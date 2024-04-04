@@ -1,0 +1,11 @@
+[package]
+name = "cab-cli"
+version = "0.0.1"
+edition = "2021"
+
+[dependencies]
+anyhow  = "1.0.82"
+clap    = { version = "4.5.4", features = [ "derive" ] }
+tokio   = { version = "1.37.0", features = [ "full" ] }
+
+cab-ast = { path = "../cab-ast" }
