@@ -1,7 +1,12 @@
 [package]
-name = "cab-cli"
-version = "0.0.1"
-edition = "2021"
+name        = "cab-cli"
+description = "A reproducible derivation file composer"
+version     = "0.0.1"
+edition     = "2021"
+
+[[bin]]
+name = "cab"
+path = "src/main.rs"
 
 [dependencies]
 anyhow  = "1.0.82"

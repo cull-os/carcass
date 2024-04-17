@@ -1,25 +1,35 @@
-#![feature(proc_macro_byte_character, proc_macro_c_str_literals)]
-
+use anyhow::Context;
+use cab_ast::*;
 use clap::{
     Parser,
     Subcommand,
 };
 
 #[derive(Parser)]
-#[command(version, about)]
+#[command(name = "cab", version, about)]
 struct Cli {
+    #[command(subcommand)]
     command: Command,
 }
 
 #[derive(Subcommand)]
 enum Command {
-    /// Evaluate a Cab expresion
-    Eval,
-    /// Enter an interactive Cab REPL
-    Repl,
-    /// Format Cab code
-    Fmt,
+    /// Dump the provided expression's abstract syntax tree
+    /// in the form of an unambigious S-expression.
+    AstDump { expr: String },
 }
 
 #[tokio::main]
-async fn main() {}
+async fn main() -> anyhow::Result<()> {
+    let cli = Cli::parse();
+
+    match cli.command {
+        Command::AstDump { expr } => {
+            let expr: Expr = expr.parse().with_context(|| "failed to parse expression")?;
+
+            println!("{}", expr.format_as_s_expr());
+        },
+    }
+
+    Ok(())
+}
