@@ -27,7 +27,7 @@ async fn main() -> anyhow::Result<()> {
         Command::AstDump { expr } => {
             let expr: Expr = expr.parse().with_context(|| "failed to parse expression")?;
 
-            println!("{}", expr.format_as_s_expr());
+            println!("{expr}");
         },
     }
 
