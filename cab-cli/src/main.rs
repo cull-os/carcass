@@ -16,7 +16,7 @@ struct Cli {
 enum Command {
     /// Dump the provided expression's abstract syntax tree
     /// in the form of an unambigious S-expression.
-    AstDump { expr: String },
+    AstDump { expression: String },
 }
 
 #[tokio::main]
@@ -24,10 +24,12 @@ async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Command::AstDump { expr } => {
-            let expr: Expr = expr.parse().with_context(|| "failed to parse expression")?;
+        Command::AstDump { expression } => {
+            let expression: Expr = expression
+                .parse()
+                .with_context(|| "failed to parse expression")?;
 
-            println!("{expr}");
+            println!("{expression}");
         },
     }
 
