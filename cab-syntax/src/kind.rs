@@ -3,6 +3,7 @@ use num_enum::TryFromPrimitive;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, TryFromPrimitive)]
 #[repr(u16)]
 #[allow(non_camel_case_types)]
+#[non_exhaustive]
 pub enum SyntaxKind {
     // TOKEN
     TOKEN_ERROR,

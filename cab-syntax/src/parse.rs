@@ -1,45 +1,55 @@
-use crate::kind::*;
+// use std::collections::VecDeque;
 
-pub struct Parse {
-    node: rowan::GreenNode,
-    errors: Vec<ParseError>,
-}
+// use crate::{
+//     kind::SyntaxKind::{
+//         self,
+//         *,
+//     },
+//     Token,
+// };
 
-pub enum ParseError {
-    Unexpected {
-        got: rowan::TextRange,
-    },
-    WantedNotFound {
-        wanted: SyntaxKind,
-        got: Box<[SyntaxKind]>,
-        at: rowan::TextRange,
-    },
+// pub struct Parse {
+//     node: rowan::GreenNode,
+//     errors: Vec<ParseError>,
+// }
 
-    UnexpectedEof,
-    WantedButGotEof {
-        got: Box<[SyntaxKind]>,
-    },
+// pub enum ParseError {
+//     Unexpected {
+//         got: rowan::TextRange,
+//     },
+//     WantedNotFound {
+//         wanted: SyntaxKind,
+//         got: Box<[SyntaxKind]>,
+//         at: rowan::TextRange,
+//     },
 
-    DuplicatedArguments {
-        at: rowan::TextRange,
-        argument: String,
-    },
+//     UnexpectedEof,
+//     WantedButGotEof {
+//         wanted: Box<[SyntaxKind]>,
+//     },
 
-    RecursionLimitExceeded,
-}
+//     DuplicatedArguments {
+//         at: rowan::TextRange,
+//         argument: String,
+//     },
 
-fn parse(text: &str) -> Parse {
-    struct Parser {
-        tokens: Vec<(SyntaxKind, String)>,
-        builder: rowan::GreenNodeBuilder<'static>,
-        errors: Vec<String>,
-    }
+//     RecursionLimitExceeded,
+// }
 
-    impl Parser {
-        fn parse(mut self) -> Parse {
-            self.builder.start_node(NODE_ROOT.into());
+// pub struct Parser<'a, I: Iterator<Item = Token<'a>>> {
+//     builder: rowan::GreenNodeBuilder<'static>,
+//     errors: Vec<ParseError>,
 
-            loop {}
-        }
-    }
-}
+//     trivia_buffer: Vec<Token<'a>>,
+//     buffer: VecDeque<Token<'a>>,
+//     iter: I,
+//     consumed: rowan::TextSize,
+
+//     depth: u32,
+// }
+
+// impl<'a, I: Iterator<Item = Token<'a>>> Parser<'a, I> {
+//     pub fn parse(mut self, input: &str) -> Parse {
+//         todo!()
+//     }
+// }
