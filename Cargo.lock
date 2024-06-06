@@ -105,32 +105,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "514de17de45fdb8dc022b1a7975556c53c86f9f0aa5f534b98977b171857c2c9"
 
 [[package]]
-name = "cab-ast"
-version = "0.0.1"
-dependencies = [
- "either",
- "indexmap",
- "num_enum",
- "rowan",
-]
-
-[[package]]
 name = "cab-cli"
 version = "0.0.1"
 dependencies = [
  "anyhow",
- "cab-ast",
+ "cab-syntax",
  "clap",
  "tokio",
 ]
 
 [[package]]
-name = "cab-drv"
+name = "cab-syntax"
 version = "0.0.1"
-
-[[package]]
-name = "cab-eval"
-version = "0.0.1"
+dependencies = [
+ "num_enum",
+ "rowan",
+]
 
 [[package]]
 name = "cc"
@@ -195,12 +185,6 @@ name = "countme"
 version = "3.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7704b5fdd17b18ae31c4c1da5a2e0305a2bf17b5249300a9ee9ed7b72114c636"
-
-[[package]]
-name = "either"
-version = "1.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a47c1c47d2f5964e29c61246e81db715514cd532db6b5116a25ea3c03d6780a2"
 
 [[package]]
 name = "equivalent"

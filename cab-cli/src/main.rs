@@ -1,5 +1,5 @@
 use anyhow::Context;
-use cab_ast::*;
+use cab_syntax::*;
 use clap::{
     Parser,
     Subcommand,
@@ -15,7 +15,8 @@ struct Cli {
 #[derive(Subcommand)]
 enum Command {
     /// Dump the provided expression's abstract syntax tree
-    /// in the form of an unambigious S-expression.
+    /// in the form of an unambigious Cab expression that is
+    /// very similar to Lisp.
     AstDump { expression: String },
 }
 

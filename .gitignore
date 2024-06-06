@@ -3,14 +3,8 @@
 !cab-cli/
 !cab-cli/src/
 
-!cab-drv/
-!cab-drv/src/
-
-!cab-eval/
-!cab-eval/src/
-
-!cab-ast/
-!cab-ast/src/
+!cab-syntax/
+!cab-syntax/src/
 
 !docs/
 

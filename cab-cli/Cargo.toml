@@ -13,4 +13,4 @@ anyhow  = "1.0.82"
 clap    = { version = "4.5.4", features = [ "derive" ] }
 tokio   = { version = "1.37.0", features = [ "full" ] }
 
-cab-ast = { path = "../cab-ast" }
+cab-syntax.path = "../cab-syntax"
