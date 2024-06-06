@@ -97,7 +97,14 @@ pub enum SyntaxKind {
     #[doc(hidden)]
     __LAST,
 }
-use SyntaxKind::*;
+
+pub use SyntaxKind::*;
+
+impl From<SyntaxKind> for rowan::SyntaxKind {
+    fn from(kind: SyntaxKind) -> Self {
+        Self(kind as u16)
+    }
+}
 
 impl SyntaxKind {
     /// Whether if this token is a literal, such as a float, integer, or path.
