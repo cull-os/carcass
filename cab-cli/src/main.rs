@@ -1,5 +1,5 @@
 use anyhow::Context;
-use cab_syntax::*;
+use cab_syntax::Expression;
 use clap::{
     Parser,
     Subcommand,
@@ -17,7 +17,7 @@ enum Command {
     /// Dump the provided expression's abstract syntax tree
     /// in the form of an unambigious Cab expression that is
     /// very similar to Lisp.
-    AstDump { expression: String },
+    Dump { expression: String },
 }
 
 #[tokio::main]
@@ -25,8 +25,8 @@ async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Command::AstDump { expression } => {
-            let expression: Expr = expression
+        Command::Dump { expression } => {
+            let expression: Expression = expression
                 .parse()
                 .with_context(|| "failed to parse expression")?;
 

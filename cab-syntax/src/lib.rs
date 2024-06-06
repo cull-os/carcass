@@ -4,9 +4,9 @@ mod parse;
 pub use kind::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum CabLanguage {}
+pub enum Language {}
 
-impl rowan::Language for CabLanguage {
+impl rowan::Language for Language {
     type Kind = SyntaxKind;
 
     fn kind_from_raw(raw: rowan::SyntaxKind) -> Self::Kind {
@@ -18,6 +18,6 @@ impl rowan::Language for CabLanguage {
     }
 }
 
-pub type SyntaxNode = rowan::SyntaxNode<CabLanguage>;
-pub type SyntaxToken = rowan::SyntaxToken<CabLanguage>;
+pub type SyntaxNode = rowan::SyntaxNode<Language>;
+pub type SyntaxToken = rowan::SyntaxToken<Language>;
 pub type SyntaxElement = rowan::NodeOrToken<SyntaxNode, SyntaxToken>;
