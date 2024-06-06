@@ -2,8 +2,6 @@ mod ast;
 mod kind;
 mod parse;
 
-use std::mem::transmute;
-
 pub use ast::*;
 pub use kind::*;
 
@@ -14,12 +12,7 @@ impl rowan::Language for CabLanguage {
     type Kind = SyntaxKind;
 
     fn kind_from_raw(raw: rowan::SyntaxKind) -> Self::Kind {
-        let syntax_discriminant = raw.0;
-        assert!(syntax_discriminant <= __LAST as u16);
-
-        // SAFETY: We only have a single SyntaxKind enum in this codebase,
-        // so there is no chance of mixing them up.
-        unsafe { transmute(syntax_discriminant) }
+        Self::Kind::try_from(raw.0).unwrap()
     }
 
     fn kind_to_raw(kind: Self::Kind) -> rowan::SyntaxKind {
