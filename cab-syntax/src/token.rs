@@ -9,7 +9,9 @@ use crate::SyntaxKind::{
 pub struct Token<'a>(pub SyntaxKind, pub &'a str);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum TokenizerContext {}
+enum TokenizerContext {
+    InsideInterpolation { brackets: u32 },
+}
 
 #[derive(Debug, Clone)]
 struct TokenizerState<'a> {
@@ -130,8 +132,30 @@ impl<'a> Tokenizer<'a> {
 
             '=' if self.consume_char('>') => TOKEN_EQUAL_MORE,
             '/' if self.consume_char('/') => TOKEN_SLASH_SLASH,
-            '{' => TOKEN_LEFT_CURLYBRACE,
-            '}' => TOKEN_RIGHT_CURLYBRACE,
+            '{' => {
+                if let Some(TokenizerContext::InsideInterpolation { brackets }) =
+                    self.context.last_mut()
+                {
+                    *brackets += 1
+                }
+
+                TOKEN_LEFT_CURLYBRACE
+            },
+            '}' => {
+                if let Some(TokenizerContext::InsideInterpolation { brackets }) =
+                    self.context.last_mut()
+                {
+                    match brackets.checked_sub(1) {
+                        Some(new) => *brackets = new,
+                        None => {
+                            self.context_pop(TokenizerContext::InsideInterpolation { brackets: 0 });
+                            return Some(TOKEN_INTERPOLATION_END);
+                        },
+                    }
+                }
+
+                TOKEN_RIGHT_CURLYBRACE
+            },
 
             // if then else
             '=' => TOKEN_EQUAL,

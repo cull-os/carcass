@@ -50,8 +50,8 @@ pub enum SyntaxKind {
     TOKEN_INTEGER, // 38
     TOKEN_FLOAT,   // 3.14
 
-    TOKEN_INTERPOL_START, // ${
-    TOKEN_INTERPOL_END,   // }
+    TOKEN_INTERPOLATION_START, // ${
+    TOKEN_INTERPOLATION_END,   // }
 
     TOKEN_IDENTIFIER, // fooBar, foo-bar, foo_bar, `foo bar baz`, `?? lmao`
 
