@@ -63,9 +63,7 @@ pub enum SyntaxKind {
     TOKEN_STRING_END,
 
     // /etc/resolv.conf, ./wallpaper.png, ./foo${bar}
-    TOKEN_PATH_START,
     TOKEN_PATH_CONTENT,
-    TOKEN_PATH_END,
 
     // <github:${user}/${repo}>
     TOKEN_ISLAND_START,

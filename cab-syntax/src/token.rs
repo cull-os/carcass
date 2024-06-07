@@ -70,7 +70,7 @@ impl<'a> Tokenizer<'a> {
         length
     }
 
-    fn consume_char(&mut self, pattern: char) -> bool {
+    fn consume_character(&mut self, pattern: char) -> bool {
         let starts_with = Some(pattern) == self.peek();
 
         if starts_with {
@@ -80,7 +80,7 @@ impl<'a> Tokenizer<'a> {
         starts_with
     }
 
-    fn consume_pattern(&mut self, pattern: &str) -> bool {
+    fn consume_string(&mut self, pattern: &str) -> bool {
         let starts_with = self.remaining().starts_with(pattern);
 
         if starts_with {
@@ -125,12 +125,12 @@ impl<'a> Tokenizer<'a> {
             '(' => TOKEN_LEFT_PARENTHESIS,
             ')' => TOKEN_RIGHT_PARENTHESIS,
 
-            '+' if self.consume_char('+') => TOKEN_PLUS_PLUS,
+            '+' if self.consume_character('+') => TOKEN_PLUS_PLUS,
             '[' => TOKEN_LEFT_BRACKET,
             ']' => TOKEN_RIGHT_BRACKET,
 
-            '=' if self.consume_char('>') => TOKEN_EQUAL_MORE,
-            '/' if self.consume_char('/') => TOKEN_SLASH_SLASH,
+            '=' if self.consume_character('>') => TOKEN_EQUAL_MORE,
+            '/' if self.consume_character('/') => TOKEN_SLASH_SLASH,
             '{' => {
                 if let Some(TokenizerContext::InsideInterpolation { brackets }) =
                     self.context.last_mut()
@@ -157,14 +157,14 @@ impl<'a> Tokenizer<'a> {
             },
 
             // if then else
-            '=' if self.consume_char('=') => TOKEN_EQUAL_EQUAL,
+            '=' if self.consume_character('=') => TOKEN_EQUAL_EQUAL,
             '=' => TOKEN_EQUAL,
-            '!' if self.consume_char('=') => TOKEN_EXCLAMATION_EQUAL,
-            '<' if self.consume_char('=') => TOKEN_LESS_EQUAL,
+            '!' if self.consume_character('=') => TOKEN_EXCLAMATION_EQUAL,
+            '<' if self.consume_character('=') => TOKEN_LESS_EQUAL,
             '<' => TOKEN_LESS,
-            '>' if self.consume_char('=') => TOKEN_MORE_EQUAL,
+            '>' if self.consume_character('=') => TOKEN_MORE_EQUAL,
             '>' => TOKEN_MORE,
-            '-' if self.consume_char('>') => TOKEN_MINUS_GREATER,
+            '-' if self.consume_character('>') => TOKEN_MINUS_GREATER,
 
             // and or not
             '.' => TOKEN_PERIOD,
@@ -181,7 +181,7 @@ impl<'a> Tokenizer<'a> {
             c if c.is_ascii_digit() => {
                 self.consume_while(|c| c.is_ascii_digit());
 
-                if self.consume_char('.') {
+                if self.consume_character('.') {
                     self.consume_while(|c| c.is_ascii_digit());
                     TOKEN_FLOAT
                 } else {
