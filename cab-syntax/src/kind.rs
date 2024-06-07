@@ -7,8 +7,8 @@ use num_enum::TryFromPrimitive;
 pub enum SyntaxKind {
     // TOKEN
     TOKEN_ERROR,
-    TOKEN_COMMENT,    // #<anything until end of line>
     TOKEN_WHITESPACE, // \n, \t
+    TOKEN_COMMENT,    // #<anything until end of line>
 
     TOKEN_LEFT_PARENTHESIS,  // (
     TOKEN_RIGHT_PARENTHESIS, // )
@@ -27,12 +27,13 @@ pub enum SyntaxKind {
     TOKEN_LITERAL_ELSE, // else
 
     TOKEN_EQUAL,             // =
+    TOKEN_EQUAL_EQUAL,       // ==
     TOKEN_EXCLAMATION_EQUAL, // !=
     TOKEN_LESS,              // <
     TOKEN_LESS_EQUAL,        // <=
     TOKEN_MORE,              // >
     TOKEN_MORE_EQUAL,        // >=
-    TOKEN_HYPHEN_GREATER,    // ->
+    TOKEN_MINUS_GREATER,     // ->
     TOKEN_LITERAL_AND,       // and
     TOKEN_LITERAL_OR,        // or
     TOKEN_LITERAL_NOT,       // not
@@ -54,11 +55,20 @@ pub enum SyntaxKind {
 
     TOKEN_IDENTIFIER, // fooBar, foo-bar, foo_bar, `foo bar baz`, `?? lmao`
 
-    TOKEN_STRING_START,   // "
-    TOKEN_STRING_CONTENT, // foo\n\t\r\u0123
-    TOKEN_STRING_END,     // "
+    // "foo\n\t${bar}"
+    TOKEN_STRING_START,
+    TOKEN_STRING_CONTENT,
+    TOKEN_STRING_END,
 
-    TOKEN_PATH, // /etc/resolv.conf, ./wallpaper.png
+    // /etc/resolv.conf, ./wallpaper.png, ./foo${bar}
+    TOKEN_PATH_START,
+    TOKEN_PATH_CONTENT,
+    TOKEN_PATH_END,
+
+    // <github:${user}/${repo}>
+    TOKEN_ISLAND_START,
+    TOKEN_ISLAND_CONTENT,
+    TOKEN_ISLAND_END,
 
     // AST
     NODE_ERROR,
@@ -112,7 +122,7 @@ impl From<SyntaxKind> for rowan::SyntaxKind {
 impl SyntaxKind {
     /// Whether if this token is a literal, such as a float, integer, or path.
     pub fn is_literal(self) -> bool {
-        matches!(self, TOKEN_FLOAT | TOKEN_INTEGER | TOKEN_PATH)
+        matches!(self, TOKEN_FLOAT | TOKEN_INTEGER)
     }
 
     /// Whether if this token can be used as a function argument.
@@ -129,6 +139,8 @@ impl SyntaxKind {
             | TOKEN_LEFT_BRACKET
             | TOKEN_LEFT_CURLYBRACE
             | TOKEN_STRING_START
+            | TOKEN_PATH_START
+            | TOKEN_ISLAND_START
             | TOKEN_IDENTIFIER => true,
             _ => self.is_literal(),
         }
