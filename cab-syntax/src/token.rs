@@ -178,7 +178,7 @@ impl<'a> Tokenizer<'a> {
             '*' => TOKEN_ASTERISK,
             '/' => TOKEN_SLASH,
 
-            '0'..='9' => {
+            c if c.is_ascii_digit() => {
                 self.consume_while(|c| c.is_ascii_digit());
 
                 if self.consume_char('.') {
