@@ -1,4 +1,3 @@
-#![allow(unused)]
 use std::ptr;
 
 use crate::SyntaxKind::{
@@ -158,13 +157,13 @@ impl<'a> Tokenizer<'a> {
             },
 
             // if then else
-            '=' => TOKEN_EQUAL,
             '=' if self.consume_char('=') => TOKEN_EQUAL_EQUAL,
+            '=' => TOKEN_EQUAL,
             '!' if self.consume_char('=') => TOKEN_EXCLAMATION_EQUAL,
-            '<' => TOKEN_LESS,
             '<' if self.consume_char('=') => TOKEN_LESS_EQUAL,
-            '>' => TOKEN_MORE,
+            '<' => TOKEN_LESS,
             '>' if self.consume_char('=') => TOKEN_MORE_EQUAL,
+            '>' => TOKEN_MORE,
             '-' if self.consume_char('>') => TOKEN_MINUS_GREATER,
 
             // and or not
@@ -178,6 +177,17 @@ impl<'a> Tokenizer<'a> {
             '-' => TOKEN_MINUS,
             '*' => TOKEN_ASTERISK,
             '/' => TOKEN_SLASH,
+
+            '0'..='9' => {
+                self.consume_while(|c| c.is_ascii_digit());
+
+                if self.consume_char('.') {
+                    self.consume_while(|c| c.is_ascii_digit());
+                    TOKEN_FLOAT
+                } else {
+                    TOKEN_INTEGER
+                }
+            },
 
             _ => TOKEN_ERROR,
         })
