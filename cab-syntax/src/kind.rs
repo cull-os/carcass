@@ -38,10 +38,11 @@ pub enum SyntaxKind {
     TOKEN_LITERAL_OR,        // or
     TOKEN_LITERAL_NOT,       // not
 
-    TOKEN_PERIOD,    // .
-    TOKEN_AT,        // @
-    TOKEN_COLON,     // :
-    TOKEN_SEMICOLON, // ;
+    TOKEN_PERIOD,       // .
+    TOKEN_AT,           // @
+    TOKEN_QUESTIONMARK, // ?
+    TOKEN_COLON,        // :
+    TOKEN_SEMICOLON,    // ;
 
     TOKEN_PLUS,     // +
     TOKEN_MINUS,    // -
