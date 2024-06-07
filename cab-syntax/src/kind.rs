@@ -139,7 +139,7 @@ impl SyntaxKind {
             | TOKEN_LEFT_BRACKET
             | TOKEN_LEFT_CURLYBRACE
             | TOKEN_STRING_START
-            | TOKEN_PATH_START
+            | TOKEN_PATH_CONTENT
             | TOKEN_ISLAND_START
             | TOKEN_IDENTIFIER => true,
             _ => self.is_literal(),

@@ -5,6 +5,7 @@ use crate::SyntaxKind::{
     *,
 };
 
+#[derive(Debug, Clone)]
 pub struct Token<'a>(pub SyntaxKind, pub &'a str);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -116,12 +117,21 @@ impl<'a> Tokenizer<'a> {
             return Some(TOKEN_WHITESPACE);
         }
 
-        if self.peek() == Some('#') {
-            self.consume_while(|c| c != '\r' && c != '\n');
-            return Some(TOKEN_COMMENT);
-        }
-
         Some(match self.next_char()? {
+            '#' if self.consume_string("##") => {
+                loop {
+                    if self.consume_string("###") {
+                        return Some(TOKEN_COMMENT);
+                    } else if self.next_char().is_none() {
+                        return Some(TOKEN_ERROR);
+                    }
+                }
+            },
+            '#' => {
+                self.consume_while(|c| c != '\r' && c != '\n');
+                return Some(TOKEN_COMMENT);
+            },
+
             '(' => TOKEN_LEFT_PARENTHESIS,
             ')' => TOKEN_RIGHT_PARENTHESIS,
 
