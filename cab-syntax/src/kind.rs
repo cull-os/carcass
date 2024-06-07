@@ -55,7 +55,10 @@ pub enum SyntaxKind {
     TOKEN_INTERPOLATION_START, // ${
     TOKEN_INTERPOLATION_END,   // }
 
-    TOKEN_IDENTIFIER, // fooBar, foo-bar, foo_bar, `foo bar baz`, `?? lmao`
+    // fooBar, foo-bar, foo_bar, `foo bar baz`, `?? lmao ${baz}`
+    TOKEN_IDENTIFIER_START,
+    TOKEN_IDENTIFIER_CONTENT,
+    TOKEN_IDENTIFIER_END,
 
     // "foo\n\t${bar}"
     TOKEN_STRING_START,
@@ -138,10 +141,10 @@ impl SyntaxKind {
             TOKEN_LEFT_PARENTHESIS
             | TOKEN_LEFT_BRACKET
             | TOKEN_LEFT_CURLYBRACE
+            | TOKEN_IDENTIFIER_START
             | TOKEN_STRING_START
             | TOKEN_PATH_CONTENT
-            | TOKEN_ISLAND_START
-            | TOKEN_IDENTIFIER => true,
+            | TOKEN_ISLAND_START => true,
             _ => self.is_literal(),
         }
     }
