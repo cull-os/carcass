@@ -1,4 +1,3 @@
-use anyhow::Context;
 use cab_syntax::Tokenizer;
 use clap::{
     Parser,
@@ -30,9 +29,11 @@ async fn main() -> anyhow::Result<()> {
         Command::TokenDump { expression } => {
             Tokenizer::new(&expression)
                 .into_iter()
-                .for_each(|token| println!("{token:?}"));
+                .for_each(|token| println!("{kind:?} {slice:?}", kind = token.0, slice = token.1));
         },
-        Command::AstDump { expression } => {
+        Command::AstDump {
+            expression: _expression,
+        } => {
             todo!();
         },
     }

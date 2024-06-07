@@ -38,8 +38,8 @@ impl<'a> Iterator for Tokenizer<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         let start_state = self.state.clone();
 
-        self.next_syntax_kind()
-            .map(|syntax_kind| Token(syntax_kind, self.consumed_since(start_state)))
+        self.next_kind()
+            .map(|kind| Token(kind, self.consumed_since(start_state)))
     }
 }
 
@@ -95,7 +95,7 @@ impl<'a> Tokenizer<'a> {
         &past.input[past.offset..self.state.offset]
     }
 
-    fn context_push(&mut self, context: TokenizerContext) {
+    fn _context_push(&mut self, context: TokenizerContext) {
         self.context.push(context)
     }
 
@@ -110,8 +110,8 @@ impl<'a> Tokenizer<'a> {
         Some(next)
     }
 
-    fn next_syntax_kind(&mut self) -> Option<SyntaxKind> {
-        let start_state = self.state.clone();
+    fn next_kind(&mut self) -> Option<SyntaxKind> {
+        let _start_state = self.state.clone();
 
         if self.consume_while(char::is_whitespace) > 0 {
             return Some(TOKEN_WHITESPACE);
