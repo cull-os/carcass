@@ -169,6 +169,7 @@ impl<'a> Tokenizer<'a> {
 
             // and or not
             '.' => TOKEN_PERIOD,
+            '@' => TOKEN_AT,
             ':' => TOKEN_COLON,
             ';' => TOKEN_SEMICOLON,
 

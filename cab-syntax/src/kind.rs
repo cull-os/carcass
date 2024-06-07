@@ -39,6 +39,7 @@ pub enum SyntaxKind {
     TOKEN_LITERAL_NOT,       // not
 
     TOKEN_PERIOD,    // .
+    TOKEN_AT,        // @
     TOKEN_COLON,     // :
     TOKEN_SEMICOLON, // ;
 
