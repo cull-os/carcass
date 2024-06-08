@@ -129,6 +129,7 @@ impl<'a> Tokenizer<'a> {
 
                 return Some(match delimiter {
                     "`" => TOKEN_IDENTIFIER_CONTENT,
+                    ">" => TOKEN_ISLAND_CONTENT,
                     _ => TOKEN_STRING_CONTENT,
                 });
             }
@@ -152,6 +153,7 @@ impl<'a> Tokenizer<'a> {
 
                     return Some(match delimiter {
                         "`" => TOKEN_IDENTIFIER_CONTENT,
+                        ">" => TOKEN_ISLAND_CONTENT,
                         _ => TOKEN_STRING_CONTENT,
                     });
                 },
@@ -182,6 +184,7 @@ impl<'a> Tokenizer<'a> {
 
                 return Some(match delimiter {
                     "`" => TOKEN_IDENTIFIER_END,
+                    ">" => TOKEN_ISLAND_END,
                     _ => TOKEN_STRING_END,
                 });
             },
