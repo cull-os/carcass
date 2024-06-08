@@ -4,5 +4,6 @@ version = "0.0.1"
 edition = "2021"
 
 [dependencies]
+log      = "0.4.21"
 num_enum = "0.7.2"
 rowan    = "0.15.15"
