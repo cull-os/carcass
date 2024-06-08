@@ -59,7 +59,7 @@ impl<'a> Tokenizer<'a> {
         &self.state.input[self.state.offset..]
     }
 
-    fn peek(&self) -> Option<char> {
+    fn peek_character(&self) -> Option<char> {
         self.remaining().chars().next()
     }
 
@@ -76,7 +76,7 @@ impl<'a> Tokenizer<'a> {
     }
 
     fn consume_character(&mut self, pattern: char) -> bool {
-        let starts_with = Some(pattern) == self.peek();
+        let starts_with = Some(pattern) == self.peek_character();
 
         if starts_with {
             self.state.offset += pattern.len_utf8();
@@ -108,8 +108,8 @@ impl<'a> Tokenizer<'a> {
         self.context.pop();
     }
 
-    fn next_char(&mut self) -> Option<char> {
-        let next = self.peek()?;
+    fn next_character(&mut self) -> Option<char> {
+        let next = self.peek_character()?;
         self.state.offset += next.len_utf8();
         Some(next)
     }
@@ -121,7 +121,7 @@ impl<'a> Tokenizer<'a> {
             return Some(TOKEN_WHITESPACE);
         }
 
-        Some(match self.next_char()? {
+        Some(match self.next_character()? {
             '#' => {
                 // ### or more gets multiline
                 if self.consume_while(|c| c == '#') >= 2 {
