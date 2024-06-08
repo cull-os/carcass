@@ -19,8 +19,11 @@ pub enum SyntaxKind {
 
     TOKEN_EQUAL_MORE,       // =>
     TOKEN_SLASH_SLASH,      // //
+    TOKEN_PERIOD,           // .
     TOKEN_LEFT_CURLYBRACE,  // {
     TOKEN_RIGHT_CURLYBRACE, // }
+    TOKEN_QUESTIONMARK,     // ?
+    TOKEN_SEMICOLON,        // ;
 
     TOKEN_LITERAL_IF,   // if
     TOKEN_LITERAL_THEN, // then
@@ -29,20 +32,17 @@ pub enum SyntaxKind {
     TOKEN_EQUAL,             // =
     TOKEN_EQUAL_EQUAL,       // ==
     TOKEN_EXCLAMATION_EQUAL, // !=
-    TOKEN_LESS,              // <
     TOKEN_LESS_EQUAL,        // <=
-    TOKEN_MORE,              // >
+    TOKEN_LESS,              // <
     TOKEN_MORE_EQUAL,        // >=
+    TOKEN_MORE,              // >
     TOKEN_MINUS_GREATER,     // ->
     TOKEN_LITERAL_AND,       // and
     TOKEN_LITERAL_OR,        // or
     TOKEN_LITERAL_NOT,       // not
 
-    TOKEN_PERIOD,       // .
-    TOKEN_AT,           // @
-    TOKEN_QUESTIONMARK, // ?
-    TOKEN_COLON,        // :
-    TOKEN_SEMICOLON,    // ;
+    TOKEN_AT,    // @
+    TOKEN_COLON, // :
 
     TOKEN_PLUS,     // +
     TOKEN_MINUS,    // -

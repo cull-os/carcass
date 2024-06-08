@@ -231,6 +231,7 @@ impl<'a> Tokenizer<'a> {
 
             '=' if self.consume_character('>') => TOKEN_EQUAL_MORE,
             '/' if self.consume_character('/') => TOKEN_SLASH_SLASH,
+            '.' => TOKEN_PERIOD,
             '{' => {
                 if let Some(TokenizerContext::Interpolation { brackets }) = self.context.last_mut()
                 {
@@ -253,6 +254,8 @@ impl<'a> Tokenizer<'a> {
 
                 TOKEN_RIGHT_CURLYBRACE
             },
+            '?' => TOKEN_QUESTIONMARK,
+            ';' => TOKEN_SEMICOLON,
 
             '=' if self.consume_character('=') => TOKEN_EQUAL_EQUAL,
             '=' => TOKEN_EQUAL,
@@ -263,11 +266,8 @@ impl<'a> Tokenizer<'a> {
             '>' => TOKEN_MORE,
             '-' if self.consume_character('>') => TOKEN_MINUS_GREATER,
 
-            '.' => TOKEN_PERIOD,
             '@' => TOKEN_AT,
-            '?' => TOKEN_QUESTIONMARK,
             ':' => TOKEN_COLON,
-            ';' => TOKEN_SEMICOLON,
 
             '+' => TOKEN_PLUS,
             '-' => TOKEN_MINUS,
