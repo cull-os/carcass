@@ -25,10 +25,6 @@ pub enum SyntaxKind {
     TOKEN_QUESTIONMARK,     // ?
     TOKEN_SEMICOLON,        // ;
 
-    TOKEN_LITERAL_IF,   // if
-    TOKEN_LITERAL_THEN, // then
-    TOKEN_LITERAL_ELSE, // else
-
     TOKEN_EQUAL,             // =
     TOKEN_EQUAL_EQUAL,       // ==
     TOKEN_EXCLAMATION_EQUAL, // !=
@@ -37,9 +33,6 @@ pub enum SyntaxKind {
     TOKEN_MORE_EQUAL,        // >=
     TOKEN_MORE,              // >
     TOKEN_MINUS_GREATER,     // ->
-    TOKEN_LITERAL_AND,       // and
-    TOKEN_LITERAL_OR,        // or
-    TOKEN_LITERAL_NOT,       // not
 
     TOKEN_AT,    // @
     TOKEN_COMMA, // ,
@@ -57,6 +50,14 @@ pub enum SyntaxKind {
     TOKEN_INTERPOLATION_END,   // }
 
     TOKEN_IDENTIFIER, // fooBar, foo-bar, foo_bar
+
+    TOKEN_LITERAL_IF,   // if
+    TOKEN_LITERAL_THEN, // then
+    TOKEN_LITERAL_ELSE, // else
+
+    TOKEN_LITERAL_AND, // and
+    TOKEN_LITERAL_OR,  // or
+    TOKEN_LITERAL_NOT, // not
 
     // `foo bar baz`, `?? lmao ${baz}`
     TOKEN_IDENTIFIER_START,
