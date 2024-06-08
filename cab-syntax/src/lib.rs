@@ -1,10 +1,7 @@
 mod kind;
 mod token;
 
-pub use kind::SyntaxKind::{
-    self,
-    *,
-};
+pub use kind::SyntaxKind;
 pub use token::{
     Token,
     Tokenizer,
