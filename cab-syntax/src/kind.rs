@@ -63,7 +63,7 @@ pub enum SyntaxKind {
     TOKEN_IDENTIFIER_CONTENT,
     TOKEN_IDENTIFIER_END,
 
-    // "foo\n\t${bar}"
+    // "foo\n\t${bar}", ''foo bar'', ''''' asdasd "hey '' asdads ''' asddklfjskaj'''''
     TOKEN_STRING_START,
     TOKEN_STRING_CONTENT,
     TOKEN_STRING_END,

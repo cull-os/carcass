@@ -8,10 +8,10 @@ use crate::SyntaxKind::{
 #[derive(Debug, Clone)]
 pub struct Token<'a>(pub SyntaxKind, pub &'a str);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum TokenizerContext {
-    StringishBody { delimiter: char },
-    StringishEnd { delimiter: char },
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum TokenizerContext<'a> {
+    Stringish { delimiter: &'a str },
+    StringishEnd { delimiter: &'a str },
     InterpolationStart,
     Interpolation { brackets: u32 },
 }
@@ -35,7 +35,7 @@ fn is_valid_identifier_character(c: char) -> bool {
 }
 
 pub struct Tokenizer<'a> {
-    context: Vec<TokenizerContext>,
+    context: Vec<TokenizerContext<'a>>,
     state: TokenizerState<'a>,
 }
 
@@ -102,7 +102,7 @@ impl<'a> Tokenizer<'a> {
         &past.input[past.offset..self.state.offset]
     }
 
-    fn context_push(&mut self, context: TokenizerContext) {
+    fn context_push(&mut self, context: TokenizerContext<'a>) {
         self.context.push(context)
     }
 
@@ -117,16 +117,15 @@ impl<'a> Tokenizer<'a> {
         Some(next)
     }
 
-    fn next_string(&mut self, delimiter: char) -> Option<SyntaxKind> {
+    fn next_string(&mut self, delimiter: &'a str) -> Option<SyntaxKind> {
         loop {
-            if self.peek_character() == Some(delimiter) {
-                self.context_pop(TokenizerContext::StringishBody { delimiter });
+            if self.remaining().starts_with(delimiter) {
+                self.context_pop(TokenizerContext::Stringish { delimiter });
                 self.context_push(TokenizerContext::StringishEnd { delimiter });
 
                 return Some(match delimiter {
-                    '`' => TOKEN_IDENTIFIER_CONTENT,
-                    '"' => TOKEN_STRING_CONTENT,
-                    _ => unreachable!(),
+                    "`" => TOKEN_IDENTIFIER_CONTENT,
+                    _ => TOKEN_STRING_CONTENT,
                 });
             }
 
@@ -137,7 +136,7 @@ impl<'a> Tokenizer<'a> {
                     match self.next_character() {
                         Some(_) => (),
                         None => {
-                            self.context_pop(TokenizerContext::StringishBody { delimiter });
+                            self.context_pop(TokenizerContext::Stringish { delimiter });
                             return Some(TOKEN_ERROR);
                         },
                     }
@@ -148,15 +147,14 @@ impl<'a> Tokenizer<'a> {
                     self.context_push(TokenizerContext::InterpolationStart);
 
                     return Some(match delimiter {
-                        '`' => TOKEN_IDENTIFIER_CONTENT,
-                        '"' => TOKEN_STRING_CONTENT,
-                        _ => unreachable!(),
+                        "`" => TOKEN_IDENTIFIER_CONTENT,
+                        _ => TOKEN_STRING_CONTENT,
                     });
                 },
 
                 Some(_) => (),
                 None => {
-                    self.context_pop(TokenizerContext::StringishBody { delimiter });
+                    self.context_pop(TokenizerContext::Stringish { delimiter });
                     return Some(TOKEN_ERROR);
                 },
             }
@@ -167,21 +165,20 @@ impl<'a> Tokenizer<'a> {
         let start_state = self.state.clone();
 
         match self.context.last() {
-            Some(TokenizerContext::StringishBody { delimiter }) => {
-                return self.next_string(*delimiter);
+            Some(TokenizerContext::Stringish { delimiter }) => {
+                return self.next_string(delimiter);
             },
             Some(TokenizerContext::StringishEnd { delimiter }) => {
                 let delimiter = *delimiter;
-
-                if !self.consume_character(delimiter) {
+                if !self.consume_string(delimiter) {
                     unreachable!()
                 }
 
                 self.context_pop(TokenizerContext::StringishEnd { delimiter });
+
                 return Some(match delimiter {
-                    '`' => TOKEN_IDENTIFIER_END,
-                    '"' => TOKEN_STRING_END,
-                    _ => unreachable!(),
+                    "`" => TOKEN_IDENTIFIER_END,
+                    _ => TOKEN_STRING_END,
                 });
             },
 
@@ -301,13 +298,27 @@ impl<'a> Tokenizer<'a> {
             },
 
             delimiter @ ('`' | '"') => {
-                self.context_push(TokenizerContext::StringishBody { delimiter });
+                self.context_push(TokenizerContext::Stringish {
+                    delimiter: match delimiter {
+                        '`' => "`",
+                        _ => "\"",
+                    },
+                });
 
                 match delimiter {
                     '`' => TOKEN_IDENTIFIER_START,
-                    '"' => TOKEN_STRING_START,
-                    _ => unreachable!(),
+                    _ => TOKEN_STRING_START,
                 }
+            },
+
+            '\'' => {
+                self.consume_while(|c| c == '\'');
+
+                self.context_push(TokenizerContext::Stringish {
+                    delimiter: self.consumed_since(start_state),
+                });
+
+                TOKEN_STRING_START
             },
 
             _ => TOKEN_ERROR,
