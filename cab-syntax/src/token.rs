@@ -10,6 +10,7 @@ pub struct Token<'a>(pub SyntaxKind, pub &'a str);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum TokenizerContext<'a> {
+    Path,
     Stringish { delimiter: &'a str },
     StringishEnd { delimiter: &'a str },
     InterpolationStart,
@@ -167,10 +168,52 @@ impl<'a> Tokenizer<'a> {
         }
     }
 
+    // TODO: Find a sane way to not duplicate so much code.
+    fn next_path(&mut self) -> Option<SyntaxKind> {
+        loop {
+            if self.peek_character().map_or(false, char::is_whitespace) {
+                self.context_pop(TokenizerContext::Path);
+
+                return Some(TOKEN_PATH);
+            }
+
+            let start_state = self.state.clone();
+
+            match self.next_character() {
+                Some('\\') => {
+                    match self.next_character() {
+                        Some(_) => (),
+                        None => {
+                            self.context_pop(TokenizerContext::Path);
+                            return Some(TOKEN_ERROR);
+                        },
+                    }
+                },
+
+                Some('$') if self.consume_character('{') => {
+                    self.state = start_state;
+                    self.context_push(TokenizerContext::InterpolationStart);
+
+                    return Some(TOKEN_PATH);
+                },
+
+                Some(_) => (),
+                None => {
+                    self.context_pop(TokenizerContext::Path);
+                    return Some(TOKEN_PATH);
+                },
+            }
+        }
+    }
+
     fn next_kind(&mut self) -> Option<SyntaxKind> {
         let start_state = self.state.clone();
 
         match self.context.last() {
+            Some(TokenizerContext::Path) => {
+                return self.next_path();
+            },
+
             Some(TokenizerContext::Stringish { delimiter }) => {
                 return self.next_string(delimiter);
             },
@@ -235,7 +278,6 @@ impl<'a> Tokenizer<'a> {
 
             '=' if self.consume_character('>') => TOKEN_EQUAL_MORE,
             '/' if self.consume_character('/') => TOKEN_SLASH_SLASH,
-            '.' => TOKEN_PERIOD,
             '{' => {
                 if let Some(TokenizerContext::Interpolation { brackets }) = self.context.last_mut()
                 {
@@ -264,7 +306,6 @@ impl<'a> Tokenizer<'a> {
             '=' if self.consume_character('=') => TOKEN_EQUAL_EQUAL,
             '=' => TOKEN_EQUAL,
             '!' if self.consume_character('=') => TOKEN_EXCLAMATION_EQUAL,
-            // <= and < have been moved to the bottom because of conflicts.
             '>' if self.consume_character('=') => TOKEN_MORE_EQUAL,
             '>' => TOKEN_MORE,
             '-' if self.consume_character('>') => TOKEN_MINUS_GREATER,
@@ -276,7 +317,6 @@ impl<'a> Tokenizer<'a> {
             '+' => TOKEN_PLUS,
             '-' => TOKEN_MINUS,
             '*' => TOKEN_ASTERISK,
-            '/' => TOKEN_SLASH,
 
             c if c.is_ascii_digit() => {
                 self.consume_while(|c| c.is_ascii_digit());
@@ -328,6 +368,25 @@ impl<'a> Tokenizer<'a> {
 
                 TOKEN_STRING_START
             },
+
+            '.' if self.peek_character() == Some('/') => {
+                self.state.offset -= 1;
+                self.context_push(TokenizerContext::Path);
+
+                return self.next_kind();
+            },
+            '/' if self
+                .peek_character()
+                .map_or(false, |c| !c.is_ascii_digit() && !c.is_whitespace()) =>
+            {
+                self.state.offset -= 1;
+                self.context_push(TokenizerContext::Path);
+
+                return self.next_kind();
+            },
+
+            '.' => TOKEN_PERIOD,
+            '/' => TOKEN_SLASH,
 
             '<' if self.peek_character().map_or(false, |c| {
                 c == '$' || is_valid_initial_identifier_character(c)

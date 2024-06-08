@@ -46,9 +46,6 @@ pub enum SyntaxKind {
     TOKEN_INTEGER, // 38
     TOKEN_FLOAT,   // 3.14
 
-    TOKEN_INTERPOLATION_START, // ${
-    TOKEN_INTERPOLATION_END,   // }
-
     TOKEN_IDENTIFIER, // fooBar, foo-bar, foo_bar
 
     TOKEN_LITERAL_IF,   // if
@@ -59,6 +56,12 @@ pub enum SyntaxKind {
     TOKEN_LITERAL_OR,  // or
     TOKEN_LITERAL_NOT, // not
 
+    TOKEN_INTERPOLATION_START, // ${
+    TOKEN_INTERPOLATION_END,   // }
+
+    // /etc/resolv.conf, ./wallpaper.png, ./foo${bar}
+    TOKEN_PATH,
+
     // `foo bar baz`, `?? lmao ${baz}`
     TOKEN_IDENTIFIER_START,
     TOKEN_IDENTIFIER_CONTENT,
@@ -68,9 +71,6 @@ pub enum SyntaxKind {
     TOKEN_STRING_START,
     TOKEN_STRING_CONTENT,
     TOKEN_STRING_END,
-
-    // /etc/resolv.conf, ./wallpaper.png, ./foo${bar}
-    TOKEN_PATH,
 
     // <github:${user}/${repo}>
     TOKEN_ISLAND_START,
