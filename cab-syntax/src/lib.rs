@@ -1,7 +1,10 @@
 mod kind;
 mod token;
 
-pub use kind::SyntaxKind;
+pub use kind::{
+    SyntaxKind,
+    SYNTAX_COLORS,
+};
 pub use token::{
     Token,
     Tokenizer,

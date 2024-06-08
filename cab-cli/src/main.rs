@@ -6,7 +6,10 @@ use std::{
     process,
 };
 
-use cab_syntax::Tokenizer;
+use cab_syntax::{
+    Tokenizer,
+    SYNTAX_COLORS,
+};
 use clap::{
     Parser,
     Subcommand,
@@ -16,7 +19,10 @@ use clap_verbosity_flag::{
     InfoLevel,
     Verbosity,
 };
-use colored::Colorize;
+use colored::{
+    Colorize,
+    CustomColor,
+};
 use log::Level;
 
 #[derive(Parser)]
@@ -33,6 +39,11 @@ struct Cli {
 enum Command {
     /// Dump the provided file.
     TokenDump {
+        /// If specified, the output will be colored instead of typed.
+        #[arg(long, short)]
+        color: bool,
+
+        /// The file to dump the tokens of.
         #[clap(default_value = "-")]
         file: FileOrStdin,
     },
@@ -41,6 +52,7 @@ enum Command {
     /// in the form of an unambigious Cab expression
     /// that is very similar to Lisp.
     AstDump {
+        /// The file to dump the AST of.
         #[clap(default_value = "-")]
         file: FileOrStdin,
     },
@@ -69,18 +81,39 @@ async fn main() -> io::Result<()> {
     let mut out = io::BufWriter::new(io::stdout());
 
     match cli.command {
-        Command::TokenDump { file } => {
+        Command::TokenDump { color, file } => {
             let expression = file.contents().unwrap_or_else(|error| {
                 log::error!("failed to read file: {error}");
                 process::exit(1);
             });
 
             for token in Tokenizer::new(&expression) {
-                writeln!(out, "{kind:?} {slice:?}", kind = token.0, slice = token.1)
-                    .unwrap_or_else(|error| {
-                        log::error!("failed to write to stdout: {error}");
-                        process::exit(1);
-                    });
+                let result = if color {
+                    let on_color = SYNTAX_COLORS[token.0 as usize];
+
+                    let color = if (0.2126 * on_color.r as f32
+                        + 0.7152 * on_color.g as f32
+                        + 0.0722 * on_color.b as f32)
+                        < 140.0
+                    {
+                        CustomColor::new(0xFF, 0xFF, 0xFF)
+                    } else {
+                        CustomColor::new(0, 0, 0)
+                    };
+
+                    write!(
+                        out,
+                        "{slice}",
+                        slice = token.1.on_custom_color(on_color).custom_color(color)
+                    )
+                } else {
+                    writeln!(out, "{kind:?} {slice:?}", kind = token.0, slice = token.1)
+                };
+
+                result.unwrap_or_else(|error| {
+                    log::error!("failed to write to stdout: {error}");
+                    process::exit(1);
+                });
             }
         },
         Command::AstDump { .. } => {

@@ -126,6 +126,7 @@ dependencies = [
 name = "cab-syntax"
 version = "0.0.1"
 dependencies = [
+ "colored",
  "log",
  "num_enum",
  "rowan",
