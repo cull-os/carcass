@@ -55,7 +55,9 @@ pub enum SyntaxKind {
     TOKEN_INTERPOLATION_START, // ${
     TOKEN_INTERPOLATION_END,   // }
 
-    // fooBar, foo-bar, foo_bar, `foo bar baz`, `?? lmao ${baz}`
+    TOKEN_IDENTIFIER, // fooBar, foo-bar, foo_bar
+
+    // `foo bar baz`, `?? lmao ${baz}`
     TOKEN_IDENTIFIER_START,
     TOKEN_IDENTIFIER_CONTENT,
     TOKEN_IDENTIFIER_END,
@@ -66,7 +68,7 @@ pub enum SyntaxKind {
     TOKEN_STRING_END,
 
     // /etc/resolv.conf, ./wallpaper.png, ./foo${bar}
-    TOKEN_PATH_CONTENT,
+    TOKEN_PATH,
 
     // <github:${user}/${repo}>
     TOKEN_ISLAND_START,
@@ -141,9 +143,10 @@ impl SyntaxKind {
             TOKEN_LEFT_PARENTHESIS
             | TOKEN_LEFT_BRACKET
             | TOKEN_LEFT_CURLYBRACE
+            | TOKEN_IDENTIFIER
             | TOKEN_IDENTIFIER_START
             | TOKEN_STRING_START
-            | TOKEN_PATH_CONTENT
+            | TOKEN_PATH
             | TOKEN_ISLAND_START => true,
             _ => self.is_literal(),
         }

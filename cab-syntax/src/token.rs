@@ -10,7 +10,7 @@ pub struct Token<'a>(pub SyntaxKind, pub &'a str);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum TokenizerContext {
-    InsideInterpolation { brackets: u32 },
+    Interpolation { brackets: u32 },
 }
 
 #[derive(Debug, Clone)]
@@ -26,6 +26,10 @@ impl PartialEq for TokenizerState<'_> {
 }
 
 impl Eq for TokenizerState<'_> {}
+
+fn is_valid_identifier_character(c: char) -> bool {
+    c.is_alphanumeric() || matches!(c, '_' | '-')
+}
 
 pub struct Tokenizer<'a> {
     context: Vec<TokenizerContext>,
@@ -95,7 +99,7 @@ impl<'a> Tokenizer<'a> {
         &past.input[past.offset..self.state.offset]
     }
 
-    fn _context_push(&mut self, context: TokenizerContext) {
+    fn context_push(&mut self, context: TokenizerContext) {
         self.context.push(context)
     }
 
@@ -111,25 +115,29 @@ impl<'a> Tokenizer<'a> {
     }
 
     fn next_kind(&mut self) -> Option<SyntaxKind> {
-        let _start_state = self.state.clone();
+        let start_state = self.state.clone();
 
         if self.consume_while(char::is_whitespace) > 0 {
             return Some(TOKEN_WHITESPACE);
         }
 
         Some(match self.next_char()? {
-            '#' if self.consume_string("##") => {
-                loop {
-                    if self.consume_string("###") {
-                        return Some(TOKEN_COMMENT);
-                    } else if self.next_char().is_none() {
-                        return Some(TOKEN_ERROR);
-                    }
-                }
-            },
             '#' => {
-                self.consume_while(|c| c != '\r' && c != '\n');
-                return Some(TOKEN_COMMENT);
+                // ### or more gets multiline
+                if self.consume_while(|c| c == '#') >= 2 {
+                    let end_delimiter = self.consumed_since(start_state);
+
+                    let Some(end_after) = self.remaining().find(end_delimiter) else {
+                        self.state.offset = self.state.input.len();
+                        return Some(TOKEN_COMMENT);
+                    };
+
+                    self.state.offset += end_after + end_delimiter.len();
+                } else {
+                    self.consume_while(|c| c != '\r' && c != '\n');
+                }
+
+                TOKEN_COMMENT
             },
 
             '(' => TOKEN_LEFT_PARENTHESIS,
@@ -142,8 +150,7 @@ impl<'a> Tokenizer<'a> {
             '=' if self.consume_character('>') => TOKEN_EQUAL_MORE,
             '/' if self.consume_character('/') => TOKEN_SLASH_SLASH,
             '{' => {
-                if let Some(TokenizerContext::InsideInterpolation { brackets }) =
-                    self.context.last_mut()
+                if let Some(TokenizerContext::Interpolation { brackets }) = self.context.last_mut()
                 {
                     *brackets += 1
                 }
@@ -151,13 +158,12 @@ impl<'a> Tokenizer<'a> {
                 TOKEN_LEFT_CURLYBRACE
             },
             '}' => {
-                if let Some(TokenizerContext::InsideInterpolation { brackets }) =
-                    self.context.last_mut()
+                if let Some(TokenizerContext::Interpolation { brackets }) = self.context.last_mut()
                 {
                     match brackets.checked_sub(1) {
                         Some(new) => *brackets = new,
                         None => {
-                            self.context_pop(TokenizerContext::InsideInterpolation { brackets: 0 });
+                            self.context_pop(TokenizerContext::Interpolation { brackets: 0 });
                             return Some(TOKEN_INTERPOLATION_END);
                         },
                     }
@@ -166,7 +172,6 @@ impl<'a> Tokenizer<'a> {
                 TOKEN_RIGHT_CURLYBRACE
             },
 
-            // if then else
             '=' if self.consume_character('=') => TOKEN_EQUAL_EQUAL,
             '=' => TOKEN_EQUAL,
             '!' if self.consume_character('=') => TOKEN_EXCLAMATION_EQUAL,
@@ -176,7 +181,6 @@ impl<'a> Tokenizer<'a> {
             '>' => TOKEN_MORE,
             '-' if self.consume_character('>') => TOKEN_MINUS_GREATER,
 
-            // and or not
             '.' => TOKEN_PERIOD,
             '@' => TOKEN_AT,
             '?' => TOKEN_QUESTIONMARK,
@@ -196,6 +200,20 @@ impl<'a> Tokenizer<'a> {
                     TOKEN_FLOAT
                 } else {
                     TOKEN_INTEGER
+                }
+            },
+
+            c if is_valid_identifier_character(c) => {
+                self.consume_while(is_valid_identifier_character);
+
+                match self.consumed_since(start_state) {
+                    "if" => TOKEN_LITERAL_IF,
+                    "then" => TOKEN_LITERAL_THEN,
+                    "else" => TOKEN_LITERAL_ELSE,
+                    "and" => TOKEN_LITERAL_AND,
+                    "or" => TOKEN_LITERAL_OR,
+                    "not" => TOKEN_LITERAL_NOT,
+                    _ => TOKEN_IDENTIFIER,
                 }
             },
 
