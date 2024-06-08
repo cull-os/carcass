@@ -10,6 +10,9 @@ pub struct Token<'a>(pub SyntaxKind, pub &'a str);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum TokenizerContext {
+    StringishBody { delimiter: char },
+    StringishEnd { delimiter: char },
+    InterpolationStart,
     Interpolation { brackets: u32 },
 }
 
@@ -114,8 +117,92 @@ impl<'a> Tokenizer<'a> {
         Some(next)
     }
 
+    fn next_string(&mut self, delimiter: char) -> Option<SyntaxKind> {
+        loop {
+            if self.peek_character() == Some(delimiter) {
+                self.context_pop(TokenizerContext::StringishBody { delimiter });
+                self.context_push(TokenizerContext::StringishEnd { delimiter });
+
+                return Some(match delimiter {
+                    '`' => TOKEN_IDENTIFIER_CONTENT,
+                    '"' => TOKEN_STRING_CONTENT,
+                    _ => unreachable!(),
+                });
+            }
+
+            let start_state = self.state.clone();
+
+            match self.next_character() {
+                Some('\\') => {
+                    match self.next_character() {
+                        Some(_) => (),
+                        None => {
+                            self.context_pop(TokenizerContext::StringishBody { delimiter });
+                            return Some(TOKEN_ERROR);
+                        },
+                    }
+                },
+
+                Some('$') if self.consume_character('{') => {
+                    self.state = start_state;
+                    self.context_push(TokenizerContext::InterpolationStart);
+
+                    return Some(match delimiter {
+                        '`' => TOKEN_IDENTIFIER_CONTENT,
+                        '"' => TOKEN_STRING_CONTENT,
+                        _ => unreachable!(),
+                    });
+                },
+
+                Some(_) => (),
+                None => {
+                    self.context_pop(TokenizerContext::StringishBody { delimiter });
+                    return Some(TOKEN_ERROR);
+                },
+            }
+        }
+    }
+
     fn next_kind(&mut self) -> Option<SyntaxKind> {
         let start_state = self.state.clone();
+
+        loop {
+            match self.context.last() {
+                Some(TokenizerContext::StringishBody { delimiter }) => {
+                    return self.next_string(*delimiter);
+                },
+                Some(TokenizerContext::StringishEnd { delimiter }) => {
+                    let delimiter = *delimiter;
+
+                    if !self.consume_character(delimiter) {
+                        unreachable!()
+                    }
+
+                    self.context_pop(TokenizerContext::StringishEnd { delimiter });
+                    return Some(match delimiter {
+                        '`' => TOKEN_IDENTIFIER_END,
+                        '"' => TOKEN_STRING_END,
+                        _ => unreachable!(),
+                    });
+                },
+
+                Some(TokenizerContext::InterpolationStart) => {
+                    if !self.consume_string("${") {
+                        unreachable!()
+                    }
+
+                    self.context_pop(TokenizerContext::InterpolationStart);
+                    self.context_push(TokenizerContext::Interpolation { brackets: 0 });
+                    return Some(TOKEN_INTERPOLATION_START);
+                },
+
+                None => break,
+                todo => {
+                    dbg!(todo);
+                    todo!()
+                },
+            }
+        }
 
         Some(match self.next_character()? {
             c if c.is_whitespace() => {
@@ -215,6 +302,16 @@ impl<'a> Tokenizer<'a> {
                     "or" => TOKEN_LITERAL_OR,
                     "not" => TOKEN_LITERAL_NOT,
                     _ => TOKEN_IDENTIFIER,
+                }
+            },
+
+            delimiter @ ('`' | '"') => {
+                self.context_push(TokenizerContext::StringishBody { delimiter });
+
+                match delimiter {
+                    '`' => TOKEN_IDENTIFIER_START,
+                    '"' => TOKEN_STRING_START,
+                    _ => unreachable!(),
                 }
             },
 
