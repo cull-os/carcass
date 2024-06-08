@@ -166,42 +166,36 @@ impl<'a> Tokenizer<'a> {
     fn next_kind(&mut self) -> Option<SyntaxKind> {
         let start_state = self.state.clone();
 
-        loop {
-            match self.context.last() {
-                Some(TokenizerContext::StringishBody { delimiter }) => {
-                    return self.next_string(*delimiter);
-                },
-                Some(TokenizerContext::StringishEnd { delimiter }) => {
-                    let delimiter = *delimiter;
+        match self.context.last() {
+            Some(TokenizerContext::StringishBody { delimiter }) => {
+                return self.next_string(*delimiter);
+            },
+            Some(TokenizerContext::StringishEnd { delimiter }) => {
+                let delimiter = *delimiter;
 
-                    if !self.consume_character(delimiter) {
-                        unreachable!()
-                    }
+                if !self.consume_character(delimiter) {
+                    unreachable!()
+                }
 
-                    self.context_pop(TokenizerContext::StringishEnd { delimiter });
-                    return Some(match delimiter {
-                        '`' => TOKEN_IDENTIFIER_END,
-                        '"' => TOKEN_STRING_END,
-                        _ => unreachable!(),
-                    });
-                },
+                self.context_pop(TokenizerContext::StringishEnd { delimiter });
+                return Some(match delimiter {
+                    '`' => TOKEN_IDENTIFIER_END,
+                    '"' => TOKEN_STRING_END,
+                    _ => unreachable!(),
+                });
+            },
 
-                Some(TokenizerContext::InterpolationStart) => {
-                    if !self.consume_string("${") {
-                        unreachable!()
-                    }
+            Some(TokenizerContext::InterpolationStart) => {
+                if !self.consume_string("${") {
+                    unreachable!()
+                }
 
-                    self.context_pop(TokenizerContext::InterpolationStart);
-                    self.context_push(TokenizerContext::Interpolation { brackets: 0 });
-                    return Some(TOKEN_INTERPOLATION_START);
-                },
+                self.context_pop(TokenizerContext::InterpolationStart);
+                self.context_push(TokenizerContext::Interpolation { brackets: 0 });
+                return Some(TOKEN_INTERPOLATION_START);
+            },
 
-                None => break,
-                todo => {
-                    dbg!(todo);
-                    todo!()
-                },
-            }
+            Some(TokenizerContext::Interpolation { .. }) | None => {},
         }
 
         Some(match self.next_character()? {
