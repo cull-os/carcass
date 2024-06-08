@@ -267,6 +267,7 @@ impl<'a> Tokenizer<'a> {
             '-' if self.consume_character('>') => TOKEN_MINUS_GREATER,
 
             '@' => TOKEN_AT,
+            ',' => TOKEN_COMMA,
             ':' => TOKEN_COLON,
 
             '+' => TOKEN_PLUS,
