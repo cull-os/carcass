@@ -112,9 +112,6 @@ pub enum SyntaxKind {
 
     NODE_UNARY_OPERATION,  // <operator> <expression>
     NODE_BINARY_OPERATION, // <expression> <operator> <expression>
-
-    #[doc(hidden)]
-    __LAST,
 }
 
 pub use SyntaxKind::*;
