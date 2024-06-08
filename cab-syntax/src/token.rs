@@ -30,8 +30,12 @@ impl PartialEq for TokenizerState<'_> {
 
 impl Eq for TokenizerState<'_> {}
 
+fn is_valid_initial_identifier_character(c: char) -> bool {
+    c.is_alphabetic() || matches!(c, '_' | '-')
+}
+
 fn is_valid_identifier_character(c: char) -> bool {
-    c.is_alphanumeric() || matches!(c, '_' | '-')
+    c.is_numeric() || is_valid_initial_identifier_character(c)
 }
 
 pub struct Tokenizer<'a> {
@@ -257,8 +261,7 @@ impl<'a> Tokenizer<'a> {
             '=' if self.consume_character('=') => TOKEN_EQUAL_EQUAL,
             '=' => TOKEN_EQUAL,
             '!' if self.consume_character('=') => TOKEN_EXCLAMATION_EQUAL,
-            '<' if self.consume_character('=') => TOKEN_LESS_EQUAL,
-            '<' => TOKEN_LESS,
+            // <= and < have been moved to the bottom because of conflicts.
             '>' if self.consume_character('=') => TOKEN_MORE_EQUAL,
             '>' => TOKEN_MORE,
             '-' if self.consume_character('>') => TOKEN_MINUS_GREATER,
@@ -283,7 +286,7 @@ impl<'a> Tokenizer<'a> {
                 }
             },
 
-            c if is_valid_identifier_character(c) => {
+            c if is_valid_initial_identifier_character(c) => {
                 self.consume_while(is_valid_identifier_character);
 
                 match self.consumed_since(start_state) {
@@ -320,6 +323,18 @@ impl<'a> Tokenizer<'a> {
 
                 TOKEN_STRING_START
             },
+
+            '<' if self.peek_character().map_or(false, |c| {
+                c == '$' || is_valid_initial_identifier_character(c)
+            }) =>
+            {
+                self.context_push(TokenizerContext::Stringish { delimiter: ">" });
+
+                TOKEN_ISLAND_START
+            },
+
+            '<' if self.consume_character('=') => TOKEN_LESS_EQUAL,
+            '<' => TOKEN_LESS,
 
             _ => TOKEN_ERROR,
         })
