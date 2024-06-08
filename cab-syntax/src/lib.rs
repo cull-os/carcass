@@ -1,6 +1,4 @@
-mod ast;
 mod kind;
-mod parse;
 mod token;
 
 pub use kind::SyntaxKind::{
