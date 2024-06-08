@@ -117,11 +117,12 @@ impl<'a> Tokenizer<'a> {
     fn next_kind(&mut self) -> Option<SyntaxKind> {
         let start_state = self.state.clone();
 
-        if self.consume_while(char::is_whitespace) > 0 {
-            return Some(TOKEN_WHITESPACE);
-        }
-
         Some(match self.next_character()? {
+            c if c.is_whitespace() => {
+                self.consume_while(char::is_whitespace);
+                TOKEN_WHITESPACE
+            },
+
             '#' => {
                 // ### or more gets multiline
                 if self.consume_while(|c| c == '#') >= 2 {
