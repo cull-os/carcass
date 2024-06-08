@@ -123,7 +123,7 @@ impl From<SyntaxKind> for rowan::SyntaxKind {
 }
 
 impl SyntaxKind {
-    /// Whether if this token is a literal, such as a float, integer, or path.
+    /// Whether if this token is a literal, such as a float or integer.
     pub fn is_literal(self) -> bool {
         matches!(self, TOKEN_FLOAT | TOKEN_INTEGER)
     }
