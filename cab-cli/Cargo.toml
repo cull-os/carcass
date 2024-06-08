@@ -9,7 +9,6 @@ name = "cab"
 path = "src/main.rs"
 
 [dependencies]
-anyhow              = "1.0.82"
 clap                = { version = "4.5.4", features = [ "derive" ] }
 clap-stdin          = "0.4.0"
 clap-verbosity-flag = "2.2.0"
