@@ -107,10 +107,11 @@ pub enum SyntaxKind {
     TOKEN_COMMA, // ,
     TOKEN_COLON, // :
 
-    TOKEN_PLUS,     // +
-    TOKEN_MINUS,    // -
-    TOKEN_ASTERISK, // *
-    TOKEN_SLASH,    // /
+    TOKEN_PLUS,              // +
+    TOKEN_MINUS,             // -
+    TOKEN_ASTERISK,          // *
+    TOKEN_ASTERISK_ASTERISK, // **
+    TOKEN_SLASH,             // /
 
     TOKEN_INTEGER, // 38
     TOKEN_FLOAT,   // 3.14

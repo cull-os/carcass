@@ -321,6 +321,7 @@ impl<'a> Tokenizer<'a> {
 
             '+' => TOKEN_PLUS,
             '-' => TOKEN_MINUS,
+            '*' if self.try_consume_character('*') => TOKEN_ASTERISK_ASTERISK,
             '*' => TOKEN_ASTERISK,
 
             initial_digit if initial_digit.is_ascii_digit() => {
