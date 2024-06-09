@@ -329,7 +329,7 @@ impl<'a> Tokenizer<'a> {
                 } else {
                     match self.consume_character() {
                         #[rustfmt::skip] // 0xr<A>.<B> == <A> + <B> / $ 10 ** $ floor $ log10 <B>
-                        Some('r') => |c| matches!(c, 'i' | 'I' | 'v' | 'V' | 'x' | 'X' | 'l' | 'L' | 'c' | 'C' | 'd' | 'D' | 'm' | 'M'),
+                        Some('r') => |c| "ivxlcdmIVXLCDM".contains(c),
                         Some('b') => |c| matches!(c, '0' | '1'),
                         Some('o') => |c| matches!(c, '0'..='7'),
                         Some('x') => |c| c.is_ascii_hexdigit(),
