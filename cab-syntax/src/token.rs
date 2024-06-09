@@ -143,12 +143,9 @@ impl<'a> Tokenizer<'a> {
 
             match self.next_character() {
                 Some('\\') => {
-                    match self.next_character() {
-                        Some(_) => (),
-                        None => {
-                            self.context_pop(TokenizerContext::Stringish { delimiter });
-                            return Some(TOKEN_ERROR);
-                        },
+                    if self.next_character().is_none() {
+                        self.context_pop(TokenizerContext::Stringish { delimiter });
+                        return Some(TOKEN_ERROR);
                     }
                 },
 
@@ -163,7 +160,7 @@ impl<'a> Tokenizer<'a> {
                     });
                 },
 
-                Some(_) => (),
+                Some(_) => {},
                 None => {
                     self.context_pop(TokenizerContext::Stringish { delimiter });
                     return Some(TOKEN_ERROR);
@@ -191,12 +188,9 @@ impl<'a> Tokenizer<'a> {
                 .expect("because EOF is handled by the if above")
             {
                 '\\' => {
-                    match self.next_character() {
-                        Some(_) => (),
-                        None => {
-                            self.context_pop(TokenizerContext::Path);
-                            return Some(TOKEN_ERROR);
-                        },
+                    if self.next_character().is_none() {
+                        self.context_pop(TokenizerContext::Path);
+                        return Some(TOKEN_ERROR);
                     }
                 },
 
