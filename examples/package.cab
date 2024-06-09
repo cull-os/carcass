@@ -1,0 +1,31 @@
+# You can use this file standalone as well. No need for a default.cab.
+#
+# Just invoke `cab build package.cab` and since this file evaulates to
+# a derivation when the `buildSystem` and `targetSystem` are overriden,
+# you will get a symlink to `/cull/store/<name>` in `./result`.
+
+{
+  buildSystem = undefined;
+  targetSystem = undefined;
+
+  packages = <github:cull-os/packages>;
+} ==> packages.rustPackage {
+  name = "cab";
+  version = readFile ../cab-cli/Cargo.toml
+    # That is a pipe operator!
+    |> fromTOML
+    # Since the . operator is used to access attributes,
+    # the builtin functions have a function named `.` that is defined as:
+    #
+    # `.` = attribute: set: set.`${attribute}`;
+    #
+    # And you can use it to do neat stuff like this.
+    |> `.` "version";
+
+  source = ./..;
+
+  targetBuildDependencies = packages ==> [
+    # We don't need this, but this is the way you'd do nativeBuildInputs.
+    lolhtml
+  ]
+}

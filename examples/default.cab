@@ -1,0 +1,48 @@
+inputs @ {
+  # These variables have to be overriden.
+  # Currently they aren't defined. They don't exist at all
+  # but will when you override them.
+  buildSystem = undefined;
+  targetSystem = undefined;
+
+  # When packages isn't given, it locks itself to the default island.
+  # The lock is stored in `default.lock.cab`.
+  packages = <github:cull-os/packages>;
+
+  # This is not a function. This is equivalent to `with` in Nix.
+  # This is used instead of `let-in` too.
+  #
+  # You can override the `==>`'ed attribute set using `<==`:
+  #
+  # {
+  #   overrideMe = { foo = 3 } ==> foo * foo;
+  # } ==> [ overrideMe (overrideMe <== { foo = 2; }) ]
+  #
+  # That will evauluate to `[ 9 4 ]`.
+} ==> {
+  description = "Hello, Cab!";
+
+  # `fix` is a builtin function. No `builtins` namespace or `lib` needed!
+  # That is also a Haskell $.
+  packages = fix $ self: {
+    default = import ./package.cab <== inputs;
+    foo = self.default;
+  };
+
+  shells. = fix $ self: {
+    default = import ./shell.nix <== inputs;
+    foo = self.default;
+    # Identifiers are denoted using normal characters or anything that can be put into a string
+    # sandwiched between ``.
+    # You can even do string interpolation!
+    #
+    # This also applies to islands (e.g. <${forge}:${owner}/${repo}>).
+    bar = self.default <== { python = packages.`python-3.13` };
+  };
+
+  systems.myhost = packages.system { # Like lib.nixosSystem
+    # I have not decided if I want to do the modules like the NixOS lambda way
+    # or the ==> way. Stay tuned I guess.
+    modules = [];
+  };
+}

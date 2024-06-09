@@ -8,11 +8,14 @@
 
 !docs/
 
+!examples/
+
 !fuzz/
 !fuzz/fuzz_targets/
 
 !.gitignore
 
+!*.cab
 !*.lock
 !*.md
 !*.nix
