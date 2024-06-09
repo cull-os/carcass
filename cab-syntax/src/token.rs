@@ -337,9 +337,7 @@ impl<'a> Tokenizer<'a> {
                     }
                 };
 
-                let s = self.state.clone();
                 self.consume_while(is_valid_digit);
-                dbg!(self.consumed_since(s));
 
                 if self.try_consume_character('.') {
                     self.consume_while(is_valid_digit);
