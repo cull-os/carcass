@@ -328,7 +328,7 @@ impl<'a> Tokenizer<'a> {
                     |c| c.is_ascii_digit()
                 } else {
                     match self.consume_character() {
-                        #[rustfmt::skip] // 0xr<A>.<B> == <A> + <B> / $ 10 ** $ floor $ log10 <B>
+                        #[rustfmt::skip] // 0xr<A>.<B> == <A> + <B> / $ 10 ** floor $ log10 <B>
                         Some('r') => |c| "ivxlcdmIVXLCDM".contains(c),
                         Some('b') => |c| matches!(c, '0' | '1'),
                         Some('o') => |c| matches!(c, '0'..='7'),
@@ -347,7 +347,7 @@ impl<'a> Tokenizer<'a> {
                 }
             },
 
-            c if is_valid_initial_identifier_character(c) => {
+            initial_letter if is_valid_initial_identifier_character(initial_letter) => {
                 self.consume_while(is_valid_identifier_character);
 
                 match self.consumed_since(start_state) {
