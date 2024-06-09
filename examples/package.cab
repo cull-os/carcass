@@ -8,7 +8,7 @@
   buildSystem = undefined;
   targetSystem = undefined;
 
-  packages = <github:cull-os/packages> <== self;
+  packages = import <github:cull-os/packages> <== self;
 }) ==> packages.rustPackage {
   name = "cab";
   version = readFile ../cab-cli/Cargo.toml

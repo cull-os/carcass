@@ -7,7 +7,7 @@
 
   # When `packages` isn't given, it will default to the <github:cull-os/packages> island.
   # The lock of this island is stored in `default.cab.lock`.
-  packages = <github:cull-os/packages> <== self;
+  packages = import <github:cull-os/packages> <== self;
 
   # This is not a function. This is equivalent to `with` in Nix.
   # This is used instead of `let-in` too.
