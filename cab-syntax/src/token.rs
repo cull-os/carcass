@@ -32,11 +32,11 @@ impl PartialEq for TokenizerState<'_> {
 impl Eq for TokenizerState<'_> {}
 
 fn is_valid_initial_identifier_character(c: char) -> bool {
-    c.is_alphabetic() || matches!(c, '_' | '-')
+    !c.is_ascii_digit() && c.is_alphanumeric() || matches!(c, '_' | '-')
 }
 
 fn is_valid_identifier_character(c: char) -> bool {
-    c.is_numeric() || is_valid_initial_identifier_character(c)
+    c.is_alphanumeric() || matches!(c, '_' | '-')
 }
 
 pub struct Tokenizer<'a> {
