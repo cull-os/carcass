@@ -37,12 +37,21 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Dump the provided file.
-    TokenDump {
+    /// Various commands related to debugging.
+    Dump {
         /// If specified, the output will be colored instead of typed.
-        #[arg(long, short)]
+        #[arg(long, short, global = true)]
         color: bool,
 
+        #[command(subcommand)]
+        command: DumpCommand,
+    },
+}
+
+#[derive(Subcommand)]
+enum DumpCommand {
+    /// Dump the provided file's tokens.
+    Token {
         /// The file to dump the tokens of.
         #[clap(default_value = "-")]
         file: FileOrStdin,
@@ -51,7 +60,7 @@ enum Command {
     /// Dump the provided file's abstract syntax tree
     /// in the form of an unambigious Cab expression
     /// that is very similar to Lisp.
-    AstDump {
+    Ast {
         /// The file to dump the AST of.
         #[clap(default_value = "-")]
         file: FileOrStdin,
@@ -81,7 +90,10 @@ async fn main() -> io::Result<()> {
     let mut out = io::BufWriter::new(io::stdout());
 
     match cli.command {
-        Command::TokenDump { color, file } => {
+        Command::Dump {
+            color,
+            command: DumpCommand::Token { file },
+        } => {
             let expression = file.contents().unwrap_or_else(|error| {
                 log::error!("failed to read file: {error}");
                 process::exit(1);
@@ -116,7 +128,8 @@ async fn main() -> io::Result<()> {
                 });
             }
         },
-        Command::AstDump { .. } => {
+
+        _ => {
             log::error!("not implemented yet");
             process::exit(1);
         },
