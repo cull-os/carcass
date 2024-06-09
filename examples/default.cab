@@ -5,8 +5,8 @@ inputs @ {
   buildSystem = undefined;
   targetSystem = undefined;
 
-  # When packages isn't given, it locks itself to the default island.
-  # The lock is stored in `default.lock.cab`.
+  # When `packages` isn't given, it will default to the <github:cull-os/packages> island.
+  # The lock of this island is stored in `default.cab.lock`.
   packages = <github:cull-os/packages>;
 
   # This is not a function. This is equivalent to `with` in Nix.
