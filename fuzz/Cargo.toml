@@ -1,0 +1,21 @@
+[package]
+name    = "fuzz"
+version = "0.0.1"
+edition = "2021"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+colored       = "2.1.0"
+libfuzzer-sys = "0.4"
+
+cab-syntax.path = "../cab-syntax"
+
+[[bin]]
+name  = "token"
+path  = "fuzz_targets/token.rs"
+bench = false
+doc   = false
+test  = false

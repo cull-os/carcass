@@ -8,6 +8,9 @@
 
 !docs/
 
+!fuzz/
+!fuzz/fuzz_targets/
+
 !.gitignore
 
 !*.lock
