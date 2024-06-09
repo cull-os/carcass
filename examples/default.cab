@@ -15,7 +15,7 @@
   # You can override the `==>`'ed attribute set using `<==`:
   #
   # {
-  #   overrideMe = { foo = 3 } ==> foo * foo;
+  #   overrideMe = { foo = 3; } ==> foo * foo;
   # } ==> [ overrideMe (overrideMe <== { foo = 2; }) ]
   #
   # That will evauluate to `[ 9 4 ]`.
