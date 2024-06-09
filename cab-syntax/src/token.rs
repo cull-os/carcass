@@ -264,7 +264,7 @@ impl<'a> Tokenizer<'a> {
 
                     self.state.offset += end_after + end_delimiter.len();
                 } else {
-                    self.consume_while(|c| c != '\r' && c != '\n');
+                    self.consume_while(|c| !matches!(c, '\r' | '\n'));
                 }
 
                 TOKEN_COMMENT
@@ -329,8 +329,8 @@ impl<'a> Tokenizer<'a> {
                 } else {
                     match self.consume_character() {
                         #[rustfmt::skip] // 0xr<A>.<B> == <A> + <B> / $ 10 ** $ floor $ log10 <B>
-                        Some('r') => |c| ['i', 'I', 'v', 'V', 'x', 'X', 'l', 'L', 'c', 'C', 'd', 'D', 'm', 'M'].contains(&c),
-                        Some('b') => |c| c == '0' || c == '1',
+                        Some('r') => |c| matches!(c, 'i' | 'I' | 'v' | 'V' | 'x' | 'X' | 'l' | 'L' | 'c' | 'C' | 'd' | 'D' | 'm' | 'M'),
+                        Some('b') => |c| matches!(c, '0' | '1'),
                         Some('o') => |c| c.is_ascii_octdigit(),
                         Some('x') => |c| c.is_ascii_hexdigit(),
                         _ => |c| c.is_ascii_digit(),
@@ -391,7 +391,7 @@ impl<'a> Tokenizer<'a> {
 
             '.' if self
                 .peek_character()
-                .map_or(false, |c| c == '.' || c == '/') =>
+                .map_or(false, |c| matches!(c, '.' | '/')) =>
             {
                 self.state.offset -= 1;
                 self.context_push(TokenizerContext::Path);
