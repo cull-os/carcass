@@ -22,7 +22,7 @@
     # And you can use it to do neat stuff like this.
     |> `.` "version";
 
-  source = ./..;
+  source = ..;
 
   targetBuildDependencies = packages ==> [
     # We don't need this, but this is the way you'd do nativeBuildInputs.
