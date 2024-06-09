@@ -323,11 +323,26 @@ impl<'a> Tokenizer<'a> {
             '-' => TOKEN_MINUS,
             '*' => TOKEN_ASTERISK,
 
-            c if c.is_ascii_digit() => {
-                self.consume_while(|c| c.is_ascii_digit());
+            initial_digit if initial_digit.is_ascii_digit() => {
+                let is_valid_digit: fn(char) -> bool = if initial_digit != '0' {
+                    |c| c.is_ascii_digit()
+                } else {
+                    match self.consume_character() {
+                        #[rustfmt::skip] // 0xr<A>.<B> == <A> + <B> / $ 10 ** $ floor $ log10 <B>
+                        Some('r') => |c| ['i', 'I', 'v', 'V', 'x', 'X', 'l', 'L', 'c', 'C', 'd', 'D', 'm', 'M'].contains(&c),
+                        Some('b') => |c| c == '0' || c == '1',
+                        Some('o') => |c| c.is_ascii_octdigit(),
+                        Some('x') => |c| c.is_ascii_hexdigit(),
+                        _ => |c| c.is_ascii_digit(),
+                    }
+                };
+
+                let s = self.state.clone();
+                self.consume_while(is_valid_digit);
+                dbg!(self.consumed_since(s));
 
                 if self.try_consume_character('.') {
-                    self.consume_while(|c| c.is_ascii_digit());
+                    self.consume_while(is_valid_digit);
                     TOKEN_FLOAT
                 } else {
                     TOKEN_INTEGER
