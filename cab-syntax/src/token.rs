@@ -97,7 +97,7 @@ impl<'a> Tokenizer<'a> {
     }
 
     fn try_consume_character(&mut self, pattern: char) -> bool {
-        let starts_with = Some(pattern) == self.peek_character();
+        let starts_with = self.peek_character() == Some(pattern);
 
         if starts_with {
             self.state.offset += pattern.len_utf8();
