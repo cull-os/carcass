@@ -257,6 +257,7 @@ impl<'a> Tokenizer<'a> {
                     let end_delimiter = self.consumed_since(start_state);
 
                     let Some(end_after) = self.remaining().find(end_delimiter) else {
+                        // Don't have to close it, it just eats the whole file up.
                         self.state.offset = self.state.input.len();
                         return Some(TOKEN_COMMENT);
                     };
@@ -276,7 +277,8 @@ impl<'a> Tokenizer<'a> {
             '[' => TOKEN_LEFT_BRACKET,
             ']' => TOKEN_RIGHT_BRACKET,
 
-            '=' if self.consume_character('>') => TOKEN_EQUAL_MORE,
+            '=' if self.consume_string("=>") => TOKEN_EQUAL_EQUAL_MORE,
+            '<' if self.consume_string("==") => TOKEN_LESS_EQUAL_EQUAL,
             '/' if self.consume_character('/') => TOKEN_SLASH_SLASH,
             '{' => {
                 if let Some(TokenizerContext::Interpolation { brackets }) = self.context.last_mut()

@@ -82,7 +82,8 @@ pub enum SyntaxKind {
     TOKEN_LEFT_BRACKET,  // [
     TOKEN_RIGHT_BRACKET, // ]
 
-    TOKEN_EQUAL_MORE,       // =>
+    TOKEN_EQUAL_EQUAL_MORE, // ==>
+    TOKEN_LESS_EQUAL_EQUAL, // <==
     TOKEN_SLASH_SLASH,      // //
     TOKEN_PERIOD,           // .
     TOKEN_LEFT_CURLYBRACE,  // {
