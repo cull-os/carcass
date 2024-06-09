@@ -1,5 +1,3 @@
-#![feature(is_ascii_octdigit)]
-
 mod kind;
 mod token;
 
