@@ -39,6 +39,10 @@ fn is_valid_identifier_character(c: char) -> bool {
     c.is_alphanumeric() || matches!(c, '_' | '-')
 }
 
+fn is_valid_path_character(c: char) -> bool {
+    c.is_alphanumeric() || matches!(c, '.' | '/' | '_' | '-')
+}
+
 pub struct Tokenizer<'a> {
     context: Vec<TokenizerContext<'a>>,
     state: TokenizerState<'a>,
@@ -171,7 +175,10 @@ impl<'a> Tokenizer<'a> {
     // TODO: Find a sane way to not duplicate so much code.
     fn next_path(&mut self) -> Option<SyntaxKind> {
         loop {
-            if self.peek_character().map_or(false, char::is_whitespace) {
+            if self
+                .peek_character()
+                .map_or(true, |c| !is_valid_path_character(c))
+            {
                 self.context_pop(TokenizerContext::Path);
 
                 return Some(TOKEN_PATH);
@@ -179,8 +186,11 @@ impl<'a> Tokenizer<'a> {
 
             let start_state = self.state.clone();
 
-            match self.next_character() {
-                Some('\\') => {
+            match self
+                .next_character()
+                .expect("because EOF is handled by the if above")
+            {
+                '\\' => {
                     match self.next_character() {
                         Some(_) => (),
                         None => {
@@ -190,18 +200,14 @@ impl<'a> Tokenizer<'a> {
                     }
                 },
 
-                Some('$') if self.consume_character('{') => {
+                '$' if self.consume_character('{') => {
                     self.state = start_state;
                     self.context_push(TokenizerContext::InterpolationStart);
 
                     return Some(TOKEN_PATH);
                 },
 
-                Some(_) => (),
-                None => {
-                    self.context_pop(TokenizerContext::Path);
-                    return Some(TOKEN_PATH);
-                },
+                _ => {},
             }
         }
     }
@@ -380,10 +386,7 @@ impl<'a> Tokenizer<'a> {
 
                 return self.next_kind();
             },
-            '/' if self
-                .peek_character()
-                .map_or(false, |c| !c.is_ascii_digit() && !c.is_whitespace()) =>
-            {
+            '/' if self.peek_character().map_or(false, is_valid_path_character) => {
                 self.state.offset -= 1;
                 self.context_push(TokenizerContext::Path);
 
