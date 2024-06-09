@@ -1,4 +1,4 @@
-inputs @ {
+(fix $ self: {
   # These variables have to be overriden.
   # Currently they aren't defined. They don't exist at all
   # but will when you override them.
@@ -7,7 +7,7 @@ inputs @ {
 
   # When `packages` isn't given, it will default to the <github:cull-os/packages> island.
   # The lock of this island is stored in `default.cab.lock`.
-  packages = <github:cull-os/packages>;
+  packages = <github:cull-os/packages> <== self;
 
   # This is not a function. This is equivalent to `with` in Nix.
   # This is used instead of `let-in` too.
@@ -19,7 +19,7 @@ inputs @ {
   # } ==> [ overrideMe (overrideMe <== { foo = 2; }) ]
   #
   # That will evauluate to `[ 9 4 ]`.
-} ==> {
+}) ==> {
   description = "Hello, Cab!";
 
   # `fix` is a builtin function. No `builtins` namespace or `lib` needed!

@@ -4,12 +4,12 @@
 # a derivation when the `buildSystem` and `targetSystem` are overriden,
 # you will get a symlink to `/cull/store/<name>` in `./result`.
 
-{
+(fix $ self: {
   buildSystem = undefined;
   targetSystem = undefined;
 
-  packages = <github:cull-os/packages>;
-} ==> packages.rustPackage {
+  packages = <github:cull-os/packages> <== self;
+}) ==> packages.rustPackage {
   name = "cab";
   version = readFile ../cab-cli/Cargo.toml
     # That is a pipe operator!
