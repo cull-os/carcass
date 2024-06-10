@@ -1,4 +1,4 @@
-(fix $ self: {
+self @ {
   # These variables have to be overriden.
   # Currently they aren't defined. They don't exist at all
   # but will when you override them.
@@ -19,7 +19,7 @@
   # } ==> [ overrideMe (overrideMe <== { foo = 2; }) ]
   #
   # That will evauluate to `[ 9 4 ]`.
-}) ==> {
+} ==> {
   description = "Hello, Cab!";
 
   # `fix` is a builtin function. No `builtins` namespace or `lib` needed!

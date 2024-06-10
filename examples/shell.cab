@@ -4,12 +4,12 @@
 # a derivation when the `buildSystem` and `targetSystem` are overriden,
 # you will get launched into a shell just like `nix develop`.
 
-(fix $ self: {
+self @ {
   buildSystem = undefined;
   targetSystem = undefined;
 
   packages = import <github:cull-os/packages> <== self;
-}) ==> packages.shell {
+} ==> packages.shell {
   pathPackages = packages ==> [
     # We don't need this, but this is the way
     # you'd do the equivalent of `packages` in mkShell.
