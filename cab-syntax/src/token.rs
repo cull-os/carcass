@@ -1,5 +1,3 @@
-use std::ptr;
-
 use crate::SyntaxKind::{
     self,
     *,
@@ -22,14 +20,6 @@ struct TokenizerState<'a> {
     input: &'a str,
     offset: usize,
 }
-
-impl PartialEq for TokenizerState<'_> {
-    fn eq(&self, other: &Self) -> bool {
-        ptr::eq(self.input, other.input) && self.offset == other.offset
-    }
-}
-
-impl Eq for TokenizerState<'_> {}
 
 fn is_valid_initial_identifier_character(c: char) -> bool {
     !c.is_ascii_digit() && c.is_alphanumeric() || matches!(c, '_' | '-')
