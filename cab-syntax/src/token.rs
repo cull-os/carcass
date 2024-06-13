@@ -3,24 +3,6 @@ use crate::SyntaxKind::{
     *,
 };
 
-#[derive(Debug, Clone)]
-pub struct Token<'a>(pub SyntaxKind, pub &'a str);
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum TokenizerContext<'a> {
-    Path,
-    Stringish { delimiter: &'a str },
-    StringishEnd { delimiter: &'a str },
-    InterpolationStart,
-    Interpolation { brackets: u32 },
-}
-
-#[derive(Debug, Clone)]
-struct TokenizerState<'a> {
-    input: &'a str,
-    offset: usize,
-}
-
 fn is_valid_initial_identifier_character(c: char) -> bool {
     !c.is_ascii_digit() && c.is_alphanumeric() || matches!(c, '_' | '-')
 }
@@ -33,27 +15,42 @@ fn is_valid_path_character(c: char) -> bool {
     c.is_alphanumeric() || matches!(c, '.' | '/' | '_' | '-')
 }
 
+#[derive(Debug, Clone)]
+pub struct Token<'a>(pub SyntaxKind, pub &'a str);
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum TokenizerContext<'a> {
+    Path,
+    Stringish { delimiter: &'a str },
+    StringishEnd { delimiter: &'a str },
+    InterpolationStart,
+    Interpolation { brackets: u32 },
+}
+
 pub struct Tokenizer<'a> {
+    input: &'a str,
+    offset: usize,
+
     context: Vec<TokenizerContext<'a>>,
-    state: TokenizerState<'a>,
 }
 
 impl<'a> Iterator for Tokenizer<'a> {
     type Item = Token<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let start_state = self.state.clone();
+        let start_offset = self.offset;
 
         self.consume_kind()
-            .map(|kind| Token(kind, self.consumed_since(start_state)))
+            .map(|kind| Token(kind, self.consumed_since(start_offset)))
     }
 }
 
 impl<'a> Tokenizer<'a> {
     pub fn new(input: &'a str) -> Self {
         Self {
+            input,
+            offset: 0,
             context: Vec::new(),
-            state: TokenizerState { input, offset: 0 },
         }
     }
 
@@ -67,7 +64,7 @@ impl<'a> Tokenizer<'a> {
     }
 
     fn remaining(&self) -> &str {
-        &self.state.input[self.state.offset..]
+        &self.input[self.offset..]
     }
 
     fn peek_character(&self) -> Option<char> {
@@ -82,7 +79,7 @@ impl<'a> Tokenizer<'a> {
             .map(char::len_utf8)
             .sum();
 
-        self.state.offset += length;
+        self.offset += length;
         length
     }
 
@@ -90,7 +87,7 @@ impl<'a> Tokenizer<'a> {
         let starts_with = self.peek_character() == Some(pattern);
 
         if starts_with {
-            self.state.offset += pattern.len_utf8();
+            self.offset += pattern.len_utf8();
         }
 
         starts_with
@@ -100,19 +97,19 @@ impl<'a> Tokenizer<'a> {
         let starts_with = self.remaining().starts_with(pattern);
 
         if starts_with {
-            self.state.offset += pattern.len();
+            self.offset += pattern.len();
         }
 
         starts_with
     }
 
-    fn consumed_since<'b>(&self, past: TokenizerState<'b>) -> &'b str {
-        &past.input[past.offset..self.state.offset]
+    fn consumed_since(&self, past_offset: usize) -> &'a str {
+        &self.input[past_offset..self.offset]
     }
 
     fn consume_character(&mut self) -> Option<char> {
         let next = self.peek_character()?;
-        self.state.offset += next.len_utf8();
+        self.offset += next.len_utf8();
         Some(next)
     }
 
@@ -129,7 +126,7 @@ impl<'a> Tokenizer<'a> {
                 });
             }
 
-            let start_state = self.state.clone();
+            let start_offset = self.offset;
 
             match self.consume_character() {
                 Some('\\') => {
@@ -140,7 +137,7 @@ impl<'a> Tokenizer<'a> {
                 },
 
                 Some('$') if self.try_consume_character('{') => {
-                    self.state = start_state;
+                    self.offset = start_offset;
                     self.context_push(TokenizerContext::InterpolationStart);
 
                     return Some(match delimiter {
@@ -171,7 +168,7 @@ impl<'a> Tokenizer<'a> {
                 return Some(TOKEN_PATH);
             }
 
-            let start_state = self.state.clone();
+            let start_offset = self.offset;
 
             match self
                 .consume_character()
@@ -185,7 +182,7 @@ impl<'a> Tokenizer<'a> {
                 },
 
                 '$' if self.try_consume_character('{') => {
-                    self.state = start_state;
+                    self.offset = start_offset;
                     self.context_push(TokenizerContext::InterpolationStart);
 
                     return Some(TOKEN_PATH);
@@ -197,7 +194,7 @@ impl<'a> Tokenizer<'a> {
     }
 
     fn consume_kind(&mut self) -> Option<SyntaxKind> {
-        let start_state = self.state.clone();
+        let start_offset = self.offset;
 
         match self.context.last() {
             Some(TokenizerContext::Path) => {
@@ -244,15 +241,15 @@ impl<'a> Tokenizer<'a> {
             '#' => {
                 // ### or more gets multiline
                 if self.consume_while(|c| c == '#') >= 2 {
-                    let end_delimiter = self.consumed_since(start_state);
+                    let end_delimiter = self.consumed_since(start_offset);
 
                     let Some(end_after) = self.remaining().find(end_delimiter) else {
                         // Don't have to close it, it just eats the whole file up.
-                        self.state.offset = self.state.input.len();
+                        self.offset = self.input.len();
                         return Some(TOKEN_COMMENT);
                     };
 
-                    self.state.offset += end_after + end_delimiter.len();
+                    self.offset += end_after + end_delimiter.len();
                 } else {
                     self.consume_while(|c| !matches!(c, '\r' | '\n'));
                 }
@@ -341,7 +338,7 @@ impl<'a> Tokenizer<'a> {
             initial_letter if is_valid_initial_identifier_character(initial_letter) => {
                 self.consume_while(is_valid_identifier_character);
 
-                match self.consumed_since(start_state) {
+                match self.consumed_since(start_offset) {
                     "if" => TOKEN_LITERAL_IF,
                     "then" => TOKEN_LITERAL_THEN,
                     "else" => TOKEN_LITERAL_ELSE,
@@ -372,7 +369,7 @@ impl<'a> Tokenizer<'a> {
                 self.consume_while(|c| c == '\'');
 
                 self.context_push(TokenizerContext::Stringish {
-                    delimiter: self.consumed_since(start_state),
+                    delimiter: self.consumed_since(start_offset),
                 });
 
                 TOKEN_STRING_START
@@ -382,13 +379,13 @@ impl<'a> Tokenizer<'a> {
                 .peek_character()
                 .map_or(false, |c| matches!(c, '.' | '/')) =>
             {
-                self.state.offset -= 1;
+                self.offset -= 1;
                 self.context_push(TokenizerContext::Path);
 
                 return self.consume_kind();
             },
             '/' if self.peek_character().map_or(false, is_valid_path_character) => {
-                self.state.offset -= 1;
+                self.offset -= 1;
                 self.context_push(TokenizerContext::Path);
 
                 return self.consume_kind();
