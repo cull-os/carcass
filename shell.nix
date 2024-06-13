@@ -5,7 +5,7 @@ mkShell {
     cargo-fuzz
   ];
 
-  LD_LIBRARY_PATH = "${stdenv.cc.cc.lib}/lib";
+  env.LD_LIBRARY_PATH = lib.makeLibraryPath [ stdenv.cc.cc ];
 
   shellHook = ''
     root=$(git rev-parse --show-toplevel 2>/dev/null || echo ".")
