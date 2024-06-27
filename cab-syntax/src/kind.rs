@@ -75,7 +75,7 @@ pub enum SyntaxKind {
     TOKEN_WHITESPACE, // \n, \t
     TOKEN_COMMENT,    // #<anything until end of line>
 
-    TOKEN_DOLLAR,       // $
+    TOKEN_LESS_PIPE,    // <|
     TOKEN_PIPE_GREATER, // |>
 
     TOKEN_LEFT_PARENTHESIS,  // (

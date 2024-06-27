@@ -2,6 +2,9 @@ self @ {
   # These variables have to be overriden.
   # Currently they aren't defined. They don't exist at all
   # but will when you override them.
+  #
+  # We're just writing them here to signal that they
+  # will exist, as the Cab CLI overrides them when evaluating this file.
   buildSystem = undefined;
   targetSystem = undefined;
 
@@ -23,13 +26,13 @@ self @ {
   description = "Hello, Cab!";
 
   # `fix` is a builtin function. No `builtins` namespace or `lib` needed!
-  # That is also a Haskell $.
-  packages = fix $ self: {
+  # <| is also equivalent to the Hasell $.
+  packages = fix <| self: {
     default = import ./package.cab <== inputs;
     foo = self.default;
   };
 
-  shells. = fix $ self: {
+  shells = fix <| self: {
     default = import ./shell.nix <== inputs;
     foo = self.default;
     # Identifiers are denoted using normal characters or anything that can be put into a string
