@@ -206,9 +206,7 @@ impl<'a> Tokenizer<'a> {
             },
             Some(TokenizerContext::StringishEnd { delimiter }) => {
                 let delimiter = *delimiter;
-                if !self.try_consume_string(delimiter) {
-                    unreachable!()
-                }
+                assert!(self.try_consume_string(delimiter));
 
                 self.context_pop(TokenizerContext::StringishEnd { delimiter });
 
@@ -220,9 +218,7 @@ impl<'a> Tokenizer<'a> {
             },
 
             Some(TokenizerContext::InterpolationStart) => {
-                if !self.try_consume_string("${") {
-                    unreachable!()
-                }
+                assert!(self.try_consume_string("${"));
 
                 self.context_pop(TokenizerContext::InterpolationStart);
                 self.context_push(TokenizerContext::Interpolation { brackets: 0 });
