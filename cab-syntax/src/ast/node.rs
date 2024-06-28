@@ -11,7 +11,7 @@ use crate::{
 
 pub trait Node: rowan::ast::AstNode<Language = Language> {
     fn nth<N: Node>(&self, n: usize) -> Option<N> {
-        self.syntax().children().flat_map(N::cast).nth(n)
+        self.syntax().children().filter_map(N::cast).nth(n)
     }
 
     fn children<N: Node>(&self) -> rowan::ast::AstChildren<N> {
