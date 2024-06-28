@@ -2,7 +2,7 @@ use colored::CustomColor;
 use num_enum::TryFromPrimitive;
 
 #[rustfmt::skip]
-pub const SYNTAX_COLORS: &[CustomColor] = &[
+pub const COLORS: &[CustomColor] = &[
     CustomColor { r: 0x00, g: 0x00, b: 0x00 },
     CustomColor { r: 0x2F, g: 0x4F, b: 0x4F },
     CustomColor { r: 0x55, g: 0x6B, b: 0x2F },
@@ -69,7 +69,7 @@ pub const SYNTAX_COLORS: &[CustomColor] = &[
 #[repr(u16)]
 #[allow(non_camel_case_types)]
 #[non_exhaustive]
-pub enum SyntaxKind {
+pub enum Kind {
     // TOKEN
     TOKEN_ERROR,
     TOKEN_WHITESPACE, // \n, \t
@@ -196,15 +196,15 @@ pub enum SyntaxKind {
     NODE_IF_ELSE, // if <expression> then <expression> else <expression>
 }
 
-pub use SyntaxKind::*;
+use Kind::*;
 
-impl From<SyntaxKind> for rowan::SyntaxKind {
-    fn from(kind: SyntaxKind) -> Self {
+impl From<Kind> for rowan::SyntaxKind {
+    fn from(kind: Kind) -> Self {
         Self(kind as u16)
     }
 }
 
-impl SyntaxKind {
+impl Kind {
     /// Whether if this token is a literal, such as a float or integer.
     pub fn is_literal(self) -> bool {
         matches!(self, TOKEN_FLOAT | TOKEN_INTEGER)

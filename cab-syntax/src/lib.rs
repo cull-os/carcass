@@ -23,13 +23,9 @@ impl rowan::Language for Language {
 }
 
 pub mod syntax {
-    pub use crate::kind::{
-        SyntaxKind as Kind,
-        SYNTAX_COLORS as COLORS,
-    };
-    use crate::Language;
+    pub use crate::kind::*;
 
-    pub type Node = rowan::SyntaxNode<Language>;
-    pub type Token = rowan::SyntaxToken<Language>;
+    pub type Node = rowan::SyntaxNode<crate::Language>;
+    pub type Token = rowan::SyntaxToken<crate::Language>;
     pub type Element = rowan::NodeOrToken<Node, Token>;
 }
