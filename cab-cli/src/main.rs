@@ -7,8 +7,8 @@ use std::{
 };
 
 use cab_syntax::{
+    syntax,
     Tokenizer,
-    SYNTAX_COLORS,
 };
 use clap::{
     Parser,
@@ -101,7 +101,7 @@ async fn main() -> io::Result<()> {
 
             for token in Tokenizer::new(&expression) {
                 let result = if color {
-                    let on_color = SYNTAX_COLORS[token.0 as usize];
+                    let on_color = syntax::COLORS[token.0 as usize];
 
                     let color = if (0.2126 * on_color.r as f32
                         + 0.7152 * on_color.g as f32

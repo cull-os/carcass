@@ -151,38 +151,49 @@ pub enum SyntaxKind {
     NODE_ERROR,
     NODE_ROOT,
 
-    NODE_LITERAL, // 1, "foo", 3.14
-
-    NODE_IDENTIFIER, // <identifier>
-
-    NODE_APPLY, // <expression> <expression>
-
-    NODE_SELECT,          // <expression>.<identifier | integer>
-    NODE_CHECK_ATTRIBUTE, // <expression> ? <identifier | integer><.<identifier | integer>>*
-
-    NODE_LIST,
-
-    NODE_ATTRIBUTE_SET,   // { <attribute-path>* }
-    NODE_ATTRIBUTE,       // <identifier><.<identifier>>* = <expression>;
-    NODE_ATTRIBUTE_PATH,  // <identifier><.<identifier>>*
-    NODE_ATTRIBUTE_VALUE, // <expression>
-
-    NODE_INTERPOLATION, // ${baz}
-    NODE_STRING,        // "foo bar ${baz}"
-    NODE_PATH,          // /foo/${bar}, ./asd/${def}
-
-    NODE_IF_ELSE, // if <expression> then <expression> else <expression>
-
-    NODE_LAMBDA,                         // <identifier | bind>: <expression>
-    NODE_LAMBDA_PARAMETER_IDENTIFIER,    // <identifier>
-    NODE_LAMBDA_PARAMETER_PATTERN,       // <identifier> @ { <<entry>,>* }
-    NODE_LAMBDA_PARAMETER_PATTERN_BIND,  // <identifier> @
-    NODE_LAMBDA_PARAMETER_PATTERN_ENTRY, // <identifier> <? <expr>>?
+    // No <| node as it is only syntax sugar.
+    NODE_PIPE,
 
     NODE_PARENTHESIS, // (<expression>)
 
-    NODE_UNARY_OPERATION,  // <operator> <expression>
-    NODE_BINARY_OPERATION, // <expression> <operator> <expression>
+    NODE_LIST, // [<<expression> >*]
+
+    NODE_ATTRIBUTE_SET,     // { <attribute | attribute-inherit>* }
+    NODE_ATTRIBUTE,         // <identifier><.<identifier>>* = <expression>;
+    NODE_ATTRIBUTE_PATH,    // <identifier><.<identifier>>*
+    NODE_ATTRIBUTE_VALUE,   // <expression>
+    NODE_ATTRIBUTE_INHERIT, // <identifier>;
+
+    NODE_PATTERN_BIND, // <identifier> @
+
+    // <== is an infix operation that has nothing special.
+    NODE_USE,                  // <<identifier> @>? <expression> ==> <expression>
+    NODE_USE_LEFT_EXPRESSION,  // Left <expression> of above.
+    NODE_USE_RIGHT_EXPRESSION, // Right <expression> of above.
+
+    NODE_LAMBDA,                         // <identifier | bind>: <expression>
+    NODE_LAMBDA_PARAMETER_IDENTIFIER,    // <identifier>
+    NODE_LAMBDA_PARAMETER_PATTERN,       // <pattern-bind>? { <<entry>,>* }
+    NODE_LAMBDA_PARAMETER_PATTERN_ENTRY, // <identifier> <? <expression>>?
+    NODE_LAMBDA_EXPRESSION,              // <expression>
+
+    NODE_APPLY,       // <expression> <expression>
+    NODE_APPLY_LEFT,  // Left <expression> of above.
+    NODE_APPLY_RIGHT, // Right <expression> of above.
+
+    NODE_SELECT_ATTRIBUTE, // <expression>.<identifier>
+    NODE_CHECK_ATTRIBUTE,  // <expression> ? <identifier><.<identifier>>*
+
+    NODE_PREFIX_OPERATION, // <operator> <expression>
+    NODE_INFIX_OPERATION,  // <expression> <operator> <expression>
+
+    NODE_PATH,   // /foo/${bar}, ./asd/${def}
+    NODE_STRING, // "foo bar ${baz}"
+    NODE_ISLAND, // <github:cull-os/packages>, <${forge}:cull-os/${repo}>
+
+    NODE_LITERAL, // 42, 3.14
+
+    NODE_IF_ELSE, // if <expression> then <expression> else <expression>
 }
 
 pub use SyntaxKind::*;

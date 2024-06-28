@@ -1,6 +1,6 @@
-use crate::SyntaxKind::{
+use crate::syntax::{
     self,
-    *,
+    Kind::*,
 };
 
 fn is_valid_initial_identifier_character(c: char) -> bool {
@@ -16,7 +16,7 @@ fn is_valid_path_character(c: char) -> bool {
 }
 
 #[derive(Debug, Clone)]
-pub struct Token<'a>(pub SyntaxKind, pub &'a str);
+pub struct Token<'a>(pub syntax::Kind, pub &'a str);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum TokenizerContext<'a> {
@@ -113,7 +113,7 @@ impl<'a> Tokenizer<'a> {
         Some(next)
     }
 
-    fn consume_string(&mut self, delimiter: &'a str) -> Option<SyntaxKind> {
+    fn consume_string(&mut self, delimiter: &'a str) -> Option<syntax::Kind> {
         loop {
             if self.remaining().starts_with(delimiter) {
                 self.context_pop(TokenizerContext::Stringish { delimiter });
@@ -157,7 +157,7 @@ impl<'a> Tokenizer<'a> {
     }
 
     // TODO: Find a sane way to not duplicate so much code.
-    fn consume_path(&mut self) -> Option<SyntaxKind> {
+    fn consume_path(&mut self) -> Option<syntax::Kind> {
         loop {
             if self
                 .peek_character()
@@ -193,7 +193,7 @@ impl<'a> Tokenizer<'a> {
         }
     }
 
-    fn consume_kind(&mut self) -> Option<SyntaxKind> {
+    fn consume_kind(&mut self) -> Option<syntax::Kind> {
         let start_offset = self.offset;
 
         match self.context.last() {

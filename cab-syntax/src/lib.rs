@@ -1,10 +1,7 @@
+pub mod ast;
 mod kind;
 mod token;
 
-pub use kind::{
-    SyntaxKind,
-    SYNTAX_COLORS,
-};
 pub use token::{
     Token,
     Tokenizer,
@@ -14,10 +11,10 @@ pub use token::{
 pub enum Language {}
 
 impl rowan::Language for Language {
-    type Kind = SyntaxKind;
+    type Kind = syntax::Kind;
 
-    fn kind_from_raw(raw: rowan::SyntaxKind) -> Self::Kind {
-        Self::Kind::try_from(raw.0).unwrap()
+    fn kind_from_raw(from: rowan::SyntaxKind) -> Self::Kind {
+        Self::Kind::try_from(from.0).unwrap()
     }
 
     fn kind_to_raw(kind: Self::Kind) -> rowan::SyntaxKind {
@@ -25,6 +22,14 @@ impl rowan::Language for Language {
     }
 }
 
-pub type SyntaxNode = rowan::SyntaxNode<Language>;
-pub type SyntaxToken = rowan::SyntaxToken<Language>;
-pub type SyntaxElement = rowan::NodeOrToken<SyntaxNode, SyntaxToken>;
+pub mod syntax {
+    pub use crate::kind::{
+        SyntaxKind as Kind,
+        SYNTAX_COLORS as COLORS,
+    };
+    use crate::Language;
+
+    pub type Node = rowan::SyntaxNode<Language>;
+    pub type Token = rowan::SyntaxToken<Language>;
+    pub type Element = rowan::NodeOrToken<Node, Token>;
+}
