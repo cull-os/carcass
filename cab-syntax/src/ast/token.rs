@@ -59,11 +59,21 @@ impl Comment {
         let raw = self.syntax().text();
         let start_index = raw.find(|c| c != '#').unwrap_or(raw.len());
 
-        // Assumes well formed comment.
         match start_index {
             0 => unreachable!(),
             1..=2 => &raw[start_index..],
-            3.. => &raw[start_index..raw.len() - start_index],
+            3.. => {
+                #[cfg(debug_assertions)]
+                {
+                    let delimiter = &raw[start_index..];
+
+                    assert!(raw.len() > delimiter.len() * 2);
+                    assert!(raw.starts_with(delimiter));
+                    assert!(raw.ends_with(delimiter));
+                }
+
+                &raw[start_index..raw.len() - start_index]
+            },
         }
     }
 }
@@ -84,7 +94,7 @@ impl Float {
     }
 }
 
-token! { #[from(TOKEN_PATH)] struct Path; }
+token! { #[from(TOKEN_PATH)] struct PathContent; }
 
 token! { #[from(TOKEN_IDENTIFIER_CONTENT)] struct IdentifierContent; }
 

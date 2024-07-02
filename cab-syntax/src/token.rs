@@ -15,7 +15,7 @@ fn is_valid_path_character(c: char) -> bool {
     c.is_alphanumeric() || matches!(c, '.' | '/' | '_' | '-')
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Token<'a>(pub syntax::Kind, pub &'a str);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -206,7 +206,7 @@ impl<'a> Tokenizer<'a> {
             },
             Some(TokenizerContext::StringishEnd { delimiter }) => {
                 let delimiter = *delimiter;
-                assert!(self.try_consume_string(delimiter));
+                debug_assert!(self.try_consume_string(delimiter));
 
                 self.context_pop(TokenizerContext::StringishEnd { delimiter });
 
@@ -218,7 +218,7 @@ impl<'a> Tokenizer<'a> {
             },
 
             Some(TokenizerContext::InterpolationStart) => {
-                assert!(self.try_consume_string("${"));
+                debug_assert!(self.try_consume_string("${"));
 
                 self.context_pop(TokenizerContext::InterpolationStart);
                 self.context_push(TokenizerContext::Interpolation { brackets: 0 });

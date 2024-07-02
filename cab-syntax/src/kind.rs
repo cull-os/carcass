@@ -69,6 +69,7 @@ pub const COLORS: &[CustomColor] = &[
 #[repr(u16)]
 #[allow(non_camel_case_types)]
 #[non_exhaustive]
+#[rustfmt::skip]
 pub enum Kind {
     // TOKEN
     TOKEN_ERROR,
@@ -132,6 +133,8 @@ pub enum Kind {
     // /etc/resolv.conf, ./wallpaper.png, ./foo${bar}
     TOKEN_PATH,
 
+    // TODO: Merge *_CONTENT into a single TOKEN_CONTENT.
+
     // `foo bar baz`, `?? lmao ${baz}`
     TOKEN_IDENTIFIER_START,
     TOKEN_IDENTIFIER_CONTENT,
@@ -149,49 +152,42 @@ pub enum Kind {
 
     // AST
     NODE_ERROR,
-    NODE_ROOT,
-
-    // No <| node as it is only syntax sugar.
-    NODE_PIPE,
 
     NODE_PARENTHESIS, // (<expression>)
 
-    NODE_LIST, // [<<expression> >*]
+    NODE_LIST, // [<expression>*]
 
-    NODE_ATTRIBUTE_SET,     // { <attribute | attribute-inherit>* }
-    NODE_ATTRIBUTE,         // <identifier><.<identifier>>* = <expression>;
-    NODE_ATTRIBUTE_PATH,    // <identifier><.<identifier>>*
-    NODE_ATTRIBUTE_VALUE,   // <expression>
-    NODE_ATTRIBUTE_INHERIT, // <identifier>;
+    NODE_ATTRIBUTE_SET,           // { <attribute | attribute-inherit>* }
+        NODE_ATTRIBUTE,           // <attribute-path> = <attribute-value>;
+            NODE_ATTRIBUTE_PATH,  // <identifier><.<identifier>>*
+            NODE_ATTRIBUTE_VALUE, // <expression>
+        NODE_ATTRIBUTE_INHERIT,   // <identifier>;
 
-    NODE_PATTERN_BIND, // <identifier> @
+        NODE_ATTRIBUTE_SELECT, // <expression>.<identifier>
+        NODE_ATTRIBUTE_CHECK,  // <expression> ? <attribute-path>
 
-    // <== is an infix operation that has nothing special.
-    NODE_USE,                  // <<identifier> @>? <expression> ==> <expression>
-    NODE_USE_LEFT_EXPRESSION,  // Left <expression> of above.
-    NODE_USE_RIGHT_EXPRESSION, // Right <expression> of above.
+    NODE_BIND, // <identifier> @
 
-    NODE_LAMBDA,                         // <identifier | bind>: <expression>
-    NODE_LAMBDA_PARAMETER_IDENTIFIER,    // <identifier>
-    NODE_LAMBDA_PARAMETER_PATTERN,       // <pattern-bind>? { <<entry>,>* }
-    NODE_LAMBDA_PARAMETER_PATTERN_ENTRY, // <identifier> <? <expression>>?
-    NODE_LAMBDA_EXPRESSION,              // <expression>
+    NODE_USE, // <bind>? <expression> ==> <expression>
 
-    NODE_APPLY,       // <expression> <expression>
-    NODE_APPLY_LEFT,  // Left <expression> of above.
-    NODE_APPLY_RIGHT, // Right <expression> of above.
+    NODE_LAMBDA,                                 // <identifier | lambda-parameter-pattern>: <expression>
+        NODE_LAMBDA_PARAMETER_IDENTIFIER,        // <identifier>
+        NODE_LAMBDA_PARAMETER_PATTERN,           // <bind>? { <<entry>,>* }
+            NODE_LAMBDA_PARAMETER_PATTERN_ENTRY, // <identifier> <? <expression>>?
 
-    NODE_SELECT_ATTRIBUTE, // <expression>.<identifier>
-    NODE_CHECK_ATTRIBUTE,  // <expression> ? <identifier><.<identifier>>*
+    NODE_APPLICATION, // <expression> <expression>
 
     NODE_PREFIX_OPERATION, // <operator> <expression>
     NODE_INFIX_OPERATION,  // <expression> <operator> <expression>
 
-    NODE_PATH,   // /foo/${bar}, ./asd/${def}
-    NODE_STRING, // "foo bar ${baz}"
-    NODE_ISLAND, // <github:cull-os/packages>, <${forge}:cull-os/${repo}>
+    NODE_INTERPOLATION, // ${<expression>}
 
-    NODE_LITERAL, // 42, 3.14
+    NODE_PATH,       // <path-content | interpolation>*
+    NODE_IDENTIFIER, // <identifier-start><identifier-content | interpolation>*<identifier-end>
+    NODE_STRING,     // <string-start><string-content | interpolation>*<string-end>
+    NODE_ISLAND,     // <island-start><island-content | interpolation>*<island-end>
+
+    NODE_NUMBER, // 42, 3.14
 
     NODE_IF_ELSE, // if <expression> then <expression> else <expression>
 }
