@@ -143,29 +143,29 @@ macro_rules! node {
 }
 
 macro_rules! get_token {
-    ($name:ident() -> $token:ident) => {
-        pub fn $name(&self) -> syntax::Token {
-            self.token_untyped($token).unwrap()
-        }
-    };
-
     ($name:ident() -> ? $token:ident) => {
         pub fn $name(&self) -> Option<syntax::Token> {
             self.token_untyped($token)
         }
     };
+
+    ($name:ident() -> $token:ident) => {
+        pub fn $name(&self) -> syntax::Token {
+            self.token_untyped($token).unwrap()
+        }
+    };
 }
 
 macro_rules! get_node {
-    ($name:ident() -> $n:literal @ $type:ty) => {
-        pub fn $name(&self) -> $type {
-            self.nth($n).unwrap()
-        }
-    };
-
     ($name:ident() -> $n:literal @ ? $type:ty) => {
         pub fn $name(&self) -> Option<$type> {
             self.nth($n)
+        }
+    };
+
+    ($name:ident() -> $n:literal @ $type:ty) => {
+        pub fn $name(&self) -> $type {
+            self.nth($n).unwrap()
         }
     };
 
@@ -182,7 +182,7 @@ node! { #[from(NODE_ERROR)] struct Error; }
 
 node! {
     #[from(
-        Parentehsis,
+        Parenthesis,
         List,
         AttributeSet,
         Use,
@@ -305,9 +305,15 @@ impl Lambda {
 
 node! {
     #[from(
-        Identifier,
+        LambdaParameterIdentifier,
         LambdaParameterPattern,
     )] enum LambdaParameter;
+}
+
+node! { #[from(NODE_LAMBDA_PARAMETER_IDENTIFIER)] struct LambdaParameterIdentifier; }
+
+impl LambdaParameterIdentifier {
+    get_node! { identifier() -> 0 @ Identifier }
 }
 
 node! { #[from(NODE_LAMBDA_PARAMETER_PATTERN)] struct LambdaParameterPattern; }
@@ -334,9 +340,9 @@ impl LambdaParameterPatternEntry {
 
 // APPLICATION
 
-node! { #[from(NODE_APPLICATION)] struct Applicaton; }
+node! { #[from(NODE_APPLICATION)] struct Application; }
 
-impl Applicaton {
+impl Application {
     get_node! { left_expression() -> 0 @ Expression }
 
     get_node! { right_expression() -> 1 @ Expression }
@@ -362,7 +368,7 @@ impl TryFrom<syntax::Kind> for PrefixOperator {
             TOKEN_PLUS => Ok(Self::Swwallation),
             TOKEN_MINUS => Ok(Self::Negation),
 
-            TOKEN_NOT => Ok(Self::Not),
+            TOKEN_LITERAL_NOT => Ok(Self::Not),
 
             _ => Err(()),
         }
@@ -384,7 +390,7 @@ impl PrefixOperation {
 node! { #[from(NODE_INFIX_OPERATION)] struct InfixOperation; }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-enum InfixOperator {
+pub enum InfixOperator {
     Apply, // <|
     Pipe,  // |>
 
@@ -529,7 +535,7 @@ impl Island {
 node! { #[from(NODE_NUMBER)] struct Number; }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-enum NumberType {
+pub enum NumberType {
     Integer,
     Float,
 }
