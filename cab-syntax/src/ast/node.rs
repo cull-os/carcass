@@ -51,11 +51,11 @@ macro_rules! node {
     (
         #[from($kind:ident)]
         $(#[$meta:meta])*
-        struct $name:ident;
+        $visibility:vis struct $name:ident;
     ) => {
-        $(#[$meta])*
         #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-        pub struct $name(pub syntax::Node);
+        $(#[$meta])*
+        $visibility struct $name(pub syntax::Node);
 
         impl fmt::Display for $name {
             fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -79,6 +79,7 @@ macro_rules! node {
             }
         }
 
+        $(#[$meta])*
         impl $name {
             pub const KIND: syntax::Kind = $kind;
         }
@@ -86,11 +87,11 @@ macro_rules! node {
     (
         #[from($($variant:ident),* $(,)?)]
         $(#[$meta:meta])*
-        enum $name:ident;
+        $visibility:vis enum $name:ident;
     ) => {
-        $(#[$meta])*
         #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-        pub enum $name {
+        $(#[$meta])*
+        $visibility enum $name {
              $($variant($variant),)*
         }
 
@@ -143,40 +144,45 @@ macro_rules! node {
 }
 
 macro_rules! get_token {
-    ($name:ident() -> ? $token:ident) => {
-        pub fn $name(&self) -> Option<syntax::Token> {
+    ($(#[$meta:meta])* $visibility:vis fn $name:ident() -> ? $token:ident) => {
+        $(#[$meta])*
+        $visibility fn $name(&self) -> Option<syntax::Token> {
             self.token_untyped($token)
         }
     };
 
-    ($name:ident() -> $token:ident) => {
-        pub fn $name(&self) -> syntax::Token {
+    ($(#[$meta:meta])* $visibility:vis fn $name:ident() -> $token:ident) => {
+        $(#[$meta])*
+        $visibility fn $name(&self) -> syntax::Token {
             self.token_untyped($token).unwrap()
         }
     };
 }
 
 macro_rules! get_node {
-    ($name:ident() -> $n:literal @ ? $type:ty) => {
-        pub fn $name(&self) -> Option<$type> {
+    ($(#[$meta:meta])* $visibility:vis fn $name:ident() -> $n:literal @ ? $type:ty) => {
+        $(#[$meta])*
+        $visibility fn $name(&self) -> Option<$type> {
             self.nth($n)
         }
     };
 
-    ($name:ident() -> $n:literal @ $type:ty) => {
-        pub fn $name(&self) -> $type {
+    ($(#[$meta:meta])* $visibility:vis fn $name:ident() -> $n:literal @ $type:ty) => {
+        $(#[$meta])*
+        $visibility fn $name(&self) -> $type {
             self.nth($n).unwrap()
         }
     };
 
-    ($name:ident() -> [$type:ty]) => {
-        pub fn $name(&self) -> rowan::ast::AstChildren<$type> {
+    ($(#[$meta:meta])* $visibility:vis fn $name:ident() -> [$type:ty]) => {
+        $(#[$meta])*
+        $visibility fn $name(&self) -> rowan::ast::AstChildren<$type> {
             self.children()
         }
     };
 }
 
-node! { #[from(NODE_ERROR)] struct Error; }
+node! { #[from(NODE_ERROR)] pub struct Error; }
 
 // EXPRESSION
 
@@ -196,161 +202,195 @@ node! {
         Island,
         Number,
         IfElse,
-    )] enum Expression;
+    )]
+    pub enum Expression;
 }
 
 // PARENTHESIS
 
-node! { #[from(NODE_PARENTHESIS)] struct Parenthesis; }
+node! { #[from(NODE_PARENTHESIS)] pub struct Parenthesis; }
 
 impl Parenthesis {
-    get_token! { left_parenthesis() -> TOKEN_LEFT_PARENTHESIS }
+    get_token! { pub fn left_parenthesis() -> TOKEN_LEFT_PARENTHESIS }
 
-    get_node! { expression() -> 0 @ Expression }
+    get_node! { pub fn expression() -> 0 @ Expression }
 
-    get_token! { right_parenthesis() -> TOKEN_RIGHT_PARENTHESIS }
+    get_token! { pub fn right_parenthesis() -> TOKEN_RIGHT_PARENTHESIS }
 }
 
 // LIST
 
-node! { #[from(NODE_LIST)] struct List; }
+node! { #[from(NODE_LIST)] pub struct List; }
 
 impl List {
-    get_token! { left_bracket() -> TOKEN_LEFT_BRACKET }
+    get_token! { pub fn left_bracket() -> TOKEN_LEFT_BRACKET }
 
-    get_node! { items() -> [Expression] }
+    get_node! { pub fn items() -> [Expression] }
 
-    get_token! { right_bracket() -> TOKEN_RIGHT_BRACKET }
+    get_token! { pub fn right_bracket() -> TOKEN_RIGHT_BRACKET }
 }
 
 // ATTRIBUTE SET
 
-node! { #[from(NODE_ATTRIBUTE_SET)] struct AttributeSet; }
+node! { #[from(NODE_ATTRIBUTE_SET)] pub struct AttributeSet; }
 
 impl AttributeSet {
-    get_token! { left_curlybrace() -> TOKEN_LEFT_CURLYBRACE }
+    get_token! { pub fn left_curlybrace() -> TOKEN_LEFT_CURLYBRACE }
 
-    get_node! { inherits() -> [AttributeInherit] }
+    get_node! { pub fn inherits() -> [AttributeInherit] }
 
-    get_node! { entries() -> [Attribute] }
+    get_node! { pub fn entries() -> [Attribute] }
 
-    get_token! { right_curlybrace() -> TOKEN_RIGHT_CURLYBRACE }
+    get_token! { pub fn right_curlybrace() -> TOKEN_RIGHT_CURLYBRACE }
 }
 
-node! { #[from(NODE_ATTRIBUTE_INHERIT)] struct AttributeInherit; }
+node! { #[from(NODE_ATTRIBUTE_INHERIT)] pub struct AttributeInherit; }
 
 impl AttributeInherit {
-    get_node! { identifier() -> 0 @ Identifier }
+    get_node! { pub fn identifier() -> 0 @ Identifier }
 
-    get_token! { semicolon() -> TOKEN_SEMICOLON }
+    get_token! { pub fn semicolon() -> TOKEN_SEMICOLON }
 }
 
-node! { #[from(NODE_ATTRIBUTE)] struct Attribute; }
+node! { #[from(NODE_ATTRIBUTE)] pub struct Attribute; }
 
+#[rustfmt::skip]
 impl Attribute {
-    get_node! { path() -> 0 @ AttributePath }
+    get_node! { fn wrapped_path() -> 0 @ AttributePath }
 
-    get_node! { value() -> 0 @ AttributeValue }
+    pub fn path(&self) -> rowan::ast::AstChildren<Identifier> {
+        self.wrapped_path().identifiers()
+    }
 
-    get_token! { semicolon() -> TOKEN_SEMICOLON }
+    get_node! { fn wrapped_value() -> 0 @ AttributeValue }
+
+    pub fn value(&self) -> Expression {
+        self.wrapped_value().value()
+    }
+
+    get_token! { pub fn semicolon() -> TOKEN_SEMICOLON }
 }
 
-node! { #[from(NODE_ATTRIBUTE_PATH)] struct AttributePath; }
+node! {
+    #[from(NODE_ATTRIBUTE_PATH)]
+    #[allow(unused)]
+    struct AttributePath;
+}
 
 impl AttributePath {
-    get_node! { identifiers() -> [Identifier] }
+    get_node! { fn identifiers() -> [Identifier] }
 }
 
-node! { #[from(NODE_ATTRIBUTE_VALUE)] struct AttributeValue; }
+node! {
+    #[from(NODE_ATTRIBUTE_VALUE)]
+    #[allow(unused)]
+    struct AttributeValue;
+}
 
 impl AttributeValue {
-    get_node! { value() -> 0 @ Expression }
+    get_node! { fn value() -> 0 @ Expression }
 }
 
 // BIND
 
-node! { #[from(NODE_BIND)] struct Bind; }
+node! {
+    #[from(NODE_BIND)]
+    #[allow(unused)]
+    struct Bind;
+}
 
 impl Bind {
-    get_node! { identifier() -> 0 @ Identifier }
+    get_node! { fn identifier() -> 0 @ Identifier }
 
-    get_token! { at() -> TOKEN_AT }
+    get_token! { #[allow(unused)] fn at() -> TOKEN_AT }
 }
 
 // USE
 
-node! { #[from(NODE_USE)] struct Use; }
+node! { #[from(NODE_USE)] pub struct Use; }
 
+#[rustfmt::skip]
 impl Use {
-    get_node! { bind() -> 0 @ ? Bind }
+    get_node! { fn wrapped_bind() -> 0 @ ? Bind }
 
-    get_node! { left_expression() -> 0 @ Expression }
+    pub fn bind(&self) -> Option<Identifier> {
+        self.wrapped_bind().map(|bind| bind.identifier())
+    }
 
-    get_token! { right_long_arrow() -> TOKEN_EQUAL_EQUAL_MORE }
+    get_node! { pub fn left_expression() -> 0 @ Expression }
 
-    get_node! { right_expression() -> 1 @ Expression }
+    get_token! { pub fn right_long_arrow() -> TOKEN_EQUAL_EQUAL_MORE }
+
+    get_node! { pub fn right_expression() -> 1 @ Expression }
 }
 
 // LAMBDA
 
-node! { #[from(NODE_LAMBDA)] struct Lambda; }
+node! { #[from(NODE_LAMBDA)] pub struct Lambda; }
 
 impl Lambda {
-    get_node! { parameter() -> 0 @ LambdaParameter }
+    get_node! { pub fn parameter() -> 0 @ LambdaParameter }
 
-    get_token! { colon() -> TOKEN_COLON }
+    get_token! { pub fn colon() -> TOKEN_COLON }
 
-    get_node! { expression() -> 0 @ Expression }
+    get_node! { pub fn expression() -> 0 @ Expression }
 }
 
 node! {
     #[from(
+        // TODO: Find a way to flatten this without a ton of code.
         LambdaParameterIdentifier,
         LambdaParameterPattern,
-    )] enum LambdaParameter;
+    )]
+    pub enum LambdaParameter;
 }
 
-node! { #[from(NODE_LAMBDA_PARAMETER_IDENTIFIER)] struct LambdaParameterIdentifier; }
+node! { #[from(NODE_LAMBDA_PARAMETER_IDENTIFIER)] pub struct LambdaParameterIdentifier; }
 
 impl LambdaParameterIdentifier {
-    get_node! { identifier() -> 0 @ Identifier }
+    get_node! { pub fn identifier() -> 0 @ Identifier }
 }
 
-node! { #[from(NODE_LAMBDA_PARAMETER_PATTERN)] struct LambdaParameterPattern; }
+node! { #[from(NODE_LAMBDA_PARAMETER_PATTERN)] pub struct LambdaParameterPattern; }
 
+#[rustfmt::skip]
 impl LambdaParameterPattern {
-    get_node! { bind() -> 0 @ ? Bind }
+    get_node! { fn wrapped_bind() -> 0 @ ? Bind }
 
-    get_token! { left_curlybrace() -> TOKEN_LEFT_CURLYBRACE }
+    pub fn bind(&self) -> Option<Identifier> {
+        self.wrapped_bind().map(|bind| bind.identifier())
+    }
 
-    get_node! { entries() -> [LambdaParameterPatternEntry] }
+    get_token! { pub fn left_curlybrace() -> TOKEN_LEFT_CURLYBRACE }
 
-    get_token! { right_curlybrace() -> TOKEN_RIGHT_CURLYBRACE }
+    get_node! { pub fn entries() -> [LambdaParameterPatternEntry] }
+
+    get_token! { pub fn right_curlybrace() -> TOKEN_RIGHT_CURLYBRACE }
 }
 
-node! { #[from(NODE_LAMBDA_PARAMETER_PATTERN_ENTRY)] struct LambdaParameterPatternEntry; }
+node! { #[from(NODE_LAMBDA_PARAMETER_PATTERN_ENTRY)] pub struct LambdaParameterPatternEntry; }
 
 impl LambdaParameterPatternEntry {
-    get_node! { identifier() -> 0 @ Identifier }
+    get_node! { pub fn identifier() -> 0 @ Identifier }
 
-    get_token! { questionmark() -> ? TOKEN_QUESTIONMARK }
+    get_token! { pub fn questionmark() -> ? TOKEN_QUESTIONMARK }
 
-    get_node! { default() -> 1 @ ? Expression }
+    get_node! { pub fn default() -> 1 @ ? Expression }
 }
 
 // APPLICATION
 
-node! { #[from(NODE_APPLICATION)] struct Application; }
+node! { #[from(NODE_APPLICATION)] pub struct Application; }
 
 impl Application {
-    get_node! { left_expression() -> 0 @ Expression }
+    get_node! { pub fn left_expression() -> 0 @ Expression }
 
-    get_node! { right_expression() -> 1 @ Expression }
+    get_node! { pub fn right_expression() -> 1 @ Expression }
 }
 
 // PREFIX OPERATION
 
-node! { #[from(NODE_PREFIX_OPERATION)] struct PrefixOperation; }
+node! { #[from(NODE_PREFIX_OPERATION)] pub struct PrefixOperation; }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum PrefixOperator {
@@ -382,12 +422,12 @@ impl PrefixOperation {
             .find_map(|token| PrefixOperator::try_from(token.kind()).ok()).unwrap()
     }
 
-    get_node! { expression() -> 0 @ Expression }
+    get_node! { pub fn expression() -> 0 @ Expression }
 }
 
 // INFIX OPERATION
 
-node! { #[from(NODE_INFIX_OPERATION)] struct InfixOperation; }
+node! { #[from(NODE_INFIX_OPERATION)] pub struct InfixOperation; }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum InfixOperator {
@@ -454,26 +494,26 @@ impl TryFrom<syntax::Kind> for InfixOperator {
 
 #[rustfmt::skip]
 impl InfixOperation {
-    get_node! { left_expression() -> 0 @ Expression }
+    get_node! { pub fn left_expression() -> 0 @ Expression }
 
     pub fn operator(&self) -> InfixOperator {
         self.children_tokens_untyped()
             .find_map(|token| InfixOperator::try_from(token.kind()).ok()).unwrap()
     }
 
-    get_node! { right_expression() -> 1 @ Expression }
+    get_node! { pub fn right_expression() -> 1 @ Expression }
 }
 
 // INTERPOLATION
 
-node! { #[from(NODE_INTERPOLATION)] struct Interpolation; }
+node! { #[from(NODE_INTERPOLATION)] pub struct Interpolation; }
 
 impl Interpolation {
-    get_token! { interpolation_start() -> TOKEN_INTERPOLATION_START }
+    get_token! { pub fn interpolation_start() -> TOKEN_INTERPOLATION_START }
 
-    get_node! { expression() -> 0 @ Expression }
+    get_node! { pub fn expression() -> 0 @ Expression }
 
-    get_token! { interpolation_end() -> TOKEN_INTERPOLATION_END }
+    get_token! { pub fn interpolation_end() -> TOKEN_INTERPOLATION_END }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -506,25 +546,25 @@ macro_rules! parted {
 
 // PATH, IDENTIFIER, STRING, ISLAND
 
-node! { #[from(TOKEN_PATH)] struct Path; }
+node! { #[from(TOKEN_PATH)] pub struct Path; }
 
 impl Path {
     parted! { TOKEN_PATH + token::PathContent }
 }
 
-node! { #[from(NODE_IDENTIFIER)] struct Identifier; }
+node! { #[from(NODE_IDENTIFIER)] pub struct Identifier; }
 
 impl Identifier {
     parted! { TOKEN_IDENTIFIER_CONTENT + token::IdentifierContent }
 }
 
-node! { #[from(NODE_STRING)] struct String; }
+node! { #[from(NODE_STRING)] pub struct String; }
 
 impl String {
     parted! { TOKEN_STRING_CONTENT + token::StringContent }
 }
 
-node! { #[from(NODE_ISLAND)] struct Island; }
+node! { #[from(NODE_ISLAND)] pub struct Island; }
 
 impl Island {
     parted! { TOKEN_ISLAND_CONTENT + token::IslandContent }
@@ -532,36 +572,40 @@ impl Island {
 
 // NUMBER
 
-node! { #[from(NODE_NUMBER)] struct Number; }
+node! { #[from(NODE_NUMBER)] pub struct Number; }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum NumberType {
-    Integer,
-    Float,
+pub enum NumberValue {
+    Integer(token::Integer),
+    Float(token::Float),
 }
 
 impl Number {
-    pub fn type_(&self) -> NumberType {
-        match self.syntax().kind() {
-            TOKEN_INTEGER => NumberType::Integer,
-            TOKEN_FLOAT => NumberType::Float,
-            _ => unreachable!(),
+    pub fn value(&self) -> NumberValue {
+        if let Some(token) = self.token() {
+            return NumberValue::Integer(token);
         }
+
+        if let Some(token) = self.token() {
+            return NumberValue::Float(token);
+        }
+
+        unreachable!()
     }
 }
 
-node! { #[from(NODE_IF_ELSE)] struct IfElse; }
+node! { #[from(NODE_IF_ELSE)] pub struct IfElse; }
 
 impl IfElse {
-    get_token! { if_() -> TOKEN_LITERAL_IF }
+    get_token! { pub fn if_() -> TOKEN_LITERAL_IF }
 
-    get_node! { condition() -> 0 @ Expression }
+    get_node! { pub fn condition() -> 0 @ Expression }
 
-    get_token! { then() -> TOKEN_LITERAL_THEN }
+    get_token! { pub fn then() -> TOKEN_LITERAL_THEN }
 
-    get_node! { true_expression() -> 1 @ Expression }
+    get_node! { pub fn true_expression() -> 1 @ Expression }
 
-    get_token! { else_() -> ? TOKEN_LITERAL_ELSE }
+    get_token! { pub fn else_() -> ? TOKEN_LITERAL_ELSE }
 
-    get_node! { fale_expression() -> 2 @ ? Expression }
+    get_node! { pub fn fale_expression() -> 2 @ ? Expression }
 }

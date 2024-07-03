@@ -22,11 +22,11 @@ macro_rules! token {
     (
         #[from($kind:ident)]
         $(#[$meta:meta])*
-        struct $name:ident;
+        $visibility:vis struct $name:ident;
     ) => {
         $(#[$meta])*
         #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-        pub struct $name(pub syntax::Token);
+        $visibility struct $name(pub syntax::Token);
 
         impl fmt::Display for $name {
             fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -50,9 +50,9 @@ macro_rules! token {
     };
 }
 
-token! { #[from(TOKEN_WHITESPACE)] struct Whitespace; }
+token! { #[from(TOKEN_WHITESPACE)] pub struct Whitespace; }
 
-token! { #[from(TOKEN_COMMENT)] struct Comment; }
+token! { #[from(TOKEN_COMMENT)] pub struct Comment; }
 
 impl Comment {
     pub fn text(&self) -> &str {
@@ -78,7 +78,7 @@ impl Comment {
     }
 }
 
-token! { #[from(TOKEN_INTEGER)] struct Integer; }
+token! { #[from(TOKEN_INTEGER)] pub struct Integer; }
 
 impl Integer {
     pub fn value(&self) -> Result<i64, num::ParseIntError> {
@@ -86,7 +86,7 @@ impl Integer {
     }
 }
 
-token! { #[from(TOKEN_FLOAT)] struct Float; }
+token! { #[from(TOKEN_FLOAT)] pub struct Float; }
 
 impl Float {
     pub fn value(&self) -> Result<f64, num::ParseFloatError> {
@@ -94,10 +94,10 @@ impl Float {
     }
 }
 
-token! { #[from(TOKEN_PATH)] struct PathContent; }
+token! { #[from(TOKEN_PATH)] pub struct PathContent; }
 
-token! { #[from(TOKEN_IDENTIFIER_CONTENT)] struct IdentifierContent; }
+token! { #[from(TOKEN_IDENTIFIER_CONTENT)] pub struct IdentifierContent; }
 
-token! { #[from(TOKEN_STRING_CONTENT)] struct StringContent; }
+token! { #[from(TOKEN_STRING_CONTENT)] pub struct StringContent; }
 
-token! { #[from(TOKEN_ISLAND_CONTENT)] struct IslandContent; }
+token! { #[from(TOKEN_ISLAND_CONTENT)] pub struct IslandContent; }
