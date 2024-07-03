@@ -144,6 +144,12 @@ macro_rules! node {
 
 macro_rules! get_token {
     ($name:ident() -> $token:ident) => {
+        pub fn $name(&self) -> syntax::Token {
+            self.token_untyped($token).unwrap()
+        }
+    };
+
+    ($name:ident() -> ? $token:ident) => {
         pub fn $name(&self) -> Option<syntax::Token> {
             self.token_untyped($token)
         }
@@ -152,6 +158,12 @@ macro_rules! get_token {
 
 macro_rules! get_node {
     ($name:ident() -> $n:literal @ $type:ty) => {
+        pub fn $name(&self) -> $type {
+            self.nth($n).unwrap()
+        }
+    };
+
+    ($name:ident() -> $n:literal @ ? $type:ty) => {
         pub fn $name(&self) -> Option<$type> {
             self.nth($n)
         }
@@ -165,6 +177,27 @@ macro_rules! get_node {
 }
 
 node! { #[from(NODE_ERROR)] struct Error; }
+
+// EXPRESSION
+
+node! {
+    #[from(
+        Parentehsis,
+        List,
+        AttributeSet,
+        Use,
+        Lambda,
+        Application,
+        PrefixOperation,
+        InfixOperation,
+        Path,
+        Identifier,
+        String,
+        Island,
+        Number,
+        IfElse,
+    )] enum Expression;
+}
 
 // PARENTHESIS
 
@@ -249,13 +282,13 @@ impl Bind {
 node! { #[from(NODE_USE)] struct Use; }
 
 impl Use {
-    get_node! { bind() -> 0 @ Bind }
+    get_node! { bind() -> 0 @ ? Bind }
 
-    get_node! { left_expression() -> 1 @ Expression }
+    get_node! { left_expression() -> 0 @ Expression }
 
     get_token! { right_long_arrow() -> TOKEN_EQUAL_EQUAL_MORE }
 
-    get_node! { right_expression() -> 2 @ Expression }
+    get_node! { right_expression() -> 1 @ Expression }
 }
 
 // LAMBDA
@@ -272,21 +305,15 @@ impl Lambda {
 
 node! {
     #[from(
-        LambdaParameterIdentifier,
+        Identifier,
         LambdaParameterPattern,
     )] enum LambdaParameter;
-}
-
-node! { #[from(NODE_LAMBDA_PARAMETER_IDENTIFIER)] struct LambdaParameterIdentifier; }
-
-impl LambdaParameterIdentifier {
-    get_node! { identifier() -> 0 @ Identifier }
 }
 
 node! { #[from(NODE_LAMBDA_PARAMETER_PATTERN)] struct LambdaParameterPattern; }
 
 impl LambdaParameterPattern {
-    get_node! { bind() -> 0 @ Bind }
+    get_node! { bind() -> 0 @ ? Bind }
 
     get_token! { left_curlybrace() -> TOKEN_LEFT_CURLYBRACE }
 
@@ -300,9 +327,9 @@ node! { #[from(NODE_LAMBDA_PARAMETER_PATTERN_ENTRY)] struct LambdaParameterPatte
 impl LambdaParameterPatternEntry {
     get_node! { identifier() -> 0 @ Identifier }
 
-    get_token! { questionmark() -> TOKEN_QUESTIONMARK }
+    get_token! { questionmark() -> ? TOKEN_QUESTIONMARK }
 
-    get_node! { default() -> 1 @ Expression }
+    get_node! { default() -> 1 @ ? Expression }
 }
 
 // APPLICATION
@@ -528,7 +555,7 @@ impl IfElse {
 
     get_node! { true_expression() -> 1 @ Expression }
 
-    get_token! { else_() -> TOKEN_LITERAL_ELSE }
+    get_token! { else_() -> ? TOKEN_LITERAL_ELSE }
 
-    get_node! { fale_expression() -> 2 @ Expression }
+    get_node! { fale_expression() -> 2 @ ? Expression }
 }
