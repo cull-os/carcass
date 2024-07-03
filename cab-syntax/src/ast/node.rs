@@ -1,6 +1,6 @@
 use std::fmt;
 
-use rowan::ast::AstNode;
+use rowan::ast::AstNode as _;
 
 use super::{
     token,

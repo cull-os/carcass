@@ -1,8 +1,9 @@
 pub mod ast;
 mod kind;
-mod token;
+mod parser;
+mod tokenizer;
 
-pub use token::{
+pub use tokenizer::{
     Token,
     Tokenizer,
 };
