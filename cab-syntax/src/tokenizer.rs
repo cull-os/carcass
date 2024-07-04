@@ -71,11 +71,11 @@ impl<'a> Tokenizer<'a> {
         self.remaining().chars().next()
     }
 
-    fn consume_while<F: FnMut(char) -> bool>(&mut self, mut predicate: F) -> usize {
+    fn consume_while(&mut self, predicate: fn(char) -> bool) -> usize {
         let length: usize = self
             .remaining()
             .chars()
-            .take_while(|&c| predicate(c))
+            .take_while(|c| predicate(*c))
             .map(char::len_utf8)
             .sum();
 
