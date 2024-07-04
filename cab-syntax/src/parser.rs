@@ -13,6 +13,7 @@ use crate::{
     Language,
 };
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ParseError {
     Unexpected {
         got: Option<syntax::Kind>,
@@ -23,6 +24,7 @@ pub enum ParseError {
     RecursionLimitExceeded,
 }
 
+#[derive(Debug)]
 struct Parser<'a, I: Iterator<Item = Token<'a>>> {
     builder: rowan::GreenNodeBuilder<'static>,
 
@@ -79,13 +81,10 @@ macro_rules! expect {
                     expected: Some(&pattern_to_list!($($variant)|*)),
                     at: rowan::TextRange::new(start, end),
                 });
-
-                None
             },
 
             Found(found) => {
                 $self.bump();
-                Some(found)
             },
         }
     };
@@ -212,7 +211,8 @@ impl<'a, I: Iterator<Item = Token<'a>>> Parser<'a, I> {
                 expect!(self, TOKEN_LITERAL_THEN);
                 self.parse_expression();
 
-                if expect!(self, TOKEN_LITERAL_ELSE).is_some() {
+                if let Found(_) = chase!(self, TOKEN_LITERAL_ELSE) {
+                    self.bump();
                     self.parse_expression();
                 }
 
