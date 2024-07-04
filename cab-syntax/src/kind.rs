@@ -158,7 +158,6 @@ pub enum Kind {
     NODE_ATTRIBUTE_SET,           // { <attribute | attribute-inherit>* }
         NODE_ATTRIBUTE,           // <attribute-path> = <attribute-value>;
             NODE_ATTRIBUTE_PATH,  // <identifier><.<identifier>>*
-            NODE_ATTRIBUTE_VALUE, // <expression>
         NODE_ATTRIBUTE_INHERIT,   // <identifier>;
 
         NODE_ATTRIBUTE_SELECT, // <expression>.<identifier>

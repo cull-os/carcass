@@ -94,4 +94,6 @@ impl Float {
 
 token! { #[from(TOKEN_PATH)] pub struct PathContent; }
 
+token! { #[from(TOKEN_IDENTIFIER)] pub struct IdentifierSimple; }
+
 token! { #[from(TOKEN_CONTENT)] pub struct Content; }

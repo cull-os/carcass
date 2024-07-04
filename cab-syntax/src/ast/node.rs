@@ -253,7 +253,7 @@ node! { #[from(NODE_ATTRIBUTE)] pub struct Attribute; }
 impl Attribute {
     get_node! { pub fn path() -> 0 @ AttributePath }
 
-    get_node! { pub fn value() -> 0 @ AttributeValue }
+    get_node! { pub fn value() -> 0 @ Expression }
 
     get_token! { pub fn semicolon() -> TOKEN_SEMICOLON }
 }
@@ -262,12 +262,6 @@ node! { #[from(NODE_ATTRIBUTE_PATH)] pub struct AttributePath; }
 
 impl AttributePath {
     get_node! { pub fn identifiers() -> [Identifier] }
-}
-
-node! { #[from(NODE_ATTRIBUTE_VALUE)] struct AttributeValue; }
-
-impl AttributeValue {
-    get_node! { pub fn value() -> 0 @ Expression }
 }
 
 // BIND
@@ -519,8 +513,30 @@ impl Path {
 
 node! { #[from(NODE_IDENTIFIER)] pub struct Identifier; }
 
-impl Identifier {
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum IdentifierValue {
+    Simple(token::IdentifierSimple),
+    Complex(IdentifierComplex),
+}
+
+node! { #[from(NODE_IDENTIFIER)] pub struct IdentifierComplex; }
+
+impl IdentifierComplex {
     parted! { TOKEN_CONTENT + token::Content }
+}
+
+impl Identifier {
+    pub fn value(&self) -> IdentifierValue {
+        if let Some(token) = self.token() {
+            return IdentifierValue::Simple(token);
+        }
+
+        if self.token_untyped(TOKEN_IDENTIFIER_START).is_some() {
+            return IdentifierValue::Complex(IdentifierComplex(self.0.clone_subtree()));
+        }
+
+        unreachable!()
+    }
 }
 
 node! { #[from(NODE_STRING)] pub struct String; }

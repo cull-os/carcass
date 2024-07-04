@@ -7,6 +7,7 @@ use std::{
 };
 
 use cab_syntax::{
+    ast::node::Expression,
     syntax,
     Tokenizer,
 };
@@ -129,9 +130,21 @@ async fn main() -> io::Result<()> {
             }
         },
 
-        _ => {
-            log::error!("not implemented yet");
-            process::exit(1);
+        Command::Dump {
+            command: DumpCommand::Ast { file },
+            ..
+        } => {
+            let expression = file.contents().unwrap_or_else(|error| {
+                log::error!("failed to read file: {error}");
+                process::exit(1);
+            });
+
+            let expression = Expression::parse(&expression).unwrap();
+
+            writeln!(out, "{expression:?}").unwrap_or_else(|error| {
+                log::error!("failed to write to stdout: {error}");
+                process::exit(1);
+            });
         },
     }
 
