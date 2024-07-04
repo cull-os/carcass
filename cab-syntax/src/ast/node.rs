@@ -254,68 +254,42 @@ impl AttributeInherit {
 
 node! { #[from(NODE_ATTRIBUTE)] pub struct Attribute; }
 
-#[rustfmt::skip]
 impl Attribute {
-    get_node! { fn wrapped_path() -> 0 @ AttributePath }
+    get_node! { pub fn path() -> 0 @ AttributePath }
 
-    pub fn path(&self) -> rowan::ast::AstChildren<Identifier> {
-        self.wrapped_path().identifiers()
-    }
-
-    get_node! { fn wrapped_value() -> 0 @ AttributeValue }
-
-    pub fn value(&self) -> Expression {
-        self.wrapped_value().value()
-    }
+    get_node! { pub fn value() -> 0 @ AttributeValue }
 
     get_token! { pub fn semicolon() -> TOKEN_SEMICOLON }
 }
 
-node! {
-    #[from(NODE_ATTRIBUTE_PATH)]
-    #[allow(unused)]
-    struct AttributePath;
-}
+node! { #[from(NODE_ATTRIBUTE_PATH)] pub struct AttributePath; }
 
 impl AttributePath {
-    get_node! { fn identifiers() -> [Identifier] }
+    get_node! { pub fn identifiers() -> [Identifier] }
 }
 
-node! {
-    #[from(NODE_ATTRIBUTE_VALUE)]
-    #[allow(unused)]
-    struct AttributeValue;
-}
+node! { #[from(NODE_ATTRIBUTE_VALUE)] struct AttributeValue; }
 
 impl AttributeValue {
-    get_node! { fn value() -> 0 @ Expression }
+    get_node! { pub fn value() -> 0 @ Expression }
 }
 
 // BIND
 
-node! {
-    #[from(NODE_BIND)]
-    #[allow(unused)]
-    struct Bind;
-}
+node! { #[from(NODE_BIND)] pub struct Bind; }
 
 impl Bind {
-    get_node! { fn identifier() -> 0 @ Identifier }
+    get_node! { pub fn identifier() -> 0 @ Identifier }
 
-    get_token! { #[allow(unused)] fn at() -> TOKEN_AT }
+    get_token! { pub fn at() -> TOKEN_AT }
 }
 
 // USE
 
 node! { #[from(NODE_USE)] pub struct Use; }
 
-#[rustfmt::skip]
 impl Use {
-    get_node! { fn wrapped_bind() -> 0 @ ? Bind }
-
-    pub fn bind(&self) -> Option<Identifier> {
-        self.wrapped_bind().map(|bind| bind.identifier())
-    }
+    get_node! { pub fn bind() -> 0 @ ? Bind }
 
     get_node! { pub fn left_expression() -> 0 @ Expression }
 
@@ -338,7 +312,6 @@ impl Lambda {
 
 node! {
     #[from(
-        // TODO: Find a way to flatten this without a ton of code.
         LambdaParameterIdentifier,
         LambdaParameterPattern,
     )]
@@ -355,11 +328,7 @@ node! { #[from(NODE_LAMBDA_PARAMETER_PATTERN)] pub struct LambdaParameterPattern
 
 #[rustfmt::skip]
 impl LambdaParameterPattern {
-    get_node! { fn wrapped_bind() -> 0 @ ? Bind }
-
-    pub fn bind(&self) -> Option<Identifier> {
-        self.wrapped_bind().map(|bind| bind.identifier())
-    }
+    get_node! { pub fn bind() -> 0 @ ? Bind }
 
     get_token! { pub fn left_curlybrace() -> TOKEN_LEFT_CURLYBRACE }
 
