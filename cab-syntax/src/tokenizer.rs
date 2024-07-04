@@ -40,8 +40,12 @@ impl<'a> Iterator for Tokenizer<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         let start_offset = self.offset;
 
-        self.consume_kind()
-            .map(|kind| Token(kind, self.consumed_since(start_offset)))
+        self.consume_kind().and_then(|kind| {
+            match self.consumed_since(start_offset) {
+                "" => self.next(),
+                slice => Some(Token(kind, slice)),
+            }
+        })
     }
 }
 
