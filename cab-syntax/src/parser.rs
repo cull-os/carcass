@@ -16,6 +16,7 @@ use crate::{
 pub enum ParseError {
     Unexpected {
         got: Option<syntax::Kind>,
+        expected: Option<&'static [syntax::Kind]>,
         at: rowan::TextRange,
     },
 
@@ -56,19 +57,26 @@ macro_rules! chase {
     }};
 }
 
+macro_rules! pattern_to_list {
+    ($($variant:ident)|+) => {
+        [$($variant),*]
+    };
+}
+
 macro_rules! expect {
-    ($self:ident, $pattern:pat) => {
-        match chase!($self, $pattern) {
+    ($self:ident, $($variant:ident)|+) => {
+        match chase!($self, $($variant)|*) {
             Absent(got) => {
                 let start = $self.error_node_start();
 
                 $self.bump();
-                $self.bump_while(|token| !matches!(token.0, $pattern));
+                $self.bump_while(|token| !matches!(token.0, $($variant)|*));
 
                 let end = $self.error_node_end();
 
                 $self.errors.push(ParseError::Unexpected {
                     got,
+                    expected: Some(&pattern_to_list!($($variant)|*)),
                     at: rowan::TextRange::new(start, end),
                 });
 
@@ -127,6 +135,7 @@ impl<'a, I: Iterator<Item = Token<'a>>> Parser<'a, I> {
         let Some(Token(kind, slice)) = self.next() else {
             self.errors.push(ParseError::Unexpected {
                 got: None,
+                expected: None,
                 at: rowan::TextRange::new(self.position, self.position),
             });
             return;
@@ -213,6 +222,7 @@ impl<'a, I: Iterator<Item = Token<'a>>> Parser<'a, I> {
             None => {
                 self.errors.push(ParseError::Unexpected {
                     got: None,
+                    expected: None,
                     at: rowan::TextRange::new(self.position, self.position),
                 })
             },
