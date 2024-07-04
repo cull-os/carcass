@@ -54,7 +54,6 @@ macro_rules! node {
         $visibility:vis struct $name:ident;
     ) => {
         #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-        $(#[$meta])*
         $visibility struct $name(pub syntax::Node);
 
         impl fmt::Display for $name {
@@ -79,18 +78,15 @@ macro_rules! node {
             }
         }
 
-        $(#[$meta])*
         impl $name {
             pub const KIND: syntax::Kind = $kind;
         }
     };
     (
         #[from($($variant:ident),* $(,)?)]
-        $(#[$meta:meta])*
         $visibility:vis enum $name:ident;
     ) => {
         #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-        $(#[$meta])*
         $visibility enum $name {
              $($variant($variant),)*
         }

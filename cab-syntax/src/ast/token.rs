@@ -21,10 +21,8 @@ pub trait Token {
 macro_rules! token {
     (
         #[from($kind:ident)]
-        $(#[$meta:meta])*
         $visibility:vis struct $name:ident;
     ) => {
-        $(#[$meta])*
         #[derive(Debug, Clone, PartialEq, Eq, Hash)]
         $visibility struct $name(pub syntax::Token);
 
