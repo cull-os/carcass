@@ -511,7 +511,7 @@ macro_rules! parted {
 
 // PATH, IDENTIFIER, STRING, ISLAND
 
-node! { #[from(TOKEN_PATH)] pub struct Path; }
+node! { #[from(NODE_PATH)] pub struct Path; }
 
 impl Path {
     parted! { TOKEN_PATH + token::PathContent }
@@ -520,19 +520,19 @@ impl Path {
 node! { #[from(NODE_IDENTIFIER)] pub struct Identifier; }
 
 impl Identifier {
-    parted! { TOKEN_IDENTIFIER_CONTENT + token::IdentifierContent }
+    parted! { TOKEN_CONTENT + token::Content }
 }
 
 node! { #[from(NODE_STRING)] pub struct String; }
 
 impl String {
-    parted! { TOKEN_STRING_CONTENT + token::StringContent }
+    parted! { TOKEN_CONTENT + token::Content }
 }
 
 node! { #[from(NODE_ISLAND)] pub struct Island; }
 
 impl Island {
-    parted! { TOKEN_ISLAND_CONTENT + token::IslandContent }
+    parted! { TOKEN_CONTENT + token::Content }
 }
 
 // NUMBER

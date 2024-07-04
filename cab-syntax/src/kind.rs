@@ -134,20 +134,18 @@ pub enum Kind {
     TOKEN_PATH,
 
     // TODO: Merge *_CONTENT into a single TOKEN_CONTENT.
+    TOKEN_CONTENT,
 
     // `foo bar baz`, `?? lmao ${baz}`
     TOKEN_IDENTIFIER_START,
-    TOKEN_IDENTIFIER_CONTENT,
     TOKEN_IDENTIFIER_END,
 
     // "foo\n\t${bar}", ''foo bar'', ''''' asdasd "hey '' asdads ''' asddklfjskaj'''''
     TOKEN_STRING_START,
-    TOKEN_STRING_CONTENT,
     TOKEN_STRING_END,
 
     // <github:${user}/${repo}>
     TOKEN_ISLAND_START,
-    TOKEN_ISLAND_CONTENT,
     TOKEN_ISLAND_END,
 
     // AST

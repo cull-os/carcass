@@ -113,17 +113,13 @@ impl<'a> Tokenizer<'a> {
         Some(next)
     }
 
-    fn consume_string(&mut self, delimiter: &'a str) -> Option<syntax::Kind> {
+    fn consume_stringish(&mut self, delimiter: &'a str) -> Option<syntax::Kind> {
         loop {
             if self.remaining().starts_with(delimiter) {
                 self.context_pop(TokenizerContext::Stringish { delimiter });
                 self.context_push(TokenizerContext::StringishEnd { delimiter });
 
-                return Some(match delimiter {
-                    "`" => TOKEN_IDENTIFIER_CONTENT,
-                    ">" => TOKEN_ISLAND_CONTENT,
-                    _ => TOKEN_STRING_CONTENT,
-                });
+                return Some(TOKEN_CONTENT);
             }
 
             let start_offset = self.offset;
@@ -140,11 +136,7 @@ impl<'a> Tokenizer<'a> {
                     self.offset = start_offset;
                     self.context_push(TokenizerContext::InterpolationStart);
 
-                    return Some(match delimiter {
-                        "`" => TOKEN_IDENTIFIER_CONTENT,
-                        ">" => TOKEN_ISLAND_CONTENT,
-                        _ => TOKEN_STRING_CONTENT,
-                    });
+                    return Some(TOKEN_CONTENT);
                 },
 
                 Some(_) => {},
@@ -156,7 +148,6 @@ impl<'a> Tokenizer<'a> {
         }
     }
 
-    // TODO: Find a sane way to not duplicate so much code.
     fn consume_path(&mut self) -> Option<syntax::Kind> {
         loop {
             if self
@@ -202,7 +193,7 @@ impl<'a> Tokenizer<'a> {
             },
 
             Some(TokenizerContext::Stringish { delimiter }) => {
-                return self.consume_string(delimiter);
+                return self.consume_stringish(delimiter);
             },
             Some(TokenizerContext::StringishEnd { delimiter }) => {
                 let delimiter = *delimiter;
