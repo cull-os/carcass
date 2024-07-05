@@ -128,15 +128,18 @@ async fn main() -> io::Result<()> {
     env_logger::Builder::new()
         .filter_level(cli.verbosity.log_level_filter())
         .format(|buffer, record| {
-            let level = match record.level() {
-                Level::Error => "error:".red().bold(),
-                Level::Warn => "warn:".yellow().bold(),
-                Level::Info => "info:".green().bold(),
-                Level::Debug => "debug:".blue().bold(),
-                Level::Trace => "trace:".cyan().bold(),
-            };
-
-            writeln!(buffer, "{level} {arguments}", arguments = record.args())
+            writeln!(
+                buffer,
+                "{level} {arguments}",
+                level = match record.level() {
+                    Level::Error => "error:".red().bold(),
+                    Level::Warn => "warn:".yellow().bold(),
+                    Level::Info => "info:".green().bold(),
+                    Level::Debug => "debug:".blue().bold(),
+                    Level::Trace => "trace:".cyan().bold(),
+                },
+                arguments = record.args()
+            )
         })
         .init();
 
