@@ -3,19 +3,20 @@ use std::{
     num,
 };
 
-use crate::syntax::{
-    self,
+use crate::{
+    Kind,
     Kind::*,
+    RowanToken,
 };
 
 pub trait Token {
-    fn can_cast(from: syntax::Kind) -> bool;
+    fn can_cast(from: Kind) -> bool;
 
-    fn cast(from: syntax::Token) -> Option<Self>
+    fn cast(from: RowanToken) -> Option<Self>
     where
         Self: Sized;
 
-    fn syntax(&self) -> &syntax::Token;
+    fn syntax(&self) -> &RowanToken;
 }
 
 macro_rules! token {
@@ -24,7 +25,7 @@ macro_rules! token {
         $visibility:vis struct $name:ident;
     ) => {
         #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-        $visibility struct $name(pub syntax::Token);
+        $visibility struct $name(pub RowanToken);
 
         impl fmt::Display for $name {
             fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -33,15 +34,15 @@ macro_rules! token {
         }
 
         impl Token for $name {
-            fn can_cast(kind: syntax::Kind) -> bool {
+            fn can_cast(kind: Kind) -> bool {
                 kind == $kind
             }
 
-            fn cast(from: syntax::Token) -> Option<Self> {
+            fn cast(from: RowanToken) -> Option<Self> {
                 Self::can_cast(from.kind()).then_some(Self(from))
             }
 
-            fn syntax(&self) -> &syntax::Token {
+            fn syntax(&self) -> &RowanToken {
                 &self.0
             }
         }

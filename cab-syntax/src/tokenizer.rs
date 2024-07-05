@@ -1,5 +1,5 @@
-use crate::syntax::{
-    self,
+use crate::{
+    Kind,
     Kind::*,
 };
 
@@ -16,7 +16,11 @@ fn is_valid_path_character(c: char) -> bool {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Token<'a>(pub syntax::Kind, pub &'a str);
+pub struct Token<'a>(pub Kind, pub &'a str);
+
+pub fn tokenize(input: &str) -> impl Iterator<Item = Token<'_>> {
+    Tokenizer::new(input)
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum TokenizerContext<'a> {
@@ -27,7 +31,8 @@ enum TokenizerContext<'a> {
     Interpolation { brackets: u32 },
 }
 
-pub struct Tokenizer<'a> {
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Tokenizer<'a> {
     input: &'a str,
     offset: usize,
 
@@ -117,7 +122,7 @@ impl<'a> Tokenizer<'a> {
         Some(next)
     }
 
-    fn consume_stringish(&mut self, delimiter: &'a str) -> Option<syntax::Kind> {
+    fn consume_stringish(&mut self, delimiter: &'a str) -> Option<Kind> {
         loop {
             if self.remaining().starts_with(delimiter) {
                 self.context_pop(TokenizerContext::Stringish { delimiter });
@@ -152,7 +157,7 @@ impl<'a> Tokenizer<'a> {
         }
     }
 
-    fn consume_path(&mut self) -> Option<syntax::Kind> {
+    fn consume_path(&mut self) -> Option<Kind> {
         loop {
             if self
                 .peek_character()
@@ -188,7 +193,7 @@ impl<'a> Tokenizer<'a> {
         }
     }
 
-    fn consume_kind(&mut self) -> Option<syntax::Kind> {
+    fn consume_kind(&mut self) -> Option<Kind> {
         let start_offset = self.offset;
 
         match self.context.last() {

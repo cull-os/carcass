@@ -7,9 +7,9 @@ use std::{
 };
 
 use cab_syntax::{
-    ast::node::Expression,
-    syntax,
-    Tokenizer,
+    node::Expression,
+    parse,
+    tokenize,
 };
 use clap::{
     Parser,
@@ -100,9 +100,9 @@ async fn main() -> io::Result<()> {
                 process::exit(1);
             });
 
-            for token in Tokenizer::new(&expression) {
+            for token in tokenize(&expression) {
                 let result = if color {
-                    let on_color = syntax::COLORS[token.0 as usize];
+                    let on_color = cab_syntax::COLORS[token.0 as usize];
 
                     let color = if (0.2126 * on_color.r as f32
                         + 0.7152 * on_color.g as f32
@@ -139,7 +139,7 @@ async fn main() -> io::Result<()> {
                 process::exit(1);
             });
 
-            let expression = Expression::parse(&expression).unwrap();
+            let expression = parse::<Expression>(&expression);
 
             writeln!(out, "{expression:?}").unwrap_or_else(|error| {
                 log::error!("failed to write to stdout: {error}");

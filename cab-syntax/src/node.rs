@@ -2,16 +2,15 @@ use std::fmt;
 
 use rowan::ast::AstNode as _;
 
-use super::{
-    token,
-    Token,
-};
 use crate::{
-    syntax::{
-        self,
-        Kind::*,
-    },
+    token,
+    Kind,
+    Kind::*,
     Language,
+    RowanElement,
+    RowanNode,
+    RowanToken,
+    Token,
 };
 
 pub trait Node: rowan::ast::AstNode<Language = Language> {
@@ -27,21 +26,21 @@ pub trait Node: rowan::ast::AstNode<Language = Language> {
         self.children_tokens().next()
     }
 
-    fn token_untyped(&self, kind: syntax::Kind) -> Option<syntax::Token> {
+    fn token_untyped(&self, kind: Kind) -> Option<RowanToken> {
         self.children_tokens_untyped().find(|it| it.kind() == kind)
     }
 
     fn children_tokens<T: Token>(&self) -> impl Iterator<Item = T> {
         self.syntax()
             .children_with_tokens()
-            .filter_map(syntax::Element::into_token)
+            .filter_map(RowanElement::into_token)
             .filter_map(T::cast)
     }
 
-    fn children_tokens_untyped(&self) -> impl Iterator<Item = syntax::Token> {
+    fn children_tokens_untyped(&self) -> impl Iterator<Item = RowanToken> {
         self.syntax()
             .children_with_tokens()
-            .filter_map(syntax::Element::into_token)
+            .filter_map(RowanElement::into_token)
     }
 }
 
@@ -54,7 +53,7 @@ macro_rules! node {
         $visibility:vis struct $name:ident;
     ) => {
         #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-        $visibility struct $name(pub syntax::Node);
+        $visibility struct $name(pub RowanNode);
 
         impl fmt::Display for $name {
             fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -65,21 +64,21 @@ macro_rules! node {
         impl rowan::ast::AstNode for $name {
             type Language = Language;
 
-            fn can_cast(kind: syntax::Kind) -> bool {
+            fn can_cast(kind: Kind) -> bool {
                 kind == $kind
             }
 
-            fn cast(from: syntax::Node) -> Option<Self> {
+            fn cast(from: RowanNode) -> Option<Self> {
                 Self::can_cast(from.kind()).then_some(Self(from))
             }
 
-            fn syntax(&self) -> &syntax::Node {
+            fn syntax(&self) -> &RowanNode {
                 &self.0
             }
         }
 
         impl $name {
-            pub const KIND: syntax::Kind = $kind;
+            pub const KIND: Kind = $kind;
         }
     };
     (
@@ -100,18 +99,18 @@ macro_rules! node {
         impl rowan::ast::AstNode for $name {
             type Language = Language;
 
-            fn can_cast(kind: syntax::Kind) -> bool {
+            fn can_cast(kind: Kind) -> bool {
                 matches!(kind, $($variant::KIND)|*)
             }
 
-            fn cast(from: syntax::Node) -> Option<Self> {
+            fn cast(from: RowanNode) -> Option<Self> {
                 Some(match from.kind() {
                     $($variant::KIND => Self::$variant($variant(from)),)*
                     _ => return None,
                 })
             }
 
-            fn syntax(&self) -> &syntax::Node {
+            fn syntax(&self) -> &RowanNode {
                 match self {
                     $(Self::$variant(this) => &this.0,)*
                 }
@@ -142,14 +141,14 @@ macro_rules! node {
 macro_rules! get_token {
     ($(#[$meta:meta])* $visibility:vis fn $name:ident() -> ? $token:ident) => {
         $(#[$meta])*
-        $visibility fn $name(&self) -> Option<syntax::Token> {
+        $visibility fn $name(&self) -> Option<RowanToken> {
             self.token_untyped($token)
         }
     };
 
     ($(#[$meta:meta])* $visibility:vis fn $name:ident() -> $token:ident) => {
         $(#[$meta])*
-        $visibility fn $name(&self) -> syntax::Token {
+        $visibility fn $name(&self) -> RowanToken {
             self.token_untyped($token).unwrap()
         }
     };
@@ -359,10 +358,10 @@ pub enum PrefixOperator {
     Not,
 }
 
-impl TryFrom<syntax::Kind> for PrefixOperator {
+impl TryFrom<Kind> for PrefixOperator {
     type Error = ();
 
-    fn try_from(from: syntax::Kind) -> Result<Self, Self::Error> {
+    fn try_from(from: Kind) -> Result<Self, Self::Error> {
         match from {
             TOKEN_PLUS => Ok(Self::Swwallation),
             TOKEN_MINUS => Ok(Self::Negation),
@@ -416,10 +415,10 @@ pub enum InfixOperator {
     Or,  // or
 }
 
-impl TryFrom<syntax::Kind> for InfixOperator {
+impl TryFrom<Kind> for InfixOperator {
     type Error = ();
 
-    fn try_from(from: syntax::Kind) -> Result<Self, Self::Error> {
+    fn try_from(from: Kind) -> Result<Self, Self::Error> {
         match from {
             TOKEN_LESS_PIPE => Ok(Self::Apply),
             TOKEN_PIPE_GREATER => Ok(Self::Pipe),
