@@ -17,12 +17,9 @@ pub trait Token {
 }
 
 macro_rules! token {
-    (
-        #[from($kind:ident)]
-        $visibility:vis struct $name:ident;
-    ) => {
+    (#[from($kind:ident)]struct $name:ident;) => {
         #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-        $visibility struct $name(pub RowanToken);
+        pub struct $name(pub RowanToken);
 
         impl fmt::Display for $name {
             fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -46,9 +43,9 @@ macro_rules! token {
     };
 }
 
-token! { #[from(TOKEN_WHITESPACE)] pub struct Whitespace; }
+token! { #[from(TOKEN_WHITESPACE)] struct Whitespace; }
 
-token! { #[from(TOKEN_COMMENT)] pub struct Comment; }
+token! { #[from(TOKEN_COMMENT)] struct Comment; }
 
 impl Comment {
     pub fn text(&self) -> &str {
@@ -74,7 +71,7 @@ impl Comment {
     }
 }
 
-token! { #[from(TOKEN_INTEGER)] pub struct Integer; }
+token! { #[from(TOKEN_INTEGER)] struct Integer; }
 
 impl Integer {
     pub fn value(&self) -> i64 {
@@ -82,7 +79,7 @@ impl Integer {
     }
 }
 
-token! { #[from(TOKEN_FLOAT)] pub struct Float; }
+token! { #[from(TOKEN_FLOAT)] struct Float; }
 
 impl Float {
     pub fn value(&self) -> f64 {
@@ -90,8 +87,8 @@ impl Float {
     }
 }
 
-token! { #[from(TOKEN_PATH)] pub struct PathContent; }
+token! { #[from(TOKEN_PATH)] struct PathContent; }
 
-token! { #[from(TOKEN_IDENTIFIER)] pub struct IdentifierSimple; }
+token! { #[from(TOKEN_IDENTIFIER)] struct IdentifierSimple; }
 
-token! { #[from(TOKEN_CONTENT)] pub struct Content; }
+token! { #[from(TOKEN_CONTENT)] struct Content; }
