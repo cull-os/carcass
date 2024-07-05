@@ -1,7 +1,4 @@
-use std::{
-    fmt,
-    num,
-};
+use std::fmt;
 
 use crate::{
     Kind,
@@ -80,16 +77,16 @@ impl Comment {
 token! { #[from(TOKEN_INTEGER)] pub struct Integer; }
 
 impl Integer {
-    pub fn value(&self) -> Result<i64, num::ParseIntError> {
-        self.syntax().text().parse()
+    pub fn value(&self) -> i64 {
+        self.syntax().text().parse().unwrap()
     }
 }
 
 token! { #[from(TOKEN_FLOAT)] pub struct Float; }
 
 impl Float {
-    pub fn value(&self) -> Result<f64, num::ParseFloatError> {
-        self.syntax().text().parse()
+    pub fn value(&self) -> f64 {
+        self.syntax().text().parse().unwrap()
     }
 }
 

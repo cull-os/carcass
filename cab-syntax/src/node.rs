@@ -13,6 +13,21 @@ use crate::{
     Token,
 };
 
+#[macro_export]
+macro_rules! match_node {
+    ($raw:expr =>
+        $($typed:ty:($name:ident) => $result:expr,)*
+        _ => $catch:expr $(,)?
+    ) => {
+        $(if $typed::can_cast($raw) {
+            let $name = $typed::cast($raw.clone_subtree()).unwrap();
+            $result
+        } else )*{
+            $catch
+        }
+    };
+}
+
 pub trait Node: rowan::ast::AstNode<Language = Language> {
     fn nth<N: Node>(&self, n: usize) -> Option<N> {
         self.syntax().children().filter_map(N::cast).nth(n)
@@ -49,17 +64,10 @@ impl<T: rowan::ast::AstNode<Language = Language>> Node for T {}
 macro_rules! node {
     (
         #[from($kind:ident)]
-        $(#[$meta:meta])*
         $visibility:vis struct $name:ident;
     ) => {
         #[derive(Debug, Clone, PartialEq, Eq, Hash)]
         $visibility struct $name(pub RowanNode);
-
-        impl fmt::Display for $name {
-            fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-                fmt::Display::fmt(<Self as rowan::ast::AstNode>::syntax(self), formatter)
-            }
-        }
 
         impl rowan::ast::AstNode for $name {
             type Language = Language;
@@ -81,6 +89,23 @@ macro_rules! node {
             pub const KIND: Kind = $kind;
         }
     };
+
+    (
+        #[from($kind:ident)]
+        $visibility:vis struct $name:ident => |$self:ident, $formatter:ident| $format_expr:expr
+    ) => {
+        node! {
+            #[from($kind)]
+            $visibility struct $name;
+        }
+
+        impl fmt::Display for $name {
+            fn fmt(&$self, $formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+                $format_expr
+            }
+        }
+    };
+
     (
         #[from($($variant:ident),* $(,)?)]
         $visibility:vis enum $name:ident;
@@ -92,7 +117,9 @@ macro_rules! node {
 
         impl fmt::Display for $name {
             fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-                fmt::Display::fmt(<Self as rowan::ast::AstNode>::syntax(self), formatter)
+                match self {
+                    $(Self::$variant(variant) => write!(formatter, "{variant}"),)*
+                }
             }
         }
 
@@ -177,7 +204,7 @@ macro_rules! get_node {
     };
 }
 
-node! { #[from(NODE_ERROR)] pub struct Error; }
+node! { #[from(NODE_ERROR)] pub struct Error => |self, formatter| write!(formatter, "ERROR") }
 
 // EXPRESSION
 
@@ -203,7 +230,7 @@ node! {
 
 // PARENTHESIS
 
-node! { #[from(NODE_PARENTHESIS)] pub struct Parenthesis; }
+node! { #[from(NODE_PARENTHESIS)] pub struct Parenthesis => |self, formatter| write!(formatter, "({self})") }
 
 impl Parenthesis {
     get_token! { pub fn left_parenthesis() -> TOKEN_LEFT_PARENTHESIS }
@@ -215,7 +242,27 @@ impl Parenthesis {
 
 // LIST
 
-node! { #[from(NODE_LIST)] pub struct List; }
+node! { #[from(NODE_LIST)] pub struct List => |self, formatter| {
+    write!(formatter, "[")?;
+
+    for expression in self.items() {
+        use Expression as Ex;
+
+        match expression {
+            Ex::Parenthesis(variant) => write!(formatter, " {variant}"),
+            Ex::List(variant) => write!(formatter, " {variant}"),
+            Ex::AttributeSet(variant) => write!(formatter, " {variant}"),
+            Ex::Path(variant) => write!(formatter, " {variant}"),
+            Ex::Identifier(variant) => write!(formatter, " {variant}"),
+            Ex::String(variant) => write!(formatter, " {variant}"),
+            Ex::Island(variant) => write!(formatter, " {variant}"),
+            Ex::Number(variant) => write!(formatter, " {variant}"),
+            _ => write!(formatter, " ({expression})"),
+        }?;
+    }
+
+    write!(formatter, " ]")
+}}
 
 impl List {
     get_token! { pub fn left_bracket() -> TOKEN_LEFT_BRACKET }
@@ -227,19 +274,31 @@ impl List {
 
 // ATTRIBUTE SET
 
-node! { #[from(NODE_ATTRIBUTE_SET)] pub struct AttributeSet; }
+node! { #[from(NODE_ATTRIBUTE_SET)] pub struct AttributeSet => |self, formatter| {
+    write!(formatter, "{{")?;
+
+    for inherit in self.inherits() {
+        write!(formatter, " {inherit}")?;
+    }
+
+    for entry in self.entries() {
+        write!(formatter, " {entry}")?;
+    }
+
+    write!(formatter, " }}")
+}}
 
 impl AttributeSet {
     get_token! { pub fn left_curlybrace() -> TOKEN_LEFT_CURLYBRACE }
 
     get_node! { pub fn inherits() -> [AttributeInherit] }
 
-    get_node! { pub fn entries() -> [Attribute] }
+    get_node! { pub fn entries() -> [AttributeEntry] }
 
     get_token! { pub fn right_curlybrace() -> TOKEN_RIGHT_CURLYBRACE }
 }
 
-node! { #[from(NODE_ATTRIBUTE_INHERIT)] pub struct AttributeInherit; }
+node! { #[from(NODE_ATTRIBUTE_INHERIT)] pub struct AttributeInherit => |self, formatter| write!(formatter, "{identifier};", identifier = self.identifier()) }
 
 impl AttributeInherit {
     get_node! { pub fn identifier() -> 0 @ Identifier }
@@ -247,9 +306,9 @@ impl AttributeInherit {
     get_token! { pub fn semicolon() -> TOKEN_SEMICOLON }
 }
 
-node! { #[from(NODE_ATTRIBUTE)] pub struct Attribute; }
+node! { #[from(NODE_ATTRIBUTE_ENTRY)] pub struct AttributeEntry => |self, formatter| write!(formatter, "{path} = {value};", path = self.path(), value = self.value()) }
 
-impl Attribute {
+impl AttributeEntry {
     get_node! { pub fn path() -> 0 @ AttributePath }
 
     get_node! { pub fn value() -> 0 @ Expression }
@@ -257,7 +316,17 @@ impl Attribute {
     get_token! { pub fn semicolon() -> TOKEN_SEMICOLON }
 }
 
-node! { #[from(NODE_ATTRIBUTE_PATH)] pub struct AttributePath; }
+node! { #[from(NODE_ATTRIBUTE_PATH)] pub struct AttributePath => |self, formatter| {
+    let mut identifiers = self.identifiers();
+
+    write!(formatter, "{identifier}", identifier = identifiers.next().unwrap())?;
+
+    for identifier in identifiers {
+        write!(formatter, ".{identifier}")?;
+    }
+
+    Ok(())
+}}
 
 impl AttributePath {
     get_node! { pub fn identifiers() -> [Identifier] }
@@ -265,7 +334,7 @@ impl AttributePath {
 
 // BIND
 
-node! { #[from(NODE_BIND)] pub struct Bind; }
+node! { #[from(NODE_BIND)] pub struct Bind => |self, formatter| write!(formatter, "{identifier} @", identifier = self.identifier()) }
 
 impl Bind {
     get_node! { pub fn identifier() -> 0 @ Identifier }
@@ -275,7 +344,18 @@ impl Bind {
 
 // USE
 
-node! { #[from(NODE_USE)] pub struct Use; }
+node! { #[from(NODE_USE)] pub struct Use => |self, formatter| {
+    if let Some(bind) = self.bind() {
+        write!(formatter, "{bind} ")?;
+    }
+
+    write!(
+        formatter,
+        "{left} ==> {right}",
+        left = self.left_expression(),
+        right = self.right_expression(),
+    )
+}}
 
 impl Use {
     get_node! { pub fn bind() -> 0 @ ? Bind }
@@ -289,7 +369,7 @@ impl Use {
 
 // LAMBDA
 
-node! { #[from(NODE_LAMBDA)] pub struct Lambda; }
+node! { #[from(NODE_LAMBDA)] pub struct Lambda => |self, formatter| write!(formatter, "{parameter}: {expression}", parameter = self.parameter(), expression = self.expression()) }
 
 impl Lambda {
     get_node! { pub fn parameter() -> 0 @ LambdaParameter }
@@ -307,13 +387,25 @@ node! {
     pub enum LambdaParameter;
 }
 
-node! { #[from(NODE_LAMBDA_PARAMETER_IDENTIFIER)] pub struct LambdaParameterIdentifier; }
+node! { #[from(NODE_LAMBDA_PARAMETER_IDENTIFIER)] pub struct LambdaParameterIdentifier => |self, formatter| write!(formatter, "{identifier}", identifier = self.identifier()) }
 
 impl LambdaParameterIdentifier {
     get_node! { pub fn identifier() -> 0 @ Identifier }
 }
 
-node! { #[from(NODE_LAMBDA_PARAMETER_PATTERN)] pub struct LambdaParameterPattern; }
+node! { #[from(NODE_LAMBDA_PARAMETER_PATTERN)] pub struct LambdaParameterPattern => |self, formatter| {
+    if let Some(bind) = self.bind() {
+        write!(formatter, "{bind} ")?;
+    }
+
+    write!(formatter, "{{")?;
+
+    for entry in self.entries() {
+        write!(formatter, " {entry}")?;
+    }
+
+    write!(formatter, " }}")
+}}
 
 #[rustfmt::skip]
 impl LambdaParameterPattern {
@@ -326,7 +418,15 @@ impl LambdaParameterPattern {
     get_token! { pub fn right_curlybrace() -> TOKEN_RIGHT_CURLYBRACE }
 }
 
-node! { #[from(NODE_LAMBDA_PARAMETER_PATTERN_ENTRY)] pub struct LambdaParameterPatternEntry; }
+node! { #[from(NODE_LAMBDA_PARAMETER_PATTERN_ENTRY)] pub struct LambdaParameterPatternEntry => |self, formatter| {
+    write!(formatter, "{identifier}", identifier = self.identifier())?;
+
+    if let Some(default) = self.default() {
+        write!(formatter, " ? {default}")?;
+    }
+
+    write!(formatter, ",")
+}}
 
 impl LambdaParameterPatternEntry {
     get_node! { pub fn identifier() -> 0 @ Identifier }
@@ -338,7 +438,7 @@ impl LambdaParameterPatternEntry {
 
 // APPLICATION
 
-node! { #[from(NODE_APPLICATION)] pub struct Application; }
+node! { #[from(NODE_APPLICATION)] pub struct Application => |self, formatter| write!(formatter, "{left} {right}", left = self.left_expression(), right = self.right_expression()) }
 
 impl Application {
     get_node! { pub fn left_expression() -> 0 @ Expression }
@@ -348,7 +448,7 @@ impl Application {
 
 // PREFIX OPERATION
 
-node! { #[from(NODE_PREFIX_OPERATION)] pub struct PrefixOperation; }
+node! { #[from(NODE_PREFIX_OPERATION)] pub struct PrefixOperation => |self, formatter| write!(formatter, "{operator}{expression}", operator = self.operator(), expression = self.expression()) }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum PrefixOperator {
@@ -356,6 +456,21 @@ pub enum PrefixOperator {
     Negation,
 
     Not,
+}
+
+impl fmt::Display for PrefixOperator {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            formatter,
+            "{operator}",
+            operator = match self {
+                Self::Swwallation => "+",
+                Self::Negation => "-",
+
+                Self::Not => "not ",
+            }
+        )
+    }
 }
 
 impl TryFrom<Kind> for PrefixOperator {
@@ -385,34 +500,69 @@ impl PrefixOperation {
 
 // INFIX OPERATION
 
-node! { #[from(NODE_INFIX_OPERATION)] pub struct InfixOperation; }
+node! { #[from(NODE_INFIX_OPERATION)] pub struct InfixOperation => |self, formatter| write!(formatter, "{left} {operator} {right}", left = self.left_expression(), operator = self.operator(), right = self.right_expression()) }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum InfixOperator {
-    Apply, // <|
-    Pipe,  // |>
+    Apply,
+    Pipe,
 
-    Concat, // ++
+    Concat,
 
-    Override, // <==
-    Update,   // //
+    Override,
+    Update,
 
-    Equal,       // ==
-    NotEqual,    // !=
-    LessOrEqual, // <=
-    Less,        // <
-    MoreOrEqual, // >=
-    More,        // >
-    Implication, // ->
+    Equal,
+    NotEqual,
+    LessOrEqual,
+    Less,
+    MoreOrEqual,
+    More,
+    Implication,
 
-    Addition,       // +
-    Negation,       // -
-    Multiplication, // *
-    Power,          // **
-    Division,       // /
+    Addition,
+    Negation,
+    Multiplication,
+    Power,
+    Division,
 
-    And, // and
-    Or,  // or
+    And,
+    Or,
+}
+
+impl fmt::Display for InfixOperator {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            formatter,
+            "{operator}",
+            operator = match self {
+                Self::Apply => "<|",
+                Self::Pipe => "|>",
+
+                Self::Concat => "++",
+
+                Self::Override => "<==",
+                Self::Update => "//",
+
+                Self::Equal => "==",
+                Self::NotEqual => "!=",
+                Self::LessOrEqual => "<=",
+                Self::Less => "<",
+                Self::MoreOrEqual => ">=",
+                Self::More => ">",
+                Self::Implication => "->",
+
+                Self::Addition => "+",
+                Self::Negation => "-",
+                Self::Multiplication => "*",
+                Self::Power => "**",
+                Self::Division => "/",
+
+                Self::And => "and",
+                Self::Or => "or",
+            }
+        )
+    }
 }
 
 impl TryFrom<Kind> for InfixOperator {
@@ -464,7 +614,7 @@ impl InfixOperation {
 
 // INTERPOLATION
 
-node! { #[from(NODE_INTERPOLATION)] pub struct Interpolation; }
+node! { #[from(NODE_INTERPOLATION)] pub struct Interpolation => |self, formatter| write!(formatter, "${{{expression}}}", expression = self.expression()) }
 
 impl Interpolation {
     get_token! { pub fn interpolation_start() -> TOKEN_INTERPOLATION_START }
@@ -480,37 +630,79 @@ pub enum InterpolationPart<T> {
     Interpolation(Interpolation),
 }
 
+impl<T: Token> fmt::Display for InterpolationPart<T> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            InterpolationPart::Content(path) => {
+                write!(formatter, "{text}", text = path.syntax().text())
+            },
+            InterpolationPart::Interpolation(interpolation) => {
+                write!(formatter, "{interpolation}")
+            },
+        }
+    }
+}
+
 macro_rules! parted {
-    ($variant:ident + $type:ty) => {
-        pub fn parts(&self) -> impl Iterator<Item = InterpolationPart<$type>> {
-            self.syntax().children_with_tokens().map(|child| {
-                match child {
-                    rowan::NodeOrToken::Token(token) => {
-                        debug_assert_eq!(token.kind(), $variant);
+    (
+        impl
+        $name:ident { let content_kind = $content_kind:expr; type ContentToken = $content_token:ty; }
+    ) => {
+        impl $name {
+            pub fn parts(&self) -> impl Iterator<Item = InterpolationPart<$content_token>> {
+                self.syntax().children_with_tokens().map(|child| {
+                    match child {
+                        rowan::NodeOrToken::Token(token) => {
+                            debug_assert_eq!(token.kind(), $content_kind);
 
-                        InterpolationPart::Content(<$type>::cast(token).unwrap())
-                    },
+                            InterpolationPart::Content(<$content_token>::cast(token).unwrap())
+                        },
 
-                    rowan::NodeOrToken::Node(node) => {
-                        debug_assert_eq!(node.kind(), TOKEN_INTERPOLATION_START);
+                        rowan::NodeOrToken::Node(node) => {
+                            debug_assert_eq!(node.kind(), TOKEN_INTERPOLATION_START);
 
-                        InterpolationPart::Interpolation(Interpolation::cast(node.clone()).unwrap())
-                    },
+                            InterpolationPart::Interpolation(
+                                Interpolation::cast(node.clone_subtree()).unwrap(),
+                            )
+                        },
+                    }
+                })
+            }
+        }
+
+        impl fmt::Display for $name {
+            fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+                let first = self.children_tokens_untyped().next().unwrap();
+                if first.kind() != $content_kind {
+                    write!(formatter, "{text}", text = first.text())?;
                 }
-            })
+
+                for part in self.parts() {
+                    write!(formatter, "{part}")?;
+                }
+
+                let last = self.children_tokens_untyped().last().unwrap();
+                if last.kind() != $content_kind {
+                    write!(formatter, "{text}", text = last.text())?;
+                }
+
+                Ok(())
+            }
         }
     };
 }
-
 // PATH, IDENTIFIER, STRING, ISLAND
 
 node! { #[from(NODE_PATH)] pub struct Path; }
 
-impl Path {
-    parted! { TOKEN_PATH + token::PathContent }
+parted! {
+    impl Path {
+        let content_kind = TOKEN_PATH;
+        type ContentToken = token::PathContent;
+    }
 }
 
-node! { #[from(NODE_IDENTIFIER)] pub struct Identifier; }
+node! { #[from(NODE_IDENTIFIER)] pub struct Identifier => |self, formatter| write!(formatter, "{value}", value = self.value()) }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum IdentifierValue {
@@ -518,10 +710,22 @@ pub enum IdentifierValue {
     Complex(IdentifierComplex),
 }
 
+impl fmt::Display for IdentifierValue {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Simple(simple) => write!(formatter, "{text}", text = simple.syntax().text()),
+            Self::Complex(complex) => write!(formatter, "{complex}"),
+        }
+    }
+}
+
 node! { #[from(NODE_IDENTIFIER)] pub struct IdentifierComplex; }
 
-impl IdentifierComplex {
-    parted! { TOKEN_CONTENT + token::Content }
+parted! {
+    impl IdentifierComplex {
+        let content_kind = TOKEN_CONTENT;
+        type ContentToken = token::Content;
+    }
 }
 
 impl Identifier {
@@ -540,24 +744,39 @@ impl Identifier {
 
 node! { #[from(NODE_STRING)] pub struct String; }
 
-impl String {
-    parted! { TOKEN_CONTENT + token::Content }
+parted! {
+    impl String {
+        let content_kind = TOKEN_CONTENT;
+        type ContentToken = token::Content;
+    }
 }
 
 node! { #[from(NODE_ISLAND)] pub struct Island; }
 
-impl Island {
-    parted! { TOKEN_CONTENT + token::Content }
+parted! {
+    impl Island {
+        let content_kind = TOKEN_CONTENT;
+        type ContentToken = token::Content;
+    }
 }
 
 // NUMBER
 
-node! { #[from(NODE_NUMBER)] pub struct Number; }
+node! { #[from(NODE_NUMBER)] pub struct Number => |self, formatter| write!(formatter, "{value}", value = self.value()) }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum NumberValue {
     Integer(token::Integer),
     Float(token::Float),
+}
+
+impl fmt::Display for NumberValue {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Integer(integer) => write!(formatter, "{value}", value = integer.value()),
+            Self::Float(float) => write!(formatter, "{value}", value = float.value()),
+        }
+    }
 }
 
 impl Number {
@@ -574,7 +793,15 @@ impl Number {
     }
 }
 
-node! { #[from(NODE_IF_ELSE)] pub struct IfElse; }
+node! { #[from(NODE_IF_ELSE)] pub struct IfElse => |self, formatter| {
+    write!(formatter, "if {condition} then {trvke}", condition = self.condition(), trvke = self.true_expression())?;
+
+    if let Some(nope) = self.false_expression() {
+        write!(formatter, " else {nope}")?;
+    }
+
+    Ok(())
+}}
 
 impl IfElse {
     get_token! { pub fn if_() -> TOKEN_LITERAL_IF }
@@ -587,5 +814,5 @@ impl IfElse {
 
     get_token! { pub fn else_() -> ? TOKEN_LITERAL_ELSE }
 
-    get_node! { pub fn fale_expression() -> 2 @ ? Expression }
+    get_node! { pub fn false_expression() -> 2 @ ? Expression }
 }

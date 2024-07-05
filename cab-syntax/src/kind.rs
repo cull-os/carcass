@@ -117,8 +117,6 @@ pub enum Kind {
     TOKEN_INTEGER, // 38
     TOKEN_FLOAT,   // 3.14
 
-    TOKEN_IDENTIFIER, // fooBar, foo-bar, foo_bar
-
     TOKEN_LITERAL_IF,   // if
     TOKEN_LITERAL_THEN, // then
     TOKEN_LITERAL_ELSE, // else
@@ -135,6 +133,8 @@ pub enum Kind {
 
     // TODO: Merge *_CONTENT into a single TOKEN_CONTENT.
     TOKEN_CONTENT,
+
+    TOKEN_IDENTIFIER, // fooBar, foo-bar, foo_bar
 
     // `foo bar baz`, `?? lmao ${baz}`
     TOKEN_IDENTIFIER_START,
@@ -156,7 +156,7 @@ pub enum Kind {
     NODE_LIST, // [<expression>*]
 
     NODE_ATTRIBUTE_SET,           // { <attribute | attribute-inherit>* }
-        NODE_ATTRIBUTE,           // <attribute-path> = <attribute-value>;
+        NODE_ATTRIBUTE_ENTRY,     // <attribute-path> = <attribute-value>;
             NODE_ATTRIBUTE_PATH,  // <identifier><.<identifier>>*
         NODE_ATTRIBUTE_INHERIT,   // <identifier>;
 

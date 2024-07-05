@@ -224,19 +224,15 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
         // this is a NODE_ATTRIBUTE_INHERIT. If it is a colon or
         // an equals, this is a NODE_ATTRIBUTE.
         self.parse_identifier()?;
-        dbg!(self.peek_nontrivia());
 
         if self.peek_nontrivia()? == TOKEN_SEMICOLON {
-            dbg!("next is a semicolon");
             self.node_start_at(checkpoint, NODE_ATTRIBUTE_INHERIT);
             self.next().expect("peek returned Some");
             self.node_end();
         } else {
-            dbg!("next is not a semicolon");
-            self.node_start_at(checkpoint, NODE_ATTRIBUTE);
+            self.node_start_at(checkpoint, NODE_ATTRIBUTE_ENTRY);
             self.node_start_at(checkpoint, NODE_ATTRIBUTE_PATH);
             while self.peek_nontrivia()? != TOKEN_EQUAL {
-                dbg!(self.peek_nontrivia());
                 self.expect(&[TOKEN_PERIOD])?;
                 self.parse_identifier()?;
             }
@@ -311,6 +307,10 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
                     self.next_nontrivia().expect("peek returned Some");
                     self.parse_expression()?;
                 }
+            },
+
+            Some(TOKEN_IDENTIFIER | TOKEN_IDENTIFIER_START) => {
+                self.parse_identifier()?;
             },
 
             unexpected => {

@@ -107,7 +107,7 @@ impl Dump {
                 let parse = syntax::parse::<syntax::node::Expression>(&contents);
 
                 if self == Self::Syntax {
-                    write!(out, "{syntax}", syntax = parse.syntax())
+                    write!(out, "{syntax:?}", syntax = parse.syntax())
                 } else {
                     write!(out, "{tree}", tree = parse.tree())
                 }
