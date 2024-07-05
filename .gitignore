@@ -1,5 +1,8 @@
 *
 
+!cab/
+!cab/src/
+
 !cab-cli/
 !cab-cli/src/
 

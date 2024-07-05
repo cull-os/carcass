@@ -17,4 +17,4 @@ env_logger          = "0.11.3"
 log                 = "0.4.21"
 tokio               = { version = "1.37.0", features = [ "full" ] }
 
-cab-syntax.path = "../cab-syntax"
+cab.path = "../cab"

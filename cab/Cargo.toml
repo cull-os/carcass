@@ -1,0 +1,8 @@
+[package]
+name        = "cab"
+description = "A reproducible derivation file composer"
+version     = "0.0.1"
+edition     = "2021"
+
+[dependencies]
+syntax = { path = "../cab-syntax", package = "cab-syntax" }
