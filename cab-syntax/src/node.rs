@@ -446,7 +446,7 @@ impl Application {
 node! { #[from(NODE_PREFIX_OPERATION)] struct PrefixOperation => |self, formatter| write!(formatter, "{operator}{expression}", operator = self.operator(), expression = self.expression()) }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-enum PrefixOperator {
+pub enum PrefixOperator {
     Swwallation, // Get it?
     Negation,
 
@@ -498,7 +498,7 @@ impl PrefixOperation {
 node! { #[from(NODE_INFIX_OPERATION)] struct InfixOperation => |self, formatter| write!(formatter, "{left} {operator} {right}", left = self.left_expression(), operator = self.operator(), right = self.right_expression()) }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-enum InfixOperator {
+pub enum InfixOperator {
     Apply,
     Pipe,
 
@@ -620,7 +620,7 @@ impl Interpolation {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-enum InterpolationPart<T> {
+pub enum InterpolationPart<T> {
     Content(T),
     Interpolation(Interpolation),
 }
@@ -700,7 +700,7 @@ parted! {
 node! { #[from(NODE_IDENTIFIER)] struct Identifier => |self, formatter| write!(formatter, "{value}", value = self.value()) }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-enum IdentifierValue {
+pub enum IdentifierValue {
     Simple(token::IdentifierSimple),
     Complex(IdentifierComplex),
 }
@@ -760,7 +760,7 @@ parted! {
 node! { #[from(NODE_NUMBER)] struct Number => |self, formatter| write!(formatter, "{value}", value = self.value()) }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-enum NumberValue {
+pub enum NumberValue {
     Integer(token::Integer),
     Float(token::Float),
 }
