@@ -1,10 +1,4 @@
-#![allow(unused)]
-
-use std::{
-    collections::VecDeque,
-    iter::Peekable,
-    marker::PhantomData,
-};
+use std::panic::Location;
 
 use rowan::{
     ast::AstNode as _,
@@ -12,12 +6,14 @@ use rowan::{
 };
 
 use crate::{
-    node::Expression,
+    limited::Limited,
+    node::Root,
     tokenize,
-    Kind,
-    Kind::*,
+    Kind::{
+        self,
+        *,
+    },
     Language,
-    Node,
     RowanNode,
     TokenizerToken,
 };
@@ -33,49 +29,80 @@ pub enum ParseError {
     RecursionLimitExceeded,
 }
 
-impl<T> Parse<T> {
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Parse {
+    node: rowan::GreenNode,
+    errors: Vec<ParseError>,
+}
+
+impl Parse {
     pub fn syntax(self) -> RowanNode {
         RowanNode::new_root(self.node)
     }
-}
 
-impl<T: Node> Parse<T> {
-    pub fn tree(self) -> T {
-        T::cast(self.syntax()).unwrap()
+    pub fn root(self) -> Root {
+        Root::cast(self.syntax()).unwrap()
     }
 
-    pub fn result(self) -> Result<T, Vec<ParseError>> {
+    pub fn result(self) -> Result<Root, Vec<ParseError>> {
         if self.errors.is_empty() {
-            Ok(self.tree())
+            Ok(self.root())
         } else {
             Err(self.errors)
         }
     }
 }
 
-pub fn parse<T>(input: &str) -> Parse<T> {
+pub fn parse(input: &str) -> Parse {
     let mut parser = Parser::new(tokenize(input));
 
-    let _ = parser.parse_expression();
-    let node = parser.builder.finish();
+    parser
+        .node(NODE_ROOT, |this| {
+            let checkpoint = this.checkpoint();
+
+            // Reached an unrecoverable error.
+            if let Err(error) = this.parse_expression() {
+                log::trace!("unrecoverable error encountered: {error:?}");
+
+                this.node_at(checkpoint, NODE_ERROR, |_| Ok(())).unwrap();
+
+                this.errors.push(error);
+            }
+
+            if let Ok(got) = this.peek_nontrivia() {
+                log::trace!("leftovers encountered: {got:?}");
+
+                let start = this.offset;
+
+                this.node(NODE_ERROR, |this| {
+                    this.next_while(|_| true);
+                    Ok(())
+                })
+                .unwrap();
+
+                this.errors.push(ParseError::Unexpected {
+                    got: Some(got),
+                    expected: None,
+                    at: rowan::TextRange::new(start, this.offset),
+                });
+            }
+            Ok(())
+        })
+        .unwrap();
 
     Parse {
-        node,
+        node: parser.builder.finish(),
         errors: parser.errors,
-
-        r#type: PhantomData,
     }
 }
 
-#[derive(Debug)]
 struct Parser<'a, I: Iterator<Item = TokenizerToken<'a>>> {
-    builder: rowan::GreenNodeBuilder<'static>,
+    builder: rowan::GreenNodeBuilder<'a>,
 
-    tokens: Peekable<I>,
+    tokens: Limited<I>,
     errors: Vec<ParseError>,
 
     offset: rowan::TextSize,
-
     depth: u32,
 }
 
@@ -84,53 +111,68 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
         Self {
             builder: rowan::GreenNodeBuilder::new(),
 
-            tokens: tokens.peekable(),
+            tokens: Limited::new(tokens),
             errors: Vec::new(),
 
             offset: 0.into(),
-
             depth: 0,
         }
     }
 
-    #[must_use]
-    fn peek(&mut self) -> Option<Kind> {
-        self.tokens.peek().map(|token| token.0)
+    fn peek(&mut self) -> Result<Kind, ParseError> {
+        self.tokens.peek().map(|token| token.0).ok_or_else(|| {
+            ParseError::Unexpected {
+                got: None,
+                expected: None,
+                at: rowan::TextRange::new(self.offset, self.offset),
+            }
+        })
     }
 
-    #[must_use]
-    fn peek_nontrivia(&mut self) -> Option<Kind> {
+    fn peek_nontrivia(&mut self) -> Result<Kind, ParseError> {
         self.next_while(Kind::is_trivia);
         self.peek()
     }
 
-    #[must_use]
-    fn next(&mut self) -> Option<Kind> {
-        self.tokens.next().map(|TokenizerToken(kind, slice)| {
-            self.offset += rowan::TextSize::of(slice);
-            self.builder.token(Language::kind_to_raw(kind), slice);
-            kind
+    fn peek_nontrivia_expecting(&mut self, expected: &'static [Kind]) -> Result<Kind, ParseError> {
+        self.peek_nontrivia().map_err(|error| {
+            let ParseError::Unexpected { got, at, .. } = error else {
+                unreachable!()
+            };
+
+            ParseError::Unexpected {
+                got,
+                expected: Some(expected),
+                at,
+            }
         })
     }
 
-    #[must_use]
-    fn next_nontrivia(&mut self) -> Option<Kind> {
+    fn next(&mut self) -> Result<Kind, ParseError> {
+        self.tokens
+            .next()
+            .map(|TokenizerToken(kind, slice)| {
+                self.offset += rowan::TextSize::of(slice);
+                self.builder.token(Language::kind_to_raw(kind), slice);
+                kind
+            })
+            .ok_or_else(|| {
+                ParseError::Unexpected {
+                    got: None,
+                    expected: None,
+                    at: rowan::TextRange::new(self.offset, self.offset),
+                }
+            })
+    }
+
+    fn next_nontrivia(&mut self) -> Result<Kind, ParseError> {
         self.next_while_trivia();
         self.next()
     }
 
-    #[must_use]
-    fn next_nontrivia_if(&mut self, predicate: impl Fn(Kind) -> bool) -> Option<Kind> {
-        self.next_while_trivia();
-        self.peek()
-            .map_or(false, predicate)
-            .then(|| self.next())
-            .flatten()
-    }
-
     fn next_while(&mut self, predicate: impl Fn(Kind) -> bool) {
         while self.peek().map_or(false, &predicate) {
-            self.next();
+            self.next().unwrap();
         }
     }
 
@@ -138,24 +180,40 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
         self.next_while(Kind::is_trivia)
     }
 
-    #[must_use]
-    fn expect(&mut self, expected: &'static [Kind]) -> Option<Kind> {
+    fn expect(&mut self, expected: &'static [Kind]) -> Result<Kind, ParseError> {
+        let checkpoint = self.checkpoint();
+
         match self.next_nontrivia() {
-            Some(got) if expected.contains(&got) => Some(got),
-            unexpected => {
+            Ok(got) if expected.contains(&got) => Ok(got),
+
+            Ok(unexpected) => {
                 let start = self.offset;
 
-                self.node_start(NODE_ERROR);
-                self.next_while(|kind| !expected.contains(&kind));
-                self.node_end();
+                self.node_at(checkpoint, NODE_ERROR, |this| {
+                    this.next_while(|kind| !expected.contains(&kind));
+                    Ok(())
+                })?;
 
-                self.errors.push(ParseError::Unexpected {
-                    got: unexpected,
+                let error = ParseError::Unexpected {
+                    got: Some(unexpected),
                     expected: Some(expected),
                     at: rowan::TextRange::new(start, self.offset),
-                });
+                };
 
-                self.next_nontrivia()
+                if let Ok(kind) = self.next_nontrivia() {
+                    self.errors.push(error);
+                    Ok(kind)
+                } else {
+                    Err(error)
+                }
+            },
+
+            Err(_) => {
+                Err(ParseError::Unexpected {
+                    got: None,
+                    expected: Some(expected),
+                    at: rowan::TextRange::new(self.offset, self.offset),
+                })
             },
         }
     }
@@ -165,173 +223,215 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
         self.builder.checkpoint()
     }
 
-    fn node_start(&mut self, kind: Kind) {
+    fn with_limit(
+        &mut self,
+        limit: usize,
+        closure: impl FnOnce(&mut Self) -> Result<(), ParseError>,
+    ) -> Result<(), ParseError> {
+        self.tokens.set_limit(limit);
+        let result = closure(self);
+
+        self.tokens.set_limit(usize::MAX);
+        result
+    }
+
+    #[track_caller]
+    fn node(
+        &mut self,
+        kind: Kind,
+        closure: impl FnOnce(&mut Self) -> Result<(), ParseError>,
+    ) -> Result<(), ParseError> {
+        log::trace!(
+            "starting node {kind:?} in {location}",
+            location = Location::caller()
+        );
         self.builder.start_node(Language::kind_to_raw(kind));
-    }
 
-    fn node_start_at(&mut self, at: rowan::Checkpoint, kind: Kind) {
-        self.builder.start_node_at(at, Language::kind_to_raw(kind))
-    }
+        let result = closure(self);
 
-    fn node_end(&mut self) {
+        log::trace!("ending node at {location}", location = Location::caller());
         self.builder.finish_node();
+        result
     }
 
-    fn parse_stringish(&mut self, end: Kind) -> Option<()> {
+    #[track_caller]
+    fn node_at(
+        &mut self,
+        at: rowan::Checkpoint,
+        kind: Kind,
+        closure: impl FnOnce(&mut Self) -> Result<(), ParseError>,
+    ) -> Result<(), ParseError> {
+        log::trace!(
+            "starting node {kind:?} at {at:?} in {location}",
+            location = Location::caller()
+        );
+        self.builder.start_node_at(at, Language::kind_to_raw(kind));
+
+        let result = closure(self);
+
+        log::trace!("ending node at {location}", location = Location::caller());
+        self.builder.finish_node();
+        result
+    }
+
+    fn parse_stringish_inner<const END: Kind>(&mut self) -> Result<(), ParseError> {
         // Assuming that the start quote has already been consumed
         // and the node is closed outside of this function.
 
         loop {
-            let peek = self.peek_nontrivia()?;
+            let checkpoint = self.checkpoint();
 
-            if peek == TOKEN_INTERPOLATION_START {
-                self.node_start(NODE_INTERPOLATION);
-                self.next().expect("peek is Some");
-                self.parse_expression()?;
-                self.expect(&[TOKEN_INTERPOLATION_END])?;
-                self.node_end();
-            } else {
-                debug_assert!(peek == end || peek == TOKEN_CONTENT);
-                self.next().expect("peek is Some");
-            }
+            let previous = self.expect(&[TOKEN_CONTENT, TOKEN_INTERPOLATION_START, END])?;
 
-            if peek == end {
+            if previous == TOKEN_INTERPOLATION_START {
+                self.node_at(checkpoint, NODE_INTERPOLATION, |this| {
+                    this.parse_expression()?;
+                    this.expect(&[TOKEN_INTERPOLATION_END])?;
+                    Ok(())
+                })?;
+            } else if previous == END {
                 break;
             }
         }
 
-        Some(())
+        Ok(())
     }
 
-    #[must_use]
-    fn parse_identifier(&mut self) -> Option<()> {
-        self.node_start(NODE_IDENTIFIER);
+    fn parse_identifier(&mut self) -> Result<(), ParseError> {
+        self.node(NODE_IDENTIFIER, |this| {
+            // If it is a normal identifier, we don't do anything
+            // else as it only has a single token, and .expect() consumes it.
+            if this.expect(&[TOKEN_IDENTIFIER, TOKEN_IDENTIFIER_START])? == TOKEN_IDENTIFIER_START {
+                this.parse_stringish_inner::<{ TOKEN_IDENTIFIER_END }>()?;
+            }
+            Ok(())
+        })?;
 
-        // If it is a normal identifier, we don't do anything
-        // else as it only has a single token, and .expect() consumes it.
-        if self.expect(&[TOKEN_IDENTIFIER, TOKEN_IDENTIFIER_START])? == TOKEN_IDENTIFIER_START {
-            self.parse_stringish(TOKEN_IDENTIFIER_END);
-        }
-
-        self.node_end();
-
-        Some(())
+        Ok(())
     }
 
-    #[must_use]
-    fn parse_attribute(&mut self) -> Option<()> {
+    fn parse_attribute(&mut self) -> Result<(), ParseError> {
         let checkpoint = self.checkpoint();
 
         // First identifier down. If the next token is a semicolon,
-        // this is a NODE_ATTRIBUTE_INHERIT. If it is a colon or
+        // this is a NODE_ATTRIBUTE_INHERIT. If it is a period or
         // an equals, this is a NODE_ATTRIBUTE.
         self.parse_identifier()?;
 
-        if self.peek_nontrivia()? == TOKEN_SEMICOLON {
-            self.node_start_at(checkpoint, NODE_ATTRIBUTE_INHERIT);
-            self.next().expect("peek returned Some");
-            self.node_end();
+        if self.peek_nontrivia_expecting(&[TOKEN_SEMICOLON, TOKEN_PERIOD, TOKEN_EQUAL])?
+            == TOKEN_SEMICOLON
+        {
+            self.node_at(checkpoint, NODE_ATTRIBUTE_INHERIT, |this| {
+                this.next().unwrap();
+                Ok(())
+            })?;
         } else {
-            self.node_start_at(checkpoint, NODE_ATTRIBUTE_ENTRY);
-            self.node_start_at(checkpoint, NODE_ATTRIBUTE_PATH);
-            while self.peek_nontrivia()? != TOKEN_EQUAL {
-                self.expect(&[TOKEN_PERIOD])?;
-                self.parse_identifier()?;
-            }
-            self.node_end();
+            self.node_at(checkpoint, NODE_ATTRIBUTE_ENTRY, |this| {
+                this.node_at(checkpoint, NODE_ATTRIBUTE_PATH, |this| {
+                    while this.peek_nontrivia_expecting(&[TOKEN_PERIOD, TOKEN_EQUAL])?
+                        != TOKEN_EQUAL
+                    {
+                        this.expect(&[TOKEN_PERIOD])?;
+                        this.parse_identifier()?;
+                    }
+                    Ok(())
+                })?;
 
-            self.expect(&[TOKEN_EQUAL])?;
-            self.parse_expression()?;
-            self.expect(&[TOKEN_SEMICOLON])?;
-            self.node_end();
+                this.expect(&[TOKEN_EQUAL])?;
+                this.parse_expression()?;
+                this.expect(&[TOKEN_SEMICOLON])?;
+                Ok(())
+            })?;
         }
 
-        Some(())
+        Ok(())
     }
 
-    #[must_use]
-    fn parse_expression(&mut self) -> Option<()> {
+    fn parse_expression(&mut self) -> Result<(), ParseError> {
         if self.depth >= 512 {
-            self.errors.push(ParseError::RecursionLimitExceeded);
+            self.node(NODE_ERROR, |this| {
+                this.next_while(|_| true);
+                Ok(())
+            })?;
 
-            self.node_start(NODE_ERROR);
-            self.next_while(|_| true);
-            self.node_end();
-
-            return None;
+            return Err(ParseError::RecursionLimitExceeded);
         }
 
-        match self.peek_nontrivia() {
-            Some(TOKEN_LEFT_PARENTHESIS) => {
-                self.node_start(NODE_PARENTHESIS);
-                self.next().expect("peek returned Some");
+        let checkpoint = self.checkpoint();
 
-                self.parse_expression()?;
-
-                self.expect(&[TOKEN_RIGHT_PARENTHESIS])?;
-                self.node_end();
+        match self.expect(&[
+            TOKEN_LEFT_PARENTHESIS,
+            TOKEN_LEFT_BRACKET,
+            TOKEN_LEFT_CURLYBRACE,
+            TOKEN_LITERAL_IF,
+            TOKEN_IDENTIFIER,
+            TOKEN_IDENTIFIER_START,
+        ])? {
+            TOKEN_LEFT_PARENTHESIS => {
+                self.node_at(checkpoint, NODE_PARENTHESIS, |this| {
+                    this.parse_expression()?;
+                    this.expect(&[TOKEN_RIGHT_PARENTHESIS])?;
+                    Ok(())
+                })?
             },
 
-            Some(TOKEN_LEFT_BRACKET) => {
-                self.node_start(NODE_LIST);
-                self.next().expect("peek returned Some");
+            TOKEN_LEFT_BRACKET => {
+                self.node_at(checkpoint, NODE_LIST, |this| {
+                    while this.peek_nontrivia_expecting(&[TOKEN_RIGHT_BRACKET])?
+                        != TOKEN_RIGHT_BRACKET
+                    {
+                        // TODO: Seperate expression parsing logic into two functions
+                        // to not parse multiple expressions next to eachother as an
+                        // application chain.
+                        this.parse_expression()?;
+                    }
 
-                while self.peek_nontrivia()? != TOKEN_RIGHT_BRACKET {
-                    // TODO: Seperate expression parsing logic into two functions
-                    // to not parse multiple expressions next to eachother as an
-                    // application chain.
-                    self.parse_expression()?;
-                }
-
-                self.expect(&[TOKEN_RIGHT_BRACKET])?;
-                self.node_end();
+                    this.expect(&[TOKEN_RIGHT_BRACKET])?;
+                    Ok(())
+                })?;
             },
 
-            Some(TOKEN_LEFT_CURLYBRACE) => {
-                self.node_start(NODE_ATTRIBUTE_SET);
-                self.next().expect("peek returned Some");
+            TOKEN_LEFT_CURLYBRACE => {
+                self.node_at(checkpoint, NODE_ATTRIBUTE_SET, |this| {
+                    while this.peek_nontrivia_expecting(&[TOKEN_RIGHT_CURLYBRACE])?
+                        != TOKEN_RIGHT_CURLYBRACE
+                    {
+                        this.parse_attribute()?;
+                    }
 
-                while self.peek_nontrivia()? != TOKEN_RIGHT_CURLYBRACE {
-                    self.parse_attribute()?;
-                }
-
-                self.expect(&[TOKEN_RIGHT_CURLYBRACE])?;
-                self.node_end();
+                    this.expect(&[TOKEN_RIGHT_CURLYBRACE])?;
+                    Ok(())
+                })?;
             },
 
-            Some(TOKEN_LITERAL_IF) => {
-                self.next().expect("peek returned Some");
-                self.parse_expression()?;
-                self.expect(&[TOKEN_LITERAL_THEN])?;
-                self.parse_expression()?;
+            TOKEN_LITERAL_IF => {
+                self.node_at(checkpoint, NODE_IF_ELSE, |this| {
+                    this.parse_expression()?;
+                    this.expect(&[TOKEN_LITERAL_THEN])?;
+                    this.parse_expression()?;
 
-                if self.peek() == Some(TOKEN_LITERAL_ELSE) {
-                    self.next_nontrivia().expect("peek returned Some");
-                    self.parse_expression()?;
-                }
+                    if this.peek_nontrivia() == Ok(TOKEN_LITERAL_ELSE) {
+                        this.next_nontrivia().expect("peek returned Some");
+                        this.parse_expression()?;
+                    }
+                    Ok(())
+                })?;
             },
 
-            Some(TOKEN_IDENTIFIER | TOKEN_IDENTIFIER_START) => {
-                self.parse_identifier()?;
+            TOKEN_IDENTIFIER => {
+                self.node_at(checkpoint, NODE_IDENTIFIER, |_| Ok(()))?;
             },
 
-            unexpected => {
-                self.errors.push(ParseError::Unexpected {
-                    got: unexpected,
-                    expected: None,
-                    at: rowan::TextRange::new(self.offset, self.offset),
-                })
+            TOKEN_IDENTIFIER_START => {
+                self.node_at(checkpoint, NODE_IDENTIFIER, |this| {
+                    this.parse_stringish_inner::<{ TOKEN_IDENTIFIER_END }>()?;
+                    Ok(())
+                })?;
             },
+
+            _ => unreachable!(),
         }
 
-        Some(())
+        Ok(())
     }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Parse<T> {
-    node: rowan::GreenNode,
-    errors: Vec<ParseError>,
-
-    r#type: PhantomData<T>,
 }

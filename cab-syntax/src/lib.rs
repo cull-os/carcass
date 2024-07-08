@@ -1,3 +1,6 @@
+#![allow(incomplete_features)]
+#![feature(adt_const_params)]
+
 mod kind;
 
 pub use kind::*;
@@ -16,6 +19,8 @@ pub use tokenizer::{
     Token as TokenizerToken,
     *,
 };
+
+mod limited;
 
 type RowanNode = rowan::SyntaxNode<Language>;
 type RowanToken = rowan::SyntaxToken<Language>;

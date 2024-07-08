@@ -43,7 +43,7 @@ enum Command {
     },
 }
 
-#[derive(Subcommand, Debug, Clone, PartialEq, Eq)]
+#[derive(Subcommand, Debug, Clone)]
 enum Dump {
     /// Dump the provided file's tokens.
     Token {
@@ -55,10 +55,8 @@ enum Dump {
     /// Dump the provided file's syntax.
     Syntax,
 
-    /// Dump the provided file's abstract syntax tree
-    /// in the form of an unambigious Cab expression
-    /// that is very similar to Lisp.
-    Ast,
+    /// Dump the provided file in a clean manner.
+    Clean,
 }
 
 impl Dump {
@@ -102,13 +100,13 @@ impl Dump {
                 }
             },
 
-            Self::Syntax | Self::Ast => {
-                let parse = syntax::parse::<syntax::node::Expression>(&contents);
+            Self::Syntax | Self::Clean => {
+                let parse = syntax::parse(&contents);
 
-                if self == Self::Syntax {
-                    write!(out, "{syntax:?}", syntax = parse.syntax())
+                if matches!(self, Self::Syntax) {
+                    write!(out, "{syntax:#?}", syntax = parse.syntax())
                 } else {
-                    write!(out, "{tree}", tree = parse.tree())
+                    write!(out, "{root}", root = parse.root())
                 }
                 .unwrap_or_else(|error| {
                     log::error!("failed to write to stdout: {error}");

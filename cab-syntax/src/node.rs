@@ -67,7 +67,7 @@ macro_rules! node {
         struct $name:ident;
     ) => {
         #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-        pub struct $name(pub RowanNode);
+        pub struct $name(pub(crate) RowanNode);
 
         impl rowan::ast::AstNode for $name {
             type Language = Language;
@@ -199,12 +199,17 @@ macro_rules! get_node {
     };
 }
 
-node! { #[from(NODE_ERROR)] struct Error => |self, formatter| write!(formatter, "ERROR") }
+node! { #[from(NODE_ROOT)] struct Root => |self, formatter| write!(formatter, "{expression}", expression = self.expression()) }
+
+impl Root {
+    get_node! { expression -> 0 @ Expression }
+}
 
 // EXPRESSION
 
 node! {
     #[from(
+        Error,
         Parenthesis,
         List,
         AttributeSet,
@@ -223,9 +228,13 @@ node! {
     enum Expression;
 }
 
+// ERROR
+
+node! { #[from(NODE_ERROR)] struct Error => |self, formatter| write!(formatter, "ERROR") }
+
 // PARENTHESIS
 
-node! { #[from(NODE_PARENTHESIS)] struct Parenthesis => |self, formatter| write!(formatter, "({self})") }
+node! { #[from(NODE_PARENTHESIS)] struct Parenthesis => |self, formatter| write!(formatter, "({expression})", expression = self.expression()) }
 
 impl Parenthesis {
     get_token! { left_parenthesis -> TOKEN_LEFT_PARENTHESIS }

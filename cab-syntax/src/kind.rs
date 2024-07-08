@@ -1,3 +1,5 @@
+use std::marker::ConstParamTy;
+
 use colored::CustomColor;
 use num_enum::TryFromPrimitive;
 
@@ -65,14 +67,16 @@ pub const COLORS: &[CustomColor] = &[
     CustomColor { r: 0xF8, g: 0xF8, b: 0xFF },
 ];
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, TryFromPrimitive)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, TryFromPrimitive, ConstParamTy,
+)]
 #[repr(u16)]
 #[allow(non_camel_case_types)]
 #[non_exhaustive]
-#[rustfmt::skip]
 pub enum Kind {
     // TOKEN
     TOKEN_ERROR,
+
     TOKEN_WHITESPACE, // \n, \t
     TOKEN_COMMENT,    // #<anything until end of line>
 
@@ -149,16 +153,17 @@ pub enum Kind {
     TOKEN_ISLAND_END,
 
     // AST
+    NODE_ROOT,
     NODE_ERROR,
 
     NODE_PARENTHESIS, // (<expression>)
 
     NODE_LIST, // [<expression>*]
 
-    NODE_ATTRIBUTE_SET,           // { <attribute | attribute-inherit>* }
-        NODE_ATTRIBUTE_ENTRY,     // <attribute-path> = <attribute-value>;
-            NODE_ATTRIBUTE_PATH,  // <identifier><.<identifier>>*
-        NODE_ATTRIBUTE_INHERIT,   // <identifier>;
+    NODE_ATTRIBUTE_SET,     // { <attribute | attribute-inherit>* }
+    NODE_ATTRIBUTE_ENTRY,   // <attribute-path> = <attribute-value>;
+    NODE_ATTRIBUTE_PATH,    // <identifier><.<identifier>>*
+    NODE_ATTRIBUTE_INHERIT, // <identifier>;
 
     NODE_ATTRIBUTE_SELECT, // <expression>.<identifier>
     NODE_ATTRIBUTE_CHECK,  // <expression> ? <attribute-path>
@@ -167,10 +172,10 @@ pub enum Kind {
 
     NODE_USE, // <bind>? <expression> ==> <expression>
 
-    NODE_LAMBDA,                                 // <identifier | lambda-parameter-pattern>: <expression>
-        NODE_LAMBDA_PARAMETER_IDENTIFIER,        // <identifier>
-        NODE_LAMBDA_PARAMETER_PATTERN,           // <bind>? { <<entry>,>* }
-            NODE_LAMBDA_PARAMETER_PATTERN_ENTRY, // <identifier> <? <expression>>?
+    NODE_LAMBDA, // <identifier | lambda-parameter-pattern>: <expression>
+    NODE_LAMBDA_PARAMETER_IDENTIFIER, // <identifier>
+    NODE_LAMBDA_PARAMETER_PATTERN, // <bind>? { <<entry>,>* }
+    NODE_LAMBDA_PARAMETER_PATTERN_ENTRY, // <identifier> <? <expression>>?
 
     NODE_APPLICATION, // <expression> <expression>
 
@@ -227,6 +232,6 @@ impl Kind {
 
     /// Whether if the token should be ignored by the parser.
     pub fn is_trivia(self) -> bool {
-        matches!(self, TOKEN_COMMENT | TOKEN_ERROR | TOKEN_WHITESPACE)
+        matches!(self, TOKEN_COMMENT | TOKEN_WHITESPACE)
     }
 }

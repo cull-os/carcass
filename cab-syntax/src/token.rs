@@ -19,7 +19,7 @@ pub trait Token {
 macro_rules! token {
     (#[from($kind:ident)]struct $name:ident;) => {
         #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-        pub struct $name(pub RowanToken);
+        pub struct $name(pub(crate) RowanToken);
 
         impl fmt::Display for $name {
             fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
