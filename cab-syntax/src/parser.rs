@@ -143,15 +143,17 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
         match self.next_nontrivia() {
             Some(got) if expected.contains(&got) => Some(got),
             unexpected => {
-                self.errors.push(ParseError::Unexpected {
-                    got: unexpected,
-                    expected: Some(expected),
-                    at: rowan::TextRange::new(self.offset, self.offset),
-                });
+                let start = self.offset;
 
                 self.node_start(NODE_ERROR);
                 self.next_while(|kind| !expected.contains(&kind));
                 self.node_end();
+
+                self.errors.push(ParseError::Unexpected {
+                    got: unexpected,
+                    expected: Some(expected),
+                    at: rowan::TextRange::new(start, self.offset),
+                });
 
                 self.next_nontrivia()
             },
