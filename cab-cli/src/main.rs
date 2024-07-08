@@ -37,7 +37,6 @@ enum Command {
         #[command(subcommand)]
         command: Dump,
 
-        // TODO: https://github.com/thepacketgeek/clap-stdin/issues/9
         /// The file to dump.
         #[clap(default_value = "-", global = true)]
         file: FileOrStdin,
