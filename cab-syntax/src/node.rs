@@ -1,4 +1,7 @@
-use std::fmt;
+use std::{
+    fmt,
+    ops::Deref,
+};
 
 use rowan::ast::AstNode as _;
 
@@ -20,7 +23,7 @@ macro_rules! match_node {
         _ => $catch:expr $(,)?
     ) => {
         $(if $typed::can_cast($raw) {
-            let $name = $typed::cast($raw.clone_subtree()).unwrap();
+            let $name = $typed::cast($raw.clone()).unwrap();
             $result
         } else )*{
             $catch
@@ -28,9 +31,9 @@ macro_rules! match_node {
     };
 }
 
-pub trait Node: rowan::ast::AstNode<Language = Language> {
+pub trait Node: rowan::ast::AstNode<Language = Language> + Deref<Target = RowanNode> {
     fn nth<N: Node>(&self, n: usize) -> Option<N> {
-        self.syntax().children().filter_map(N::cast).nth(n)
+        self.children::<N>().nth(n)
     }
 
     fn children<N: Node>(&self) -> rowan::ast::AstChildren<N> {
@@ -46,20 +49,18 @@ pub trait Node: rowan::ast::AstNode<Language = Language> {
     }
 
     fn children_tokens<T: Token>(&self) -> impl Iterator<Item = T> {
-        self.syntax()
-            .children_with_tokens()
+        self.children_with_tokens()
             .filter_map(RowanElement::into_token)
             .filter_map(T::cast)
     }
 
     fn children_tokens_untyped(&self) -> impl Iterator<Item = RowanToken> {
-        self.syntax()
-            .children_with_tokens()
+        self.children_with_tokens()
             .filter_map(RowanElement::into_token)
     }
 }
 
-impl<T: rowan::ast::AstNode<Language = Language>> Node for T {}
+impl<T: rowan::ast::AstNode<Language = Language> + Deref<Target = RowanNode>> Node for T {}
 
 macro_rules! node {
     (
@@ -85,6 +86,14 @@ macro_rules! node {
             }
         }
 
+        impl Deref for $name {
+            type Target = RowanNode;
+
+            fn deref(&self) -> &Self::Target {
+                self.syntax()
+            }
+        }
+
         impl $name {
             pub const KIND: Kind = $kind;
         }
@@ -94,10 +103,7 @@ macro_rules! node {
         #[from($kind:ident)]
         struct $name:ident => |$self:ident, $formatter:ident| $format_expr:expr
     ) => {
-        node! {
-            #[from($kind)]
-            struct $name;
-        }
+        node! { #[from($kind)] struct $name; }
 
         impl fmt::Display for $name {
             fn fmt(&$self, $formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -141,6 +147,14 @@ macro_rules! node {
                 match self {
                     $(Self::$variant(this) => &this.0,)*
                 }
+            }
+        }
+
+        impl Deref for $name {
+            type Target = RowanNode;
+
+            fn deref(&self) -> &Self::Target {
+                self.syntax()
             }
         }
 
@@ -250,17 +264,15 @@ node! { #[from(NODE_LIST)] struct List => |self, formatter| {
     write!(formatter, "[")?;
 
     for expression in self.items() {
-        use Expression as Ex;
-
         match expression {
-            Ex::Parenthesis(variant) => write!(formatter, " {variant}"),
-            Ex::List(variant) => write!(formatter, " {variant}"),
-            Ex::AttributeSet(variant) => write!(formatter, " {variant}"),
-            Ex::Path(variant) => write!(formatter, " {variant}"),
-            Ex::Identifier(variant) => write!(formatter, " {variant}"),
-            Ex::String(variant) => write!(formatter, " {variant}"),
-            Ex::Island(variant) => write!(formatter, " {variant}"),
-            Ex::Number(variant) => write!(formatter, " {variant}"),
+            Expression::Parenthesis(variant) => write!(formatter, " {variant}"),
+            Expression::List(variant) => write!(formatter, " {variant}"),
+            Expression::AttributeSet(variant) => write!(formatter, " {variant}"),
+            Expression::Path(variant) => write!(formatter, " {variant}"),
+            Expression::Identifier(variant) => write!(formatter, " {variant}"),
+            Expression::String(variant) => write!(formatter, " {variant}"),
+            Expression::Island(variant) => write!(formatter, " {variant}"),
+            Expression::Number(variant) => write!(formatter, " {variant}"),
             _ => write!(formatter, " ({expression})"),
         }?;
     }
@@ -574,8 +586,8 @@ impl TryFrom<Kind> for InfixOperator {
 
     fn try_from(from: Kind) -> Result<Self, Self::Error> {
         match from {
-            TOKEN_LESS_PIPE => Ok(Self::Apply),
-            TOKEN_PIPE_GREATER => Ok(Self::Pipe),
+            TOKEN_DOLLAR => Ok(Self::Apply),
+            TOKEN_PIPE_MORE => Ok(Self::Pipe),
 
             TOKEN_PLUS_PLUS => Ok(Self::Concat),
 
@@ -588,7 +600,7 @@ impl TryFrom<Kind> for InfixOperator {
             TOKEN_LESS => Ok(Self::Less),
             TOKEN_MORE_EQUAL => Ok(Self::MoreOrEqual),
             TOKEN_MORE => Ok(Self::More),
-            TOKEN_MINUS_GREATER => Ok(Self::Implication),
+            TOKEN_MINUS_MORE => Ok(Self::Implication),
 
             TOKEN_PLUS => Ok(Self::Addition),
             TOKEN_MINUS => Ok(Self::Negation),
@@ -638,7 +650,7 @@ impl<T: Token> fmt::Display for InterpolationPart<T> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             InterpolationPart::Content(path) => {
-                write!(formatter, "{text}", text = path.syntax().text())
+                write!(formatter, "{text}", text = path.text())
             },
             InterpolationPart::Interpolation(interpolation) => {
                 write!(formatter, "{interpolation}")
@@ -654,7 +666,7 @@ macro_rules! parted {
     ) => {
         impl $name {
             pub fn parts(&self) -> impl Iterator<Item = InterpolationPart<$content_token>> {
-                self.syntax().children_with_tokens().map(|child| {
+                self.children_with_tokens().map(|child| {
                     match child {
                         rowan::NodeOrToken::Token(token) => {
                             debug_assert_eq!(token.kind(), $content_kind);
@@ -666,7 +678,7 @@ macro_rules! parted {
                             debug_assert_eq!(node.kind(), TOKEN_INTERPOLATION_START);
 
                             InterpolationPart::Interpolation(
-                                Interpolation::cast(node.clone_subtree()).unwrap(),
+                                Interpolation::cast(node.clone()).unwrap(),
                             )
                         },
                     }
@@ -702,7 +714,7 @@ node! { #[from(NODE_PATH)] struct Path; }
 parted! {
     impl Path {
         let content_kind = TOKEN_PATH;
-        type ContentToken = token::PathContent;
+        type ContentToken = token::Path;
     }
 }
 
@@ -710,14 +722,14 @@ node! { #[from(NODE_IDENTIFIER)] struct Identifier => |self, formatter| write!(f
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum IdentifierValue {
-    Simple(token::IdentifierSimple),
+    Simple(token::Identifier),
     Complex(IdentifierComplex),
 }
 
 impl fmt::Display for IdentifierValue {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Simple(simple) => write!(formatter, "{text}", text = simple.syntax().text()),
+            Self::Simple(simple) => write!(formatter, "{text}", text = simple.text()),
             Self::Complex(complex) => write!(formatter, "{complex}"),
         }
     }
@@ -739,7 +751,7 @@ impl Identifier {
         }
 
         if self.token_untyped(TOKEN_IDENTIFIER_START).is_some() {
-            return IdentifierValue::Complex(IdentifierComplex(self.0.clone_subtree()));
+            return IdentifierValue::Complex(IdentifierComplex(self.0.clone()));
         }
 
         unreachable!()

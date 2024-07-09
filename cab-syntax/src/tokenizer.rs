@@ -12,7 +12,7 @@ fn is_valid_identifier_character(c: char) -> bool {
 }
 
 fn is_valid_path_character(c: char) -> bool {
-    c.is_alphanumeric() || matches!(c, '.' | '/' | '_' | '-')
+    c.is_alphanumeric() || matches!(c, '.' | '/' | '_' | '-' | '\\' | '$')
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -253,8 +253,8 @@ impl<'a> Tokenizer<'a> {
                 TOKEN_COMMENT
             },
 
-            '<' if self.try_consume_character('|') => TOKEN_LESS_PIPE,
-            '|' if self.try_consume_character('>') => TOKEN_PIPE_GREATER,
+            '<' if self.try_consume_character('|') => TOKEN_DOLLAR,
+            '|' if self.try_consume_character('>') => TOKEN_PIPE_MORE,
 
             '(' => TOKEN_LEFT_PARENTHESIS,
             ')' => TOKEN_RIGHT_PARENTHESIS,
@@ -296,7 +296,7 @@ impl<'a> Tokenizer<'a> {
             '!' if self.try_consume_character('=') => TOKEN_EXCLAMATION_EQUAL,
             '>' if self.try_consume_character('=') => TOKEN_MORE_EQUAL,
             '>' => TOKEN_MORE,
-            '-' if self.try_consume_character('>') => TOKEN_MINUS_GREATER,
+            '-' if self.try_consume_character('>') => TOKEN_MINUS_MORE,
 
             '@' => TOKEN_AT,
             ',' => TOKEN_COMMA,
@@ -307,19 +307,62 @@ impl<'a> Tokenizer<'a> {
             '*' if self.try_consume_character('*') => TOKEN_ASTERISK_ASTERISK,
             '*' => TOKEN_ASTERISK,
 
-            initial_digit if initial_digit.is_ascii_digit() => {
-                let is_valid_digit: fn(char) -> bool = if initial_digit != '0' {
-                    |c| c.is_ascii_digit()
-                } else {
-                    match self.consume_character() {
-                        #[rustfmt::skip] // 0xr<A>.<B> == <A> + <B> / $ 10 ** floor $ log10 <B>
-                        Some('r') => |c| "ivxlcdmIVXLCDM".contains(c),
-                        Some('b') => |c| matches!(c, '0' | '1'),
-                        Some('o') => |c| matches!(c, '0'..='7'),
-                        Some('x') => |c| c.is_ascii_hexdigit(),
-                        _ => |c| c.is_ascii_digit(),
-                    }
+            '0' if matches!(self.peek_character(), Some('r' | 'b' | 'o' | 'x')) => {
+                let is_valid_digit: fn(char) -> bool = match self.consume_character() {
+                    Some('b') => |c| matches!(c, '0' | '1'),
+                    Some('o') => |c| matches!(c, '0'..='7'),
+                    Some('x') => |c| c.is_ascii_hexdigit(),
+                    _ => unreachable!(),
                 };
+
+                let start = self.offset;
+                self.consume_while(is_valid_digit);
+
+                if self.try_consume_character('.') {
+                    let start = self.offset;
+                    self.consume_while(is_valid_digit);
+                    if self.offset - start == 0 {
+                        TOKEN_ERROR
+                    } else {
+                        TOKEN_FLOAT
+                    }
+                } else if self.offset - start > 0 {
+                    TOKEN_INTEGER
+                } else {
+                    TOKEN_ERROR
+                }
+            },
+
+            initial_digit if initial_digit.is_ascii_digit() => {
+                let (is_valid_digit, minimum_length): (fn(char) -> bool, u8) =
+                    if initial_digit != '0' {
+                        (|c| c.is_ascii_digit(), 0)
+                    } else {
+                        match self.peek_character() {
+                            // 0xr<A>.<B> == <A> + <B> / $ 10 ** floor $ log10 <B>
+                            Some('r') => {
+                                self.consume_character();
+                                (|c| "ivxlcdmIVXLCDM".contains(c), 1)
+                            },
+
+                            Some('b') => {
+                                self.consume_character();
+                                (|c| matches!(c, '0' | '1'), 1)
+                            },
+
+                            Some('o') => {
+                                self.consume_character();
+                                (|c| matches!(c, '0'..='7'), 1)
+                            },
+
+                            Some('x') => {
+                                self.consume_character();
+                                (|c| c.is_ascii_hexdigit(), 1)
+                            },
+
+                            _ => (|c| c.is_ascii_digit(), 0),
+                        }
+                    };
 
                 self.consume_while(is_valid_digit);
 

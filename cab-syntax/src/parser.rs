@@ -271,15 +271,15 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
         loop {
             let checkpoint = self.checkpoint();
 
-            let previous = self.expect(&[TOKEN_CONTENT, TOKEN_INTERPOLATION_START, END])?;
+            let current = self.expect(&[TOKEN_CONTENT, TOKEN_INTERPOLATION_START, END])?;
 
-            if previous == TOKEN_INTERPOLATION_START {
+            if current == TOKEN_INTERPOLATION_START {
                 self.node_from(checkpoint, NODE_INTERPOLATION, |this| {
                     this.parse_expression()?;
                     this.expect(&[TOKEN_INTERPOLATION_END])?;
                     Ok(())
                 })?;
-            } else if previous == END {
+            } else if current == END {
                 break;
             }
         }
@@ -414,7 +414,32 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
 
             TOKEN_IDENTIFIER_START => {
                 self.node_from(checkpoint, NODE_IDENTIFIER, |this| {
-                    this.parse_stringish_inner::<{ TOKEN_IDENTIFIER_END }>()?;
+                    this.parse_stringish_inner::<{ TOKEN_IDENTIFIER_END }>()
+                })?;
+            },
+
+            TOKEN_PLUS | TOKEN_MINUS | TOKEN_LITERAL_NOT => {
+                self.node_from(checkpoint, NODE_PREFIX_OPERATION, |this| {
+                    this.parse_expression()
+                })?;
+            },
+
+            TOKEN_PATH => {
+                self.node_from(checkpoint, NODE_PATH, |this| {
+                    loop {
+                        let checkpoint = this.checkpoint();
+                        let current = this.next();
+
+                        if current == Ok(TOKEN_INTERPOLATION_START) {
+                            this.node_from(checkpoint, NODE_INTERPOLATION, |this| {
+                                this.parse_expression()?;
+                                this.expect(&[TOKEN_INTERPOLATION_END])?;
+                                Ok(())
+                            })?;
+                        } else if current != Ok(TOKEN_PATH) {
+                            break;
+                        }
+                    }
                     Ok(())
                 })?;
             },

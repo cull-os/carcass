@@ -80,8 +80,8 @@ pub enum Kind {
     TOKEN_WHITESPACE, // \n, \t
     TOKEN_COMMENT,    // #<anything until end of line>
 
-    TOKEN_LESS_PIPE,    // <|
-    TOKEN_PIPE_GREATER, // |>
+    TOKEN_DOLLAR,    // $
+    TOKEN_PIPE_MORE, // |>
 
     TOKEN_LEFT_PARENTHESIS,  // (
     TOKEN_RIGHT_PARENTHESIS, // )
@@ -106,7 +106,7 @@ pub enum Kind {
     TOKEN_LESS,              // <
     TOKEN_MORE_EQUAL,        // >=
     TOKEN_MORE,              // >
-    TOKEN_MINUS_GREATER,     // ->
+    TOKEN_MINUS_MORE,        // ->
 
     TOKEN_AT,    // @
     TOKEN_COMMA, // ,
