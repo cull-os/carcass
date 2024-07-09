@@ -66,7 +66,7 @@ pub fn parse(input: &str) -> Parse {
             if let Err(error) = this.parse_expression() {
                 log::trace!("unrecoverable error encountered: {error:?}");
 
-                this.node_at(checkpoint, NODE_ERROR, |_| Ok(())).unwrap();
+                this.node_from(checkpoint, NODE_ERROR, |_| Ok(())).unwrap();
 
                 this.errors.push(error);
             }
@@ -191,7 +191,7 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
             Ok(unexpected) => {
                 let start = self.offset;
 
-                self.node_at(checkpoint, NODE_ERROR, |this| {
+                self.node_from(checkpoint, NODE_ERROR, |this| {
                     this.next_while(|kind| !expected.contains(&kind));
                     Ok(())
                 })?;
@@ -245,7 +245,7 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
     }
 
     #[track_caller]
-    fn node_at(
+    fn node_from(
         &mut self,
         at: rowan::Checkpoint,
         kind: Kind,
@@ -274,7 +274,7 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
             let previous = self.expect(&[TOKEN_CONTENT, TOKEN_INTERPOLATION_START, END])?;
 
             if previous == TOKEN_INTERPOLATION_START {
-                self.node_at(checkpoint, NODE_INTERPOLATION, |this| {
+                self.node_from(checkpoint, NODE_INTERPOLATION, |this| {
                     this.parse_expression()?;
                     this.expect(&[TOKEN_INTERPOLATION_END])?;
                     Ok(())
@@ -311,13 +311,13 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
         if self.peek_nontrivia_expecting(&[TOKEN_SEMICOLON, TOKEN_PERIOD, TOKEN_EQUAL])?
             == TOKEN_SEMICOLON
         {
-            self.node_at(checkpoint, NODE_ATTRIBUTE_INHERIT, |this| {
+            self.node_from(checkpoint, NODE_ATTRIBUTE_INHERIT, |this| {
                 this.next().unwrap();
                 Ok(())
             })?;
         } else {
-            self.node_at(checkpoint, NODE_ATTRIBUTE_ENTRY, |this| {
-                this.node_at(checkpoint, NODE_ATTRIBUTE_PATH, |this| {
+            self.node_from(checkpoint, NODE_ATTRIBUTE_ENTRY, |this| {
+                this.node_from(checkpoint, NODE_ATTRIBUTE_PATH, |this| {
                     while this.peek_nontrivia_expecting(&[TOKEN_PERIOD, TOKEN_EQUAL])?
                         != TOKEN_EQUAL
                     {
@@ -358,7 +358,7 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
             TOKEN_IDENTIFIER_START,
         ])? {
             TOKEN_LEFT_PARENTHESIS => {
-                self.node_at(checkpoint, NODE_PARENTHESIS, |this| {
+                self.node_from(checkpoint, NODE_PARENTHESIS, |this| {
                     this.parse_expression()?;
                     this.expect(&[TOKEN_RIGHT_PARENTHESIS])?;
                     Ok(())
@@ -366,7 +366,7 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
             },
 
             TOKEN_LEFT_BRACKET => {
-                self.node_at(checkpoint, NODE_LIST, |this| {
+                self.node_from(checkpoint, NODE_LIST, |this| {
                     while this.peek_nontrivia_expecting(&[TOKEN_RIGHT_BRACKET])?
                         != TOKEN_RIGHT_BRACKET
                     {
@@ -382,7 +382,7 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
             },
 
             TOKEN_LEFT_CURLYBRACE => {
-                self.node_at(checkpoint, NODE_ATTRIBUTE_SET, |this| {
+                self.node_from(checkpoint, NODE_ATTRIBUTE_SET, |this| {
                     while this.peek_nontrivia_expecting(&[TOKEN_RIGHT_CURLYBRACE])?
                         != TOKEN_RIGHT_CURLYBRACE
                     {
@@ -395,7 +395,7 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
             },
 
             TOKEN_LITERAL_IF => {
-                self.node_at(checkpoint, NODE_IF_ELSE, |this| {
+                self.node_from(checkpoint, NODE_IF_ELSE, |this| {
                     this.parse_expression()?;
                     this.expect(&[TOKEN_LITERAL_THEN])?;
                     this.parse_expression()?;
@@ -409,11 +409,11 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
             },
 
             TOKEN_IDENTIFIER => {
-                self.node_at(checkpoint, NODE_IDENTIFIER, |_| Ok(()))?;
+                self.node_from(checkpoint, NODE_IDENTIFIER, |_| Ok(()))?;
             },
 
             TOKEN_IDENTIFIER_START => {
-                self.node_at(checkpoint, NODE_IDENTIFIER, |this| {
+                self.node_from(checkpoint, NODE_IDENTIFIER, |this| {
                     this.parse_stringish_inner::<{ TOKEN_IDENTIFIER_END }>()?;
                     Ok(())
                 })?;
