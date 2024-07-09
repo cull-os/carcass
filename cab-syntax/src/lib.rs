@@ -20,8 +20,6 @@ pub use tokenizer::{
     *,
 };
 
-mod limited;
-
 type RowanNode = rowan::SyntaxNode<Language>;
 type RowanToken = rowan::SyntaxToken<Language>;
 type RowanElement = rowan::NodeOrToken<RowanNode, RowanToken>;

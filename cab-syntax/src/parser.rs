@@ -1,4 +1,7 @@
-use std::panic::Location;
+use std::{
+    iter::Peekable,
+    panic::Location,
+};
 
 use rowan::{
     ast::AstNode as _,
@@ -6,7 +9,6 @@ use rowan::{
 };
 
 use crate::{
-    limited::Limited,
     node::Root,
     tokenize,
     Kind::{
@@ -99,7 +101,7 @@ pub fn parse(input: &str) -> Parse {
 struct Parser<'a, I: Iterator<Item = TokenizerToken<'a>>> {
     builder: rowan::GreenNodeBuilder<'a>,
 
-    tokens: Limited<I>,
+    tokens: Peekable<I>,
     errors: Vec<ParseError>,
 
     offset: rowan::TextSize,
@@ -111,7 +113,7 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
         Self {
             builder: rowan::GreenNodeBuilder::new(),
 
-            tokens: Limited::new(tokens),
+            tokens: tokens.peekable(),
             errors: Vec::new(),
 
             offset: 0.into(),
@@ -221,18 +223,6 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
     fn checkpoint(&mut self) -> rowan::Checkpoint {
         self.next_while_trivia();
         self.builder.checkpoint()
-    }
-
-    fn with_limit(
-        &mut self,
-        limit: usize,
-        closure: impl FnOnce(&mut Self) -> Result<(), ParseError>,
-    ) -> Result<(), ParseError> {
-        self.tokens.set_limit(limit);
-        let result = closure(self);
-
-        self.tokens.set_limit(usize::MAX);
-        result
     }
 
     #[track_caller]
