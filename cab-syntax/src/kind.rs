@@ -10,9 +10,11 @@ use std::marker;
     PartialOrd,
     Ord,
     Hash,
+    enumset::EnumSetType,
     num_enum::TryFromPrimitive,
     marker::ConstParamTy,
 )]
+#[enumset(no_super_impls)]
 #[repr(u16)]
 #[allow(non_camel_case_types)]
 #[non_exhaustive]
