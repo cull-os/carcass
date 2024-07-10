@@ -253,7 +253,7 @@ impl<'a> Tokenizer<'a> {
                 TOKEN_COMMENT
             },
 
-            '<' if self.try_consume_character('|') => TOKEN_DOLLAR,
+            '$' => TOKEN_DOLLAR,
             '|' if self.try_consume_character('>') => TOKEN_PIPE_MORE,
 
             '(' => TOKEN_LEFT_PARENTHESIS,
@@ -307,71 +307,45 @@ impl<'a> Tokenizer<'a> {
             '*' if self.try_consume_character('*') => TOKEN_ASTERISK_ASTERISK,
             '*' => TOKEN_ASTERISK,
 
-            '0' if matches!(self.peek_character(), Some('r' | 'b' | 'o' | 'x')) => {
-                let is_valid_digit: fn(char) -> bool = match self.consume_character() {
-                    Some('b') => |c| matches!(c, '0' | '1'),
-                    Some('o') => |c| matches!(c, '0'..='7'),
-                    Some('x') => |c| c.is_ascii_hexdigit(),
+            '0' if matches!(self.peek_character(), Some('b' | 'o' | 'x')) => {
+                let is_valid_digit = match self.consume_character() {
+                    Some('b') => |c: char| matches!(c, '0' | '1'),
+                    Some('o') => |c: char| matches!(c, '0'..='7'),
+                    Some('x') => |c: char| c.is_ascii_hexdigit(),
                     _ => unreachable!(),
                 };
 
                 let start = self.offset;
                 self.consume_while(is_valid_digit);
 
+                if self.offset - start == 0 {
+                    TOKEN_ERROR
+                } else {
+                    TOKEN_INTEGER
+                }
+            },
+
+            initial_digit if initial_digit.is_ascii_digit() => {
+                self.consume_while(|c| c.is_ascii_digit());
+
                 if self.try_consume_character('.') {
                     let start = self.offset;
-                    self.consume_while(is_valid_digit);
+                    self.consume_while(|c| c.is_ascii_digit());
+
                     if self.offset - start == 0 {
                         TOKEN_ERROR
                     } else {
                         TOKEN_FLOAT
                     }
-                } else if self.offset - start > 0 {
-                    TOKEN_INTEGER
                 } else {
-                    TOKEN_ERROR
+                    TOKEN_INTEGER
                 }
             },
 
-            initial_digit if initial_digit.is_ascii_digit() => {
-                let (is_valid_digit, minimum_length): (fn(char) -> bool, u8) =
-                    if initial_digit != '0' {
-                        (|c| c.is_ascii_digit(), 0)
-                    } else {
-                        match self.peek_character() {
-                            // 0xr<A>.<B> == <A> + <B> / $ 10 ** floor $ log10 <B>
-                            Some('r') => {
-                                self.consume_character();
-                                (|c| "ivxlcdmIVXLCDM".contains(c), 1)
-                            },
+            '.' if self.peek_character().map_or(false, |c| c.is_ascii_digit()) => {
+                self.consume_while(|c| c.is_ascii_digit());
 
-                            Some('b') => {
-                                self.consume_character();
-                                (|c| matches!(c, '0' | '1'), 1)
-                            },
-
-                            Some('o') => {
-                                self.consume_character();
-                                (|c| matches!(c, '0'..='7'), 1)
-                            },
-
-                            Some('x') => {
-                                self.consume_character();
-                                (|c| c.is_ascii_hexdigit(), 1)
-                            },
-
-                            _ => (|c| c.is_ascii_digit(), 0),
-                        }
-                    };
-
-                self.consume_while(is_valid_digit);
-
-                if self.try_consume_character('.') {
-                    self.consume_while(is_valid_digit);
-                    TOKEN_FLOAT
-                } else {
-                    TOKEN_INTEGER
-                }
+                TOKEN_FLOAT
             },
 
             initial_letter if is_valid_initial_identifier_character(initial_letter) => {
