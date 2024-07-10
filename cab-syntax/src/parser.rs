@@ -186,16 +186,25 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
     }
 
     fn expect(&mut self, expected: enumset::EnumSet<Kind>) -> Result<Kind, ParseError> {
+        self.expect_until(expected, enumset::EnumSet::<Kind>::EMPTY)
+            .map(|maybe_kind| maybe_kind.unwrap())
+    }
+
+    fn expect_until(
+        &mut self,
+        expected: enumset::EnumSet<Kind>,
+        until: enumset::EnumSet<Kind>,
+    ) -> Result<Option<Kind>, ParseError> {
         let checkpoint = self.checkpoint();
 
         match self.next_nontrivia() {
-            Ok(got) if expected.contains(got) => Ok(got),
+            Ok(got) if expected.contains(got) => Ok(Some(got)),
 
             Ok(unexpected) => {
                 let start = self.offset;
 
                 self.node_from(checkpoint, NODE_ERROR, |this| {
-                    this.next_while(|kind| !expected.contains(kind));
+                    this.next_while(|kind| !expected.contains(kind) && !until.contains(kind));
                     Ok(())
                 })
                 .unwrap();
@@ -206,10 +215,19 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
                     at: rowan::TextRange::new(start, self.offset),
                 };
 
-                if let Ok(kind) = self.next_nontrivia() {
+                if self
+                    .peek_nontrivia()
+                    .map_or(false, |kind| expected.contains(kind))
+                {
+                    log::trace!("found expected kind");
                     self.errors.push(error);
-                    Ok(kind)
+                    Ok(Some(self.next().unwrap()))
+                } else if self.next().is_ok() {
+                    log::trace!("reached expect bound");
+                    self.errors.push(error);
+                    Ok(None)
                 } else {
+                    log::trace!("expect consumed everything");
                     Err(error)
                 }
             },
