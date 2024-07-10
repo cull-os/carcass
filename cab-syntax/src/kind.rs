@@ -1,84 +1,26 @@
-use std::marker::ConstParamTy;
+use std::marker;
 
-use colored::CustomColor;
-use num_enum::TryFromPrimitive;
-
-#[rustfmt::skip]
-pub const COLORS: &[CustomColor] = &[
-    CustomColor { r: 0x00, g: 0x00, b: 0x00 },
-    CustomColor { r: 0x2F, g: 0x4F, b: 0x4F },
-    CustomColor { r: 0x55, g: 0x6B, b: 0x2F },
-    CustomColor { r: 0x8B, g: 0x45, b: 0x13 },
-    CustomColor { r: 0x7F, g: 0x00, b: 0x00 },
-    CustomColor { r: 0x19, g: 0x19, b: 0x70 },
-    CustomColor { r: 0x80, g: 0x80, b: 0x00 },
-    CustomColor { r: 0x77, g: 0x88, b: 0x99 },
-    CustomColor { r: 0x00, g: 0x80, b: 0x00 },
-    CustomColor { r: 0x3C, g: 0xB3, b: 0x71 },
-    CustomColor { r: 0xBC, g: 0x8F, b: 0x8F },
-    CustomColor { r: 0x66, g: 0x33, b: 0x99 },
-    CustomColor { r: 0x00, g: 0x80, b: 0x80 },
-    CustomColor { r: 0xB8, g: 0x86, b: 0x0B },
-    CustomColor { r: 0x46, g: 0x82, b: 0xB4 },
-    CustomColor { r: 0x00, g: 0x00, b: 0x80 },
-    CustomColor { r: 0xD2, g: 0x69, b: 0x1E },
-    CustomColor { r: 0x9A, g: 0xCD, b: 0x32 },
-    CustomColor { r: 0x20, g: 0xB2, b: 0xAA },
-    CustomColor { r: 0xCD, g: 0x5C, b: 0x5C },
-    CustomColor { r: 0x32, g: 0xCD, b: 0x32 },
-    CustomColor { r: 0x8F, g: 0xBC, b: 0x8F },
-    CustomColor { r: 0x8B, g: 0x00, b: 0x8B },
-    CustomColor { r: 0xB0, g: 0x30, b: 0x60 },
-    CustomColor { r: 0x99, g: 0x32, b: 0xCC },
-    CustomColor { r: 0xFF, g: 0x00, b: 0x00 },
-    CustomColor { r: 0xFF, g: 0xA5, b: 0x00 },
-    CustomColor { r: 0xFF, g: 0xD7, b: 0x00 },
-    CustomColor { r: 0xFF, g: 0xFF, b: 0x00 },
-    CustomColor { r: 0xC7, g: 0x15, b: 0x85 },
-    CustomColor { r: 0x00, g: 0x00, b: 0xCD },
-    CustomColor { r: 0xDE, g: 0xB8, b: 0x87 },
-    CustomColor { r: 0x00, g: 0xFF, b: 0x00 },
-    CustomColor { r: 0x00, g: 0xFF, b: 0x7F },
-    CustomColor { r: 0x41, g: 0x69, b: 0xE1 },
-    CustomColor { r: 0xE9, g: 0x96, b: 0x7A },
-    CustomColor { r: 0xDC, g: 0x14, b: 0x3C },
-    CustomColor { r: 0x00, g: 0xFF, b: 0xFF },
-    CustomColor { r: 0x00, g: 0xBF, b: 0xFF },
-    CustomColor { r: 0xF4, g: 0xA4, b: 0x60 },
-    CustomColor { r: 0x93, g: 0x70, b: 0xDB },
-    CustomColor { r: 0x00, g: 0x00, b: 0xFF },
-    CustomColor { r: 0xA0, g: 0x20, b: 0xF0 },
-    CustomColor { r: 0xAD, g: 0xFF, b: 0x2F },
-    CustomColor { r: 0xFF, g: 0x63, b: 0x47 },
-    CustomColor { r: 0xDA, g: 0x70, b: 0xD6 },
-    CustomColor { r: 0xD8, g: 0xBF, b: 0xD8 },
-    CustomColor { r: 0xFF, g: 0x00, b: 0xFF },
-    CustomColor { r: 0xDB, g: 0x70, b: 0x93 },
-    CustomColor { r: 0xF0, g: 0xE6, b: 0x8C },
-    CustomColor { r: 0x64, g: 0x95, b: 0xED },
-    CustomColor { r: 0xDD, g: 0xA0, b: 0xDD },
-    CustomColor { r: 0xB0, g: 0xE0, b: 0xE6 },
-    CustomColor { r: 0x90, g: 0xEE, b: 0x90 },
-    CustomColor { r: 0xFF, g: 0x14, b: 0x93 },
-    CustomColor { r: 0x7F, g: 0xFF, b: 0xD4 },
-    CustomColor { r: 0xFA, g: 0xFA, b: 0xD2 },
-    CustomColor { r: 0xFF, g: 0x69, b: 0xB4 },
-    CustomColor { r: 0xFF, g: 0xB6, b: 0xC1 },
-    CustomColor { r: 0xF8, g: 0xF8, b: 0xFF },
-];
-
+/// The Cab syntax kind.
 #[derive(
-    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, TryFromPrimitive, ConstParamTy,
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    num_enum::TryFromPrimitive,
+    marker::ConstParamTy,
 )]
 #[repr(u16)]
 #[allow(non_camel_case_types)]
 #[non_exhaustive]
 pub enum Kind {
-    // TOKEN
     TOKEN_ERROR,
 
-    TOKEN_WHITESPACE, // \n, \t
-    TOKEN_COMMENT,    // #<anything until end of line>
+    TOKEN_WHITESPACE,
+    TOKEN_COMMENT, // #[^\r\n]* and (#{3,}).*\1
 
     TOKEN_DOLLAR,    // $
     TOKEN_PIPE_MORE, // |>
@@ -135,7 +77,6 @@ pub enum Kind {
     // /etc/resolv.conf, ./wallpaper.png, ./foo${bar}
     TOKEN_PATH,
 
-    // TODO: Merge *_CONTENT into a single TOKEN_CONTENT.
     TOKEN_CONTENT,
 
     TOKEN_IDENTIFIER, // fooBar, foo-bar, foo_bar
@@ -152,7 +93,6 @@ pub enum Kind {
     TOKEN_ISLAND_START,
     TOKEN_ISLAND_END,
 
-    // AST
     NODE_ROOT,
     NODE_ERROR,
 
@@ -214,7 +154,7 @@ impl Kind {
     ///
     /// ```ignore
     /// max 42 38 + 61
-    /// yyy yy yy n
+    ///     +  +  -
     /// ```
     pub fn is_argument(self) -> bool {
         match self {

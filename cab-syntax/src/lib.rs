@@ -1,8 +1,10 @@
 #![allow(incomplete_features)]
 #![feature(adt_const_params)]
 
+mod color;
 mod kind;
 
+pub use color::*;
 pub use kind::*;
 
 pub mod node;
