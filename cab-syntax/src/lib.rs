@@ -18,14 +18,15 @@ mod tokenizer;
 
 pub use parser::*;
 pub use tokenizer::{
+    tokenize,
     Token as TokenizerToken,
-    *,
 };
 
 type RowanNode = rowan::SyntaxNode<Language>;
 type RowanToken = rowan::SyntaxToken<Language>;
 type RowanElement = rowan::NodeOrToken<RowanNode, RowanToken>;
 
+/// The Cab language type.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Language {}
 

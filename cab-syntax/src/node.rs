@@ -32,28 +32,38 @@ macro_rules! match_node {
 }
 
 pub trait Node: rowan::ast::AstNode<Language = Language> + Deref<Target = RowanNode> {
+    /// Returns the Nth immediate children node that can be cast to the given
+    /// typed node.
     fn nth<N: Node>(&self, n: usize) -> Option<N> {
         self.children::<N>().nth(n)
     }
 
+    /// Returns all immediate children nodes that can be cast to the given typed
+    /// node.
     fn children<N: Node>(&self) -> rowan::ast::AstChildren<N> {
         rowan::ast::support::children(self.syntax())
     }
 
+    /// Returns the first immediate children token that can be cast to the given
+    /// typed token.
     fn token<T: Token>(&self) -> Option<T> {
         self.children_tokens().next()
     }
 
+    /// Returns the first immediate children token that is the given kind.
     fn token_untyped(&self, kind: Kind) -> Option<RowanToken> {
         self.children_tokens_untyped().find(|it| it.kind() == kind)
     }
 
+    /// Returns all immediate children tokens that can be cast to the given
+    /// typed token.
     fn children_tokens<T: Token>(&self) -> impl Iterator<Item = T> {
         self.children_with_tokens()
             .filter_map(RowanElement::into_token)
             .filter_map(T::cast)
     }
 
+    /// Returns all immediate children tokens.
     fn children_tokens_untyped(&self) -> impl Iterator<Item = RowanToken> {
         self.children_with_tokens()
             .filter_map(RowanElement::into_token)
@@ -95,6 +105,7 @@ macro_rules! node {
         }
 
         impl $name {
+            /// The syntax kind this node can be cast from.
             pub const KIND: Kind = $kind;
         }
     };
@@ -552,7 +563,7 @@ impl fmt::Display for InfixOperator {
             formatter,
             "{operator}",
             operator = match self {
-                Self::Apply => "<|",
+                Self::Apply => "$",
                 Self::Pipe => "|>",
 
                 Self::Concat => "++",

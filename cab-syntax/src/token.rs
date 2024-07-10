@@ -71,6 +71,7 @@ impl Whitespace {
 token! { #[from(TOKEN_COMMENT)] struct Comment; }
 
 impl Comment {
+    /// Returns the delimiter of this comment.
     pub fn delimiter(&self) -> &str {
         let text = self.text();
         let content_start_index = text.find(|c| c != '#').unwrap_or(text.len());
@@ -78,27 +79,44 @@ impl Comment {
         &text[..content_start_index]
     }
 
+    /// Returns whether if this comment has the capability to span multiple
+    /// lines.
     pub fn multiline(&self) -> bool {
         self.delimiter().len() >= 3
     }
 
+    /// Returns whether if this multiline comment was closed off properly.
+    ///
+    /// Panics if this comment is not a multiline comment.
+    pub fn closed_off(&self) -> bool {
+        assert!(self.multiline());
+        self.text().ends_with(self.delimiter())
+    }
+
+    /// Returns the contents of this comment by removing delimiters.
     pub fn contents(&self) -> &str {
         let delimiter = self.delimiter();
 
-        self.text()
-            .strip_prefix(delimiter)
-            .and_then(|s| {
-                self.multiline()
-                    .then(|| s.strip_suffix(delimiter))
-                    .unwrap_or(Some(s))
-            })
-            .unwrap()
+        let start_stripped = self.text().strip_prefix(delimiter).unwrap();
+
+        if self.multiline() {
+            start_stripped
+                .strip_suffix(delimiter)
+                // Not .unwrap(), because it's perfectly fine if you don't close off your multiline string.
+                .unwrap_or(start_stripped)
+        } else {
+            start_stripped
+        }
     }
 }
 
 token! { #[from(TOKEN_INTEGER)] struct Integer; }
 
 impl Integer {
+    /// Returns the value of this integer, after resolving binary,
+    /// octadecimal and hexadecimal notation if it exists.
+    ///
+    /// Will panic if the underlying token is not valid.
     pub fn value(&self) -> i64 {
         let text = self.text();
 
@@ -114,6 +132,7 @@ impl Integer {
 token! { #[from(TOKEN_FLOAT)] struct Float; }
 
 impl Float {
+    /// Returns the value of the float by parsing the underlying string.
     pub fn value(&self) -> f64 {
         self.text().parse().unwrap()
     }

@@ -17,9 +17,17 @@ use std::marker;
 #[allow(non_camel_case_types)]
 #[non_exhaustive]
 pub enum Kind {
+    /// Represents any sequence of tokens that was not recognized.
     TOKEN_ERROR,
 
+    /// Anything that matches [`char::is_whitespace`].
     TOKEN_WHITESPACE,
+
+    /// Anything that starts with a `#`.
+    ///
+    /// When the comment starts with more than 3 `#` characters, it will be
+    /// multiline. Multiline comments can be closed with the initial delimiter,
+    /// but they don't have to be.
     TOKEN_COMMENT, // #[^\r\n]* and (#{3,}).*\1
 
     TOKEN_DOLLAR,    // $
@@ -74,22 +82,40 @@ pub enum Kind {
     TOKEN_INTERPOLATION_START, // ${
     TOKEN_INTERPOLATION_END,   // }
 
-    // /etc/resolv.conf, ./wallpaper.png, ./foo${bar}
+    /// A path. Valid paths start with `./`, `..` or `/`, followed by
+    /// characters that are either [alphanumeric](char::is_alphanumeric) or
+    /// are any of the following characters: `.`, `/`, `_`, `-`, `\`.
+    ///
+    /// The `\` character can be used to escape characters that are normally
+    /// not allowed in paths, like spaces and other weird characters.
+    /// It is also useful to escape `${` literally, to not begin string
+    /// interpolation like so: `./\$\{foo`
+    ///
+    /// Every path part will be represented using this kind, so a path node with
+    /// interpolation will be represented as the following:
+    ///
+    /// ```txt
+    /// ./foo${bar}baz -- TOKEN_PATH
+    /// +---/\|\|/\-- TOKEN_INTERPOLATION_END
+    /// |     | +-- TOKEN_IDENTIFIER
+    /// |     +-- TOKEN_INTERPOLATION_START
+    /// +-- TOKEN_PATH
+    /// ```
     TOKEN_PATH,
 
     TOKEN_CONTENT,
 
-    TOKEN_IDENTIFIER, // fooBar, foo-bar, foo_bar
+    /// A normal non-quoted identifier. The initial character must not match
+    /// [`char::is_ascii_digit`], the other characters must be either
+    /// [`char::is_alphanumeric`], `_` or `-`.
+    TOKEN_IDENTIFIER,
 
-    // `foo bar baz`, `?? lmao ${baz}`
     TOKEN_IDENTIFIER_START,
     TOKEN_IDENTIFIER_END,
 
-    // "foo\n\t${bar}", ''foo bar'', ''''' asdasd "hey '' asdads ''' asddklfjskaj'''''
     TOKEN_STRING_START,
     TOKEN_STRING_END,
 
-    // <github:${user}/${repo}>
     TOKEN_ISLAND_START,
     TOKEN_ISLAND_END,
 
@@ -122,14 +148,33 @@ pub enum Kind {
     NODE_PREFIX_OPERATION, // <operator> <expression>
     NODE_INFIX_OPERATION,  // <expression> <operator> <expression>
 
-    NODE_INTERPOLATION, // ${<expression>}
+    /// A node which starts with a [`TOKEN_INTERPOLATION_START`], ends with a
+    /// [`TOKEN_INTERPOLATION_END`] while having a node at the middle that can
+    /// be cast to an [Expression](crate::node::Expression)
+    NODE_INTERPOLATION,
 
-    NODE_PATH,       // <path-content | interpolation>*
-    NODE_IDENTIFIER, // <identifier-start><identifier-content | interpolation>*<identifier-end>
-    NODE_STRING,     // <string-start><string-content | interpolation>*<string-end>
-    NODE_ISLAND,     // <island-start><island-content | interpolation>*<island-end>
+    /// A node that only has [`TOKEN_PATH`]s and [`NODE_INTERPOLATION`]s as its
+    /// direct children without any delimiters.
+    NODE_PATH,
 
-    NODE_NUMBER, // 42, 3.14
+    /// A stringish that is delimited by a single backtick. See [`NODE_STRING`]
+    /// for the definition of stringish.
+    NODE_IDENTIFIER,
+
+    /// A stringish that is delimited by a single `"` or any number of `'`.
+    ///
+    /// A stringish is a sequence of nodes and tokens, where all the immediate
+    /// children tokens are [`TOKEN_CONTENT`]s, while all the immediate children
+    /// nodes are all [`NODE_INTERPOLATION`]s.
+    NODE_STRING,
+
+    /// A stringish that is delimited by `<` and `>`. See [`NODE_STRING`] for
+    /// the definition of stringish.
+    NODE_ISLAND,
+
+    /// A node containing a single token, which can be either a
+    /// [`TOKEN_INTEGER`] or [`TOKEN_FLOAT`].
+    NODE_NUMBER,
 
     NODE_IF_ELSE, // if <expression> then <expression> else <expression>
 }
@@ -150,11 +195,9 @@ impl Kind {
 
     /// Whether if this token can be used as a function argument.
     ///
-    /// # Example
-    ///
-    /// ```ignore
-    /// max 42 38 + 61
-    ///     +  +  -
+    /// ```txt
+    /// max 42 (38) + 61
+    ///     t  t    f
     /// ```
     pub fn is_argument(self) -> bool {
         match self {

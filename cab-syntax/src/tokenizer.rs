@@ -15,9 +15,11 @@ fn is_valid_path_character(c: char) -> bool {
     c.is_alphanumeric() || matches!(c, '.' | '/' | '_' | '-' | '\\' | '$')
 }
 
+/// A tokenizer token. Includes a syntax kind and a string slice.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Token<'a>(pub Kind, pub &'a str);
 
+/// Returns an iterator of tokenizer tokens that reference the given string.
 pub fn tokenize(input: &str) -> impl Iterator<Item = Token<'_>> {
     Tokenizer::new(input)
 }
@@ -55,7 +57,7 @@ impl<'a> Iterator for Tokenizer<'a> {
 }
 
 impl<'a> Tokenizer<'a> {
-    pub fn new(input: &'a str) -> Self {
+    fn new(input: &'a str) -> Self {
         Self {
             input,
             offset: 0,
