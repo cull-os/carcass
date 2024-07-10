@@ -194,7 +194,8 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
                 self.node_from(checkpoint, NODE_ERROR, |this| {
                     this.next_while(|kind| !expected.contains(&kind));
                     Ok(())
-                })?;
+                })
+                .unwrap();
 
                 let error = ParseError::Unexpected {
                     got: Some(unexpected),
@@ -245,23 +246,53 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
     }
 
     #[track_caller]
+    fn node_failable(
+        &mut self,
+        kind: Kind,
+        closure: impl FnOnce(&mut Self) -> Result<(), ParseError>,
+    ) {
+        let checkpoint = self.checkpoint();
+
+        if let Err(error) = self.node(kind, closure) {
+            self.errors.push(error);
+            self.node_from(checkpoint, NODE_ERROR, |_| Ok(())).unwrap();
+        }
+    }
+
+    #[track_caller]
     fn node_from(
         &mut self,
-        at: rowan::Checkpoint,
+        from: rowan::Checkpoint,
         kind: Kind,
         closure: impl FnOnce(&mut Self) -> Result<(), ParseError>,
     ) -> Result<(), ParseError> {
         log::trace!(
-            "starting node {kind:?} at {at:?} in {location}",
+            "starting node {kind:?} at {from:?} in {location}",
             location = Location::caller()
         );
-        self.builder.start_node_at(at, Language::kind_to_raw(kind));
+        self.builder
+            .start_node_at(from, Language::kind_to_raw(kind));
 
         let result = closure(self);
 
         log::trace!("ending node at {location}", location = Location::caller());
         self.builder.finish_node();
         result
+    }
+
+    #[track_caller]
+    fn node_failable_from(
+        &mut self,
+        from: rowan::Checkpoint,
+        kind: Kind,
+        closure: impl FnOnce(&mut Self) -> Result<(), ParseError>,
+    ) {
+        let checkpoint = self.checkpoint();
+
+        if let Err(error) = self.node_from(from, kind, closure) {
+            self.errors.push(error);
+            self.node_from(checkpoint, NODE_ERROR, |_| Ok(())).unwrap();
+        }
     }
 
     fn parse_stringish_inner<const END: Kind>(&mut self) -> Result<(), ParseError> {
@@ -314,7 +345,8 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
             self.node_from(checkpoint, NODE_ATTRIBUTE_INHERIT, |this| {
                 this.next().unwrap();
                 Ok(())
-            })?;
+            })
+            .unwrap();
         } else {
             self.node_from(checkpoint, NODE_ATTRIBUTE_ENTRY, |this| {
                 this.node_from(checkpoint, NODE_ATTRIBUTE_PATH, |this| {
@@ -337,12 +369,22 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
         Ok(())
     }
 
+    fn parse_interpolation(&mut self) -> Result<(), ParseError> {
+        self.node(NODE_INTERPOLATION, |this| {
+            this.expect(&[TOKEN_INTERPOLATION_START])?;
+            this.parse_expression()?;
+            this.expect(&[TOKEN_INTERPOLATION_END])?;
+            Ok(())
+        })
+    }
+
     fn parse_expression(&mut self) -> Result<(), ParseError> {
         if self.depth >= 512 {
             self.node(NODE_ERROR, |this| {
                 this.next_while(|_| true);
                 Ok(())
-            })?;
+            })
+            .unwrap();
 
             return Err(ParseError::RecursionLimitExceeded);
         }
@@ -353,9 +395,21 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
             TOKEN_LEFT_PARENTHESIS,
             TOKEN_LEFT_BRACKET,
             TOKEN_LEFT_CURLYBRACE,
-            TOKEN_LITERAL_IF,
+            //
+            TOKEN_PLUS,
+            TOKEN_MINUS,
+            TOKEN_LITERAL_NOT,
+            //
+            TOKEN_PATH,
             TOKEN_IDENTIFIER,
             TOKEN_IDENTIFIER_START,
+            TOKEN_STRING_START,
+            TOKEN_ISLAND_START,
+            //
+            TOKEN_INTEGER,
+            TOKEN_FLOAT,
+            //
+            TOKEN_LITERAL_IF,
         ])? {
             TOKEN_LEFT_PARENTHESIS => {
                 self.node_from(checkpoint, NODE_PARENTHESIS, |this| {
@@ -394,30 +448,6 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
                 })?;
             },
 
-            TOKEN_LITERAL_IF => {
-                self.node_from(checkpoint, NODE_IF_ELSE, |this| {
-                    this.parse_expression()?;
-                    this.expect(&[TOKEN_LITERAL_THEN])?;
-                    this.parse_expression()?;
-
-                    if this.peek_nontrivia() == Ok(TOKEN_LITERAL_ELSE) {
-                        this.next_nontrivia().expect("peek returned Some");
-                        this.parse_expression()?;
-                    }
-                    Ok(())
-                })?;
-            },
-
-            TOKEN_IDENTIFIER => {
-                self.node_from(checkpoint, NODE_IDENTIFIER, |_| Ok(()))?;
-            },
-
-            TOKEN_IDENTIFIER_START => {
-                self.node_from(checkpoint, NODE_IDENTIFIER, |this| {
-                    this.parse_stringish_inner::<{ TOKEN_IDENTIFIER_END }>()
-                })?;
-            },
-
             TOKEN_PLUS | TOKEN_MINUS | TOKEN_LITERAL_NOT => {
                 self.node_from(checkpoint, NODE_PREFIX_OPERATION, |this| {
                     this.parse_expression()
@@ -427,18 +457,56 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
             TOKEN_PATH => {
                 self.node_from(checkpoint, NODE_PATH, |this| {
                     loop {
-                        let checkpoint = this.checkpoint();
-                        let current = this.next();
+                        let peek = this.peek_nontrivia();
 
-                        if current == Ok(TOKEN_INTERPOLATION_START) {
-                            this.node_from(checkpoint, NODE_INTERPOLATION, |this| {
-                                this.parse_expression()?;
-                                this.expect(&[TOKEN_INTERPOLATION_END])?;
-                                Ok(())
-                            })?;
-                        } else if current != Ok(TOKEN_PATH) {
+                        if peek == Ok(TOKEN_INTERPOLATION_START) {
+                            this.parse_interpolation()?;
+                        } else if peek == Ok(TOKEN_PATH) {
+                            this.next().unwrap();
+                        } else {
                             break;
                         }
+                    }
+                    Ok(())
+                })?;
+            },
+
+            TOKEN_IDENTIFIER => {
+                self.node_from(checkpoint, NODE_IDENTIFIER, |_| Ok(()))
+                    .unwrap();
+            },
+
+            TOKEN_IDENTIFIER_START => {
+                self.node_from(checkpoint, NODE_IDENTIFIER, |this| {
+                    this.parse_stringish_inner::<{ TOKEN_IDENTIFIER_END }>()
+                })?;
+            },
+
+            TOKEN_STRING_START => {
+                self.node_from(checkpoint, NODE_STRING, |this| {
+                    this.parse_stringish_inner::<{ TOKEN_STRING_END }>()
+                })?;
+            },
+
+            TOKEN_ISLAND_START => {
+                self.node_from(checkpoint, NODE_ISLAND, |this| {
+                    this.parse_stringish_inner::<{ TOKEN_ISLAND_END }>()
+                })?;
+            },
+
+            TOKEN_INTEGER | TOKEN_FLOAT => {
+                self.node_from(checkpoint, NODE_NUMBER, |_| Ok(())).unwrap();
+            },
+
+            TOKEN_LITERAL_IF => {
+                self.node_from(checkpoint, NODE_IF_ELSE, |this| {
+                    this.parse_expression()?;
+                    this.expect(&[TOKEN_LITERAL_THEN])?;
+                    this.parse_expression()?;
+
+                    if this.peek_nontrivia() == Ok(TOKEN_LITERAL_ELSE) {
+                        this.next().unwrap();
+                        this.parse_expression()?;
                     }
                     Ok(())
                 })?;
