@@ -365,7 +365,7 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
     fn parse_identifier_until(&mut self, until: EnumSet<Kind>) {
         self.node_failable(NODE_IDENTIFIER, |this| {
             // If it is a normal identifier, we don't do anything
-            // else as it only has a single token, and .expect() consumes it.
+            // else as it only has a single token as .expect_until() consumes it.
             if this
                 .expect_until(TOKEN_IDENTIFIER | TOKEN_IDENTIFIER_START, until)?
                 .ok_or(None)?
