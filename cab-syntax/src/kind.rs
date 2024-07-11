@@ -129,7 +129,7 @@ pub enum Kind {
     NODE_LIST, // [<expression>*]
 
     NODE_ATTRIBUTE_SET,     // { <attribute | attribute-inherit>* }
-    NODE_ATTRIBUTE_ENTRY,   // <attribute-path> = <attribute-value>;
+    NODE_ATTRIBUTE,         // <attribute-path> = <expression>;
     NODE_ATTRIBUTE_PATH,    // <identifier><.<identifier>>*
     NODE_ATTRIBUTE_INHERIT, // <identifier>;
 
@@ -142,8 +142,8 @@ pub enum Kind {
 
     NODE_LAMBDA, // <identifier | lambda-parameter-pattern>: <expression>
     NODE_LAMBDA_PARAMETER_IDENTIFIER, // <identifier>
-    NODE_LAMBDA_PARAMETER_PATTERN, // <bind>? { <<entry>,>* }
-    NODE_LAMBDA_PARAMETER_PATTERN_ENTRY, // <identifier> <? <expression>>?
+    NODE_LAMBDA_PARAMETER_PATTERN, // <bind>? { <<attribute>,>* }
+    NODE_LAMBDA_PARAMETER_PATTERN_ATTRIBUTE, // <identifier> <? <expression>>?
 
     NODE_APPLICATION, // <expression> <expression>
 

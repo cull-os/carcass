@@ -309,8 +309,8 @@ node! { #[from(NODE_ATTRIBUTE_SET)] struct AttributeSet => |self, formatter| {
         write!(formatter, " {inherit}")?;
     }
 
-    for entry in self.entries() {
-        write!(formatter, " {entry}")?;
+    for attribute in self.attributes() {
+        write!(formatter, " {attribute}")?;
     }
 
     write!(formatter, " }}")
@@ -321,7 +321,7 @@ impl AttributeSet {
 
     get_node! { inherits -> [AttributeInherit] }
 
-    get_node! { entries -> [AttributeEntry] }
+    get_node! { attributes -> [Attribute] }
 
     get_token! { right_curlybrace -> TOKEN_RIGHT_CURLYBRACE }
 }
@@ -334,9 +334,9 @@ impl AttributeInherit {
     get_token! { semicolon -> TOKEN_SEMICOLON }
 }
 
-node! { #[from(NODE_ATTRIBUTE_ENTRY)] struct AttributeEntry => |self, formatter| write!(formatter, "{path} = {value};", path = self.path(), value = self.value()) }
+node! { #[from(NODE_ATTRIBUTE)] struct Attribute => |self, formatter| write!(formatter, "{path} = {value};", path = self.path(), value = self.value()) }
 
-impl AttributeEntry {
+impl Attribute {
     get_node! { path -> 0 @ AttributePath }
 
     get_node! { value -> 0 @ Expression }
@@ -428,8 +428,8 @@ node! { #[from(NODE_LAMBDA_PARAMETER_PATTERN)] struct LambdaParameterPattern => 
 
     write!(formatter, "{{")?;
 
-    for entry in self.entries() {
-        write!(formatter, " {entry}")?;
+    for attribute in self.attributes() {
+        write!(formatter, " {attribute}")?;
     }
 
     write!(formatter, " }}")
@@ -441,12 +441,12 @@ impl LambdaParameterPattern {
 
     get_token! { left_curlybrace -> TOKEN_LEFT_CURLYBRACE }
 
-    get_node! { entries -> [LambdaParameterPatternEntry] }
+    get_node! { attributes -> [LambdaParameterPatternAttribute] }
 
     get_token! { right_curlybrace -> TOKEN_RIGHT_CURLYBRACE }
 }
 
-node! { #[from(NODE_LAMBDA_PARAMETER_PATTERN_ENTRY)] struct LambdaParameterPatternEntry => |self, formatter| {
+node! { #[from(NODE_LAMBDA_PARAMETER_PATTERN_ATTRIBUTE)] struct LambdaParameterPatternAttribute => |self, formatter| {
     write!(formatter, "{identifier}", identifier = self.identifier())?;
 
     if let Some(default) = self.default() {
@@ -456,7 +456,7 @@ node! { #[from(NODE_LAMBDA_PARAMETER_PATTERN_ENTRY)] struct LambdaParameterPatte
     write!(formatter, ",")
 }}
 
-impl LambdaParameterPatternEntry {
+impl LambdaParameterPatternAttribute {
     get_node! { identifier -> 0 @ Identifier }
 
     get_token! { questionmark -> ? TOKEN_QUESTIONMARK }

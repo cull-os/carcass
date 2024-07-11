@@ -392,7 +392,7 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
                 this.next().unwrap();
             });
         } else {
-            self.node_failable_from(checkpoint, NODE_ATTRIBUTE_ENTRY, |this| {
+            self.node_failable_from(checkpoint, NODE_ATTRIBUTE, |this| {
                 this.node_failable_from(checkpoint, NODE_ATTRIBUTE_PATH, |this| {
                     while this.peek_nontrivia_expecting(TOKEN_PERIOD | TOKEN_EQUAL)? == TOKEN_PERIOD
                     {
