@@ -103,11 +103,11 @@ impl Dump {
             Self::Syntax | Self::Clean => {
                 let parse = syntax::parse(&contents);
 
-                if matches!(self, Self::Syntax) {
-                    for error in parse.errors() {
-                        log::error!("{error}");
-                    }
+                for error in parse.errors() {
+                    log::error!("{error}");
+                }
 
+                if matches!(self, Self::Syntax) {
                     write!(out, "{syntax:#?}", syntax = parse.syntax())
                 } else {
                     write!(out, "{root}", root = parse.root())

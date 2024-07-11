@@ -257,6 +257,7 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
                     Ok(Some(self.next().unwrap()))
                 } else if let Some(peek) = self.peek() {
                     log::trace!("reached expect bound, not consuming {peek:?}",);
+                    self.errors.push(error);
                     Ok(None)
                 } else {
                     log::trace!("expect consumed everything");
