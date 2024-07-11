@@ -104,6 +104,10 @@ impl Dump {
                 let parse = syntax::parse(&contents);
 
                 if matches!(self, Self::Syntax) {
+                    for error in parse.errors() {
+                        log::error!("{error}");
+                    }
+
                     write!(out, "{syntax:#?}", syntax = parse.syntax())
                 } else {
                     write!(out, "{root}", root = parse.root())

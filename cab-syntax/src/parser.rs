@@ -1,4 +1,5 @@
 use std::{
+    fmt,
     iter::Peekable,
     panic::Location,
 };
@@ -23,13 +24,52 @@ use crate::{
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ParseError {
+    RecursionLimitExceeded,
+
     Unexpected {
         got: Option<Kind>,
         expected: Option<EnumSet<Kind>>,
         at: rowan::TextRange,
     },
+}
 
-    RecursionLimitExceeded,
+impl fmt::Display for ParseError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::RecursionLimitExceeded => write!(formatter, "recursion limit exceeded"),
+
+            Self::Unexpected {
+                got: None,
+                expected: Some(expected),
+                at,
+            } => {
+                assert_eq!(at.start(), at.end());
+
+                write!(formatter, "expected {expected:?}, reached end of file")
+            },
+
+            Self::Unexpected {
+                got: Some(got),
+                expected: None,
+                at,
+            } => {
+                write!(formatter, "expected end of file, got {got:?} at {at:?}")
+            },
+
+            Self::Unexpected {
+                got: Some(got),
+                expected: Some(expected),
+                at,
+            } => {
+                write!(formatter, "expected {expected:?} got {got:?} at {at:?}")
+            },
+
+            other => {
+                dbg!(other);
+                Ok(())
+            },
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -41,6 +81,10 @@ pub struct Parse {
 impl Parse {
     pub fn syntax(self) -> RowanNode {
         RowanNode::new_root(self.node)
+    }
+
+    pub fn errors(&self) -> &[ParseError] {
+        &self.errors
     }
 
     pub fn root(self) -> Root {
@@ -158,6 +202,7 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
             })
     }
 
+    #[allow(unused)]
     fn next_nontrivia(&mut self) -> Result<Kind, ParseError> {
         self.next_while_trivia();
         self.next()
@@ -254,6 +299,7 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
     }
 
     #[track_caller]
+    #[allow(unused)]
     fn node_failable(
         &mut self,
         kind: Kind,
