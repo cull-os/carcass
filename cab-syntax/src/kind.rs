@@ -1,5 +1,3 @@
-use std::marker;
-
 /// The Cab syntax kind.
 #[derive(
     Debug,
@@ -12,7 +10,6 @@ use std::marker;
     Hash,
     enumset::EnumSetType,
     num_enum::TryFromPrimitive,
-    marker::ConstParamTy,
 )]
 #[enumset(no_super_impls)]
 #[repr(u16)]

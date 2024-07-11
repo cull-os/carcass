@@ -1,6 +1,3 @@
-#![allow(incomplete_features)]
-#![feature(adt_const_params)]
-
 mod color;
 mod kind;
 
