@@ -3,6 +3,7 @@ use std::{
     panic::Location,
 };
 
+use enumset::EnumSet;
 use rowan::{
     ast::AstNode as _,
     Language as _,
@@ -24,7 +25,7 @@ use crate::{
 pub enum ParseError {
     Unexpected {
         got: Option<Kind>,
-        expected: Option<enumset::EnumSet<Kind>>,
+        expected: Option<EnumSet<Kind>>,
         at: rowan::TextRange,
     },
 
@@ -136,10 +137,7 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
         self.peek()
     }
 
-    fn peek_nontrivia_expecting(
-        &mut self,
-        expected: enumset::EnumSet<Kind>,
-    ) -> Result<Kind, ParseError> {
+    fn peek_nontrivia_expecting(&mut self, expected: EnumSet<Kind>) -> Result<Kind, ParseError> {
         self.peek_nontrivia().map_err(|error| {
             let ParseError::Unexpected { got, at, .. } = error else {
                 unreachable!()
@@ -185,22 +183,21 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
         self.next_while(Kind::is_trivia)
     }
 
-    fn expect(&mut self, expected: enumset::EnumSet<Kind>) -> Result<Kind, ParseError> {
-        self.expect_until(expected, enumset::EnumSet::<Kind>::EMPTY)
-            .map(|maybe_kind| maybe_kind.unwrap())
+    fn expect(&mut self, expected: EnumSet<Kind>) -> Result<Kind, ParseError> {
+        self.expect_until(expected, EnumSet::empty())
     }
 
     fn expect_until(
         &mut self,
-        expected: enumset::EnumSet<Kind>,
-        until: enumset::EnumSet<Kind>,
-    ) -> Result<Option<Kind>, ParseError> {
+        expected: EnumSet<Kind>,
+        until: EnumSet<Kind>,
+    ) -> Result<Kind, ParseError> {
         let checkpoint = self.checkpoint();
 
-        match self.next_nontrivia() {
-            Ok(got) if expected.contains(got) => Ok(Some(got)),
+        match self.peek_nontrivia() {
+            Ok(next) if expected.contains(next) => Ok(self.next().unwrap()),
 
-            Ok(unexpected) => {
+            Ok(_) => {
                 let start = self.offset;
 
                 self.node_from(checkpoint, NODE_ERROR, |this| {
@@ -210,7 +207,7 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
                 .unwrap();
 
                 let error = ParseError::Unexpected {
-                    got: Some(unexpected),
+                    got: self.next().ok(),
                     expected: Some(expected),
                     at: rowan::TextRange::new(start, self.offset),
                 };
@@ -221,11 +218,10 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
                 {
                     log::trace!("found expected kind");
                     self.errors.push(error);
-                    Ok(Some(self.next().unwrap()))
-                } else if self.next().is_ok() {
-                    log::trace!("reached expect bound");
-                    self.errors.push(error);
-                    Ok(None)
+                    Ok(self.next().unwrap())
+                } else if let Ok(peek) = self.peek() {
+                    log::trace!("reached expect bound, not consuming {peek:?}",);
+                    Err(error)
                 } else {
                     log::trace!("expect consumed everything");
                     Err(error)
@@ -283,16 +279,16 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
     #[track_caller]
     fn node_from(
         &mut self,
-        from: rowan::Checkpoint,
+        checkpoint: rowan::Checkpoint,
         kind: Kind,
         closure: impl FnOnce(&mut Self) -> Result<(), ParseError>,
     ) -> Result<(), ParseError> {
         log::trace!(
-            "starting node {kind:?} at {from:?} in {location}",
+            "starting node {kind:?} at {checkpoint:?} in {location}",
             location = Location::caller()
         );
         self.builder
-            .start_node_at(from, Language::kind_to_raw(kind));
+            .start_node_at(checkpoint, Language::kind_to_raw(kind));
 
         let result = closure(self);
 
@@ -304,13 +300,11 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
     #[track_caller]
     fn node_failable_from(
         &mut self,
-        from: rowan::Checkpoint,
+        checkpoint: rowan::Checkpoint,
         kind: Kind,
         closure: impl FnOnce(&mut Self) -> Result<(), ParseError>,
     ) {
-        let checkpoint = self.checkpoint();
-
-        if let Err(error) = self.node_from(from, kind, closure) {
+        if let Err(error) = self.node_from(checkpoint, kind, closure) {
             self.errors.push(error);
             self.node_from(checkpoint, NODE_ERROR, |_| Ok(())).unwrap();
         }
@@ -369,21 +363,21 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
             })
             .unwrap();
         } else {
-            self.node_from(checkpoint, NODE_ATTRIBUTE_ENTRY, |this| {
-                this.node_from(checkpoint, NODE_ATTRIBUTE_PATH, |this| {
+            self.node_failable_from(checkpoint, NODE_ATTRIBUTE_ENTRY, |this| {
+                this.node_failable_from(checkpoint, NODE_ATTRIBUTE_PATH, |this| {
                     while this.peek_nontrivia_expecting(TOKEN_PERIOD | TOKEN_EQUAL)? != TOKEN_EQUAL
                     {
-                        this.expect(TOKEN_PERIOD.into())?;
+                        this.expect_until(TOKEN_PERIOD.into(), TOKEN_EQUAL.into())?;
                         this.parse_identifier()?;
                     }
                     Ok(())
-                })?;
+                });
 
-                this.expect(TOKEN_EQUAL.into())?;
-                this.parse_expression()?;
-                this.expect(TOKEN_SEMICOLON.into())?;
+                this.expect_until(TOKEN_EQUAL.into(), TOKEN_SEMICOLON | TOKEN_RIGHT_CURLYBRACE)?;
+                this.parse_expression_until(TOKEN_SEMICOLON | TOKEN_RIGHT_CURLYBRACE)?;
+                this.expect_until(TOKEN_SEMICOLON.into(), TOKEN_RIGHT_CURLYBRACE.into())?;
                 Ok(())
-            })?;
+            });
         }
 
         Ok(())
@@ -399,6 +393,10 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
     }
 
     fn parse_expression(&mut self) -> Result<(), ParseError> {
+        self.parse_expression_until(EnumSet::empty())
+    }
+
+    fn parse_expression_until(&mut self, until: EnumSet<Kind>) -> Result<(), ParseError> {
         if self.depth >= 512 {
             self.node(NODE_ERROR, |this| {
                 this.next_while(|_| true);
@@ -409,9 +407,11 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
             return Err(ParseError::RecursionLimitExceeded);
         }
 
+        self.depth += 1;
+
         let checkpoint = self.checkpoint();
 
-        match self.expect(
+        match self.expect_until(
             TOKEN_LEFT_PARENTHESIS
                 | TOKEN_LEFT_BRACKET
                 | TOKEN_LEFT_CURLYBRACE
@@ -426,6 +426,7 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
                 | TOKEN_INTEGER
                 | TOKEN_FLOAT
                 | TOKEN_LITERAL_IF,
+            until,
         )? {
             TOKEN_LEFT_PARENTHESIS => {
                 self.node_from(checkpoint, NODE_PARENTHESIS, |this| {
@@ -531,6 +532,7 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
             _ => unreachable!(),
         }
 
+        self.depth -= 1;
         Ok(())
     }
 }
