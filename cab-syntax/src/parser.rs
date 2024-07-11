@@ -103,39 +103,34 @@ impl Parse {
 pub fn parse(input: &str) -> Parse {
     let mut parser = Parser::new(tokenize(input));
 
-    parser
-        .node(NODE_ROOT, |this| {
-            let checkpoint = this.checkpoint();
+    parser.node(NODE_ROOT, |this| {
+        let checkpoint = this.checkpoint();
 
-            // Reached an unrecoverable error.
-            if let Err(error) = this.parse_expression() {
-                log::trace!("unrecoverable error encountered: {error:?}");
+        // Reached an unrecoverable error.
+        if let Err(error) = this.parse_expression() {
+            log::trace!("unrecoverable error encountered: {error:?}");
 
-                this.node_from(checkpoint, NODE_ERROR, |_| Ok(())).unwrap();
+            this.node_from(checkpoint, NODE_ERROR, |_| ());
 
-                this.errors.push(error);
-            }
+            this.errors.push(error);
+        }
 
-            if let Some(got) = this.peek_nontrivia() {
-                log::trace!("leftovers encountered: {got:?}");
+        if let Some(got) = this.peek_nontrivia() {
+            log::trace!("leftovers encountered: {got:?}");
 
-                let start = this.offset;
+            let start = this.offset;
 
-                this.node(NODE_ERROR, |this| {
-                    this.next_while(|_| true);
-                    Ok(())
-                })
-                .unwrap();
+            this.node(NODE_ERROR, |this| {
+                this.next_while(|_| true);
+            });
 
-                this.errors.push(ParseError::Unexpected {
-                    got: Some(got),
-                    expected: None,
-                    at: rowan::TextRange::new(start, this.offset),
-                });
-            }
-            Ok(())
-        })
-        .unwrap();
+            this.errors.push(ParseError::Unexpected {
+                got: Some(got),
+                expected: None,
+                at: rowan::TextRange::new(start, this.offset),
+            });
+        }
+    });
 
     Parse {
         node: parser.builder.finish(),
@@ -238,9 +233,7 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
 
                 self.node_from(checkpoint, NODE_ERROR, |this| {
                     this.next_while(|kind| !expected.contains(kind) && !until.contains(kind));
-                    Ok(())
-                })
-                .unwrap();
+                });
 
                 let error = ParseError::Unexpected {
                     got: Some(got),
@@ -281,11 +274,7 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
     }
 
     #[track_caller]
-    fn node(
-        &mut self,
-        kind: Kind,
-        closure: impl FnOnce(&mut Self) -> Result<(), ParseError>,
-    ) -> Result<(), ParseError> {
+    fn node<T>(&mut self, kind: Kind, closure: impl FnOnce(&mut Self) -> T) -> T {
         log::trace!(
             "starting node {kind:?} in {location}",
             location = Location::caller()
@@ -300,27 +289,29 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
     }
 
     #[track_caller]
-    #[allow(unused)]
     fn node_failable(
         &mut self,
         kind: Kind,
-        closure: impl FnOnce(&mut Self) -> Result<(), ParseError>,
+        closure: impl FnOnce(&mut Self) -> Result<(), Option<ParseError>>,
     ) {
         let checkpoint = self.checkpoint();
 
         if let Err(error) = self.node(kind, closure) {
-            self.errors.push(error);
-            self.node_from(checkpoint, NODE_ERROR, |_| Ok(())).unwrap();
+            if let Some(error) = error {
+                self.errors.push(error);
+            }
+
+            self.node_from(checkpoint, NODE_ERROR, |_| ());
         }
     }
 
     #[track_caller]
-    fn node_from(
+    fn node_from<T>(
         &mut self,
         checkpoint: rowan::Checkpoint,
         kind: Kind,
-        closure: impl FnOnce(&mut Self) -> Result<(), ParseError>,
-    ) -> Result<(), ParseError> {
+        closure: impl FnOnce(&mut Self) -> T,
+    ) -> T {
         log::trace!(
             "starting node {kind:?} at {checkpoint:?} in {location}",
             location = Location::caller()
@@ -344,7 +335,7 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
     ) {
         if let Err(error) = self.node_from(checkpoint, kind, closure) {
             self.errors.push(error);
-            self.node_from(checkpoint, NODE_ERROR, |_| Ok(())).unwrap();
+            self.node_from(checkpoint, NODE_ERROR, |_| ());
         }
     }
 
@@ -371,49 +362,55 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
         Ok(())
     }
 
-    fn parse_identifier(&mut self) -> Result<(), ParseError> {
-        self.node(NODE_IDENTIFIER, |this| {
+    fn parse_identifier_until(&mut self, until: EnumSet<Kind>) {
+        self.node_failable(NODE_IDENTIFIER, |this| {
             // If it is a normal identifier, we don't do anything
             // else as it only has a single token, and .expect() consumes it.
-            if this.expect(TOKEN_IDENTIFIER | TOKEN_IDENTIFIER_START)? == TOKEN_IDENTIFIER_START {
+            if this
+                .expect_until(TOKEN_IDENTIFIER | TOKEN_IDENTIFIER_START, until)?
+                .ok_or(None)?
+                == TOKEN_IDENTIFIER_START
+            {
                 this.parse_stringish_inner::<{ TOKEN_IDENTIFIER_END }>()?;
             }
             Ok(())
-        })?;
-
-        Ok(())
+        })
     }
 
-    fn parse_attribute(&mut self) -> Result<(), ParseError> {
+    fn parse_attribute_until(&mut self, until: EnumSet<Kind>) -> Result<(), ParseError> {
         let checkpoint = self.checkpoint();
 
         // First identifier down. If the next token is a semicolon,
         // this is a NODE_ATTRIBUTE_INHERIT. If it is a period or
         // an equals, this is a NODE_ATTRIBUTE.
-        self.parse_identifier()?;
+        self.parse_identifier_until(until | TOKEN_EQUAL | TOKEN_SEMICOLON | TOKEN_RIGHT_CURLYBRACE);
 
         if self.peek_nontrivia_expecting(TOKEN_SEMICOLON | TOKEN_PERIOD | TOKEN_EQUAL)?
             == TOKEN_SEMICOLON
         {
             self.node_from(checkpoint, NODE_ATTRIBUTE_INHERIT, |this| {
                 this.next().unwrap();
-                Ok(())
-            })
-            .unwrap();
+            });
         } else {
             self.node_failable_from(checkpoint, NODE_ATTRIBUTE_ENTRY, |this| {
                 this.node_failable_from(checkpoint, NODE_ATTRIBUTE_PATH, |this| {
-                    while this.peek_nontrivia_expecting(TOKEN_PERIOD | TOKEN_EQUAL)? != TOKEN_EQUAL
+                    while this.peek_nontrivia_expecting(TOKEN_PERIOD | TOKEN_EQUAL)? == TOKEN_PERIOD
                     {
-                        this.expect_until(TOKEN_PERIOD.into(), TOKEN_EQUAL.into())?;
-                        this.parse_identifier()?;
+                        this.next().unwrap();
+                        this.parse_identifier_until(
+                            until | TOKEN_EQUAL | TOKEN_SEMICOLON | TOKEN_RIGHT_CURLYBRACE,
+                        );
                     }
                     Ok(())
                 });
 
-                this.expect_until(TOKEN_EQUAL.into(), TOKEN_SEMICOLON | TOKEN_RIGHT_CURLYBRACE)?;
-                this.parse_expression_until(TOKEN_SEMICOLON | TOKEN_RIGHT_CURLYBRACE)?;
-                this.expect_until(TOKEN_SEMICOLON.into(), TOKEN_RIGHT_CURLYBRACE.into())?;
+                if this
+                    .expect_until(TOKEN_EQUAL.into(), TOKEN_SEMICOLON | TOKEN_RIGHT_CURLYBRACE)?
+                    .is_some()
+                {
+                    this.parse_expression_until(TOKEN_SEMICOLON | TOKEN_RIGHT_CURLYBRACE)?;
+                    this.expect_until(TOKEN_SEMICOLON.into(), TOKEN_RIGHT_CURLYBRACE.into())?;
+                }
                 Ok(())
             });
         }
@@ -438,9 +435,7 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
         if self.depth >= 512 {
             self.node(NODE_ERROR, |this| {
                 this.next_while(|_| true);
-                Ok(())
-            })
-            .unwrap();
+            });
 
             return Err(ParseError::RecursionLimitExceeded);
         }
@@ -496,7 +491,7 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
                     while this.peek_nontrivia_expecting(TOKEN_RIGHT_CURLYBRACE.into())?
                         != TOKEN_RIGHT_CURLYBRACE
                     {
-                        this.parse_attribute()?;
+                        this.parse_attribute_until(until | TOKEN_RIGHT_CURLYBRACE)?;
                     }
 
                     this.expect_until(TOKEN_RIGHT_CURLYBRACE.into(), until)?;
@@ -529,8 +524,7 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
             },
 
             Some(TOKEN_IDENTIFIER) => {
-                self.node_from(checkpoint, NODE_IDENTIFIER, |_| Ok(()))
-                    .unwrap();
+                self.node_from(checkpoint, NODE_IDENTIFIER, |_| ());
             },
 
             Some(TOKEN_IDENTIFIER_START) => {
@@ -552,7 +546,7 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
             },
 
             Some(TOKEN_INTEGER | TOKEN_FLOAT) => {
-                self.node_from(checkpoint, NODE_NUMBER, |_| Ok(())).unwrap();
+                self.node_from(checkpoint, NODE_NUMBER, |_| ());
             },
 
             Some(TOKEN_LITERAL_IF) => {
@@ -570,7 +564,7 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
             },
 
             None => {
-                self.node_from(checkpoint, NODE_ERROR, |_| Ok(())).unwrap();
+                self.node_from(checkpoint, NODE_ERROR, |_| ());
             },
 
             _ => unreachable!(),
