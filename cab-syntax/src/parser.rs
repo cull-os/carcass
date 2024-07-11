@@ -185,19 +185,20 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
 
     fn expect(&mut self, expected: EnumSet<Kind>) -> Result<Kind, ParseError> {
         self.expect_until(expected, EnumSet::empty())
+            .map(Option::unwrap)
     }
 
     fn expect_until(
         &mut self,
         expected: EnumSet<Kind>,
         until: EnumSet<Kind>,
-    ) -> Result<Kind, ParseError> {
+    ) -> Result<Option<Kind>, ParseError> {
         let checkpoint = self.checkpoint();
 
         match self.peek_nontrivia() {
-            Ok(next) if expected.contains(next) => Ok(self.next().unwrap()),
+            Ok(next) if expected.contains(next) => Ok(Some(self.next().unwrap())),
 
-            Ok(_) => {
+            Ok(got) => {
                 let start = self.offset;
 
                 self.node_from(checkpoint, NODE_ERROR, |this| {
@@ -207,7 +208,7 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
                 .unwrap();
 
                 let error = ParseError::Unexpected {
-                    got: self.next().ok(),
+                    got: Some(got),
                     expected: Some(expected),
                     at: rowan::TextRange::new(start, self.offset),
                 };
@@ -218,10 +219,10 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
                 {
                     log::trace!("found expected kind");
                     self.errors.push(error);
-                    Ok(self.next().unwrap())
+                    Ok(Some(self.next().unwrap()))
                 } else if let Ok(peek) = self.peek() {
                     log::trace!("reached expect bound, not consuming {peek:?}",);
-                    Err(error)
+                    Ok(None)
                 } else {
                     log::trace!("expect consumed everything");
                     Err(error)
@@ -428,50 +429,51 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
                 | TOKEN_LITERAL_IF,
             until,
         )? {
-            TOKEN_LEFT_PARENTHESIS => {
-                self.node_from(checkpoint, NODE_PARENTHESIS, |this| {
-                    this.parse_expression()?;
-                    this.expect(TOKEN_RIGHT_PARENTHESIS.into())?;
+            Some(TOKEN_LEFT_PARENTHESIS) => {
+                self.node_failable_from(checkpoint, NODE_PARENTHESIS, |this| {
+                    this.parse_expression_until(until | TOKEN_RIGHT_PARENTHESIS)?;
+                    this.expect_until(TOKEN_RIGHT_PARENTHESIS.into(), until)?;
                     Ok(())
-                })?
+                })
             },
 
-            TOKEN_LEFT_BRACKET => {
-                self.node_from(checkpoint, NODE_LIST, |this| {
-                    while this.peek_nontrivia_expecting(TOKEN_RIGHT_BRACKET.into())?
-                        != TOKEN_RIGHT_BRACKET
-                    {
+            Some(TOKEN_LEFT_BRACKET) => {
+                self.node_failable_from(checkpoint, NODE_LIST, |this| {
+                    while {
+                        let peek = this.peek_nontrivia_expecting(TOKEN_RIGHT_BRACKET.into())?;
+                        !until.contains(peek) && peek != TOKEN_RIGHT_BRACKET
+                    } {
                         // TODO: Seperate expression parsing logic into two functions
                         // to not parse multiple expressions next to eachother as an
                         // application chain.
-                        this.parse_expression()?;
+                        this.parse_expression_until(until | TOKEN_RIGHT_BRACKET)?;
                     }
 
-                    this.expect(TOKEN_RIGHT_BRACKET.into())?;
+                    this.expect_until(TOKEN_RIGHT_BRACKET.into(), until)?;
                     Ok(())
-                })?;
+                });
             },
 
-            TOKEN_LEFT_CURLYBRACE => {
-                self.node_from(checkpoint, NODE_ATTRIBUTE_SET, |this| {
+            Some(TOKEN_LEFT_CURLYBRACE) => {
+                self.node_failable_from(checkpoint, NODE_ATTRIBUTE_SET, |this| {
                     while this.peek_nontrivia_expecting(TOKEN_RIGHT_CURLYBRACE.into())?
                         != TOKEN_RIGHT_CURLYBRACE
                     {
                         this.parse_attribute()?;
                     }
 
-                    this.expect(TOKEN_RIGHT_CURLYBRACE.into())?;
+                    this.expect_until(TOKEN_RIGHT_CURLYBRACE.into(), until)?;
                     Ok(())
-                })?;
+                });
             },
 
-            TOKEN_PLUS | TOKEN_MINUS | TOKEN_LITERAL_NOT => {
-                self.node_from(checkpoint, NODE_PREFIX_OPERATION, |this| {
-                    this.parse_expression()
-                })?;
+            Some(TOKEN_PLUS | TOKEN_MINUS | TOKEN_LITERAL_NOT) => {
+                self.node_failable_from(checkpoint, NODE_PREFIX_OPERATION, |this| {
+                    this.parse_expression_until(until)
+                });
             },
 
-            TOKEN_PATH => {
+            Some(TOKEN_PATH) => {
                 self.node_from(checkpoint, NODE_PATH, |this| {
                     loop {
                         let peek = this.peek_nontrivia();
@@ -488,34 +490,34 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
                 })?;
             },
 
-            TOKEN_IDENTIFIER => {
+            Some(TOKEN_IDENTIFIER) => {
                 self.node_from(checkpoint, NODE_IDENTIFIER, |_| Ok(()))
                     .unwrap();
             },
 
-            TOKEN_IDENTIFIER_START => {
+            Some(TOKEN_IDENTIFIER_START) => {
                 self.node_from(checkpoint, NODE_IDENTIFIER, |this| {
                     this.parse_stringish_inner::<{ TOKEN_IDENTIFIER_END }>()
                 })?;
             },
 
-            TOKEN_STRING_START => {
+            Some(TOKEN_STRING_START) => {
                 self.node_from(checkpoint, NODE_STRING, |this| {
                     this.parse_stringish_inner::<{ TOKEN_STRING_END }>()
                 })?;
             },
 
-            TOKEN_ISLAND_START => {
+            Some(TOKEN_ISLAND_START) => {
                 self.node_from(checkpoint, NODE_ISLAND, |this| {
                     this.parse_stringish_inner::<{ TOKEN_ISLAND_END }>()
                 })?;
             },
 
-            TOKEN_INTEGER | TOKEN_FLOAT => {
+            Some(TOKEN_INTEGER | TOKEN_FLOAT) => {
                 self.node_from(checkpoint, NODE_NUMBER, |_| Ok(())).unwrap();
             },
 
-            TOKEN_LITERAL_IF => {
+            Some(TOKEN_LITERAL_IF) => {
                 self.node_from(checkpoint, NODE_IF_ELSE, |this| {
                     this.parse_expression()?;
                     this.expect(TOKEN_LITERAL_THEN.into())?;
@@ -528,6 +530,8 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
                     Ok(())
                 })?;
             },
+
+            None => return Ok(()),
 
             _ => unreachable!(),
         }
