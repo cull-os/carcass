@@ -64,10 +64,7 @@ impl fmt::Display for ParseError {
                 write!(formatter, "expected {expected:?} got {got:?} at {at:?}")
             },
 
-            other => {
-                dbg!(other);
-                Ok(())
-            },
+            other => unreachable!("unhandled ParseError format: {other:?}"),
         }
     }
 }
@@ -98,6 +95,25 @@ impl Parse {
             Err(self.errors)
         }
     }
+}
+
+macro_rules! EXPRESSION_TOKENS {
+    () => {
+        TOKEN_LEFT_PARENTHESIS
+            | TOKEN_LEFT_BRACKET
+            | TOKEN_LEFT_CURLYBRACE
+            | TOKEN_PLUS
+            | TOKEN_MINUS
+            | TOKEN_LITERAL_NOT
+            | TOKEN_PATH
+            | TOKEN_IDENTIFIER
+            | TOKEN_IDENTIFIER_START
+            | TOKEN_STRING_START
+            | TOKEN_ISLAND_START
+            | TOKEN_INTEGER
+            | TOKEN_FLOAT
+            | TOKEN_LITERAL_IF
+    };
 }
 
 pub fn parse(input: &str) -> Parse {
@@ -404,13 +420,9 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
                     Ok(())
                 });
 
-                if this
-                    .expect_until(TOKEN_EQUAL.into(), TOKEN_SEMICOLON | TOKEN_RIGHT_CURLYBRACE)?
-                    .is_some()
-                {
-                    this.parse_expression_until(TOKEN_SEMICOLON | TOKEN_RIGHT_CURLYBRACE)?;
-                    this.expect_until(TOKEN_SEMICOLON.into(), TOKEN_RIGHT_CURLYBRACE.into())?;
-                }
+                this.expect_until(TOKEN_EQUAL.into(), EXPRESSION_TOKENS!())?;
+                this.parse_expression_until(TOKEN_SEMICOLON | TOKEN_RIGHT_CURLYBRACE)?;
+                this.expect_until(TOKEN_SEMICOLON.into(), TOKEN_RIGHT_CURLYBRACE.into())?;
                 Ok(())
             });
         }
@@ -444,23 +456,7 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
 
         let checkpoint = self.checkpoint();
 
-        match self.expect_until(
-            TOKEN_LEFT_PARENTHESIS
-                | TOKEN_LEFT_BRACKET
-                | TOKEN_LEFT_CURLYBRACE
-                | TOKEN_PLUS
-                | TOKEN_MINUS
-                | TOKEN_LITERAL_NOT
-                | TOKEN_PATH
-                | TOKEN_IDENTIFIER
-                | TOKEN_IDENTIFIER_START
-                | TOKEN_STRING_START
-                | TOKEN_ISLAND_START
-                | TOKEN_INTEGER
-                | TOKEN_FLOAT
-                | TOKEN_LITERAL_IF,
-            until,
-        )? {
+        match self.expect_until(EXPRESSION_TOKENS!(), until)? {
             Some(TOKEN_LEFT_PARENTHESIS) => {
                 self.node_failable_from(checkpoint, NODE_PARENTHESIS, |this| {
                     this.parse_expression_until(until | TOKEN_RIGHT_PARENTHESIS)?;
@@ -472,7 +468,8 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
             Some(TOKEN_LEFT_BRACKET) => {
                 self.node_failable_from(checkpoint, NODE_LIST, |this| {
                     while {
-                        let peek = this.peek_nontrivia_expecting(TOKEN_RIGHT_BRACKET.into())?;
+                        let peek = this
+                            .peek_nontrivia_expecting(TOKEN_RIGHT_BRACKET | EXPRESSION_TOKENS!())?;
                         !until.contains(peek) && peek != TOKEN_RIGHT_BRACKET
                     } {
                         // TODO: Seperate expression parsing logic into two functions
@@ -488,8 +485,9 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
 
             Some(TOKEN_LEFT_CURLYBRACE) => {
                 self.node_failable_from(checkpoint, NODE_ATTRIBUTE_SET, |this| {
-                    while this.peek_nontrivia_expecting(TOKEN_RIGHT_CURLYBRACE.into())?
-                        != TOKEN_RIGHT_CURLYBRACE
+                    while this.peek_nontrivia_expecting(
+                        TOKEN_RIGHT_CURLYBRACE | TOKEN_IDENTIFIER | TOKEN_IDENTIFIER_START,
+                    )? != TOKEN_RIGHT_CURLYBRACE
                     {
                         this.parse_attribute_until(until | TOKEN_RIGHT_CURLYBRACE)?;
                     }
