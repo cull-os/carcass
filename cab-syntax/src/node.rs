@@ -276,6 +276,7 @@ node! { #[from(NODE_LIST)] struct List => |self, formatter| {
 
     for expression in self.items() {
         match expression {
+            Expression::Error(variant) => write!(formatter, " {variant}"),
             Expression::Parenthesis(variant) => write!(formatter, " {variant}"),
             Expression::List(variant) => write!(formatter, " {variant}"),
             Expression::AttributeSet(variant) => write!(formatter, " {variant}"),
