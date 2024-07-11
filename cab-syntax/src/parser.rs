@@ -5,6 +5,7 @@ use std::{
 };
 
 use enumset::EnumSet;
+use multipeek::multipeek;
 use rowan::{
     ast::AstNode as _,
     Language as _,
@@ -22,6 +23,25 @@ use crate::{
     TokenizerToken,
 };
 
+macro_rules! EXPRESSION_TOKENS {
+    () => {
+        TOKEN_LEFT_PARENTHESIS
+            | TOKEN_LEFT_BRACKET
+            | TOKEN_LEFT_CURLYBRACE
+            | TOKEN_PLUS
+            | TOKEN_MINUS
+            | TOKEN_LITERAL_NOT
+            | TOKEN_PATH
+            | TOKEN_IDENTIFIER
+            | TOKEN_IDENTIFIER_START
+            | TOKEN_STRING_START
+            | TOKEN_ISLAND_START
+            | TOKEN_INTEGER
+            | TOKEN_FLOAT
+            | TOKEN_LITERAL_IF
+    };
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ParseError {
     RecursionLimitExceeded,
@@ -31,6 +51,34 @@ pub enum ParseError {
         expected: Option<EnumSet<Kind>>,
         at: rowan::TextRange,
     },
+}
+
+fn format_kindset(mut set: EnumSet<Kind>, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+    if set & EXPRESSION_TOKENS!() == EXPRESSION_TOKENS!() {
+        write!(formatter, "an expression")?;
+
+        set = set.difference(EXPRESSION_TOKENS!());
+    }
+
+    if set.contains(TOKEN_IDENTIFIER) && set.contains(TOKEN_IDENTIFIER_START) {
+        set &= !TOKEN_IDENTIFIER_START
+    }
+
+    let mut iterator = multipeek(set.iter());
+    while let Some(item) = iterator.next() {
+        write!(
+            formatter,
+            "{item}{seperator}",
+            seperator = match (iterator.peek().is_some(), iterator.peek_nth(1).is_some()) {
+                (false, false) => "",
+                (true, false) => " or ",
+                (true, true) => ", ",
+                _ => unreachable!(),
+            }
+        )?;
+    }
+
+    Ok(())
 }
 
 impl fmt::Display for ParseError {
@@ -45,7 +93,9 @@ impl fmt::Display for ParseError {
             } => {
                 assert_eq!(at.start(), at.end());
 
-                write!(formatter, "expected {expected:?}, reached end of file")
+                write!(formatter, "expected ")?;
+                format_kindset(*expected, formatter)?;
+                write!(formatter, ", reached end of file")
             },
 
             Self::Unexpected {
@@ -53,7 +103,7 @@ impl fmt::Display for ParseError {
                 expected: None,
                 at,
             } => {
-                write!(formatter, "expected end of file, got {got:?} at {at:?}")
+                write!(formatter, "expected end of file, got {got} at {at:?}")
             },
 
             Self::Unexpected {
@@ -61,7 +111,9 @@ impl fmt::Display for ParseError {
                 expected: Some(expected),
                 at,
             } => {
-                write!(formatter, "expected {expected:?} got {got:?} at {at:?}")
+                write!(formatter, "expected ")?;
+                format_kindset(*expected, formatter)?;
+                write!(formatter, ", got {got:?} at {at:?}")
             },
 
             other => unreachable!("unhandled ParseError format: {other:?}"),
@@ -95,25 +147,6 @@ impl Parse {
             Err(self.errors)
         }
     }
-}
-
-macro_rules! EXPRESSION_TOKENS {
-    () => {
-        TOKEN_LEFT_PARENTHESIS
-            | TOKEN_LEFT_BRACKET
-            | TOKEN_LEFT_CURLYBRACE
-            | TOKEN_PLUS
-            | TOKEN_MINUS
-            | TOKEN_LITERAL_NOT
-            | TOKEN_PATH
-            | TOKEN_IDENTIFIER
-            | TOKEN_IDENTIFIER_START
-            | TOKEN_STRING_START
-            | TOKEN_ISLAND_START
-            | TOKEN_INTEGER
-            | TOKEN_FLOAT
-            | TOKEN_LITERAL_IF
-    };
 }
 
 pub fn parse(input: &str) -> Parse {
@@ -230,7 +263,7 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
     }
 
     fn expect(&mut self, expected: EnumSet<Kind>) -> Result<Kind, ParseError> {
-        self.expect_until(expected, EnumSet::empty())
+        self.expect_until(expected, EnumSet::EMPTY)
             .map(Option::unwrap)
     }
 
@@ -440,7 +473,7 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
     }
 
     fn parse_expression(&mut self) -> Result<(), ParseError> {
-        self.parse_expression_until(EnumSet::empty())
+        self.parse_expression_until(EnumSet::EMPTY)
     }
 
     fn parse_expression_until(&mut self, until: EnumSet<Kind>) -> Result<(), ParseError> {

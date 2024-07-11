@@ -1,6 +1,9 @@
+use derive_more::Display;
+
 /// The Cab syntax kind.
 #[derive(
     Debug,
+    Display,
     Clone,
     Copy,
     PartialEq,
@@ -17,9 +20,11 @@
 #[non_exhaustive]
 pub enum Kind {
     /// Represents any sequence of tokens that was not recognized.
+    #[display(fmt = "unknown token")]
     TOKEN_ERROR,
 
     /// Anything that matches [`char::is_whitespace`].
+    #[display(fmt = "whitespace")]
     TOKEN_WHITESPACE,
 
     /// Anything that starts with a `#`.
@@ -27,59 +32,100 @@ pub enum Kind {
     /// When the comment starts with more than 3 `#` characters, it will be
     /// multiline. Multiline comments can be closed with the initial delimiter,
     /// but they don't have to be.
+    #[display(fmt = "a comment")]
     TOKEN_COMMENT, // #[^\r\n]* and (#{3,}).*\1
 
-    TOKEN_DOLLAR,    // $
-    TOKEN_PIPE_MORE, // |>
+    #[display(fmt = "'$'")]
+    TOKEN_DOLLAR,
+    TOKEN_PIPE_MORE,
 
-    TOKEN_LEFT_PARENTHESIS,  // (
-    TOKEN_RIGHT_PARENTHESIS, // )
+    #[display(fmt = "'('")]
+    TOKEN_LEFT_PARENTHESIS,
+    #[display(fmt = "')'")]
+    TOKEN_RIGHT_PARENTHESIS,
 
-    TOKEN_PLUS_PLUS,     // ++
-    TOKEN_LEFT_BRACKET,  // [
-    TOKEN_RIGHT_BRACKET, // ]
+    #[display(fmt = "'++'")]
+    TOKEN_PLUS_PLUS,
+    #[display(fmt = "'['")]
+    TOKEN_LEFT_BRACKET,
+    #[display(fmt = "']'")]
+    TOKEN_RIGHT_BRACKET,
 
-    TOKEN_EQUAL_EQUAL_MORE, // ==>
-    TOKEN_LESS_EQUAL_EQUAL, // <==
-    TOKEN_SLASH_SLASH,      // //
-    TOKEN_PERIOD,           // .
-    TOKEN_LEFT_CURLYBRACE,  // {
-    TOKEN_RIGHT_CURLYBRACE, // }
-    TOKEN_QUESTIONMARK,     // ?
-    TOKEN_SEMICOLON,        // ;
+    #[display(fmt = "'==>'")]
+    TOKEN_EQUAL_EQUAL_MORE,
+    #[display(fmt = "'<=='")]
+    TOKEN_LESS_EQUAL_EQUAL,
+    #[display(fmt = "'//'")]
+    TOKEN_SLASH_SLASH,
+    #[display(fmt = "'.'")]
+    TOKEN_PERIOD,
+    #[display(fmt = "'{{'")]
+    TOKEN_LEFT_CURLYBRACE,
+    #[display(fmt = "'}}'")]
+    TOKEN_RIGHT_CURLYBRACE,
+    #[display(fmt = "'?'")]
+    TOKEN_QUESTIONMARK,
+    #[display(fmt = "';'")]
+    TOKEN_SEMICOLON,
 
-    TOKEN_EQUAL,             // =
-    TOKEN_EQUAL_EQUAL,       // ==
-    TOKEN_EXCLAMATION_EQUAL, // !=
-    TOKEN_LESS_EQUAL,        // <=
-    TOKEN_LESS,              // <
-    TOKEN_MORE_EQUAL,        // >=
-    TOKEN_MORE,              // >
-    TOKEN_MINUS_MORE,        // ->
+    #[display(fmt = "'='")]
+    TOKEN_EQUAL,
+    #[display(fmt = "'=='")]
+    TOKEN_EQUAL_EQUAL,
+    #[display(fmt = "'!='")]
+    TOKEN_EXCLAMATION_EQUAL,
+    #[display(fmt = "'<='")]
+    TOKEN_LESS_EQUAL,
+    #[display(fmt = "'<'")]
+    TOKEN_LESS,
+    #[display(fmt = "'>='")]
+    TOKEN_MORE_EQUAL,
+    #[display(fmt = "'>'")]
+    TOKEN_MORE,
+    #[display(fmt = "'->'")]
+    TOKEN_MINUS_MORE,
 
-    TOKEN_AT,    // @
-    TOKEN_COMMA, // ,
-    TOKEN_COLON, // :
+    #[display(fmt = "'@'")]
+    TOKEN_AT,
+    #[display(fmt = "','")]
+    TOKEN_COMMA,
+    #[display(fmt = "':'")]
+    TOKEN_COLON,
 
-    TOKEN_PLUS,              // +
-    TOKEN_MINUS,             // -
-    TOKEN_ASTERISK,          // *
-    TOKEN_ASTERISK_ASTERISK, // **
-    TOKEN_SLASH,             // /
+    #[display(fmt = "'+'")]
+    TOKEN_PLUS,
+    #[display(fmt = "'-'")]
+    TOKEN_MINUS,
+    #[display(fmt = "'*'")]
+    TOKEN_ASTERISK,
+    #[display(fmt = "'**'")]
+    TOKEN_ASTERISK_ASTERISK,
+    #[display(fmt = "'/'")]
+    TOKEN_SLASH,
 
-    TOKEN_INTEGER, // 38
-    TOKEN_FLOAT,   // 3.14
+    #[display(fmt = "an integer")]
+    TOKEN_INTEGER,
+    #[display(fmt = "a float")]
+    TOKEN_FLOAT,
 
-    TOKEN_LITERAL_IF,   // if
-    TOKEN_LITERAL_THEN, // then
-    TOKEN_LITERAL_ELSE, // else
+    #[display(fmt = "the keyword 'if'")]
+    TOKEN_LITERAL_IF,
+    #[display(fmt = "the keyword 'then'")]
+    TOKEN_LITERAL_THEN,
+    #[display(fmt = "the keyword 'else'")]
+    TOKEN_LITERAL_ELSE,
 
-    TOKEN_LITERAL_AND, // and
-    TOKEN_LITERAL_OR,  // or
-    TOKEN_LITERAL_NOT, // not
+    #[display(fmt = "the keyword 'and'")]
+    TOKEN_LITERAL_AND,
+    #[display(fmt = "the keyword 'or'")]
+    TOKEN_LITERAL_OR,
+    #[display(fmt = "the keyword 'not'")]
+    TOKEN_LITERAL_NOT,
 
-    TOKEN_INTERPOLATION_START, // ${
-    TOKEN_INTERPOLATION_END,   // }
+    #[display(fmt = "${{")]
+    TOKEN_INTERPOLATION_START,
+    #[display(fmt = "}}")]
+    TOKEN_INTERPOLATION_END,
 
     /// A path. Valid paths start with `./`, `..` or `/`, followed by
     /// characters that are either [alphanumeric](char::is_alphanumeric) or
@@ -100,6 +146,7 @@ pub enum Kind {
     /// |     +-- TOKEN_INTERPOLATION_START
     /// +-- TOKEN_PATH
     /// ```
+    #[display(fmt = "a path")]
     TOKEN_PATH,
 
     TOKEN_CONTENT,
@@ -107,14 +154,18 @@ pub enum Kind {
     /// A normal non-quoted identifier. The initial character must not match
     /// [`char::is_ascii_digit`], the other characters must be either
     /// [`char::is_alphanumeric`], `_` or `-`.
+    #[display(fmt = "an identifier")]
     TOKEN_IDENTIFIER,
 
+    #[display(fmt = "an identifier")]
     TOKEN_IDENTIFIER_START,
     TOKEN_IDENTIFIER_END,
 
+    #[display(fmt = "a string")]
     TOKEN_STRING_START,
     TOKEN_STRING_END,
 
+    #[display(fmt = "an string")]
     TOKEN_ISLAND_START,
     TOKEN_ISLAND_END,
 

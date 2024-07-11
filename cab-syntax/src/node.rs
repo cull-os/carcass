@@ -3,6 +3,7 @@ use std::{
     ops::Deref,
 };
 
+use derive_more::Display;
 use rowan::ast::AstNode as _;
 
 use crate::{
@@ -478,27 +479,15 @@ impl Application {
 
 node! { #[from(NODE_PREFIX_OPERATION)] struct PrefixOperation => |self, formatter| write!(formatter, "{operator}{expression}", operator = self.operator(), expression = self.expression()) }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Display, Clone, PartialEq, Eq, Hash)]
 pub enum PrefixOperator {
+    #[display(fmt = "+")]
     Swwallation, // Get it?
+    #[display(fmt = "-")]
     Negation,
 
+    #[display(fmt = "not ")]
     Not,
-}
-
-impl fmt::Display for PrefixOperator {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            formatter,
-            "{operator}",
-            operator = match self {
-                Self::Swwallation => "+",
-                Self::Negation => "-",
-
-                Self::Not => "not ",
-            }
-        )
-    }
 }
 
 impl TryFrom<Kind> for PrefixOperator {
