@@ -165,7 +165,7 @@ macro_rules! node {
 
             fn syntax(&self) -> &RowanNode {
                 match self {
-                    $(Self::$variant(this) => &this.0,)*
+                    $(Self::$variant(this) => &this.syntax(),)*
                 }
             }
         }
@@ -720,7 +720,7 @@ impl Identifier {
         }
 
         if self.token_untyped(TOKEN_IDENTIFIER_START).is_some() {
-            return IdentifierValue::Complex(IdentifierComplex(self.0.clone()));
+            return IdentifierValue::Complex(IdentifierComplex(self.syntax().clone()));
         }
 
         unreachable!()

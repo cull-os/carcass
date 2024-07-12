@@ -265,7 +265,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
     }
 
     fn peek(&mut self) -> Option<Kind> {
-        self.tokens.peek().map(|token| token.0)
+        self.tokens.peek().map(|&(kind, _)| kind)
     }
 
     fn peek_nontrivia(&mut self) -> Option<Kind> {
