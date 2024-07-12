@@ -58,6 +58,12 @@ fn format_kindset(mut set: EnumSet<Kind>, formatter: &mut fmt::Formatter<'_>) ->
         write!(formatter, "an expression")?;
 
         set = set.difference(EXPRESSION_TOKENS!());
+
+        match set.iter().count() {
+            0 => {},
+            1 => write!(formatter, " or ")?,
+            2.. => write!(formatter, ", ")?,
+        }
     }
 
     if set.contains(TOKEN_IDENTIFIER) && set.contains(TOKEN_IDENTIFIER_START) {
