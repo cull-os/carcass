@@ -128,17 +128,12 @@ macro_rules! node {
         #[from($($variant:ident),* $(,)?)]
         enum $name:ident;
     ) => {
-        #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+        #[derive(Display, Debug, Clone, PartialEq, Eq, Hash)]
         pub enum $name {
-             $($variant($variant),)*
-        }
-
-        impl fmt::Display for $name {
-            fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-                match self {
-                    $(Self::$variant(variant) => write!(formatter, "{variant}"),)*
-                }
-            }
+            $(
+                #[display(fmt = "{_0}")]
+                $variant($variant),
+            )*
         }
 
         impl rowan::ast::AstNode for $name {
@@ -479,7 +474,7 @@ impl Application {
 
 node! { #[from(NODE_PREFIX_OPERATION)] struct PrefixOperation => |self, formatter| write!(formatter, "{operator}{expression}", operator = self.operator(), expression = self.expression()) }
 
-#[derive(Debug, Display, Clone, PartialEq, Eq, Hash)]
+#[derive(Display, Debug, Clone, PartialEq, Eq, Hash)]
 pub enum PrefixOperator {
     #[display(fmt = "+")]
     Swwallation, // Get it?
@@ -519,67 +514,51 @@ impl PrefixOperation {
 
 node! { #[from(NODE_INFIX_OPERATION)] struct InfixOperation => |self, formatter| write!(formatter, "{left} {operator} {right}", left = self.left_expression(), operator = self.operator(), right = self.right_expression()) }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Display, Debug, Clone, PartialEq, Eq, Hash)]
 pub enum InfixOperator {
+    #[display(fmt = "$")]
     Apply,
+    #[display(fmt = "|>")]
     Pipe,
 
+    #[display(fmt = "++")]
     Concat,
 
+    #[display(fmt = "<==")]
     Override,
+    #[display(fmt = "//")]
     Update,
 
+    #[display(fmt = "==")]
     Equal,
+    #[display(fmt = "!=")]
     NotEqual,
+    #[display(fmt = "<=")]
     LessOrEqual,
+    #[display(fmt = "<")]
     Less,
+    #[display(fmt = ">=")]
     MoreOrEqual,
+    #[display(fmt = ">")]
     More,
+    #[display(fmt = "->")]
     Implication,
 
+    #[display(fmt = "+")]
     Addition,
+    #[display(fmt = "-")]
     Negation,
+    #[display(fmt = "*")]
     Multiplication,
+    #[display(fmt = "**")]
     Power,
+    #[display(fmt = "/")]
     Division,
 
+    #[display(fmt = "and")]
     And,
+    #[display(fmt = "or")]
     Or,
-}
-
-impl fmt::Display for InfixOperator {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            formatter,
-            "{operator}",
-            operator = match self {
-                Self::Apply => "$",
-                Self::Pipe => "|>",
-
-                Self::Concat => "++",
-
-                Self::Override => "<==",
-                Self::Update => "//",
-
-                Self::Equal => "==",
-                Self::NotEqual => "!=",
-                Self::LessOrEqual => "<=",
-                Self::Less => "<",
-                Self::MoreOrEqual => ">=",
-                Self::More => ">",
-                Self::Implication => "->",
-
-                Self::Addition => "+",
-                Self::Negation => "-",
-                Self::Multiplication => "*",
-                Self::Power => "**",
-                Self::Division => "/",
-
-                Self::And => "and",
-                Self::Or => "or",
-            }
-        )
-    }
 }
 
 impl TryFrom<Kind> for InfixOperator {

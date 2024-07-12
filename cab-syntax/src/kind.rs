@@ -2,8 +2,8 @@ use derive_more::Display;
 
 /// The Cab syntax kind.
 #[derive(
-    Debug,
     Display,
+    Debug,
     Clone,
     Copy,
     PartialEq,
