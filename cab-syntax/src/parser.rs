@@ -165,7 +165,7 @@ pub fn parse(input: &str) -> Parse {
         if let Err(error) = this.parse_expression() {
             log::trace!("unrecoverable error encountered: {error:?}");
 
-            this.node_from(checkpoint, NODE_ERROR, |_| ());
+            this.node_from(checkpoint, NODE_ERROR, |_| {});
 
             this.errors.push(error);
         }
@@ -356,7 +356,7 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
                 self.errors.push(error);
             }
 
-            self.node_from(checkpoint, NODE_ERROR, |_| ());
+            self.node_from(checkpoint, NODE_ERROR, |_| {});
         }
     }
 
@@ -390,7 +390,7 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
     ) {
         if let Err(error) = self.node_from(checkpoint, kind, closure) {
             self.errors.push(error);
-            self.node_from(checkpoint, NODE_ERROR, |_| ());
+            self.node_from(checkpoint, NODE_ERROR, |_| {});
         }
     }
 
@@ -561,7 +561,7 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
             },
 
             Some(TOKEN_IDENTIFIER) => {
-                self.node_from(checkpoint, NODE_IDENTIFIER, |_| ());
+                self.node_from(checkpoint, NODE_IDENTIFIER, |_| {});
             },
 
             Some(TOKEN_IDENTIFIER_START) => {
@@ -583,7 +583,7 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
             },
 
             Some(TOKEN_INTEGER | TOKEN_FLOAT) => {
-                self.node_from(checkpoint, NODE_NUMBER, |_| ());
+                self.node_from(checkpoint, NODE_NUMBER, |_| {});
             },
 
             Some(TOKEN_LITERAL_IF) => {
@@ -601,7 +601,7 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
             },
 
             None => {
-                self.node_from(checkpoint, NODE_ERROR, |_| ());
+                self.node_from(checkpoint, NODE_ERROR, |_| {});
             },
 
             _ => unreachable!(),
