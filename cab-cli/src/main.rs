@@ -4,7 +4,10 @@ use std::{
     process,
 };
 
-use cab::syntax;
+use cab::syntax::{
+    self,
+    ParseError,
+};
 use clap::{
     Parser,
     Subcommand,
@@ -14,7 +17,17 @@ use clap_verbosity_flag::{
     InfoLevel,
     Verbosity,
 };
-// use codespan_reporting::files::SimpleFiles;
+use codespan_reporting::{
+    diagnostic::{
+        Diagnostic,
+        Label,
+    },
+    files::SimpleFiles,
+    term::{
+        self,
+        termcolor,
+    },
+};
 use log::Level;
 use yansi::{
     Condition,
@@ -67,10 +80,15 @@ impl Dump {
             process::exit(1);
         });
 
-        // let mut files = SimpleFiles::new();
-        // files.add(file.s
+        // https://github.com/thepacketgeek/clap-stdin/issues/2#issuecomment-2225371594
+        let mut files = SimpleFiles::new();
+        let file_id = files.add("todofixthis.cab", &contents);
 
-        let mut out = io::BufWriter::new(io::stdout());
+        let mut out = termcolor::StandardStream::stderr(if yansi::is_enabled() {
+            termcolor::ColorChoice::Always
+        } else {
+            termcolor::ColorChoice::Never
+        });
 
         match self {
             Self::Token { color } => {
@@ -93,8 +111,22 @@ impl Dump {
             Self::Syntax | Self::Clean => {
                 let parse = syntax::parse(&contents);
 
+                let error_config = term::Config::default();
+
                 for error in parse.errors() {
-                    log::error!("{error}");
+                    let diagnostic = Diagnostic::error()
+                        .with_message("syntax error")
+                        .with_labels(vec![Label::primary(
+                            file_id,
+                            if let ParseError::Unexpected { at, .. } = error {
+                                at.start().into()..at.end().into()
+                            } else {
+                                0..0
+                            },
+                        )
+                        .with_message(format!("{error}"))]);
+
+                    term::emit(&mut out.lock(), &error_config, &files, &diagnostic).ok();
                 }
 
                 if matches!(self, Self::Syntax) {

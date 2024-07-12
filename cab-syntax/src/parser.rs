@@ -107,19 +107,19 @@ impl fmt::Display for ParseError {
             Self::Unexpected {
                 got: Some(got),
                 expected: None,
-                at,
+                ..
             } => {
-                write!(formatter, "expected end of file, got {got} at {at:?}")
+                write!(formatter, "expected end of file, got {got}")
             },
 
             Self::Unexpected {
                 got: Some(got),
                 expected: Some(expected),
-                at,
+                ..
             } => {
                 write!(formatter, "expected ")?;
                 format_kindset(*expected, formatter)?;
-                write!(formatter, ", got {got:?} at {at:?}")
+                write!(formatter, ", got {got}")
             },
 
             other => unreachable!("unhandled ParseError format: {other:?}"),
@@ -239,7 +239,7 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
             ParseError::Unexpected {
                 got: None,
                 expected: Some(expected),
-                at: rowan::TextRange::new(self.offset, self.offset),
+                at: rowan::TextRange::empty(self.offset),
             }
         })
     }
@@ -256,7 +256,7 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
                 ParseError::Unexpected {
                     got: None,
                     expected: None,
-                    at: rowan::TextRange::new(self.offset, self.offset),
+                    at: rowan::TextRange::empty(self.offset),
                 }
             })
     }
@@ -326,7 +326,7 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
                 Err(ParseError::Unexpected {
                     got: None,
                     expected: Some(expected),
-                    at: rowan::TextRange::new(self.offset, self.offset),
+                    at: rowan::TextRange::empty(self.offset),
                 })
             },
         }
