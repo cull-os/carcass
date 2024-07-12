@@ -14,11 +14,9 @@ use clap_verbosity_flag::{
     InfoLevel,
     Verbosity,
 };
-use colored::{
-    Colorize,
-    CustomColor,
-};
+// use codespan_reporting::files::SimpleFiles;
 use log::Level;
+use yansi::Paint;
 
 #[derive(Parser)]
 #[command(name = "cab", version, about)]
@@ -66,31 +64,20 @@ impl Dump {
             process::exit(1);
         });
 
+        // let mut files = SimpleFiles::new();
+        // files.add(file.s
+
         let mut out = io::BufWriter::new(io::stdout());
 
         match self {
             Self::Token { color } => {
-                for token in syntax::tokenize(&contents) {
+                for syntax::TokenizerToken(kind, slice) in syntax::tokenize(&contents) {
                     let result = if color {
-                        let on_color = syntax::COLORS[token.0 as usize];
+                        let style = syntax::COLORS[kind as usize];
 
-                        let color = if (0.2126 * on_color.r as f32
-                            + 0.7152 * on_color.g as f32
-                            + 0.0722 * on_color.b as f32)
-                            < 140.0
-                        {
-                            CustomColor::new(0xFF, 0xFF, 0xFF)
-                        } else {
-                            CustomColor::new(0, 0, 0)
-                        };
-
-                        write!(
-                            out,
-                            "{slice}",
-                            slice = token.1.on_custom_color(on_color).custom_color(color)
-                        )
+                        write!(out, "{slice}", slice = slice.paint(style))
                     } else {
-                        writeln!(out, "{kind:?} {slice:?}", kind = token.0, slice = token.1)
+                        writeln!(out, "{kind:?} {slice:?}")
                     };
 
                     result.unwrap_or_else(|error| {

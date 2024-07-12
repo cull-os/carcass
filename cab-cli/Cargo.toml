@@ -9,12 +9,21 @@ name = "cab"
 path = "src/main.rs"
 
 [dependencies]
-clap                = { version = "4.5.4", features = [ "derive" ] }
+cab.path            = "../cab"
 clap-stdin          = "0.5.0"
 clap-verbosity-flag = "2.2.0"
-colored             = "2.1.0"
+codespan-reporting  = "0.11.1"
 env_logger          = "0.11.3"
 log                 = "0.4.21"
-tokio               = { version = "1.37.0", features = [ "full" ] }
 
-cab.path = "../cab"
+[dependencies.clap]
+version = "4.5.4"
+features = [ "derive" ]
+
+[dependencies.tokio]
+version = "1.37.0"
+features = [ "full" ]
+
+[dependencies.yansi]
+version = "1.0.1"
+features = [ "detect-env", "detect-tty", "hyperlink" ]

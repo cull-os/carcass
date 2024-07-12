@@ -8,9 +8,7 @@ publish = false
 cargo-fuzz = true
 
 [dependencies]
-colored       = "2.1.0"
-libfuzzer-sys = "0.4"
-
+libfuzzer-sys   = "0.4"
 cab-syntax.path = "../cab-syntax"
 
 [[bin]]

@@ -1,3 +1,5 @@
+#![feature(const_fn_floating_point_arithmetic)]
+
 mod color;
 mod kind;
 
