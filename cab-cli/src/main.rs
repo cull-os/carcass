@@ -94,7 +94,7 @@ impl Dump {
 
         match self {
             Self::Token { color } => {
-                for syntax::TokenizerToken(kind, slice) in syntax::tokenize(&contents) {
+                for (kind, slice) in syntax::tokenize(&contents) {
                     let result = if color {
                         let style = syntax::COLORS[kind as usize];
 

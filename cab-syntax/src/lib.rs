@@ -16,10 +16,7 @@ mod parser;
 mod tokenizer;
 
 pub use parser::*;
-pub use tokenizer::{
-    tokenize,
-    Token as TokenizerToken,
-};
+pub use tokenizer::*;
 
 pub type RowanNode = rowan::SyntaxNode<Language>;
 pub type RowanToken = rowan::SyntaxToken<Language>;

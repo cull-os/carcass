@@ -20,7 +20,6 @@ use crate::{
     },
     Language,
     RowanNode,
-    TokenizerToken,
 };
 
 macro_rules! EXPRESSION_TOKENS {
@@ -242,7 +241,7 @@ pub fn parse(input: &str) -> Parse {
     }
 }
 
-struct Parser<'a, I: Iterator<Item = TokenizerToken<'a>>> {
+struct Parser<'a, I: Iterator<Item = (Kind, &'a str)>> {
     builder: rowan::GreenNodeBuilder<'a>,
 
     tokens: Peekable<I>,
@@ -252,7 +251,7 @@ struct Parser<'a, I: Iterator<Item = TokenizerToken<'a>>> {
     depth: u32,
 }
 
-impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
+impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
     fn new(tokens: I) -> Self {
         Self {
             builder: rowan::GreenNodeBuilder::new(),
@@ -287,7 +286,7 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
     fn next(&mut self) -> Result<Kind, ParseError> {
         self.tokens
             .next()
-            .map(|TokenizerToken(kind, slice)| {
+            .map(|(kind, slice)| {
                 self.offset += rowan::TextSize::of(slice);
                 self.builder.token(Language::kind_to_raw(kind), slice);
                 kind
