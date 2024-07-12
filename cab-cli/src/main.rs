@@ -80,7 +80,7 @@ impl Dump {
             process::exit(1);
         });
 
-        // https://github.com/thepacketgeek/clap-stdin/issues/2#issuecomment-2225371594
+        // TODO: https://github.com/thepacketgeek/clap-stdin/issues/2#issuecomment-2225371594
         let mut files = SimpleFiles::new();
         let file_id = files.add("todofixthis.cab", &contents);
 
