@@ -421,7 +421,7 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
         }
     }
 
-    fn parse_stringish_inner(&mut self, end: Kind) -> Result<(), ParseError> {
+    fn parse_stringlike_inner(&mut self, end: Kind) -> Result<(), ParseError> {
         // Assuming that the start quote has already been consumed
         // and the node is closed outside of this function.
 
@@ -453,7 +453,7 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
                 .ok_or(None)?
                 == TOKEN_IDENTIFIER_START
             {
-                this.parse_stringish_inner(TOKEN_IDENTIFIER_END)?;
+                this.parse_stringlike_inner(TOKEN_IDENTIFIER_END)?;
             }
             Ok(())
         })
@@ -595,19 +595,19 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
 
             Some(TOKEN_IDENTIFIER_START) => {
                 self.node_failable_from(checkpoint, NODE_IDENTIFIER, |this| {
-                    this.parse_stringish_inner(TOKEN_IDENTIFIER_END)
+                    this.parse_stringlike_inner(TOKEN_IDENTIFIER_END)
                 });
             },
 
             Some(TOKEN_STRING_START) => {
                 self.node_failable_from(checkpoint, NODE_STRING, |this| {
-                    this.parse_stringish_inner(TOKEN_STRING_END)
+                    this.parse_stringlike_inner(TOKEN_STRING_END)
                 });
             },
 
             Some(TOKEN_ISLAND_START) => {
                 self.node_failable_from(checkpoint, NODE_ISLAND, |this| {
-                    this.parse_stringish_inner(TOKEN_ISLAND_END)
+                    this.parse_stringlike_inner(TOKEN_ISLAND_END)
                 });
             },
 

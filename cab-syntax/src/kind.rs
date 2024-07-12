@@ -20,7 +20,7 @@ use derive_more::Display;
 #[non_exhaustive]
 pub enum Kind {
     /// Represents any sequence of tokens that was not recognized.
-    #[display(fmt = "unknown token")]
+    #[display(fmt = "an unknown token sequence")]
     TOKEN_ERROR,
 
     /// Anything that matches [`char::is_whitespace`].
@@ -149,6 +149,7 @@ pub enum Kind {
     #[display(fmt = "a path")]
     TOKEN_PATH,
 
+    #[display(fmt = "the content of a string-like")]
     TOKEN_CONTENT,
 
     /// A normal non-quoted identifier. The initial character must not match
@@ -159,14 +160,17 @@ pub enum Kind {
 
     #[display(fmt = "an identifier")]
     TOKEN_IDENTIFIER_START,
+    #[display(fmt = "the end of an identifier")]
     TOKEN_IDENTIFIER_END,
 
     #[display(fmt = "a string")]
     TOKEN_STRING_START,
+    #[display(fmt = "the end of a string")]
     TOKEN_STRING_END,
 
-    #[display(fmt = "an string")]
+    #[display(fmt = "an island")]
     TOKEN_ISLAND_START,
+    #[display(fmt = "the end of an island")]
     TOKEN_ISLAND_END,
 
     NODE_ROOT,
@@ -207,19 +211,19 @@ pub enum Kind {
     /// direct children without any delimiters.
     NODE_PATH,
 
-    /// A stringish that is delimited by a single backtick. See [`NODE_STRING`]
-    /// for the definition of stringish.
+    /// A stringlike that is delimited by a single backtick. See [`NODE_STRING`]
+    /// for the definition of stringlike.
     NODE_IDENTIFIER,
 
-    /// A stringish that is delimited by a single `"` or any number of `'`.
+    /// A stringlike that is delimited by a single `"` or any number of `'`.
     ///
-    /// A stringish is a sequence of nodes and tokens, where all the immediate
+    /// A stringlike is a sequence of nodes and tokens, where all the immediate
     /// children tokens are [`TOKEN_CONTENT`]s, while all the immediate children
     /// nodes are all [`NODE_INTERPOLATION`]s.
     NODE_STRING,
 
-    /// A stringish that is delimited by `<` and `>`. See [`NODE_STRING`] for
-    /// the definition of stringish.
+    /// A stringlike that is delimited by `<` and `>`. See [`NODE_STRING`] for
+    /// the definition of stringlike.
     NODE_ISLAND,
 
     /// A node containing a single token, which can be either a

@@ -27,8 +27,8 @@ pub fn tokenize(input: &str) -> impl Iterator<Item = Token<'_>> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum TokenizerContext<'a> {
     Path,
-    Stringish { delimiter: &'a str },
-    StringishEnd { delimiter: &'a str },
+    Stringlike { end: &'a str },
+    StringlikeEnd { end: &'a str },
     InterpolationStart,
     Interpolation { brackets: u32 },
 }
@@ -124,11 +124,11 @@ impl<'a> Tokenizer<'a> {
         Some(next)
     }
 
-    fn consume_stringish(&mut self, delimiter: &'a str) -> Option<Kind> {
+    fn consume_stringlike(&mut self, end: &'a str) -> Option<Kind> {
         loop {
-            if self.remaining().starts_with(delimiter) {
-                self.context_pop(TokenizerContext::Stringish { delimiter });
-                self.context_push(TokenizerContext::StringishEnd { delimiter });
+            if self.remaining().starts_with(end) {
+                self.context_pop(TokenizerContext::Stringlike { end });
+                self.context_push(TokenizerContext::StringlikeEnd { end });
 
                 return Some(TOKEN_CONTENT);
             }
@@ -138,7 +138,7 @@ impl<'a> Tokenizer<'a> {
             match self.consume_character() {
                 Some('\\') => {
                     if self.consume_character().is_none() {
-                        self.context_pop(TokenizerContext::Stringish { delimiter });
+                        self.context_pop(TokenizerContext::Stringlike { end });
                         return Some(TOKEN_ERROR);
                     }
                 },
@@ -152,7 +152,7 @@ impl<'a> Tokenizer<'a> {
 
                 Some(_) => {},
                 None => {
-                    self.context_pop(TokenizerContext::Stringish { delimiter });
+                    self.context_pop(TokenizerContext::Stringlike { end });
                     return Some(TOKEN_ERROR);
                 },
             }
@@ -203,16 +203,16 @@ impl<'a> Tokenizer<'a> {
                 return self.consume_path();
             },
 
-            Some(TokenizerContext::Stringish { delimiter }) => {
-                return self.consume_stringish(delimiter);
+            Some(TokenizerContext::Stringlike { end }) => {
+                return self.consume_stringlike(end);
             },
-            Some(TokenizerContext::StringishEnd { delimiter }) => {
-                let delimiter = *delimiter;
-                debug_assert!(self.try_consume_string(delimiter));
+            Some(TokenizerContext::StringlikeEnd { end }) => {
+                let end = *end;
+                debug_assert!(self.try_consume_string(end));
 
-                self.context_pop(TokenizerContext::StringishEnd { delimiter });
+                self.context_pop(TokenizerContext::StringlikeEnd { end });
 
-                return Some(match delimiter {
+                return Some(match end {
                     "`" => TOKEN_IDENTIFIER_END,
                     ">" => TOKEN_ISLAND_END,
                     _ => TOKEN_STRING_END,
@@ -239,15 +239,15 @@ impl<'a> Tokenizer<'a> {
             '#' => {
                 // ### or more gets multiline
                 if self.consume_while(|c| c == '#') >= 2 {
-                    let end_delimiter = self.consumed_since(start_offset);
+                    let end = self.consumed_since(start_offset);
 
-                    let Some(end_after) = self.remaining().find(end_delimiter) else {
+                    let Some(end_after) = self.remaining().find(end) else {
                         // Don't have to close it, it just eats the whole file up.
                         self.offset = self.input.len();
                         return Some(TOKEN_COMMENT);
                     };
 
-                    self.offset += end_after + end_delimiter.len();
+                    self.offset += end_after + end.len();
                 } else {
                     self.consume_while(|c| !matches!(c, '\r' | '\n'));
                 }
@@ -366,15 +366,15 @@ impl<'a> Tokenizer<'a> {
                 }
             },
 
-            delimiter @ ('`' | '"') => {
-                self.context_push(TokenizerContext::Stringish {
-                    delimiter: match delimiter {
+            start @ ('`' | '"') => {
+                self.context_push(TokenizerContext::Stringlike {
+                    end: match start {
                         '`' => "`",
                         _ => "\"",
                     },
                 });
 
-                match delimiter {
+                match start {
                     '`' => TOKEN_IDENTIFIER_START,
                     _ => TOKEN_STRING_START,
                 }
@@ -383,8 +383,8 @@ impl<'a> Tokenizer<'a> {
             '\'' => {
                 self.consume_while(|c| c == '\'');
 
-                self.context_push(TokenizerContext::Stringish {
-                    delimiter: self.consumed_since(start_offset),
+                self.context_push(TokenizerContext::Stringlike {
+                    end: self.consumed_since(start_offset),
                 });
 
                 TOKEN_STRING_START
@@ -413,7 +413,7 @@ impl<'a> Tokenizer<'a> {
                 c == '$' || is_valid_initial_identifier_character(c)
             }) =>
             {
-                self.context_push(TokenizerContext::Stringish { delimiter: ">" });
+                self.context_push(TokenizerContext::Stringlike { end: ">" });
 
                 TOKEN_ISLAND_START
             },
