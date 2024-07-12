@@ -84,7 +84,9 @@ impl Dump {
         let mut files = SimpleFiles::new();
         let file_id = files.add("todofixthis.cab", &contents);
 
-        let mut out = termcolor::StandardStream::stderr(if yansi::is_enabled() {
+        let mut out = io::BufWriter::new(io::stdout());
+
+        let err = termcolor::StandardStream::stderr(if yansi::is_enabled() {
             termcolor::ColorChoice::Always
         } else {
             termcolor::ColorChoice::Never
@@ -126,7 +128,7 @@ impl Dump {
                         )
                         .with_message(format!("{error}"))]);
 
-                    term::emit(&mut out.lock(), &error_config, &files, &diagnostic).ok();
+                    term::emit(&mut err.lock(), &error_config, &files, &diagnostic).ok();
                 }
 
                 if matches!(self, Self::Syntax) {
