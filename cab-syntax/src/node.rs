@@ -17,6 +17,19 @@ use crate::{
     Token,
 };
 
+/// A macro that allows you to match on a [`RowanNode`] efficiently.
+///
+/// The branches must all implement [`Node`] for this macro to work properly.
+///
+/// # Example
+///
+/// ```ignore
+/// match_node! { rowan_node =>
+///     IfElse:(if_else) => { todo!() },
+///     Identifier:(identifier) => { todo!() },
+///     _ => todo!(),
+/// }
+/// ```
 #[macro_export]
 macro_rules! match_node {
     ($raw:expr =>
