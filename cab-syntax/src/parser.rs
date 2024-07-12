@@ -44,7 +44,9 @@ macro_rules! EXPRESSION_TOKENS {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ParseError {
-    RecursionLimitExceeded,
+    RecursionLimitExceeded {
+        at: rowan::TextSize,
+    },
 
     Unexpected {
         got: Option<Kind>,
@@ -90,7 +92,7 @@ fn format_kindset(mut set: EnumSet<Kind>, formatter: &mut fmt::Formatter<'_>) ->
 impl fmt::Display for ParseError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::RecursionLimitExceeded => write!(formatter, "recursion limit exceeded"),
+            Self::RecursionLimitExceeded { .. } => write!(formatter, "recursion limit exceeded"),
 
             Self::Unexpected {
                 got: None,
@@ -138,7 +140,19 @@ impl Parse {
         RowanNode::new_root(self.node)
     }
 
-    pub fn errors(&self) -> &[ParseError] {
+    pub fn errors(&self) -> Box<dyn Iterator<Item = &ParseError> + '_> {
+        if self
+            .errors
+            .iter()
+            .any(|error| matches!(error, ParseError::RecursionLimitExceeded { .. }))
+        {
+            return Box::new(
+                self.errors
+                    .iter()
+                    .filter(|error| matches!(error, ParseError::RecursionLimitExceeded { .. })),
+            );
+        }
+
         let extra_error_count = self
             .errors
             .iter()
@@ -148,7 +162,11 @@ impl Parse {
             .count() as isize
             - 1;
 
-        &self.errors[0..self.errors.len() - extra_error_count.max(0) as usize]
+        Box::new(
+            self.errors
+                .iter()
+                .take(self.errors.len() - extra_error_count.max(0) as usize),
+        )
     }
 
     pub fn root(self) -> Root {
@@ -159,7 +177,7 @@ impl Parse {
         if self.errors.is_empty() {
             Ok(self.root())
         } else {
-            Err(self.errors().to_vec())
+            Err(self.errors().cloned().collect())
         }
     }
 }
@@ -493,11 +511,13 @@ impl<'a, I: Iterator<Item = TokenizerToken<'a>>> Parser<'a, I> {
 
     fn parse_expression_until(&mut self, until: EnumSet<Kind>) -> Result<(), ParseError> {
         if self.depth >= 512 {
+            let error = ParseError::RecursionLimitExceeded { at: self.offset };
+
             self.node(NODE_ERROR, |this| {
                 this.next_while(|_| true);
             });
 
-            return Err(ParseError::RecursionLimitExceeded);
+            return Err(error);
         }
 
         self.depth += 1;

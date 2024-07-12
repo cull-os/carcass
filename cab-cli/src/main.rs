@@ -120,10 +120,16 @@ impl Dump {
                         .with_message("syntax error")
                         .with_labels(vec![Label::primary(
                             file_id,
-                            if let ParseError::Unexpected { at, .. } = error {
-                                at.start().into()..at.end().into()
-                            } else {
-                                0..0
+                            match error {
+                                ParseError::Unexpected { at, .. } => {
+                                    at.start().into()..at.end().into()
+                                },
+
+                                ParseError::RecursionLimitExceeded { at } => {
+                                    let as_usize = Into::<u32>::into(*at) as usize;
+
+                                    as_usize..as_usize
+                                },
                             },
                         )
                         .with_message(format!("{error}"))]);
