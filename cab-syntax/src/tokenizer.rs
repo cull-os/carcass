@@ -174,7 +174,7 @@ impl<'a> Tokenizer<'a> {
 
             match self
                 .consume_character()
-                .expect("because EOF is handled by the if above")
+                .expect("because end of file is handled by the if above")
             {
                 '\\' => {
                     if self.consume_character().is_none() {

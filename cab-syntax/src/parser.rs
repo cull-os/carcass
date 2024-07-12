@@ -139,7 +139,15 @@ impl Parse {
     }
 
     pub fn errors(&self) -> &[ParseError] {
-        &self.errors
+        let end_of_file_error_count = self
+            .errors
+            .iter()
+            .rev()
+            .take_while(|error| matches!(error, ParseError::Unexpected { got: None, .. }))
+            .map(|error| log::trace!("found end of file error: {error}"))
+            .count();
+
+        &self.errors[0..=self.errors.len() - end_of_file_error_count]
     }
 
     pub fn root(self) -> Root {
@@ -150,7 +158,7 @@ impl Parse {
         if self.errors.is_empty() {
             Ok(self.root())
         } else {
-            Err(self.errors)
+            Err(self.errors().to_vec())
         }
     }
 }
