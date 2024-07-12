@@ -42,15 +42,27 @@ macro_rules! EXPRESSION_TOKENS {
     };
 }
 
+/// A parse error.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ParseError {
+    /// An error that happens when you nest expressions in too deep.
+    ///
+    /// No normal expression will ever hit this, but just in case.
     RecursionLimitExceeded {
+        /// The starting point of the expression that was too nested.
         at: rowan::TextSize,
     },
 
+    /// An error that happens when the parser was not expecting a particular
+    /// token.
     Unexpected {
+        /// The token that was not expected. This being [`None`] means that the
+        /// end of the file was reached.
         got: Option<Kind>,
+        /// The expected token. This being [`None`] means that the end of the
+        /// file was expected, but there were leftovers.
         expected: Option<EnumSet<Kind>>,
+        /// The range that contains the unexpected token sequence.
         at: rowan::TextRange,
     },
 }
@@ -129,6 +141,8 @@ impl fmt::Display for ParseError {
     }
 }
 
+/// A parse result that contains a [`rowan::GreenNode`] and a list of
+/// [`ParseError`]s.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Parse {
     node: rowan::GreenNode,
@@ -136,10 +150,13 @@ pub struct Parse {
 }
 
 impl Parse {
+    /// Creates a [`RowanNode`] from the underlying GreenNode.
     pub fn syntax(self) -> RowanNode {
         RowanNode::new_root(self.node)
     }
 
+    /// Returns an iterator over the underlying [`ParseError`]s, removing
+    /// duplicates and only returning useful errors.
     pub fn errors(&self) -> Box<dyn Iterator<Item = &ParseError> + '_> {
         if self
             .errors
@@ -169,10 +186,14 @@ impl Parse {
         )
     }
 
+    /// Creates a [`Root`] node from [`Self::syntax`].
     pub fn root(self) -> Root {
         Root::cast(self.syntax()).unwrap()
     }
 
+    /// Returns [`Ok`] with the [`Root`] node if there are no errors, returns
+    /// [`Err`] with the list of errors obtained from [`Self::errors`]
+    /// otherwise.
     pub fn result(self) -> Result<Root, Vec<ParseError>> {
         if self.errors.is_empty() {
             Ok(self.root())
@@ -182,6 +203,7 @@ impl Parse {
     }
 }
 
+/// Parses a string reference and returns a [`Parse`].
 pub fn parse(input: &str) -> Parse {
     let mut parser = Parser::new(tokenize(input));
 

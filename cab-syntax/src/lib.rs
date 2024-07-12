@@ -21,9 +21,9 @@ pub use tokenizer::{
     Token as TokenizerToken,
 };
 
-type RowanNode = rowan::SyntaxNode<Language>;
-type RowanToken = rowan::SyntaxToken<Language>;
-type RowanElement = rowan::NodeOrToken<RowanNode, RowanToken>;
+pub type RowanNode = rowan::SyntaxNode<Language>;
+pub type RowanToken = rowan::SyntaxToken<Language>;
+pub type RowanElement = rowan::NodeOrToken<RowanNode, RowanToken>;
 
 /// The Cab language type.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
