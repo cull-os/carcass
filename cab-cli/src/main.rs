@@ -16,7 +16,10 @@ use clap_verbosity_flag::{
 };
 // use codespan_reporting::files::SimpleFiles;
 use log::Level;
-use yansi::Paint;
+use yansi::{
+    Condition,
+    Paint,
+};
 
 #[derive(Parser)]
 #[command(name = "cab", version, about)]
@@ -111,6 +114,8 @@ impl Dump {
 #[tokio::main]
 async fn main() -> io::Result<()> {
     let cli = Cli::parse();
+
+    yansi::whenever(Condition::TTY_AND_COLOR);
 
     // Trying to imitate clap to get a consistent experience.
     env_logger::Builder::new()
