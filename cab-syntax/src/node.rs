@@ -620,23 +620,14 @@ impl Interpolation {
     get_token! { interpolation_end -> TOKEN_INTERPOLATION_END }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Display, Debug, Clone, PartialEq, Eq, Hash)]
 pub enum InterpolationPart<T> {
+    #[display(fmt = "{}", _0.text())]
+    Delimiter(RowanToken),
+    #[display(fmt = "{}", _0.text())]
     Content(T),
+    #[display(fmt = "{_0}")]
     Interpolation(Interpolation),
-}
-
-impl<T: Token> fmt::Display for InterpolationPart<T> {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            InterpolationPart::Content(path) => {
-                write!(formatter, "{text}", text = path.text())
-            },
-            InterpolationPart::Interpolation(interpolation) => {
-                write!(formatter, "{interpolation}")
-            },
-        }
-    }
 }
 
 macro_rules! parted {
@@ -649,13 +640,15 @@ macro_rules! parted {
                 self.children_with_tokens().map(|child| {
                     match child {
                         rowan::NodeOrToken::Token(token) => {
-                            debug_assert_eq!(token.kind(), $content_kind);
-
-                            InterpolationPart::Content(<$content_token>::cast(token).unwrap())
+                            if token.kind() == $content_kind {
+                                InterpolationPart::Content(<$content_token>::cast(token).unwrap())
+                            } else {
+                                InterpolationPart::Delimiter(token)
+                            }
                         },
 
                         rowan::NodeOrToken::Node(node) => {
-                            debug_assert_eq!(node.kind(), TOKEN_INTERPOLATION_START);
+                            debug_assert_eq!(node.kind(), NODE_INTERPOLATION);
 
                             InterpolationPart::Interpolation(
                                 Interpolation::cast(node.clone()).unwrap(),
@@ -668,18 +661,8 @@ macro_rules! parted {
 
         impl fmt::Display for $name {
             fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-                let first = self.children_tokens_untyped().next().unwrap();
-                if first.kind() != $content_kind {
-                    write!(formatter, "{text}", text = first.text())?;
-                }
-
                 for part in self.parts() {
                     write!(formatter, "{part}")?;
-                }
-
-                let last = self.children_tokens_untyped().last().unwrap();
-                if last.kind() != $content_kind {
-                    write!(formatter, "{text}", text = last.text())?;
                 }
 
                 Ok(())
@@ -700,19 +683,12 @@ parted! {
 
 node! { #[from(NODE_IDENTIFIER)] struct Identifier => |self, formatter| write!(formatter, "{value}", value = self.value()) }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Display, Debug, Clone, PartialEq, Eq, Hash)]
 pub enum IdentifierValue {
+    #[display(fmt = "{}", _0.text())]
     Simple(token::Identifier),
+    #[display(fmt = "{_0}")]
     Complex(IdentifierComplex),
-}
-
-impl fmt::Display for IdentifierValue {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Simple(simple) => write!(formatter, "{text}", text = simple.text()),
-            Self::Complex(complex) => write!(formatter, "{complex}"),
-        }
-    }
 }
 
 node! { #[from(NODE_IDENTIFIER)] struct IdentifierComplex; }
@@ -760,19 +736,12 @@ parted! {
 
 node! { #[from(NODE_NUMBER)] struct Number => |self, formatter| write!(formatter, "{value}", value = self.value()) }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Display, Debug, Clone, PartialEq, Eq, Hash)]
 pub enum NumberValue {
+    #[display(fmt = "{}", _0.value())]
     Integer(token::Integer),
+    #[display(fmt = "{}", _0.value())]
     Float(token::Float),
-}
-
-impl fmt::Display for NumberValue {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Integer(integer) => write!(formatter, "{value}", value = integer.value()),
-            Self::Float(float) => write!(formatter, "{value}", value = float.value()),
-        }
-    }
 }
 
 impl Number {
