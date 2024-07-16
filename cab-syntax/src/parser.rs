@@ -73,10 +73,10 @@ impl fmt::Display for ParseError {
             mut set: EnumSet<Kind>,
             formatter: &mut fmt::Formatter<'_>,
         ) -> fmt::Result {
-            if set & EXPRESSION_TOKENS == EXPRESSION_TOKENS {
+            if set.is_superset(EXPRESSION_TOKENS) {
                 write!(formatter, "an expression")?;
 
-                set = set.difference(EXPRESSION_TOKENS);
+                set.remove_all(EXPRESSION_TOKENS);
 
                 match set.iter().count() {
                     0 => {},
@@ -85,8 +85,8 @@ impl fmt::Display for ParseError {
                 }
             }
 
-            if set.contains(TOKEN_IDENTIFIER) && set.contains(TOKEN_IDENTIFIER_START) {
-                set &= !TOKEN_IDENTIFIER_START
+            if set.is_superset(TOKEN_IDENTIFIER | TOKEN_IDENTIFIER_START) {
+                set.remove(TOKEN_IDENTIFIER_START);
             }
 
             let mut iterator = set.iter().peekmore();
