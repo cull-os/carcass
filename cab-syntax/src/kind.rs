@@ -242,11 +242,6 @@ impl From<Kind> for rowan::SyntaxKind {
 }
 
 impl Kind {
-    /// Whether if this token is a literal, such as a float or integer.
-    pub fn is_literal(self) -> bool {
-        matches!(self, TOKEN_INTEGER | TOKEN_FLOAT)
-    }
-
     /// Whether if this token can be used as a function argument.
     ///
     /// ```txt
@@ -254,17 +249,19 @@ impl Kind {
     ///     t  t    f
     /// ```
     pub fn is_argument(self) -> bool {
-        match self {
+        matches!(
+            self,
             TOKEN_LEFT_PARENTHESIS
-            | TOKEN_LEFT_BRACKET
-            | TOKEN_LEFT_CURLYBRACE
-            | TOKEN_PATH
-            | TOKEN_IDENTIFIER
-            | TOKEN_IDENTIFIER_START
-            | TOKEN_STRING_START
-            | TOKEN_ISLAND_START => true,
-            _ => self.is_literal(),
-        }
+                | TOKEN_LEFT_BRACKET
+                | TOKEN_LEFT_CURLYBRACE
+                | TOKEN_INTEGER
+                | TOKEN_FLOAT
+                | TOKEN_PATH
+                | TOKEN_IDENTIFIER
+                | TOKEN_IDENTIFIER_START
+                | TOKEN_STRING_START
+                | TOKEN_ISLAND_START
+        )
     }
 
     /// Whether if the token should be ignored by the parser.
