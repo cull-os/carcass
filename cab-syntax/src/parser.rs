@@ -73,6 +73,14 @@ impl fmt::Display for ParseError {
             Self::RecursionLimitExceeded { .. } => write!(formatter, "recursion limit exceeded"),
 
             Self::Unexpected {
+                got: Some(got),
+                expected: None,
+                ..
+            } => {
+                write!(formatter, "expected end of file, got {got}")
+            },
+
+            Self::Unexpected {
                 got,
                 expected: Some(mut expected),
                 ..
@@ -114,14 +122,6 @@ impl fmt::Display for ParseError {
                 } else {
                     write!(formatter, ", reached end of file")
                 }
-            },
-
-            Self::Unexpected {
-                got: Some(got),
-                expected: None,
-                ..
-            } => {
-                write!(formatter, "expected end of file, got {got}")
             },
 
             other => unreachable!("unhandled ParseError format: {other:?}"),
