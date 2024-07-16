@@ -568,6 +568,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
                 });
             },
 
+            // TODO: Peek and do lambda parameter parsing.
             Some(TOKEN_LEFT_CURLYBRACE) => {
                 self.node_failable_from(checkpoint, NODE_ATTRIBUTE_SET, |this| {
                     while this.peek_nontrivia_expecting(
