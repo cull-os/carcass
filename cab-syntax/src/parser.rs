@@ -66,42 +66,45 @@ pub enum ParseError {
     },
 }
 
-fn format_kindset(mut set: EnumSet<Kind>, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-    if set & EXPRESSION_TOKENS!() == EXPRESSION_TOKENS!() {
-        write!(formatter, "an expression")?;
-
-        set = set.difference(EXPRESSION_TOKENS!());
-
-        match set.iter().count() {
-            0 => {},
-            1 => write!(formatter, " or ")?,
-            2.. => write!(formatter, ", ")?,
-        }
-    }
-
-    if set.contains(TOKEN_IDENTIFIER) && set.contains(TOKEN_IDENTIFIER_START) {
-        set &= !TOKEN_IDENTIFIER_START
-    }
-
-    let mut iterator = set.iter().peekmore();
-    while let Some(item) = iterator.next() {
-        write!(
-            formatter,
-            "{item}{seperator}",
-            seperator = match (iterator.peek().is_some(), iterator.peek_nth(1).is_some()) {
-                (false, false) => "",
-                (true, false) => " or ",
-                (true, true) => ", ",
-                _ => unreachable!(),
-            }
-        )?;
-    }
-
-    Ok(())
-}
-
 impl fmt::Display for ParseError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fn format_enumset(
+            mut set: EnumSet<Kind>,
+            formatter: &mut fmt::Formatter<'_>,
+        ) -> fmt::Result {
+            if set & EXPRESSION_TOKENS!() == EXPRESSION_TOKENS!() {
+                write!(formatter, "an expression")?;
+
+                set = set.difference(EXPRESSION_TOKENS!());
+
+                match set.iter().count() {
+                    0 => {},
+                    1 => write!(formatter, " or ")?,
+                    2.. => write!(formatter, ", ")?,
+                }
+            }
+
+            if set.contains(TOKEN_IDENTIFIER) && set.contains(TOKEN_IDENTIFIER_START) {
+                set &= !TOKEN_IDENTIFIER_START
+            }
+
+            let mut iterator = set.iter().peekmore();
+            while let Some(item) = iterator.next() {
+                write!(
+                    formatter,
+                    "{item}{seperator}",
+                    seperator = match (iterator.peek().is_some(), iterator.peek_nth(1).is_some()) {
+                        (false, false) => "",
+                        (true, false) => " or ",
+                        (true, true) => ", ",
+                        _ => unreachable!(),
+                    }
+                )?;
+            }
+
+            Ok(())
+        }
+
         match self {
             Self::RecursionLimitExceeded { .. } => write!(formatter, "recursion limit exceeded"),
 
@@ -113,7 +116,7 @@ impl fmt::Display for ParseError {
                 assert_eq!(at.start(), at.end());
 
                 write!(formatter, "expected ")?;
-                format_kindset(*expected, formatter)?;
+                format_enumset(*expected, formatter)?;
                 write!(formatter, ", reached end of file")
             },
 
@@ -131,7 +134,7 @@ impl fmt::Display for ParseError {
                 ..
             } => {
                 write!(formatter, "expected ")?;
-                format_kindset(*expected, formatter)?;
+                format_enumset(*expected, formatter)?;
                 write!(formatter, ", got {got}")
             },
 
