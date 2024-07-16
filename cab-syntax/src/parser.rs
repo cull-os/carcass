@@ -30,79 +30,6 @@ use crate::{
     RowanNode,
 };
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum ExpectMust {
-    Found(Kind),
-    ReachedBound,
-    ReachedEndOfFile,
-}
-
-impl FromResidual for ExpectMust {
-    fn from_residual(residual: <Self as Try>::Residual) -> Self {
-        match residual {
-            Expect::Found(found) => Self::Found(found),
-            Expect::ReachedBound => Self::ReachedBound,
-            Expect::ReachedEndOfFile => Self::ReachedEndOfFile,
-        }
-    }
-}
-
-impl Try for ExpectMust {
-    type Output = Kind;
-    type Residual = Expect;
-
-    fn from_output(output: Self::Output) -> Self {
-        Self::Found(output)
-    }
-
-    fn branch(self) -> ControlFlow<Self::Residual, Self::Output> {
-        match self {
-            Self::Found(found) => ControlFlow::Continue(found),
-            Self::ReachedBound => ControlFlow::Break(Expect::ReachedBound),
-            Self::ReachedEndOfFile => ControlFlow::Break(Expect::ReachedEndOfFile),
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum Expect {
-    Found(Kind),
-    ReachedBound,
-    ReachedEndOfFile,
-}
-
-impl FromResidual for Expect {
-    fn from_residual(residual: <Self as Try>::Residual) -> Self {
-        residual
-    }
-}
-
-impl Try for Expect {
-    type Output = Option<Kind>;
-    type Residual = Self;
-
-    fn from_output(output: Self::Output) -> Self {
-        match output {
-            Some(found) => Self::Found(found),
-            None => Self::ReachedBound,
-        }
-    }
-
-    fn branch(self) -> ControlFlow<Self::Residual, Self::Output> {
-        match self {
-            Self::Found(found) => ControlFlow::Continue(Some(found)),
-            Self::ReachedBound => ControlFlow::Continue(None),
-            Self::ReachedEndOfFile => ControlFlow::Break(Self::ReachedEndOfFile),
-        }
-    }
-}
-
-impl Expect {
-    fn must(self) -> ExpectMust {
-        ExpectMust::from_residual(self)
-    }
-}
-
 const EXPRESSION_TOKENS: EnumSet<Kind> = enum_set!(
     TOKEN_LEFT_PARENTHESIS
         | TOKEN_LEFT_BRACKET
@@ -139,7 +66,7 @@ pub enum ParseError {
         got: Option<Kind>,
         /// The expected token. This being [`None`] means that the end of the
         /// file was expected, but there were leftovers.
-        expected: Option<EnumSet<Kind>>,
+        expected: EnumSet<Kind>,
         /// The range that contains the unexpected token sequence.
         at: rowan::TextRange,
     },
@@ -152,7 +79,7 @@ impl fmt::Display for ParseError {
 
             Self::Unexpected {
                 got: Some(got),
-                expected: None,
+                expected: EnumSet::EMPTY,
                 ..
             } => {
                 write!(formatter, "expected end of file, got {got}")
@@ -160,7 +87,7 @@ impl fmt::Display for ParseError {
 
             Self::Unexpected {
                 got,
-                expected: Some(mut expected),
+                expected: mut expected,
                 ..
             } => {
                 write!(formatter, "expected ")?;
@@ -201,8 +128,6 @@ impl fmt::Display for ParseError {
                     write!(formatter, ", reached end of file")
                 }
             },
-
-            other => unreachable!("unhandled parse error format: {other:?}"),
         }
     }
 }
@@ -285,7 +210,7 @@ pub fn parse(input: &str) -> Parse {
             this.errors.push(error);
         }
 
-        if let Some(got) = this.peek_nontrivia() {
+        if let Some(got) = this.peek_direct() {
             log::trace!("leftovers encountered: {got:?}");
 
             let start = this.offset;
@@ -296,7 +221,7 @@ pub fn parse(input: &str) -> Parse {
 
             this.errors.push(ParseError::Unexpected {
                 got: Some(got),
-                expected: None,
+                expected: EnumSet::EMPTY,
                 at: rowan::TextRange::new(start, this.offset),
             });
         }
@@ -331,20 +256,20 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
         }
     }
 
-    fn peek(&mut self) -> Option<Kind> {
+    fn peek_direct(&mut self) -> Option<Kind> {
         self.tokens.peek().map(|&(kind, _)| kind)
     }
 
-    fn peek_nontrivia(&mut self) -> Option<Kind> {
+    fn peek(&mut self) -> Option<Kind> {
         self.next_while(Kind::is_trivia);
-        self.peek()
+        self.peek_direct()
     }
 
-    fn peek_nontrivia_expecting(&mut self, expected: EnumSet<Kind>) -> Result<Kind, ParseError> {
-        self.peek_nontrivia().ok_or_else(|| {
+    fn peek_expecting(&mut self, expected: EnumSet<Kind>) -> Result<Kind, ParseError> {
+        self.peek_direct().ok_or_else(|| {
             ParseError::Unexpected {
                 got: None,
-                expected: Some(expected),
+                expected,
                 at: rowan::TextRange::empty(self.offset),
             }
         })
@@ -361,20 +286,14 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
             .ok_or_else(|| {
                 ParseError::Unexpected {
                     got: None,
-                    expected: None,
+                    expected: EnumSet::EMPTY,
                     at: rowan::TextRange::empty(self.offset),
                 }
             })
     }
 
-    #[allow(unused)]
-    fn next_nontrivia(&mut self) -> Result<Kind, ParseError> {
-        self.next_while_trivia();
-        self.next()
-    }
-
     fn next_while(&mut self, predicate: impl Fn(Kind) -> bool) {
-        while self.peek().map_or(false, &predicate) {
+        while self.peek_direct().map_or(false, &predicate) {
             self.next().unwrap();
         }
     }
@@ -395,7 +314,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
     ) -> Result<Option<Kind>, ParseError> {
         let checkpoint = self.checkpoint();
 
-        match self.peek_nontrivia() {
+        match self.peek_direct() {
             Some(next) if expected.contains(next) => Ok(Some(self.next().unwrap())),
 
             Some(got) => {
@@ -407,18 +326,18 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
 
                 let error = ParseError::Unexpected {
                     got: Some(got),
-                    expected: Some(expected),
+                    expected,
                     at: rowan::TextRange::new(start, self.offset),
                 };
 
                 if self
-                    .peek_nontrivia()
+                    .peek_direct()
                     .map_or(false, |kind| expected.contains(kind))
                 {
                     log::trace!("found expected kind");
                     self.errors.push(error);
                     Ok(Some(self.next().unwrap()))
-                } else if let Some(peek) = self.peek() {
+                } else if let Some(peek) = self.peek_direct() {
                     log::trace!("reached expect bound, not consuming {peek:?}",);
                     self.errors.push(error);
                     Ok(None)
@@ -431,7 +350,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
             None => {
                 Err(ParseError::Unexpected {
                     got: None,
-                    expected: Some(expected),
+                    expected,
                     at: rowan::TextRange::empty(self.offset),
                 })
             },
@@ -555,17 +474,14 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
         // an equals, this is a NODE_ATTRIBUTE.
         self.parse_identifier_until(until | TOKEN_EQUAL | TOKEN_SEMICOLON | TOKEN_RIGHT_CURLYBRACE);
 
-        if self.peek_nontrivia_expecting(TOKEN_SEMICOLON | TOKEN_PERIOD | TOKEN_EQUAL)?
-            == TOKEN_SEMICOLON
-        {
+        if self.peek_expecting(TOKEN_SEMICOLON | TOKEN_PERIOD | TOKEN_EQUAL)? == TOKEN_SEMICOLON {
             self.node_from(checkpoint, NODE_ATTRIBUTE_INHERIT, |this| {
                 this.next().unwrap();
             });
         } else {
             self.node_failable_from(checkpoint, NODE_ATTRIBUTE, |this| {
                 this.node_failable_from(checkpoint, NODE_ATTRIBUTE_PATH, |this| {
-                    while this.peek_nontrivia_expecting(TOKEN_PERIOD | TOKEN_EQUAL)? == TOKEN_PERIOD
-                    {
+                    while this.peek_expecting(TOKEN_PERIOD | TOKEN_EQUAL)? == TOKEN_PERIOD {
                         this.next().unwrap();
                         this.parse_identifier_until(
                             until | TOKEN_EQUAL | TOKEN_SEMICOLON | TOKEN_RIGHT_CURLYBRACE,
@@ -620,8 +536,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
             Some(TOKEN_LEFT_BRACKET) => {
                 self.node_failable_from(checkpoint, NODE_LIST, |this| {
                     while {
-                        let peek =
-                            this.peek_nontrivia_expecting(TOKEN_RIGHT_BRACKET | EXPRESSION_TOKENS)?;
+                        let peek = this.peek_expecting(TOKEN_RIGHT_BRACKET | EXPRESSION_TOKENS)?;
                         !until.contains(peek) && peek != TOKEN_RIGHT_BRACKET
                     } {
                         // TODO: Seperate expression parsing logic into two functions
@@ -638,7 +553,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
             // TODO: Peek and do lambda parameter parsing.
             Some(TOKEN_LEFT_CURLYBRACE) => {
                 self.node_failable_from(checkpoint, NODE_ATTRIBUTE_SET, |this| {
-                    while this.peek_nontrivia_expecting(
+                    while this.peek_expecting(
                         TOKEN_RIGHT_CURLYBRACE | TOKEN_IDENTIFIER | TOKEN_IDENTIFIER_START,
                     )? != TOKEN_RIGHT_CURLYBRACE
                     {
@@ -660,7 +575,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
             Some(TOKEN_PATH) => {
                 self.node_failable_from(checkpoint, NODE_PATH, |this| {
                     loop {
-                        let peek = this.peek_nontrivia();
+                        let peek = this.peek_direct();
 
                         if peek == Some(TOKEN_INTERPOLATION_START) {
                             this.parse_interpolation()?;
@@ -681,7 +596,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
                     self.parse_stringlike_inner(TOKEN_IDENTIFIER_END)
                 };
 
-                if self.peek_nontrivia() == Some(TOKEN_COLON) {
+                if self.peek_direct() == Some(TOKEN_COLON) {
                     self.node_failable_from(checkpoint, NODE_LAMBDA, |this| {
                         this.node_from(checkpoint, NODE_LAMBDA_PARAMETER_IDENTIFIER, |this| {
                             this.node_from(checkpoint, NODE_IDENTIFIER, |_| {});
@@ -721,7 +636,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
                     this.expect_until(TOKEN_LITERAL_THEN.into(), until)?;
                     this.parse_expression_until(until | TOKEN_LITERAL_ELSE)?;
 
-                    if this.peek_nontrivia() == Some(TOKEN_LITERAL_ELSE) {
+                    if this.peek_direct() == Some(TOKEN_LITERAL_ELSE) {
                         this.next().unwrap();
                         this.parse_expression_until(until)?;
                     }
