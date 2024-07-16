@@ -607,7 +607,13 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
                 });
             },
 
-            Some(TOKEN_IDENTIFIER) => {
+            Some(start @ (TOKEN_IDENTIFIER | TOKEN_IDENTIFIER_START)) => {
+                let identifier_parse_result = if start == TOKEN_IDENTIFIER {
+                    Ok(())
+                } else {
+                    self.parse_stringlike_inner(TOKEN_IDENTIFIER_END)
+                };
+
                 if self.peek_nontrivia() == Some(TOKEN_COLON) {
                     self.node_failable_from(checkpoint, NODE_LAMBDA, |this| {
                         this.node_from(checkpoint, NODE_LAMBDA_PARAMETER_IDENTIFIER, |this| {
@@ -619,32 +625,8 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
                         this.parse_expression_until(until)
                     });
                 } else {
-                    self.node_from(checkpoint, NODE_IDENTIFIER, |_| {});
-                }
-            },
-
-            Some(TOKEN_IDENTIFIER_START) => {
-                let result = self.parse_stringlike_inner(TOKEN_IDENTIFIER_END);
-
-                if self.peek_nontrivia() == Some(TOKEN_COLON) {
-                    self.node_failable_from(checkpoint, NODE_LAMBDA, |this| {
-                        this.node_failable_from(
-                            checkpoint,
-                            NODE_LAMBDA_PARAMETER_IDENTIFIER,
-                            |this| {
-                                result?;
-                                this.node_from(checkpoint, NODE_IDENTIFIER, |_| {});
-                                Ok(())
-                            },
-                        );
-
-                        this.next().unwrap();
-
-                        this.parse_expression_until(until)
-                    });
-                } else {
                     self.node_failable_from(checkpoint, NODE_IDENTIFIER, |_| {
-                        result?;
+                        identifier_parse_result?;
                         Ok(())
                     });
                 }
