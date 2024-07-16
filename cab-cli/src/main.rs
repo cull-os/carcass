@@ -75,14 +75,14 @@ enum Dump {
 
 impl Dump {
     fn run(self, file: FileOrStdin) {
+        let name = file.filename().to_owned();
         let contents = file.contents().unwrap_or_else(|error| {
             log::error!("failed to read file: {error}");
             process::exit(1);
         });
 
-        // TODO: https://github.com/thepacketgeek/clap-stdin/issues/2#issuecomment-2225371594
         let mut files = SimpleFiles::new();
-        let file_id = files.add("todofixthis.cab", &contents);
+        let file_id = files.add(name, &contents);
 
         let mut out = io::BufWriter::new(io::stdout());
 
