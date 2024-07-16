@@ -5,7 +5,7 @@ use std::{
 };
 
 use enumset::EnumSet;
-use multipeek::multipeek;
+use peekmore::PeekMore;
 use rowan::{
     ast::AstNode as _,
     Language as _,
@@ -83,7 +83,7 @@ fn format_kindset(mut set: EnumSet<Kind>, formatter: &mut fmt::Formatter<'_>) ->
         set &= !TOKEN_IDENTIFIER_START
     }
 
-    let mut iterator = multipeek(set.iter());
+    let mut iterator = set.iter().peekmore();
     while let Some(item) = iterator.next() {
         write!(
             formatter,

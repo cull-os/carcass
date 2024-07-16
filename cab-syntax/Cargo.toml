@@ -4,12 +4,12 @@ version = "0.0.1"
 edition = "2021"
 
 [dependencies]
-derive_more        = "0.99.18"
-enumset            = "1.1.3"
-log                = "0.4.21"
-multipeek          = "0.1.2"
-num_enum           = "0.7.2"
-rowan              = "0.15.15"
+derive_more = "0.99.18"
+enumset     = "1.1.3"
+log         = "0.4.21"
+num_enum    = "0.7.2"
+peekmore    = { version = "1.3.0", features = ["smallvec"] }
+rowan       = "0.15.15"
 
 [dependencies.yansi]
 version = "1.0.1"
