@@ -1,6 +1,9 @@
 use std::{
     fmt,
-    ops::Deref,
+    ops::{
+        Deref,
+        Not,
+    },
 };
 
 use derive_more::Display;
@@ -650,22 +653,26 @@ macro_rules! parted {
     ) => {
         impl $name {
             pub fn parts(&self) -> impl Iterator<Item = InterpolationPart<$content_token>> {
-                self.children_with_tokens().map(|child| {
+                self.children_with_tokens().filter_map(|child| {
                     match child {
                         rowan::NodeOrToken::Token(token) => {
-                            if token.kind() == $content_kind {
-                                InterpolationPart::Content(<$content_token>::cast(token).unwrap())
-                            } else {
-                                InterpolationPart::Delimiter(token)
-                            }
+                            token.kind().is_trivia().not().then(|| {
+                                if token.kind() == $content_kind {
+                                    InterpolationPart::Content(
+                                        <$content_token>::cast(token).unwrap(),
+                                    )
+                                } else {
+                                    InterpolationPart::Delimiter(token)
+                                }
+                            })
                         },
 
                         rowan::NodeOrToken::Node(node) => {
                             debug_assert_eq!(node.kind(), NODE_INTERPOLATION);
 
-                            InterpolationPart::Interpolation(
+                            Some(InterpolationPart::Interpolation(
                                 Interpolation::cast(node.clone()).unwrap(),
-                            )
+                            ))
                         },
                     }
                 })
