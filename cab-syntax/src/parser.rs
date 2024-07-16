@@ -30,6 +30,88 @@ use crate::{
     RowanNode,
 };
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum ExpectMust {
+    Found(Kind),
+    Deadly(ParseError),
+}
+
+impl FromResidual for ExpectMust {
+    fn from_residual(residual: <Self as Try>::Residual) -> Self {
+        match residual {
+            Expect::Found(found) => Self::Found(found),
+            Expect::Recoverable(error) | Expect::Deadly(error) => Self::Deadly(error),
+        }
+    }
+}
+
+impl Try for ExpectMust {
+    type Output = Kind;
+    type Residual = Expect;
+
+    fn from_output(output: Self::Output) -> Self {
+        Self::Found(output)
+    }
+
+    fn branch(self) -> ControlFlow<Self::Residual, Self::Output> {
+        match self {
+            Self::Found(found) => ControlFlow::Continue(found),
+            Self::Deadly(error) => ControlFlow::Break(Expect::from_output(Err(error))),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Expect {
+    Found(Kind),
+    Recoverable(ParseError),
+    Deadly(ParseError),
+}
+
+impl FromResidual for Expect {
+    fn from_residual(residual: <Self as Try>::Residual) -> Self {
+        residual
+    }
+}
+
+impl Try for Expect {
+    type Output = Result<Kind, ParseError>;
+    type Residual = Self;
+
+    fn from_output(output: Self::Output) -> Self {
+        match output {
+            Ok(found) => Self::Found(found),
+
+            Err(
+                error @ ParseError::Unexpected {
+                    got: Some(_),
+                    expected,
+                    ..
+                },
+            ) if expected.is_empty() => Self::Recoverable(error),
+
+            Err(error) => Self::Deadly(error),
+        }
+    }
+
+    fn branch(self) -> ControlFlow<Self::Residual, Self::Output> {
+        match self {
+            Self::Found(found) => ControlFlow::Continue(Ok(found)),
+            Self::Recoverable(error) => ControlFlow::Continue(Err(error)),
+            _ => ControlFlow::Break(self),
+        }
+    }
+}
+
+impl Expect {
+    fn must(self) -> ExpectMust {
+        match self {
+            Self::Found(found) => ExpectMust::Found(found),
+            Self::Recoverable(error) | Self::Deadly(error) => ExpectMust::Deadly(error),
+        }
+    }
+}
+
 const EXPRESSION_TOKENS: EnumSet<Kind> = enum_set!(
     TOKEN_LEFT_PARENTHESIS
         | TOKEN_LEFT_BRACKET
