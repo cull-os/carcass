@@ -122,9 +122,9 @@ pub enum Kind {
     #[display(fmt = "the keyword 'not'")]
     TOKEN_LITERAL_NOT,
 
-    #[display(fmt = "${{")]
+    #[display(fmt = "'${{'")]
     TOKEN_INTERPOLATION_START,
-    #[display(fmt = "}}")]
+    #[display(fmt = "'}}'")]
     TOKEN_INTERPOLATION_END,
 
     /// A path. Valid paths start with `./`, `..` or `/`, followed by
