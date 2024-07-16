@@ -139,8 +139,10 @@ impl Dump {
 
                 if matches!(self, Self::Syntax) {
                     write!(out, "{syntax:#?}", syntax = parse.syntax())
+                } else if let Ok(root) = parse.result() {
+                    write!(out, "{root}")
                 } else {
-                    write!(out, "{root}", root = parse.root())
+                    Ok(())
                 }
                 .unwrap_or_else(|error| {
                     log::error!("failed to write to stdout: {error}");
