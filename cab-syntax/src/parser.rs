@@ -168,9 +168,7 @@ impl fmt::Display for ParseError {
             },
 
             Self::Unexpected {
-                got,
-                expected: mut expected,
-                ..
+                got, mut expected, ..
             } => {
                 write!(formatter, "expected ")?;
 
@@ -292,7 +290,7 @@ pub fn parse(input: &str) -> Parse {
             this.errors.push(error);
         }
 
-        if let Some(got) = this.peek_direct() {
+        if let Some(got) = this.peek() {
             log::trace!("leftovers encountered: {got:?}");
 
             let start = this.offset;
@@ -343,12 +341,12 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
     }
 
     fn peek(&mut self) -> Option<Kind> {
-        self.next_while(Kind::is_trivia);
+        self.next_while_trivia();
         self.peek_direct()
     }
 
     fn peek_expecting(&mut self, expected: EnumSet<Kind>) -> Result<Kind, ParseError> {
-        self.peek_direct().ok_or_else(|| {
+        self.peek().ok_or_else(|| {
             ParseError::Unexpected {
                 got: None,
                 expected,
@@ -375,7 +373,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
     }
 
     fn next_while(&mut self, predicate: impl Fn(Kind) -> bool) {
-        while self.peek_direct().map_or(false, &predicate) {
+        while self.peek().map_or(false, &predicate) {
             self.next().unwrap();
         }
     }
@@ -396,7 +394,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
     ) -> Result<Option<Kind>, ParseError> {
         let checkpoint = self.checkpoint();
 
-        match self.peek_direct() {
+        match self.peek() {
             Some(next) if expected.contains(next) => Ok(Some(self.next().unwrap())),
 
             Some(got) => {
@@ -412,14 +410,11 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
                     at: rowan::TextRange::new(start, self.offset),
                 };
 
-                if self
-                    .peek_direct()
-                    .map_or(false, |kind| expected.contains(kind))
-                {
+                if self.peek().map_or(false, |kind| expected.contains(kind)) {
                     log::trace!("found expected kind");
                     self.errors.push(error);
                     Ok(Some(self.next().unwrap()))
-                } else if let Some(peek) = self.peek_direct() {
+                } else if let Some(peek) = self.peek() {
                     log::trace!("reached expect bound, not consuming {peek:?}",);
                     self.errors.push(error);
                     Ok(None)
@@ -657,7 +652,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
             Some(TOKEN_PATH) => {
                 self.node_failable_from(checkpoint, NODE_PATH, |this| {
                     loop {
-                        let peek = this.peek_direct();
+                        let peek = this.peek();
 
                         if peek == Some(TOKEN_INTERPOLATION_START) {
                             this.parse_interpolation()?;
@@ -678,7 +673,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
                     self.parse_stringlike_inner(TOKEN_IDENTIFIER_END)
                 };
 
-                if self.peek_direct() == Some(TOKEN_COLON) {
+                if self.peek() == Some(TOKEN_COLON) {
                     self.node_failable_from(checkpoint, NODE_LAMBDA, |this| {
                         this.node_from(checkpoint, NODE_LAMBDA_PARAMETER_IDENTIFIER, |this| {
                             this.node_from(checkpoint, NODE_IDENTIFIER, |_| {});
@@ -718,7 +713,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
                     this.expect_until(TOKEN_LITERAL_THEN.into(), until)?;
                     this.parse_expression_until(until | TOKEN_LITERAL_ELSE)?;
 
-                    if this.peek_direct() == Some(TOKEN_LITERAL_ELSE) {
+                    if this.peek() == Some(TOKEN_LITERAL_ELSE) {
                         this.next().unwrap();
                         this.parse_expression_until(until)?;
                     }
