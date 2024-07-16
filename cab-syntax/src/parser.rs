@@ -69,56 +69,51 @@ pub enum ParseError {
 
 impl fmt::Display for ParseError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fn format_enumset(
-            mut set: EnumSet<Kind>,
-            formatter: &mut fmt::Formatter<'_>,
-        ) -> fmt::Result {
-            if set.is_superset(EXPRESSION_TOKENS) {
-                write!(formatter, "an expression")?;
-
-                set.remove_all(EXPRESSION_TOKENS);
-
-                match set.iter().count() {
-                    0 => {},
-                    1 => write!(formatter, " or ")?,
-                    2.. => write!(formatter, ", ")?,
-                }
-            }
-
-            if set.is_superset(TOKEN_IDENTIFIER | TOKEN_IDENTIFIER_START) {
-                set.remove(TOKEN_IDENTIFIER_START);
-            }
-
-            let mut iterator = set.iter().peekmore();
-            while let Some(item) = iterator.next() {
-                write!(
-                    formatter,
-                    "{item}{seperator}",
-                    seperator = match (iterator.peek().is_some(), iterator.peek_nth(1).is_some()) {
-                        (false, false) => "",
-                        (true, false) => " or ",
-                        (true, true) => ", ",
-                        _ => unreachable!(),
-                    }
-                )?;
-            }
-
-            Ok(())
-        }
-
         match self {
             Self::RecursionLimitExceeded { .. } => write!(formatter, "recursion limit exceeded"),
 
             Self::Unexpected {
-                got: None,
-                expected: Some(expected),
-                at,
+                got,
+                expected: Some(mut expected),
+                ..
             } => {
-                assert_eq!(at.start(), at.end());
-
                 write!(formatter, "expected ")?;
-                format_enumset(*expected, formatter)?;
-                write!(formatter, ", reached end of file")
+
+                if expected.is_superset(EXPRESSION_TOKENS) {
+                    expected.remove_all(EXPRESSION_TOKENS);
+                    write!(formatter, "an expression")?;
+
+                    match expected.iter().count() {
+                        0 => {},
+                        1 => write!(formatter, " or ")?,
+                        2.. => write!(formatter, ", ")?,
+                    }
+                }
+
+                if expected.is_superset(TOKEN_IDENTIFIER | TOKEN_IDENTIFIER_START) {
+                    expected.remove(TOKEN_IDENTIFIER_START);
+                }
+
+                let mut iterator = expected.iter().peekmore();
+                while let Some(item) = iterator.next() {
+                    write!(
+                        formatter,
+                        "{item}{seperator}",
+                        seperator =
+                            match (iterator.peek().is_some(), iterator.peek_nth(1).is_some()) {
+                                (false, false) => "",
+                                (true, false) => " or ",
+                                (true, true) => ", ",
+                                _ => unreachable!(),
+                            }
+                    )?;
+                }
+
+                if let Some(got) = got {
+                    write!(formatter, ", got {got}")
+                } else {
+                    write!(formatter, ", reached end of file")
+                }
             },
 
             Self::Unexpected {
@@ -127,16 +122,6 @@ impl fmt::Display for ParseError {
                 ..
             } => {
                 write!(formatter, "expected end of file, got {got}")
-            },
-
-            Self::Unexpected {
-                got: Some(got),
-                expected: Some(expected),
-                ..
-            } => {
-                write!(formatter, "expected ")?;
-                format_enumset(*expected, formatter)?;
-                write!(formatter, ", got {got}")
             },
 
             other => unreachable!("unhandled ParseError format: {other:?}"),
