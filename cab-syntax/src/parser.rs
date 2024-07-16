@@ -210,7 +210,7 @@ pub fn parse(input: &str) -> Parse {
         let checkpoint = this.checkpoint();
 
         // Reached an unrecoverable error.
-        if let Err(error) = this.parse_expression() {
+        if let Err(error) = this.parse_expression_until(EnumSet::EMPTY) {
             log::trace!("unrecoverable error encountered: {error:?}");
 
             this.node_from(checkpoint, NODE_ERROR, |_| {});
@@ -520,14 +520,10 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
     fn parse_interpolation(&mut self) -> Result<(), ParseError> {
         self.node(NODE_INTERPOLATION, |this| {
             this.expect(TOKEN_INTERPOLATION_START.into())?;
-            this.parse_expression()?;
+            this.parse_expression_until(TOKEN_RIGHT_CURLYBRACE.into())?;
             this.expect(TOKEN_INTERPOLATION_END.into())?;
             Ok(())
         })
-    }
-
-    fn parse_expression(&mut self) -> Result<(), ParseError> {
-        self.parse_expression_until(EnumSet::EMPTY)
     }
 
     fn parse_expression_until(&mut self, until: EnumSet<Kind>) -> Result<(), ParseError> {
@@ -611,13 +607,46 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
             },
 
             Some(TOKEN_IDENTIFIER) => {
-                self.node_from(checkpoint, NODE_IDENTIFIER, |_| {});
+                if self.peek_nontrivia() == Some(TOKEN_COLON) {
+                    self.node_failable_from(checkpoint, NODE_LAMBDA, |this| {
+                        this.node_from(checkpoint, NODE_LAMBDA_PARAMETER_IDENTIFIER, |this| {
+                            this.node_from(checkpoint, NODE_IDENTIFIER, |_| {});
+                        });
+
+                        this.next().unwrap();
+
+                        this.parse_expression_until(until)
+                    });
+                } else {
+                    self.node_from(checkpoint, NODE_IDENTIFIER, |_| {});
+                }
             },
 
             Some(TOKEN_IDENTIFIER_START) => {
-                self.node_failable_from(checkpoint, NODE_IDENTIFIER, |this| {
-                    this.parse_stringlike_inner(TOKEN_IDENTIFIER_END)
-                });
+                let result = self.parse_stringlike_inner(TOKEN_IDENTIFIER_END);
+
+                if self.peek_nontrivia() == Some(TOKEN_COLON) {
+                    self.node_failable_from(checkpoint, NODE_LAMBDA, |this| {
+                        this.node_failable_from(
+                            checkpoint,
+                            NODE_LAMBDA_PARAMETER_IDENTIFIER,
+                            |this| {
+                                result?;
+                                this.node_from(checkpoint, NODE_IDENTIFIER, |_| {});
+                                Ok(())
+                            },
+                        );
+
+                        this.next().unwrap();
+
+                        this.parse_expression_until(until)
+                    });
+                } else {
+                    self.node_failable_from(checkpoint, NODE_IDENTIFIER, |_| {
+                        result?;
+                        Ok(())
+                    });
+                }
             },
 
             Some(TOKEN_STRING_START) => {
