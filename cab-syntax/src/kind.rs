@@ -244,7 +244,7 @@ impl From<Kind> for rowan::SyntaxKind {
 impl Kind {
     /// Whether if this token is a literal, such as a float or integer.
     pub fn is_literal(self) -> bool {
-        matches!(self, TOKEN_FLOAT | TOKEN_INTEGER)
+        matches!(self, TOKEN_INTEGER | TOKEN_FLOAT)
     }
 
     /// Whether if this token can be used as a function argument.
@@ -258,10 +258,10 @@ impl Kind {
             TOKEN_LEFT_PARENTHESIS
             | TOKEN_LEFT_BRACKET
             | TOKEN_LEFT_CURLYBRACE
+            | TOKEN_PATH
             | TOKEN_IDENTIFIER
             | TOKEN_IDENTIFIER_START
             | TOKEN_STRING_START
-            | TOKEN_PATH
             | TOKEN_ISLAND_START => true,
             _ => self.is_literal(),
         }

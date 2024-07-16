@@ -669,7 +669,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
             Some(TOKEN_LITERAL_IF) => {
                 self.node_failable_from(checkpoint, NODE_IF_ELSE, |this| {
                     this.parse_expression_until(until | TOKEN_LITERAL_THEN)?;
-                    this.expect(TOKEN_LITERAL_THEN.into())?;
+                    this.expect_until(TOKEN_LITERAL_THEN.into(), until)?;
                     this.parse_expression_until(until | TOKEN_LITERAL_ELSE)?;
 
                     if this.peek_nontrivia() == Some(TOKEN_LITERAL_ELSE) {

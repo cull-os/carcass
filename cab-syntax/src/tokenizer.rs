@@ -168,10 +168,7 @@ impl<'a> Tokenizer<'a> {
 
             let start_offset = self.offset;
 
-            match self
-                .consume_character()
-                .expect("because end of file is handled by the if above")
-            {
+            match self.consume_character().unwrap() {
                 '\\' => {
                     if self.consume_character().is_none() {
                         self.context_pop(TokenizerContext::Path);
