@@ -4,8 +4,10 @@ use std::{
 };
 
 use crate::{
-    Kind,
-    Kind::*,
+    Kind::{
+        self,
+        *,
+    },
     RowanToken,
 };
 

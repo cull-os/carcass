@@ -1,4 +1,5 @@
 use derive_more::Display;
+use Kind::*;
 
 /// The Cab syntax kind.
 #[derive(
@@ -232,8 +233,6 @@ pub enum Kind {
 
     NODE_IF_ELSE, // if <expression> then <expression> else <expression>
 }
-
-use Kind::*;
 
 impl From<Kind> for rowan::SyntaxKind {
     fn from(kind: Kind) -> Self {

@@ -11,8 +11,10 @@ use rowan::ast::AstNode as _;
 
 use crate::{
     token,
-    Kind,
-    Kind::*,
+    Kind::{
+        self,
+        *,
+    },
     Language,
     RowanElement,
     RowanNode,

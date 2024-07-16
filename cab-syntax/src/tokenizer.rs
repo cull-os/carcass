@@ -1,6 +1,6 @@
-use crate::{
-    Kind,
-    Kind::*,
+use crate::Kind::{
+    self,
+    *,
 };
 
 fn is_valid_initial_identifier_character(c: char) -> bool {
