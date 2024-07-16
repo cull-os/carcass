@@ -1,6 +1,11 @@
 use std::{
     fmt,
     iter::Peekable,
+    ops::{
+        ControlFlow,
+        FromResidual,
+        Try,
+    },
     panic::Location,
 };
 
@@ -24,6 +29,79 @@ use crate::{
     Language,
     RowanNode,
 };
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum ExpectMust {
+    Found(Kind),
+    ReachedBound,
+    ReachedEndOfFile,
+}
+
+impl FromResidual for ExpectMust {
+    fn from_residual(residual: <Self as Try>::Residual) -> Self {
+        match residual {
+            Expect::Found(found) => Self::Found(found),
+            Expect::ReachedBound => Self::ReachedBound,
+            Expect::ReachedEndOfFile => Self::ReachedEndOfFile,
+        }
+    }
+}
+
+impl Try for ExpectMust {
+    type Output = Kind;
+    type Residual = Expect;
+
+    fn from_output(output: Self::Output) -> Self {
+        Self::Found(output)
+    }
+
+    fn branch(self) -> ControlFlow<Self::Residual, Self::Output> {
+        match self {
+            Self::Found(found) => ControlFlow::Continue(found),
+            Self::ReachedBound => ControlFlow::Break(Expect::ReachedBound),
+            Self::ReachedEndOfFile => ControlFlow::Break(Expect::ReachedEndOfFile),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Expect {
+    Found(Kind),
+    ReachedBound,
+    ReachedEndOfFile,
+}
+
+impl FromResidual for Expect {
+    fn from_residual(residual: <Self as Try>::Residual) -> Self {
+        residual
+    }
+}
+
+impl Try for Expect {
+    type Output = Option<Kind>;
+    type Residual = Self;
+
+    fn from_output(output: Self::Output) -> Self {
+        match output {
+            Some(found) => Self::Found(found),
+            None => Self::ReachedBound,
+        }
+    }
+
+    fn branch(self) -> ControlFlow<Self::Residual, Self::Output> {
+        match self {
+            Self::Found(found) => ControlFlow::Continue(Some(found)),
+            Self::ReachedBound => ControlFlow::Continue(None),
+            Self::ReachedEndOfFile => ControlFlow::Break(Self::ReachedEndOfFile),
+        }
+    }
+}
+
+impl Expect {
+    fn must(self) -> ExpectMust {
+        ExpectMust::from_residual(self)
+    }
+}
 
 const EXPRESSION_TOKENS: EnumSet<Kind> = enum_set!(
     TOKEN_LEFT_PARENTHESIS
@@ -124,7 +202,7 @@ impl fmt::Display for ParseError {
                 }
             },
 
-            other => unreachable!("unhandled ParseError format: {other:?}"),
+            other => unreachable!("unhandled parse error format: {other:?}"),
         }
     }
 }
