@@ -4,7 +4,10 @@ use std::{
     panic::Location,
 };
 
-use enumset::EnumSet;
+use enumset::{
+    enum_set,
+    EnumSet,
+};
 use peekmore::PeekMore;
 use rowan::{
     ast::AstNode as _,
@@ -22,24 +25,22 @@ use crate::{
     RowanNode,
 };
 
-macro_rules! EXPRESSION_TOKENS {
-    () => {
-        TOKEN_LEFT_PARENTHESIS
-            | TOKEN_LEFT_BRACKET
-            | TOKEN_LEFT_CURLYBRACE
-            | TOKEN_PLUS
-            | TOKEN_MINUS
-            | TOKEN_LITERAL_NOT
-            | TOKEN_PATH
-            | TOKEN_IDENTIFIER
-            | TOKEN_IDENTIFIER_START
-            | TOKEN_STRING_START
-            | TOKEN_ISLAND_START
-            | TOKEN_INTEGER
-            | TOKEN_FLOAT
-            | TOKEN_LITERAL_IF
-    };
-}
+const EXPRESSION_TOKENS: EnumSet<Kind> = enum_set!(
+    TOKEN_LEFT_PARENTHESIS
+        | TOKEN_LEFT_BRACKET
+        | TOKEN_LEFT_CURLYBRACE
+        | TOKEN_PLUS
+        | TOKEN_MINUS
+        | TOKEN_LITERAL_NOT
+        | TOKEN_PATH
+        | TOKEN_IDENTIFIER
+        | TOKEN_IDENTIFIER_START
+        | TOKEN_STRING_START
+        | TOKEN_ISLAND_START
+        | TOKEN_INTEGER
+        | TOKEN_FLOAT
+        | TOKEN_LITERAL_IF
+);
 
 /// A parse error.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -72,10 +73,10 @@ impl fmt::Display for ParseError {
             mut set: EnumSet<Kind>,
             formatter: &mut fmt::Formatter<'_>,
         ) -> fmt::Result {
-            if set & EXPRESSION_TOKENS!() == EXPRESSION_TOKENS!() {
+            if set & EXPRESSION_TOKENS == EXPRESSION_TOKENS {
                 write!(formatter, "an expression")?;
 
-                set = set.difference(EXPRESSION_TOKENS!());
+                set = set.difference(EXPRESSION_TOKENS);
 
                 match set.iter().count() {
                     0 => {},
@@ -510,7 +511,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
                     Ok(())
                 });
 
-                this.expect_until(TOKEN_EQUAL.into(), EXPRESSION_TOKENS!())?;
+                this.expect_until(TOKEN_EQUAL.into(), EXPRESSION_TOKENS)?;
                 this.parse_expression_until(TOKEN_SEMICOLON | TOKEN_RIGHT_CURLYBRACE)?;
                 this.expect_until(TOKEN_SEMICOLON.into(), TOKEN_RIGHT_CURLYBRACE.into())?;
                 Ok(())
@@ -544,7 +545,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
 
         let checkpoint = self.checkpoint();
 
-        match self.expect_until(EXPRESSION_TOKENS!(), until)? {
+        match self.expect_until(EXPRESSION_TOKENS, until)? {
             Some(TOKEN_LEFT_PARENTHESIS) => {
                 self.node_failable_from(checkpoint, NODE_PARENTHESIS, |this| {
                     this.parse_expression_until(until | TOKEN_RIGHT_PARENTHESIS)?;
@@ -556,8 +557,8 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
             Some(TOKEN_LEFT_BRACKET) => {
                 self.node_failable_from(checkpoint, NODE_LIST, |this| {
                     while {
-                        let peek = this
-                            .peek_nontrivia_expecting(TOKEN_RIGHT_BRACKET | EXPRESSION_TOKENS!())?;
+                        let peek =
+                            this.peek_nontrivia_expecting(TOKEN_RIGHT_BRACKET | EXPRESSION_TOKENS)?;
                         !until.contains(peek) && peek != TOKEN_RIGHT_BRACKET
                     } {
                         // TODO: Seperate expression parsing logic into two functions
