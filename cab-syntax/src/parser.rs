@@ -1,4 +1,5 @@
 use std::{
+    convert::Infallible,
     fmt,
     iter::Peekable,
     ops::{
@@ -33,21 +34,21 @@ use crate::{
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum ExpectMust {
     Found(Kind),
-    Deadly(ParseError),
+    Deadly(Option<ParseError>),
 }
 
 impl FromResidual for ExpectMust {
     fn from_residual(residual: <Self as Try>::Residual) -> Self {
         match residual {
-            Expect::Found(found) => Self::Found(found),
             Expect::Recoverable(error) | Expect::Deadly(error) => Self::Deadly(error),
+            _ => unreachable!(),
         }
     }
 }
 
 impl Try for ExpectMust {
     type Output = Kind;
-    type Residual = Expect;
+    type Residual = Expect<Infallible>;
 
     fn from_output(output: Self::Output) -> Self {
         Self::Found(output)
@@ -56,49 +57,57 @@ impl Try for ExpectMust {
     fn branch(self) -> ControlFlow<Self::Residual, Self::Output> {
         match self {
             Self::Found(found) => ControlFlow::Continue(found),
-            Self::Deadly(error) => ControlFlow::Break(Expect::from_output(Err(error))),
+            Self::Deadly(error) => {
+                ControlFlow::Break(match error {
+                    error @ ParseError::Unexpected {
+                        got: Some(_),
+                        expected,
+                        ..
+                    } if expected.is_empty() => Expect::Recoverable(error),
+
+                    error => Expect::Deadly(error),
+                })
+            },
         }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-enum Expect {
-    Found(Kind),
-    Recoverable(ParseError),
+enum Expect<K = Kind> {
+    Found(K),
+    Recoverable,
     Deadly(ParseError),
 }
 
 impl FromResidual for Expect {
     fn from_residual(residual: <Self as Try>::Residual) -> Self {
-        residual
+        match residual {
+            Expect::Recoverable => Self::Recoverable,
+            Expect::Deadly(error) => Self::Deadly(error),
+            _ => unreachable!(),
+        }
     }
 }
 
 impl Try for Expect {
-    type Output = Result<Kind, ParseError>;
-    type Residual = Self;
+    type Output = Result<Kind, Option<ParseError>>;
+    type Residual = Expect<Infallible>;
 
     fn from_output(output: Self::Output) -> Self {
         match output {
             Ok(found) => Self::Found(found),
 
-            Err(
-                error @ ParseError::Unexpected {
-                    got: Some(_),
-                    expected,
-                    ..
-                },
-            ) if expected.is_empty() => Self::Recoverable(error),
+            Err(None) => Self::Recoverable,
 
-            Err(error) => Self::Deadly(error),
+            Err(Some(error)) => Self::Deadly(error),
         }
     }
 
     fn branch(self) -> ControlFlow<Self::Residual, Self::Output> {
         match self {
             Self::Found(found) => ControlFlow::Continue(Ok(found)),
-            Self::Recoverable(error) => ControlFlow::Continue(Err(error)),
-            _ => ControlFlow::Break(self),
+            Self::Recoverable => ControlFlow::Continue(Err(None)),
+            Self::Deadly(error) => ControlFlow::Break(Expect::Deadly(error)),
         }
     }
 }
@@ -107,7 +116,8 @@ impl Expect {
     fn must(self) -> ExpectMust {
         match self {
             Self::Found(found) => ExpectMust::Found(found),
-            Self::Recoverable(error) | Self::Deadly(error) => ExpectMust::Deadly(error),
+            Self::Recoverable => ExpectMust::Deadly(None),
+            Self::Deadly(error) => ExpectMust::Deadly(Some(error)),
         }
     }
 }
@@ -382,20 +392,11 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
         self.next_while(Kind::is_trivia)
     }
 
-    fn expect(&mut self, expected: EnumSet<Kind>) -> Result<Kind, ParseError> {
-        self.expect_until(expected, EnumSet::EMPTY)
-            .map(Option::unwrap)
-    }
-
-    fn expect_until(
-        &mut self,
-        expected: EnumSet<Kind>,
-        until: EnumSet<Kind>,
-    ) -> Result<Option<Kind>, ParseError> {
+    fn expect_until(&mut self, expected: EnumSet<Kind>, until: EnumSet<Kind>) -> Expect {
         let checkpoint = self.checkpoint();
 
         match self.peek() {
-            Some(next) if expected.contains(next) => Ok(Some(self.next().unwrap())),
+            Some(next) if expected.contains(next) => Expect::Found(self.next().unwrap()),
 
             Some(got) => {
                 let start = self.offset;
@@ -413,11 +414,15 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
                 if self.peek().map_or(false, |kind| expected.contains(kind)) {
                     log::trace!("found expected kind");
                     self.errors.push(error);
-                    Ok(Some(self.next().unwrap()))
+                    Expect::Found(self.next().unwrap())
                 } else if let Some(peek) = self.peek() {
                     log::trace!("reached expect bound, not consuming {peek:?}",);
                     self.errors.push(error);
-                    Ok(None)
+                    Expect::Recoverable(ParseError::Unexpected {
+                        got: Some(got),
+                        expected,
+                        at: rowan::TextRange::new(start, self.offset),
+                    })
                 } else {
                     log::trace!("expect consumed everything");
                     Err(error)
