@@ -145,14 +145,6 @@ impl<K> Expect<K> {
             Self::Deadly(error) => ExpectMust::Deadly(Some(error)),
         }
     }
-
-    #[allow(unused)]
-    fn assert(self) -> K {
-        match self {
-            Self::Found(found) => found,
-            _ => panic!("asserted on a failed expect"),
-        }
-    }
 }
 
 const EXPRESSION_TOKENS: EnumSet<Kind> = enum_set!(
