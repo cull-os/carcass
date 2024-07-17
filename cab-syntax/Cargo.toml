@@ -8,9 +8,17 @@ derive_more = "0.99.18"
 enumset     = "1.1.3"
 log         = "0.4.21"
 num_enum    = "0.7.2"
-peekmore    = { version = "1.3.0", features = ["smallvec"] }
 rowan       = "0.15.15"
 
+[dependencies.peekmore]
+version  = "1.3.0"
+features = [ "smallvec" ]
+
+[dependencies.rug]
+version          = "1.24.1"
+default-features = false
+features         = [ "integer", "float", "std" ]
+
 [dependencies.yansi]
-version = "1.0.1"
+version  = "1.0.1"
 features = [ "detect-env", "detect-tty", "hyperlink" ]

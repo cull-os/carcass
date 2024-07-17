@@ -1,5 +1,7 @@
 *
 
+!.cargo/
+
 !cab/
 !cab/src/
 
