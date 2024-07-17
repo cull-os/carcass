@@ -443,8 +443,14 @@ node! { #[from(NODE_LAMBDA_PARAMETER_PATTERN)] struct LambdaParameterPattern => 
 
     write!(formatter, "{{")?;
 
-    for attribute in self.attributes() {
+    let mut attributes = self.attributes();
+
+    if let Some(attribute) = attributes.next() {
         write!(formatter, " {attribute}")?;
+    }
+
+    for attribute in attributes {
+        write!(formatter, ", {attribute}")?;
     }
 
     write!(formatter, " }}")
@@ -468,7 +474,7 @@ node! { #[from(NODE_LAMBDA_PARAMETER_PATTERN_ATTRIBUTE)] struct LambdaParameterP
         write!(formatter, " ? {default}")?;
     }
 
-    write!(formatter, ",")
+    Ok(())
 }}
 
 impl LambdaParameterPatternAttribute {
