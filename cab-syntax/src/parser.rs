@@ -75,6 +75,7 @@ impl<K> From<Result<K, ParseError>> for ExpectMust<K> {
         }
     }
 }
+
 impl<K> ExpectMust<K> {
     fn maybe(self) -> Expect<K> {
         match self {
@@ -84,7 +85,7 @@ impl<K> ExpectMust<K> {
         }
     }
 
-    fn assert(self) -> K {
+    fn unwrap(self) -> K {
         match self {
             Self::Found(found) => found,
             _ => panic!("asserted on a failed expect"),
@@ -166,6 +167,8 @@ const EXPRESSION_TOKENS: EnumSet<Kind> = enum_set!(
         | TOKEN_LITERAL_IF
 );
 
+const IDENTIFIER_TOKENS: EnumSet<Kind> = enum_set!(TOKEN_IDENTIFIER | TOKEN_IDENTIFIER_START);
+
 /// A parse error.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ParseError {
@@ -220,7 +223,7 @@ impl fmt::Display for ParseError {
                     }
                 }
 
-                if expected.is_superset(TOKEN_IDENTIFIER | TOKEN_IDENTIFIER_START) {
+                if expected.is_superset(IDENTIFIER_TOKENS) {
                     expected.remove(TOKEN_IDENTIFIER_START);
                 }
 
@@ -323,7 +326,6 @@ pub fn parse(input: &str) -> Parse {
             log::trace!("unrecoverable error encountered: {error:?}");
 
             this.node_from(checkpoint, NODE_ERROR, |_| {});
-
             this.errors.push(error);
         }
 
@@ -332,10 +334,7 @@ pub fn parse(input: &str) -> Parse {
 
             let start = this.offset;
 
-            this.node(NODE_ERROR, |this| {
-                this.next_direct_while(|_| true);
-            });
-
+            this.node(NODE_ERROR, |this| this.next_direct_while(|_| true));
             this.errors.push(ParseError::Unexpected {
                 got: Some(got),
                 expected: EnumSet::EMPTY,
@@ -439,7 +438,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
 
     fn next_direct_while(&mut self, predicate: impl Fn(Kind) -> bool) {
         while self.peek_direct().map_or(false, &predicate) {
-            self.next_direct().assert();
+            self.next_direct().unwrap();
         }
     }
 
@@ -452,19 +451,23 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
         self.next_direct()
     }
 
+    fn next_while(&mut self, predicate: impl Fn(Kind) -> bool) {
+        while self.peek().map_or(false, &predicate) {
+            self.next().unwrap();
+        }
+    }
+
     fn expect_until(&mut self, expected: EnumSet<Kind>, until: EnumSet<Kind>) -> Expect {
         let checkpoint = self.checkpoint();
 
-        match self.peek() {
-            Some(next) if expected.contains(next) => self.next().maybe(),
+        match self.peek_expecting(expected)? {
+            next if expected.contains(next) => self.next().maybe(),
 
-            Some(got) => {
+            got => {
                 let start = self.offset;
 
                 self.node_from(checkpoint, NODE_ERROR, |this| {
-                    this.next_direct_while(|kind| {
-                        !expected.contains(kind) && !until.contains(kind)
-                    });
+                    this.next_while(|kind| !(until | expected).contains(kind));
                 });
 
                 let error = ParseError::Unexpected {
@@ -485,14 +488,6 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
                     log::trace!("expect consumed everything");
                     Expect::Deadly(error)
                 }
-            },
-
-            None => {
-                Expect::Deadly(ParseError::Unexpected {
-                    got: None,
-                    expected,
-                    at: rowan::TextRange::empty(self.offset),
-                })
             },
         }
     }
@@ -523,8 +518,8 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
         let checkpoint = self.checkpoint();
 
         if let Expect::Deadly(error) = self.node(kind, closure) {
-            self.errors.push(error);
             self.node_from(checkpoint, NODE_ERROR, |_| {});
+            self.errors.push(error);
         }
     }
 
@@ -557,50 +552,59 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
         closure: impl FnOnce(&mut Self) -> Expect<K>,
     ) {
         if let Expect::Deadly(error) = self.node_from(checkpoint, kind, closure) {
-            self.errors.push(error);
             self.node_from(checkpoint, NODE_ERROR, |_| {});
+            self.errors.push(error);
         }
     }
 
-    fn parse_stringlike_inner(&mut self, end: Kind) -> Expect<()> {
-        // Assuming that the start quote has already been consumed
-        // and the node is closed outside of this function.
-
-        loop {
-            let checkpoint = self.checkpoint();
-
-            let current = self.expect_until(
-                TOKEN_CONTENT | TOKEN_INTERPOLATION_START | end,
-                EnumSet::EMPTY,
+    fn parse_parenthesis_until(&mut self, until: EnumSet<Kind>) {
+        self.node_failable(NODE_PARENTHESIS, |this| {
+            this.expect_until(
+                TOKEN_LEFT_PARENTHESIS.into(),
+                until | TOKEN_RIGHT_PARENTHESIS,
             )?;
-
-            if current == Some(TOKEN_INTERPOLATION_START) {
-                self.node_from(checkpoint, NODE_INTERPOLATION, |this| {
-                    this.parse_expression_until(TOKEN_INTERPOLATION_END.into())?;
-                    this.expect_until(TOKEN_INTERPOLATION_END.into(), EnumSet::EMPTY)
-                })?;
-            } else if current == Some(end) {
-                break;
-            }
-        }
-
-        Expect::Found(())
+            this.parse_expression_until(until | TOKEN_RIGHT_PARENTHESIS)?;
+            this.expect_until(TOKEN_RIGHT_PARENTHESIS.into(), until)
+        });
     }
 
-    fn parse_identifier_until(&mut self, until: EnumSet<Kind>) -> Expect<()> {
-        self.node(NODE_IDENTIFIER, |this| {
-            // If it is a normal identifier, we don't do anything
-            // else as it only has a single token as .expect_until() consumes it.
-            if this
-                .expect_until(TOKEN_IDENTIFIER | TOKEN_IDENTIFIER_START, until)
-                .must()?
-                == TOKEN_IDENTIFIER_START
+    fn parse_list_until(&mut self, until: EnumSet<Kind>) {
+        self.node_failable(NODE_LIST, |this| {
+            this.expect_until(TOKEN_LEFT_BRACKET.into(), until | TOKEN_RIGHT_BRACKET)?;
+
+            while this.peek_expecting(EXPRESSION_TOKENS | TOKEN_RIGHT_BRACKET)?
+                != TOKEN_RIGHT_BRACKET
             {
-                this.parse_stringlike_inner(TOKEN_IDENTIFIER_END)?;
+                this.parse_expression_until(until | TOKEN_RIGHT_BRACKET)?;
             }
 
-            Expect::Found(())
-        })
+            this.expect_until(TOKEN_RIGHT_BRACKET.into(), until)
+        });
+    }
+
+    // TODO: Peek and do lambda parameter parsing.
+    //
+    // # Attribute set initials:
+    // {
+    // { foo
+    // { foo;
+    // { foo =
+    //
+    // # Lambda pattern initials:
+    // { foo,
+    // { foo ?
+    fn parse_attribute_set_until(&mut self, until: EnumSet<Kind>) {
+        self.node_failable(NODE_ATTRIBUTE_SET, |this| {
+            this.expect_until(TOKEN_LEFT_CURLYBRACE.into(), until | TOKEN_RIGHT_CURLYBRACE)?;
+
+            while !(until | TOKEN_RIGHT_CURLYBRACE)
+                .contains(this.peek_expecting(IDENTIFIER_TOKENS | TOKEN_RIGHT_CURLYBRACE)?)
+            {
+                this.parse_attribute_until(until | TOKEN_RIGHT_CURLYBRACE)?;
+            }
+
+            this.expect_until(TOKEN_RIGHT_CURLYBRACE.into(), until)
+        });
     }
 
     fn parse_attribute_until(&mut self, until: EnumSet<Kind>) -> Expect<()> {
@@ -609,42 +613,170 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
         // First identifier down. If the next token is a semicolon,
         // this is a NODE_ATTRIBUTE_INHERIT. If it is a period or
         // an equals, this is a NODE_ATTRIBUTE.
-        self.parse_identifier_until(
-            until | TOKEN_EQUAL | TOKEN_SEMICOLON | TOKEN_RIGHT_CURLYBRACE,
-        )?;
+        self.parse_identifier_until(until | TOKEN_EQUAL | EXPRESSION_TOKENS | TOKEN_SEMICOLON);
 
         if self.peek_expecting(TOKEN_SEMICOLON | TOKEN_PERIOD | TOKEN_EQUAL)? == TOKEN_SEMICOLON {
             self.node_from(checkpoint, NODE_ATTRIBUTE_INHERIT, |this| {
-                this.next().assert();
+                this.next().unwrap();
             });
         } else {
-            self.node_failable_from(checkpoint, NODE_ATTRIBUTE, |this| {
-                this.node_failable_from(checkpoint, NODE_ATTRIBUTE_PATH, |this| {
+            self.node_from(checkpoint, NODE_ATTRIBUTE, |this| {
+                this.node_from(checkpoint, NODE_ATTRIBUTE_PATH, |this| {
                     while this.peek_expecting(TOKEN_PERIOD | TOKEN_EQUAL)? == TOKEN_PERIOD {
-                        this.next().assert();
+                        this.next().unwrap();
                         this.parse_identifier_until(
-                            until | TOKEN_EQUAL | TOKEN_SEMICOLON | TOKEN_RIGHT_CURLYBRACE,
-                        )?;
+                            until | TOKEN_EQUAL | EXPRESSION_TOKENS | TOKEN_SEMICOLON,
+                        );
                     }
                     Expect::Found(())
-                });
+                })?;
 
-                this.expect_until(TOKEN_EQUAL.into(), EXPRESSION_TOKENS)?;
-                this.parse_expression_until(TOKEN_SEMICOLON | TOKEN_RIGHT_CURLYBRACE)?;
-                this.expect_until(TOKEN_SEMICOLON.into(), TOKEN_RIGHT_CURLYBRACE.into())
-            });
+                this.expect_until(
+                    TOKEN_EQUAL.into(),
+                    until | EXPRESSION_TOKENS | TOKEN_SEMICOLON,
+                )?;
+                this.parse_expression_until(until | TOKEN_SEMICOLON)?;
+                this.expect_until(TOKEN_SEMICOLON.into(), until)
+            })?;
         }
 
         Expect::Found(())
     }
 
-    fn parse_interpolation(&mut self) -> Expect<()> {
-        self.node(NODE_INTERPOLATION, |this| {
-            this.expect_until(TOKEN_INTERPOLATION_START.into(), EnumSet::EMPTY)?;
-            this.parse_expression_until(TOKEN_RIGHT_CURLYBRACE.into())?;
-            this.expect_until(TOKEN_INTERPOLATION_END.into(), EnumSet::EMPTY)?;
+    fn parse_prefix_operation_until(&mut self, until: EnumSet<Kind>) {
+        self.node_failable(NODE_PREFIX_OPERATION, |this| {
+            this.expect_until(
+                TOKEN_PLUS | TOKEN_MINUS | TOKEN_LITERAL_NOT,
+                until | EXPRESSION_TOKENS,
+            )?;
+            this.parse_expression_until(until)
+        });
+    }
+
+    fn parse_path(&mut self) {
+        self.node_failable(NODE_PATH, |this| {
+            loop {
+                match this.peek_direct() {
+                    Some(TOKEN_PATH) => {
+                        this.next_direct().unwrap();
+                    },
+
+                    Some(TOKEN_INTERPOLATION_START) => {
+                        this.parse_interpolation()?;
+                    },
+
+                    _ => break Expect::Found(()),
+                }
+            }
+        });
+    }
+
+    fn parse_identifier_or_simple_lambda_until(&mut self, until: EnumSet<Kind>) {
+        let checkpoint = self.checkpoint();
+
+        self.parse_identifier_until(until | TOKEN_COLON);
+
+        if self.peek() == Some(TOKEN_COLON) {
+            self.node_failable_from(checkpoint, NODE_LAMBDA, |this| {
+                this.node_from(checkpoint, NODE_LAMBDA_PARAMETER_IDENTIFIER, |_| {});
+
+                this.expect_until(TOKEN_COLON.into(), until | EXPRESSION_TOKENS)?;
+
+                this.parse_expression_until(until)
+            });
+        }
+    }
+
+    fn parse_identifier_until(&mut self, until: EnumSet<Kind>) {
+        self.node_failable(NODE_IDENTIFIER, |this| {
+            // If it is a normal identifier, we don't do anything
+            // else as it only has a single token as .expect_until() consumes it.
+            if this.peek_expecting(IDENTIFIER_TOKENS)? == TOKEN_IDENTIFIER_START {
+                this.parse_stringlike(TOKEN_IDENTIFIER_START, TOKEN_IDENTIFIER_END);
+            } else {
+                this.expect_until(IDENTIFIER_TOKENS, until)?;
+            }
+
             Expect::Found(())
         })
+    }
+
+    fn parse_stringlike(&mut self, start: Kind, end: Kind) {
+        self.node_failable(
+            match start {
+                TOKEN_IDENTIFIER_START => NODE_IDENTIFIER,
+                TOKEN_STRING_START => NODE_STRING,
+                TOKEN_ISLAND_START => NODE_ISLAND,
+                _ => unreachable!(),
+            },
+            |this| {
+                let current = this.next();
+                debug_assert_eq!(current, ExpectMust::Found(start));
+
+                loop {
+                    match this.peek_direct() {
+                        Some(TOKEN_CONTENT) => {
+                            this.next_direct().unwrap();
+                        },
+
+                        Some(TOKEN_INTERPOLATION_START) => {
+                            this.parse_interpolation()?;
+                        },
+
+                        Some(other) if other == end => {
+                            this.next_direct().unwrap();
+                            break Expect::Found(());
+                        },
+
+                        _ => unreachable!(),
+                    }
+                }
+            },
+        );
+    }
+
+    fn parse_interpolation(&mut self) -> Expect<()> {
+        self.node(NODE_INTERPOLATION, |this| {
+            this.expect_until(TOKEN_INTERPOLATION_START.into(), EnumSet::EMPTY)
+                .must()?;
+
+            this.parse_expression_until(TOKEN_RIGHT_CURLYBRACE.into())?;
+
+            this.expect_until(TOKEN_INTERPOLATION_END.into(), EnumSet::EMPTY)
+                .must()?;
+
+            Expect::Found(())
+        })
+    }
+
+    fn parse_number_until(&mut self, until: EnumSet<Kind>) {
+        self.node_failable(NODE_NUMBER, |this| {
+            this.expect_until(TOKEN_INTEGER | TOKEN_FLOAT, until)
+        });
+    }
+
+    fn parse_if_else_until(&mut self, until: EnumSet<Kind>) {
+        self.node_failable(NODE_IF_ELSE, |this| {
+            this.expect_until(
+                TOKEN_LITERAL_IF.into(),
+                until | EXPRESSION_TOKENS | TOKEN_LITERAL_THEN,
+            )?;
+            this.parse_expression_until(
+                until | TOKEN_LITERAL_THEN | EXPRESSION_TOKENS | TOKEN_LITERAL_ELSE,
+            )?;
+
+            this.expect_until(
+                TOKEN_LITERAL_THEN.into(),
+                until | EXPRESSION_TOKENS | TOKEN_LITERAL_ELSE,
+            )?;
+            this.parse_expression_until(until | TOKEN_LITERAL_ELSE)?;
+
+            if this.peek() == Some(TOKEN_LITERAL_ELSE) {
+                this.next().unwrap();
+                this.parse_expression_until(until)?;
+            }
+            Expect::Found(())
+        });
     }
 
     fn parse_expression_until(&mut self, until: EnumSet<Kind>) -> Expect<()> {
@@ -660,138 +792,77 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
 
         self.depth += 1;
 
-        let checkpoint = self.checkpoint();
-
-        match self.expect_until(EXPRESSION_TOKENS, until)? {
-            Some(TOKEN_LEFT_PARENTHESIS) => {
-                self.node_failable_from(checkpoint, NODE_PARENTHESIS, |this| {
-                    this.parse_expression_until(until | TOKEN_RIGHT_PARENTHESIS)?;
-                    this.expect_until(TOKEN_RIGHT_PARENTHESIS.into(), until)
-                })
+        match self.peek_expecting(EXPRESSION_TOKENS)? {
+            TOKEN_LEFT_PARENTHESIS => {
+                self.parse_parenthesis_until(until);
             },
 
-            Some(TOKEN_LEFT_BRACKET) => {
-                self.node_failable_from(checkpoint, NODE_LIST, |this| {
-                    while {
-                        let peek = this.peek_expecting(TOKEN_RIGHT_BRACKET | EXPRESSION_TOKENS)?;
-                        !until.contains(peek) && peek != TOKEN_RIGHT_BRACKET
-                    } {
-                        // TODO: Seperate expression parsing logic into two functions
-                        // to not parse multiple expressions next to eachother as an
-                        // application chain.
-                        this.parse_expression_until(until | TOKEN_RIGHT_BRACKET)?;
-                    }
+            TOKEN_LEFT_BRACKET => {
+                self.parse_list_until(until);
+            },
 
-                    this.expect_until(TOKEN_RIGHT_BRACKET.into(), until)
+            TOKEN_LEFT_CURLYBRACE => {
+                self.parse_attribute_set_until(until);
+            },
+
+            TOKEN_PLUS | TOKEN_MINUS | TOKEN_LITERAL_NOT => {
+                self.parse_prefix_operation_until(until)
+            },
+
+            TOKEN_PATH => {
+                self.parse_path();
+            },
+
+            kind if IDENTIFIER_TOKENS.contains(kind) => {
+                self.parse_identifier_or_simple_lambda_until(until);
+            },
+
+            TOKEN_STRING_START => {
+                self.parse_stringlike(TOKEN_STRING_START, TOKEN_STRING_END);
+            },
+
+            TOKEN_ISLAND_START => {
+                self.parse_stringlike(TOKEN_ISLAND_START, TOKEN_ISLAND_END);
+            },
+
+            TOKEN_INTEGER | TOKEN_FLOAT => {
+                self.parse_number_until(until);
+            },
+
+            TOKEN_LITERAL_IF => {
+                self.parse_if_else_until(until);
+            },
+
+            got => {
+                // TODO: Find a way to merge this with expect_until?
+                self.next_while_trivia();
+                let start = self.offset;
+
+                self.node(NODE_ERROR, |this| {
+                    this.next_while(|kind| !(until | EXPRESSION_TOKENS).contains(kind));
                 });
-            },
 
-            // TODO: Peek and do lambda parameter parsing.
-            //
-            // # Attribute set initials:
-            // {
-            // { foo
-            // { foo;
-            // { foo =
-            //
-            // # Lambda pattern initials:
-            // { foo,
-            // { foo ?
-            Some(TOKEN_LEFT_CURLYBRACE) => {
-                self.node_failable_from(checkpoint, NODE_ATTRIBUTE_SET, |this| {
-                    while this.peek_expecting(
-                        TOKEN_RIGHT_CURLYBRACE | TOKEN_IDENTIFIER | TOKEN_IDENTIFIER_START,
-                    )? != TOKEN_RIGHT_CURLYBRACE
-                    {
-                        this.parse_attribute_until(until | TOKEN_RIGHT_CURLYBRACE)?;
-                    }
-
-                    this.expect_until(TOKEN_RIGHT_CURLYBRACE.into(), until)
-                });
-            },
-
-            Some(TOKEN_PLUS | TOKEN_MINUS | TOKEN_LITERAL_NOT) => {
-                self.node_failable_from(checkpoint, NODE_PREFIX_OPERATION, |this| {
-                    this.parse_expression_until(until)
-                });
-            },
-
-            Some(TOKEN_PATH) => {
-                self.node_failable_from(checkpoint, NODE_PATH, |this| {
-                    loop {
-                        let peek = this.peek();
-
-                        if peek == Some(TOKEN_INTERPOLATION_START) {
-                            this.parse_interpolation()?;
-                        } else if peek == Some(TOKEN_PATH) {
-                            this.next().assert();
-                        } else {
-                            break;
-                        }
-                    }
-                    Expect::Found(())
-                });
-            },
-
-            Some(start @ (TOKEN_IDENTIFIER | TOKEN_IDENTIFIER_START)) => {
-                let identifier_parse_result = if start == TOKEN_IDENTIFIER {
-                    Expect::Found(())
-                } else {
-                    self.parse_stringlike_inner(TOKEN_IDENTIFIER_END)
+                let error = ParseError::Unexpected {
+                    got: Some(got),
+                    expected: EXPRESSION_TOKENS,
+                    at: rowan::TextRange::new(start, self.offset),
                 };
 
-                if self.peek() == Some(TOKEN_COLON) {
-                    self.node_failable_from(checkpoint, NODE_LAMBDA, |this| {
-                        this.node_from(checkpoint, NODE_LAMBDA_PARAMETER_IDENTIFIER, |this| {
-                            this.node_from(checkpoint, NODE_IDENTIFIER, |_| identifier_parse_result)
-                        })?;
-
-                        this.next().assert();
-
-                        this.parse_expression_until(until)
-                    });
+                return if self
+                    .peek()
+                    .map_or(false, |kind| EXPRESSION_TOKENS.contains(kind))
+                {
+                    self.errors.push(error);
+                    self.parse_expression_until(until)
+                } else if let Some(peek) = self.peek() {
+                    log::trace!("reached expect bound, not consuming {peek:?}",);
+                    self.errors.push(error);
+                    Expect::Recoverable
                 } else {
-                    self.node_failable_from(checkpoint, NODE_IDENTIFIER, |_| {
-                        identifier_parse_result
-                    });
-                }
+                    log::trace!("expect consumed everything");
+                    Expect::Deadly(error)
+                };
             },
-
-            Some(TOKEN_STRING_START) => {
-                self.node_failable_from(checkpoint, NODE_STRING, |this| {
-                    this.parse_stringlike_inner(TOKEN_STRING_END)
-                });
-            },
-
-            Some(TOKEN_ISLAND_START) => {
-                self.node_failable_from(checkpoint, NODE_ISLAND, |this| {
-                    this.parse_stringlike_inner(TOKEN_ISLAND_END)
-                });
-            },
-
-            Some(TOKEN_INTEGER | TOKEN_FLOAT) => {
-                self.node_from(checkpoint, NODE_NUMBER, |_| {});
-            },
-
-            Some(TOKEN_LITERAL_IF) => {
-                self.node_failable_from(checkpoint, NODE_IF_ELSE, |this| {
-                    this.parse_expression_until(until | TOKEN_LITERAL_THEN)?;
-                    this.expect_until(TOKEN_LITERAL_THEN.into(), until)?;
-                    this.parse_expression_until(until | TOKEN_LITERAL_ELSE)?;
-
-                    if this.peek() == Some(TOKEN_LITERAL_ELSE) {
-                        this.next().assert();
-                        this.parse_expression_until(until)?;
-                    }
-                    Expect::Found(())
-                });
-            },
-
-            None => {
-                self.node_from(checkpoint, NODE_ERROR, |_| {});
-            },
-
-            _ => unreachable!(),
         }
 
         self.depth -= 1;
