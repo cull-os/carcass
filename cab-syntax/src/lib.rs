@@ -1,4 +1,4 @@
-#![feature(const_fn_floating_point_arithmetic, try_trait_v2)]
+#![feature(assert_matches, const_fn_floating_point_arithmetic, try_trait_v2)]
 
 mod color;
 mod kind;

@@ -32,22 +32,24 @@ use crate::{
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-enum ExpectMust {
-    Found(Kind),
+#[must_use]
+enum ExpectMust<K = Kind> {
+    Found(K),
     Deadly(Option<ParseError>),
 }
 
-impl FromResidual for ExpectMust {
+impl<K> FromResidual for ExpectMust<K> {
     fn from_residual(residual: <Self as Try>::Residual) -> Self {
         match residual {
-            Expect::Recoverable(error) | Expect::Deadly(error) => Self::Deadly(error),
+            Expect::Recoverable => Self::Deadly(None),
+            Expect::Deadly(error) => Self::Deadly(Some(error)),
             _ => unreachable!(),
         }
     }
 }
 
-impl Try for ExpectMust {
-    type Output = Kind;
+impl<K> Try for ExpectMust<K> {
+    type Output = K;
     type Residual = Expect<Infallible>;
 
     fn from_output(output: Self::Output) -> Self {
@@ -57,29 +59,46 @@ impl Try for ExpectMust {
     fn branch(self) -> ControlFlow<Self::Residual, Self::Output> {
         match self {
             Self::Found(found) => ControlFlow::Continue(found),
-            Self::Deadly(error) => {
-                ControlFlow::Break(match error {
-                    error @ ParseError::Unexpected {
-                        got: Some(_),
-                        expected,
-                        ..
-                    } if expected.is_empty() => Expect::Recoverable(error),
+            Self::Deadly(None) => ControlFlow::Break(Expect::Recoverable),
+            Self::Deadly(Some(error)) => ControlFlow::Break(Expect::Deadly(error)),
+        }
+    }
+}
 
-                    error => Expect::Deadly(error),
-                })
-            },
+impl<K> From<Result<K, ParseError>> for ExpectMust<K> {
+    fn from(result: Result<K, ParseError>) -> Self {
+        match result {
+            Ok(value) => Self::Found(value),
+            Err(error) => Self::Deadly(Some(error)),
+        }
+    }
+}
+impl<K> ExpectMust<K> {
+    fn maybe(self) -> Expect<K> {
+        match self {
+            Self::Found(found) => Expect::Found(found),
+            Self::Deadly(None) => Expect::Recoverable,
+            Self::Deadly(Some(error)) => Expect::Deadly(error),
+        }
+    }
+
+    fn assert(self) -> K {
+        match self {
+            Self::Found(found) => found,
+            _ => panic!("asserted on a failed expect"),
         }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[must_use]
 enum Expect<K = Kind> {
     Found(K),
     Recoverable,
     Deadly(ParseError),
 }
 
-impl FromResidual for Expect {
+impl<K> FromResidual for Expect<K> {
     fn from_residual(residual: <Self as Try>::Residual) -> Self {
         match residual {
             Expect::Recoverable => Self::Recoverable,
@@ -89,35 +108,49 @@ impl FromResidual for Expect {
     }
 }
 
-impl Try for Expect {
-    type Output = Result<Kind, Option<ParseError>>;
+impl<K> Try for Expect<K> {
+    type Output = Option<K>;
     type Residual = Expect<Infallible>;
 
     fn from_output(output: Self::Output) -> Self {
         match output {
-            Ok(found) => Self::Found(found),
-
-            Err(None) => Self::Recoverable,
-
-            Err(Some(error)) => Self::Deadly(error),
+            Some(found) => Self::Found(found),
+            None => Self::Recoverable,
         }
     }
 
     fn branch(self) -> ControlFlow<Self::Residual, Self::Output> {
         match self {
-            Self::Found(found) => ControlFlow::Continue(Ok(found)),
-            Self::Recoverable => ControlFlow::Continue(Err(None)),
+            Self::Found(found) => ControlFlow::Continue(Some(found)),
+            Self::Recoverable => ControlFlow::Continue(None),
             Self::Deadly(error) => ControlFlow::Break(Expect::Deadly(error)),
         }
     }
 }
 
-impl Expect {
-    fn must(self) -> ExpectMust {
+impl<K> From<Result<K, ParseError>> for Expect<K> {
+    fn from(result: Result<K, ParseError>) -> Self {
+        match result {
+            Ok(value) => Self::Found(value),
+            Err(error) => Self::Deadly(error),
+        }
+    }
+}
+
+impl<K> Expect<K> {
+    fn must(self) -> ExpectMust<K> {
         match self {
             Self::Found(found) => ExpectMust::Found(found),
             Self::Recoverable => ExpectMust::Deadly(None),
             Self::Deadly(error) => ExpectMust::Deadly(Some(error)),
+        }
+    }
+
+    #[allow(unused)]
+    fn assert(self) -> K {
+        match self {
+            Self::Found(found) => found,
+            _ => panic!("asserted on a failed expect"),
         }
     }
 }
@@ -292,7 +325,7 @@ pub fn parse(input: &str) -> Parse {
         let checkpoint = this.checkpoint();
 
         // Reached an unrecoverable error.
-        if let Err(error) = this.parse_expression_until(EnumSet::EMPTY) {
+        if let Expect::Deadly(error) = this.parse_expression_until(EnumSet::EMPTY) {
             log::trace!("unrecoverable error encountered: {error:?}");
 
             this.node_from(checkpoint, NODE_ERROR, |_| {});
@@ -355,17 +388,19 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
         self.peek_direct()
     }
 
-    fn peek_expecting(&mut self, expected: EnumSet<Kind>) -> Result<Kind, ParseError> {
-        self.peek().ok_or_else(|| {
-            ParseError::Unexpected {
-                got: None,
-                expected,
-                at: rowan::TextRange::empty(self.offset),
-            }
-        })
+    fn peek_expecting(&mut self, expected: EnumSet<Kind>) -> ExpectMust {
+        self.peek()
+            .ok_or_else(|| {
+                ParseError::Unexpected {
+                    got: None,
+                    expected,
+                    at: rowan::TextRange::empty(self.offset),
+                }
+            })
+            .into()
     }
 
-    fn next(&mut self) -> Result<Kind, ParseError> {
+    fn next(&mut self) -> ExpectMust {
         self.tokens
             .next()
             .map(|(kind, slice)| {
@@ -380,11 +415,12 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
                     at: rowan::TextRange::empty(self.offset),
                 }
             })
+            .into()
     }
 
     fn next_while(&mut self, predicate: impl Fn(Kind) -> bool) {
-        while self.peek().map_or(false, &predicate) {
-            self.next().unwrap();
+        while self.peek_direct().map_or(false, &predicate) {
+            self.next().assert();
         }
     }
 
@@ -396,7 +432,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
         let checkpoint = self.checkpoint();
 
         match self.peek() {
-            Some(next) if expected.contains(next) => Expect::Found(self.next().unwrap()),
+            Some(next) if expected.contains(next) => self.next().maybe(),
 
             Some(got) => {
                 let start = self.offset;
@@ -414,23 +450,19 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
                 if self.peek().map_or(false, |kind| expected.contains(kind)) {
                     log::trace!("found expected kind");
                     self.errors.push(error);
-                    Expect::Found(self.next().unwrap())
+                    self.next().maybe()
                 } else if let Some(peek) = self.peek() {
                     log::trace!("reached expect bound, not consuming {peek:?}",);
                     self.errors.push(error);
-                    Expect::Recoverable(ParseError::Unexpected {
-                        got: Some(got),
-                        expected,
-                        at: rowan::TextRange::new(start, self.offset),
-                    })
+                    Expect::Recoverable
                 } else {
                     log::trace!("expect consumed everything");
-                    Err(error)
+                    Expect::Deadly(error)
                 }
             },
 
             None => {
-                Err(ParseError::Unexpected {
+                Expect::Deadly(ParseError::Unexpected {
                     got: None,
                     expected,
                     at: rowan::TextRange::empty(self.offset),
@@ -460,18 +492,12 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
     }
 
     #[track_caller]
-    fn node_failable(
-        &mut self,
-        kind: Kind,
-        closure: impl FnOnce(&mut Self) -> Result<(), Option<ParseError>>,
-    ) {
+    #[allow(unused)]
+    fn node_failable<K>(&mut self, kind: Kind, closure: impl FnOnce(&mut Self) -> Expect<K>) {
         let checkpoint = self.checkpoint();
 
-        if let Err(error) = self.node(kind, closure) {
-            if let Some(error) = error {
-                self.errors.push(error);
-            }
-
+        if let Expect::Deadly(error) = self.node(kind, closure) {
+            self.errors.push(error);
             self.node_from(checkpoint, NODE_ERROR, |_| {});
         }
     }
@@ -498,100 +524,104 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
     }
 
     #[track_caller]
-    fn node_failable_from(
+    fn node_failable_from<K>(
         &mut self,
         checkpoint: rowan::Checkpoint,
         kind: Kind,
-        closure: impl FnOnce(&mut Self) -> Result<(), ParseError>,
+        closure: impl FnOnce(&mut Self) -> Expect<K>,
     ) {
-        if let Err(error) = self.node_from(checkpoint, kind, closure) {
+        if let Expect::Deadly(error) = self.node_from(checkpoint, kind, closure) {
             self.errors.push(error);
             self.node_from(checkpoint, NODE_ERROR, |_| {});
         }
     }
 
-    fn parse_stringlike_inner(&mut self, end: Kind) -> Result<(), ParseError> {
+    fn parse_stringlike_inner(&mut self, end: Kind) -> Expect<()> {
         // Assuming that the start quote has already been consumed
         // and the node is closed outside of this function.
 
         loop {
             let checkpoint = self.checkpoint();
 
-            let current = self.expect(TOKEN_CONTENT | TOKEN_INTERPOLATION_START | end)?;
+            let current = self.expect_until(
+                TOKEN_CONTENT | TOKEN_INTERPOLATION_START | end,
+                EnumSet::EMPTY,
+            )?;
 
-            if current == TOKEN_INTERPOLATION_START {
+            if current == Some(TOKEN_INTERPOLATION_START) {
                 self.node_from(checkpoint, NODE_INTERPOLATION, |this| {
                     this.parse_expression_until(TOKEN_INTERPOLATION_END.into())?;
-                    this.expect(TOKEN_INTERPOLATION_END.into())?;
-                    Ok(())
+                    this.expect_until(TOKEN_INTERPOLATION_END.into(), EnumSet::EMPTY)
                 })?;
-            } else if current == end {
+            } else if current == Some(end) {
                 break;
             }
         }
 
-        Ok(())
+        Expect::Found(())
     }
 
-    fn parse_identifier_until(&mut self, until: EnumSet<Kind>) {
-        self.node_failable(NODE_IDENTIFIER, |this| {
+    fn parse_identifier_until(&mut self, until: EnumSet<Kind>) -> Expect<()> {
+        self.node(NODE_IDENTIFIER, |this| {
             // If it is a normal identifier, we don't do anything
             // else as it only has a single token as .expect_until() consumes it.
             if this
-                .expect_until(TOKEN_IDENTIFIER | TOKEN_IDENTIFIER_START, until)?
-                .ok_or(None)?
+                .expect_until(TOKEN_IDENTIFIER | TOKEN_IDENTIFIER_START, until)
+                .must()?
                 == TOKEN_IDENTIFIER_START
             {
                 this.parse_stringlike_inner(TOKEN_IDENTIFIER_END)?;
             }
-            Ok(())
+
+            Expect::Found(())
         })
     }
 
-    fn parse_attribute_until(&mut self, until: EnumSet<Kind>) -> Result<(), ParseError> {
+    fn parse_attribute_until(&mut self, until: EnumSet<Kind>) -> Expect<()> {
         let checkpoint = self.checkpoint();
 
         // First identifier down. If the next token is a semicolon,
         // this is a NODE_ATTRIBUTE_INHERIT. If it is a period or
         // an equals, this is a NODE_ATTRIBUTE.
-        self.parse_identifier_until(until | TOKEN_EQUAL | TOKEN_SEMICOLON | TOKEN_RIGHT_CURLYBRACE);
+        self.parse_identifier_until(
+            until | TOKEN_EQUAL | TOKEN_SEMICOLON | TOKEN_RIGHT_CURLYBRACE,
+        )?;
 
         if self.peek_expecting(TOKEN_SEMICOLON | TOKEN_PERIOD | TOKEN_EQUAL)? == TOKEN_SEMICOLON {
             self.node_from(checkpoint, NODE_ATTRIBUTE_INHERIT, |this| {
-                this.next().unwrap();
+                this.next().assert();
             });
         } else {
             self.node_failable_from(checkpoint, NODE_ATTRIBUTE, |this| {
                 this.node_failable_from(checkpoint, NODE_ATTRIBUTE_PATH, |this| {
                     while this.peek_expecting(TOKEN_PERIOD | TOKEN_EQUAL)? == TOKEN_PERIOD {
-                        this.next().unwrap();
+                        this.next().assert();
                         this.parse_identifier_until(
                             until | TOKEN_EQUAL | TOKEN_SEMICOLON | TOKEN_RIGHT_CURLYBRACE,
-                        );
+                        )?;
                     }
-                    Ok(())
+                    Expect::Found(())
                 });
 
                 this.expect_until(TOKEN_EQUAL.into(), EXPRESSION_TOKENS)?;
                 this.parse_expression_until(TOKEN_SEMICOLON | TOKEN_RIGHT_CURLYBRACE)?;
-                this.expect_until(TOKEN_SEMICOLON.into(), TOKEN_RIGHT_CURLYBRACE.into())?;
-                Ok(())
+                this.expect_until(TOKEN_SEMICOLON.into(), TOKEN_RIGHT_CURLYBRACE.into())
             });
         }
 
-        Ok(())
+        Expect::Found(())
     }
 
-    fn parse_interpolation(&mut self) -> Result<(), ParseError> {
+    fn parse_interpolation(&mut self) -> Expect<()> {
         self.node(NODE_INTERPOLATION, |this| {
-            this.expect(TOKEN_INTERPOLATION_START.into())?;
+            this.expect_until(TOKEN_INTERPOLATION_START.into(), EnumSet::EMPTY)?;
             this.parse_expression_until(TOKEN_RIGHT_CURLYBRACE.into())?;
-            this.expect(TOKEN_INTERPOLATION_END.into())?;
-            Ok(())
+            this.expect_until(TOKEN_INTERPOLATION_END.into(), EnumSet::EMPTY)?;
+            Expect::Found(())
         })
     }
 
-    fn parse_expression_until(&mut self, until: EnumSet<Kind>) -> Result<(), ParseError> {
+    fn parse_expression_until(&mut self, until: EnumSet<Kind>) -> Expect<()> {
         if self.depth >= 512 {
             let error = ParseError::RecursionLimitExceeded { at: self.offset };
 
@@ -599,7 +629,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
                 this.next_while(|_| true);
             });
 
-            return Err(error);
+            return Expect::Deadly(error);
         }
 
         self.depth += 1;
@@ -610,8 +640,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
             Some(TOKEN_LEFT_PARENTHESIS) => {
                 self.node_failable_from(checkpoint, NODE_PARENTHESIS, |this| {
                     this.parse_expression_until(until | TOKEN_RIGHT_PARENTHESIS)?;
-                    this.expect_until(TOKEN_RIGHT_PARENTHESIS.into(), until)?;
-                    Ok(())
+                    this.expect_until(TOKEN_RIGHT_PARENTHESIS.into(), until)
                 })
             },
 
@@ -627,8 +656,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
                         this.parse_expression_until(until | TOKEN_RIGHT_BRACKET)?;
                     }
 
-                    this.expect_until(TOKEN_RIGHT_BRACKET.into(), until)?;
-                    Ok(())
+                    this.expect_until(TOKEN_RIGHT_BRACKET.into(), until)
                 });
             },
 
@@ -642,15 +670,13 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
                         this.parse_attribute_until(until | TOKEN_RIGHT_CURLYBRACE)?;
                     }
 
-                    this.expect_until(TOKEN_RIGHT_CURLYBRACE.into(), until)?;
-                    Ok(())
+                    this.expect_until(TOKEN_RIGHT_CURLYBRACE.into(), until)
                 });
             },
 
             Some(TOKEN_PLUS | TOKEN_MINUS | TOKEN_LITERAL_NOT) => {
                 self.node_failable_from(checkpoint, NODE_PREFIX_OPERATION, |this| {
-                    this.parse_expression_until(until)?;
-                    Ok(())
+                    this.parse_expression_until(until)
                 });
             },
 
@@ -662,18 +688,18 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
                         if peek == Some(TOKEN_INTERPOLATION_START) {
                             this.parse_interpolation()?;
                         } else if peek == Some(TOKEN_PATH) {
-                            this.next().unwrap();
+                            this.next().assert();
                         } else {
                             break;
                         }
                     }
-                    Ok(())
+                    Expect::Found(())
                 });
             },
 
             Some(start @ (TOKEN_IDENTIFIER | TOKEN_IDENTIFIER_START)) => {
                 let identifier_parse_result = if start == TOKEN_IDENTIFIER {
-                    Ok(())
+                    Expect::Found(())
                 } else {
                     self.parse_stringlike_inner(TOKEN_IDENTIFIER_END)
                 };
@@ -681,17 +707,16 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
                 if self.peek() == Some(TOKEN_COLON) {
                     self.node_failable_from(checkpoint, NODE_LAMBDA, |this| {
                         this.node_from(checkpoint, NODE_LAMBDA_PARAMETER_IDENTIFIER, |this| {
-                            this.node_from(checkpoint, NODE_IDENTIFIER, |_| {});
-                        });
+                            this.node_from(checkpoint, NODE_IDENTIFIER, |_| identifier_parse_result)
+                        })?;
 
-                        this.next().unwrap();
+                        this.next().assert();
 
                         this.parse_expression_until(until)
                     });
                 } else {
                     self.node_failable_from(checkpoint, NODE_IDENTIFIER, |_| {
-                        identifier_parse_result?;
-                        Ok(())
+                        identifier_parse_result
                     });
                 }
             },
@@ -719,10 +744,10 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
                     this.parse_expression_until(until | TOKEN_LITERAL_ELSE)?;
 
                     if this.peek() == Some(TOKEN_LITERAL_ELSE) {
-                        this.next().unwrap();
+                        this.next().assert();
                         this.parse_expression_until(until)?;
                     }
-                    Ok(())
+                    Expect::Found(())
                 });
             },
 
@@ -734,6 +759,6 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
         }
 
         self.depth -= 1;
-        Ok(())
+        Expect::Found(())
     }
 }
