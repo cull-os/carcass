@@ -1,7 +1,6 @@
 use std::{
     convert::Infallible,
     fmt,
-    iter::Peekable,
     ops::{
         ControlFlow,
         FromResidual,
@@ -14,7 +13,10 @@ use enumset::{
     enum_set,
     EnumSet,
 };
-use peekmore::PeekMore;
+use peekmore::{
+    PeekMore as _,
+    PeekMoreIterator,
+};
 use rowan::{
     ast::AstNode as _,
     Language as _,
@@ -331,7 +333,7 @@ pub fn parse(input: &str) -> Parse {
             let start = this.offset;
 
             this.node(NODE_ERROR, |this| {
-                this.next_while(|_| true);
+                this.next_direct_while(|_| true);
             });
 
             this.errors.push(ParseError::Unexpected {
@@ -351,7 +353,7 @@ pub fn parse(input: &str) -> Parse {
 struct Parser<'a, I: Iterator<Item = (Kind, &'a str)>> {
     builder: rowan::GreenNodeBuilder<'a>,
 
-    tokens: Peekable<I>,
+    tokens: PeekMoreIterator<I>,
     errors: Vec<ParseError>,
 
     offset: rowan::TextSize,
@@ -363,7 +365,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
         Self {
             builder: rowan::GreenNodeBuilder::new(),
 
-            tokens: tokens.peekable(),
+            tokens: tokens.peekmore(),
             errors: Vec::new(),
 
             offset: 0.into(),
@@ -375,9 +377,26 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
         self.tokens.peek().map(|&(kind, _)| kind)
     }
 
+    fn peek_nth(&mut self, n: usize) -> Option<Kind> {
+        let mut index = 0;
+        let mut result = None;
+
+        loop {
+            match self.tokens.peek_nth(index) {
+                None => break,
+                Some(&(kind, _)) if !kind.is_trivia() && index < n => index += 1,
+                Some(&(kind, _)) => {
+                    result = Some(kind);
+                    break;
+                },
+            }
+        }
+
+        result
+    }
+
     fn peek(&mut self) -> Option<Kind> {
-        self.next_while_trivia();
-        self.peek_direct()
+        self.peek_nth(0)
     }
 
     fn peek_expecting(&mut self, expected: EnumSet<Kind>) -> ExpectMust {
@@ -392,7 +411,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
             .into()
     }
 
-    fn next(&mut self) -> ExpectMust {
+    fn next_direct(&mut self) -> ExpectMust {
         self.tokens
             .next()
             .map(|(kind, slice)| {
@@ -410,14 +429,19 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
             .into()
     }
 
-    fn next_while(&mut self, predicate: impl Fn(Kind) -> bool) {
+    fn next_direct_while(&mut self, predicate: impl Fn(Kind) -> bool) {
         while self.peek_direct().map_or(false, &predicate) {
-            self.next().assert();
+            self.next_direct().assert();
         }
     }
 
     fn next_while_trivia(&mut self) {
-        self.next_while(Kind::is_trivia)
+        self.next_direct_while(Kind::is_trivia)
+    }
+
+    fn next(&mut self) -> ExpectMust {
+        self.next_while_trivia();
+        self.next_direct()
     }
 
     fn expect_until(&mut self, expected: EnumSet<Kind>, until: EnumSet<Kind>) -> Expect {
@@ -430,7 +454,9 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
                 let start = self.offset;
 
                 self.node_from(checkpoint, NODE_ERROR, |this| {
-                    this.next_while(|kind| !expected.contains(kind) && !until.contains(kind));
+                    this.next_direct_while(|kind| {
+                        !expected.contains(kind) && !until.contains(kind)
+                    });
                 });
 
                 let error = ParseError::Unexpected {
@@ -618,7 +644,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
             let error = ParseError::RecursionLimitExceeded { at: self.offset };
 
             self.node(NODE_ERROR, |this| {
-                this.next_while(|_| true);
+                this.next_direct_while(|_| true);
             });
 
             return Expect::Deadly(error);
