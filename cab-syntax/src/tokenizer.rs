@@ -395,10 +395,7 @@ impl<'a> Tokenizer<'a> {
                 TOKEN_STRING_START
             },
 
-            '.' if self
-                .peek_character()
-                .map_or(false, |c| matches!(c, '.' | '/')) =>
-            {
+            '.' if matches!(self.peek_character(), Some('.' | '/')) => {
                 self.offset -= 1;
                 self.context_push(TokenizerContext::Path);
 
