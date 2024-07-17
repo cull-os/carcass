@@ -378,21 +378,29 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
     }
 
     fn peek_nth(&mut self, n: usize) -> Option<Kind> {
+        let mut peek_index = 0;
         let mut index = 0;
-        let mut result = None;
 
         loop {
-            match self.tokens.peek_nth(index) {
-                None => break,
-                Some(&(kind, _)) if !kind.is_trivia() && index < n => index += 1,
+            match self.tokens.peek_nth(peek_index) {
+                None => return None,
+
                 Some(&(kind, _)) => {
-                    result = Some(kind);
-                    break;
+                    if !kind.is_trivia() {
+                        index += 1;
+                    }
+
+                    // If it is trivia or we haven't reached the desired real index,
+                    // move on to the next iteration.
+                    if kind.is_trivia() || index < n {
+                        peek_index += 1;
+                        continue;
+                    }
+
+                    return Some(kind);
                 },
             }
         }
-
-        result
     }
 
     fn peek(&mut self) -> Option<Kind> {
