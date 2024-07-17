@@ -74,8 +74,12 @@ impl<'a> Tokenizer<'a> {
         &self.input[self.offset..]
     }
 
+    fn peek_character_n(&self, n: usize) -> Option<char> {
+        self.remaining().chars().nth(n)
+    }
+
     fn peek_character(&self) -> Option<char> {
-        self.remaining().chars().next()
+        self.peek_character_n(0)
     }
 
     fn consume_while(&mut self, predicate: fn(char) -> bool) -> usize {
@@ -302,39 +306,46 @@ impl<'a> Tokenizer<'a> {
             '*' if self.try_consume_character('*') => TOKEN_ASTERISK_ASTERISK,
             '*' => TOKEN_ASTERISK,
 
-            initial_digit if initial_digit.is_ascii_digit() => {
-                let (is_valid_digit, threshold): (fn(char) -> bool, usize) = if initial_digit == '0'
-                    && matches!(self.peek_character(), Some('b' | 'o' | 'x'))
-                {
-                    (
-                        match self.consume_character() {
-                            Some('b') => |c| matches!(c, '0' | '1'),
-                            Some('o') => |c| matches!(c, '0'..='7'),
-                            Some('x') => |c| c.is_ascii_hexdigit(),
-                            _ => unreachable!(),
-                        },
-                        1,
-                    )
-                } else {
-                    (|c| c.is_ascii_digit(), 0)
+            '0' if matches!(self.peek_character(), Some('b' | 'o' | 'x')) => {
+                let is_valid_digit = match self.consume_character() {
+                    Some('b') => |c: char| matches!(c, '0' | '1'),
+                    Some('o') => |c: char| matches!(c, '0'..='7'),
+                    Some('x') => |c: char| c.is_ascii_hexdigit(),
+                    _ => unreachable!(),
                 };
 
                 let start = self.offset;
                 self.consume_while(is_valid_digit);
 
-                if self.try_consume_character('.') {
-                    let start = self.offset;
-                    self.consume_while(|c| c.is_ascii_digit());
+                if self.peek_character() == Some('.')
+                    && self.peek_character_n(1).map_or(false, is_valid_digit)
+                {
+                    self.consume_character();
+                    self.consume_while(is_valid_digit);
 
-                    if self.offset - start > 0 {
-                        TOKEN_FLOAT
-                    } else {
-                        TOKEN_ERROR
-                    }
-                } else if self.offset - start >= threshold {
+                    TOKEN_FLOAT
+                } else if self.offset - start > 0 {
                     TOKEN_INTEGER
                 } else {
+                    // There was no character consumed after the initial 0{b,o,x}.
                     TOKEN_ERROR
+                }
+            },
+
+            initial_digit if initial_digit.is_ascii_digit() => {
+                self.consume_while(|c| c.is_ascii_digit());
+
+                if self.peek_character() == Some('.')
+                    && self
+                        .peek_character_n(1)
+                        .map_or(false, |c| c.is_ascii_digit())
+                {
+                    self.consume_character();
+                    self.consume_while(|c| c.is_ascii_digit());
+
+                    TOKEN_FLOAT
+                } else {
+                    TOKEN_INTEGER
                 }
             },
 
