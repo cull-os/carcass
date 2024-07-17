@@ -74,12 +74,12 @@ impl<'a> Tokenizer<'a> {
         &self.input[self.offset..]
     }
 
-    fn peek_character_n(&self, n: usize) -> Option<char> {
+    fn peek_character_nth(&self, n: usize) -> Option<char> {
         self.remaining().chars().nth(n)
     }
 
     fn peek_character(&self) -> Option<char> {
-        self.peek_character_n(0)
+        self.peek_character_nth(0)
     }
 
     fn consume_while(&mut self, predicate: fn(char) -> bool) -> usize {
@@ -318,7 +318,7 @@ impl<'a> Tokenizer<'a> {
                 self.consume_while(is_valid_digit);
 
                 if self.peek_character() == Some('.')
-                    && self.peek_character_n(1).map_or(false, is_valid_digit)
+                    && self.peek_character_nth(1).map_or(false, is_valid_digit)
                 {
                     self.consume_character();
                     self.consume_while(is_valid_digit);
@@ -337,7 +337,7 @@ impl<'a> Tokenizer<'a> {
 
                 if self.peek_character() == Some('.')
                     && self
-                        .peek_character_n(1)
+                        .peek_character_nth(1)
                         .map_or(false, |c| c.is_ascii_digit())
                 {
                     self.consume_character();
