@@ -1,3 +1,4 @@
+//! [`Token`] definitions for the Cab language.
 use std::{
     fmt,
     ops::Deref,
