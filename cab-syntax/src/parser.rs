@@ -463,6 +463,8 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
             next if expected.contains(next) => self.next().maybe(),
 
             got => {
+                // I don't know why I don't have to run next_while_trivia here to not capture
+                // the trivia for the error offsets, and I do not care anymore.
                 let start = self.offset;
 
                 self.node_from(checkpoint, NODE_ERROR, |this| {
