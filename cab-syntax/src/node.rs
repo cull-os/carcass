@@ -251,9 +251,9 @@ node! {
     #[from(
         Error,
         Parenthesis,
+        Bind,
         List,
         AttributeSet,
-        Use,
         Lambda,
         Application,
         PrefixOperation,
@@ -282,6 +282,18 @@ impl Parenthesis {
     get_node! { expression -> 0 @ Expression }
 
     get_token! { right_parenthesis -> TOKEN_RIGHT_PARENTHESIS }
+}
+
+// BIND
+
+node! { #[from(NODE_BIND)] struct Bind => |self, formatter| write!(formatter, "{identifier} @ {expression}", identifier = self.identifier(), expression = self.expression()) }
+
+impl Bind {
+    get_node! { identifier -> 0 @ Identifier }
+
+    get_token! { at -> TOKEN_AT }
+
+    get_node! { expression -> 1 @ Expression }
 }
 
 // LIST
@@ -375,41 +387,6 @@ impl AttributePath {
     get_node! { identifiers -> [Identifier] }
 }
 
-// BIND
-
-node! { #[from(NODE_BIND)] struct Bind => |self, formatter| write!(formatter, "{identifier} @", identifier = self.identifier()) }
-
-impl Bind {
-    get_node! { identifier -> 0 @ Identifier }
-
-    get_token! { at -> TOKEN_AT }
-}
-
-// USE
-
-node! { #[from(NODE_USE)] struct Use => |self, formatter| {
-    if let Some(bind) = self.bind() {
-        write!(formatter, "{bind} ")?;
-    }
-
-    write!(
-        formatter,
-        "{left} ==> {right}",
-        left = self.left_expression(),
-        right = self.right_expression(),
-    )
-}}
-
-impl Use {
-    get_node! { bind -> 0 @ ? Bind }
-
-    get_node! { left_expression -> 0 @ Expression }
-
-    get_token! { right_long_arrow -> TOKEN_EQUAL_EQUAL_MORE }
-
-    get_node! { right_expression -> 1 @ Expression }
-}
-
 // LAMBDA
 
 node! { #[from(NODE_LAMBDA)] struct Lambda => |self, formatter| write!(formatter, "{parameter}: {expression}", parameter = self.parameter(), expression = self.expression()) }
@@ -437,10 +414,6 @@ impl LambdaParameterIdentifier {
 }
 
 node! { #[from(NODE_LAMBDA_PARAMETER_PATTERN)] struct LambdaParameterPattern => |self, formatter| {
-    if let Some(bind) = self.bind() {
-        write!(formatter, "{bind} ")?;
-    }
-
     write!(formatter, "{{")?;
 
     let mut attributes = self.attributes();
@@ -458,8 +431,6 @@ node! { #[from(NODE_LAMBDA_PARAMETER_PATTERN)] struct LambdaParameterPattern => 
 
 #[rustfmt::skip]
 impl LambdaParameterPattern {
-    get_node! { bind -> 0 @ ? Bind }
-
     get_token! { left_curlybrace -> TOKEN_LEFT_CURLYBRACE }
 
     get_node! { attributes -> [LambdaParameterPatternAttribute] }
@@ -549,6 +520,8 @@ pub enum InfixOperator {
     #[display(fmt = "++")]
     Concat,
 
+    #[display(fmt = "==>")]
+    Use,
     #[display(fmt = "<==")]
     Override,
     #[display(fmt = "//")]
@@ -596,6 +569,7 @@ impl TryFrom<Kind> for InfixOperator {
 
             TOKEN_PLUS_PLUS => Ok(Self::Concat),
 
+            TOKEN_EQUAL_EQUAL_MORE => Ok(Self::Use),
             TOKEN_LESS_EQUAL_EQUAL => Ok(Self::Override),
             TOKEN_SLASH_SLASH => Ok(Self::Update),
 
