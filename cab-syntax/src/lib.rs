@@ -18,9 +18,9 @@ mod tokenizer;
 pub use parser::*;
 pub use tokenizer::*;
 
-pub type RowanNode = rowan::SyntaxNode<Language>;
-pub type RowanToken = rowan::SyntaxToken<Language>;
-pub type RowanElement = rowan::NodeOrToken<RowanNode, RowanToken>;
+pub(crate) type RowanNode = rowan::SyntaxNode<Language>;
+pub(crate) type RowanToken = rowan::SyntaxToken<Language>;
+pub(crate) type RowanElement = rowan::NodeOrToken<RowanNode, RowanToken>;
 
 /// The Cab language type.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
