@@ -255,6 +255,8 @@ impl<'a> Tokenizer<'a> {
             '$' => TOKEN_DOLLAR,
             '|' if self.try_consume_character('>') => TOKEN_PIPE_MORE,
 
+            '@' => TOKEN_AT,
+
             '(' => TOKEN_LEFT_PARENTHESIS,
             ')' => TOKEN_RIGHT_PARENTHESIS,
 
@@ -290,14 +292,13 @@ impl<'a> Tokenizer<'a> {
             '?' => TOKEN_QUESTIONMARK,
             ';' => TOKEN_SEMICOLON,
 
+            '!' if self.try_consume_character('=') => TOKEN_EXCLAMATION_EQUAL,
             '=' if self.try_consume_character('=') => TOKEN_EQUAL_EQUAL,
             '=' => TOKEN_EQUAL,
-            '!' if self.try_consume_character('=') => TOKEN_EXCLAMATION_EQUAL,
             '>' if self.try_consume_character('=') => TOKEN_MORE_EQUAL,
             '>' => TOKEN_MORE,
             '-' if self.try_consume_character('>') => TOKEN_MINUS_MORE,
 
-            '@' => TOKEN_AT,
             ',' => TOKEN_COMMA,
             ':' => TOKEN_COLON,
 
@@ -371,6 +372,19 @@ impl<'a> Tokenizer<'a> {
                 }
             },
 
+            '.' if matches!(self.peek_character(), Some('.' | '/')) => {
+                self.offset -= 1;
+                self.context_push(TokenizerContext::Path);
+
+                return self.consume_kind();
+            },
+            '/' if self.peek_character().map_or(false, is_valid_path_character) => {
+                self.offset -= 1;
+                self.context_push(TokenizerContext::Path);
+
+                return self.consume_kind();
+            },
+
             start @ ('`' | '"') => {
                 self.context_push(TokenizerContext::Stringlike {
                     end: match start {
@@ -393,19 +407,6 @@ impl<'a> Tokenizer<'a> {
                 });
 
                 TOKEN_STRING_START
-            },
-
-            '.' if matches!(self.peek_character(), Some('.' | '/')) => {
-                self.offset -= 1;
-                self.context_push(TokenizerContext::Path);
-
-                return self.consume_kind();
-            },
-            '/' if self.peek_character().map_or(false, is_valid_path_character) => {
-                self.offset -= 1;
-                self.context_push(TokenizerContext::Path);
-
-                return self.consume_kind();
             },
 
             '.' => TOKEN_PERIOD,

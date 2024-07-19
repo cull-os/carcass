@@ -251,9 +251,9 @@ node! {
     #[from(
         Error,
         Parenthesis,
-        Bind,
         List,
         AttributeSet,
+        Bind,
         Lambda,
         Application,
         PrefixOperation,
@@ -282,18 +282,6 @@ impl Parenthesis {
     get_node! { expression -> 0 @ Expression }
 
     get_token! { right_parenthesis -> TOKEN_RIGHT_PARENTHESIS }
-}
-
-// BIND
-
-node! { #[from(NODE_BIND)] struct Bind => |self, formatter| write!(formatter, "{identifier} @ {expression}", identifier = self.identifier(), expression = self.expression()) }
-
-impl Bind {
-    get_node! { identifier -> 0 @ Identifier }
-
-    get_token! { at -> TOKEN_AT }
-
-    get_node! { expression -> 1 @ Expression }
 }
 
 // LIST
@@ -385,6 +373,18 @@ node! { #[from(NODE_ATTRIBUTE_PATH)] struct AttributePath => |self, formatter| {
 
 impl AttributePath {
     get_node! { identifiers -> [Identifier] }
+}
+
+// BIND
+
+node! { #[from(NODE_BIND)] struct Bind => |self, formatter| write!(formatter, "{identifier} @ {expression}", identifier = self.identifier(), expression = self.expression()) }
+
+impl Bind {
+    get_node! { identifier -> 0 @ Identifier }
+
+    get_token! { at -> TOKEN_AT }
+
+    get_node! { expression -> 1 @ Expression }
 }
 
 // LAMBDA

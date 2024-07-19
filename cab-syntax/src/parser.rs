@@ -827,6 +827,8 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
         self.depth += 1;
 
         match self.peek_expecting(EXPRESSION_TOKENS)? {
+            TOKEN_PLUS | TOKEN_MINUS | TOKEN_LITERAL_NOT => self.parse_prefix_operation(until),
+
             TOKEN_LEFT_PARENTHESIS => {
                 self.parse_parenthesis(until);
             },
@@ -858,12 +860,6 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
                 }
             },
 
-            TOKEN_PLUS | TOKEN_MINUS | TOKEN_LITERAL_NOT => self.parse_prefix_operation(until),
-
-            TOKEN_PATH => {
-                self.parse_path();
-            },
-
             kind if IDENTIFIER_TOKENS.contains(kind) => {
                 let checkpoint = self.checkpoint();
 
@@ -876,6 +872,10 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
 
                     _ => {},
                 }
+            },
+
+            TOKEN_PATH => {
+                self.parse_path();
             },
 
             TOKEN_STRING_START => {

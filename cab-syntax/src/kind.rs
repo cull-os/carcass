@@ -38,7 +38,11 @@ pub enum Kind {
 
     #[display(fmt = "'$'")]
     TOKEN_DOLLAR,
+    #[display(fmy = "'|>'")]
     TOKEN_PIPE_MORE,
+
+    #[display(fmt = "'@'")]
+    TOKEN_AT,
 
     #[display(fmt = "'('")]
     TOKEN_LEFT_PARENTHESIS,
@@ -69,12 +73,12 @@ pub enum Kind {
     #[display(fmt = "';'")]
     TOKEN_SEMICOLON,
 
-    #[display(fmt = "'='")]
-    TOKEN_EQUAL,
-    #[display(fmt = "'=='")]
-    TOKEN_EQUAL_EQUAL,
     #[display(fmt = "'!='")]
     TOKEN_EXCLAMATION_EQUAL,
+    #[display(fmt = "'=='")]
+    TOKEN_EQUAL_EQUAL,
+    #[display(fmt = "'='")]
+    TOKEN_EQUAL,
     #[display(fmt = "'<='")]
     TOKEN_LESS_EQUAL,
     #[display(fmt = "'<'")]
@@ -86,8 +90,6 @@ pub enum Kind {
     #[display(fmt = "'->'")]
     TOKEN_MINUS_MORE,
 
-    #[display(fmt = "'@'")]
-    TOKEN_AT,
     #[display(fmt = "','")]
     TOKEN_COMMA,
     #[display(fmt = "':'")]
@@ -97,10 +99,10 @@ pub enum Kind {
     TOKEN_PLUS,
     #[display(fmt = "'-'")]
     TOKEN_MINUS,
-    #[display(fmt = "'*'")]
-    TOKEN_ASTERISK,
     #[display(fmt = "'**'")]
     TOKEN_ASTERISK_ASTERISK,
+    #[display(fmt = "'*'")]
+    TOKEN_ASTERISK,
     #[display(fmt = "'/'")]
     TOKEN_SLASH,
 
@@ -177,9 +179,12 @@ pub enum Kind {
     NODE_ROOT,
     NODE_ERROR,
 
-    NODE_PARENTHESIS, // (<expression>)
+    NODE_APPLICATION, // <expression> <expression>
 
-    NODE_BIND, // <identifier> @ <expression>
+    NODE_PREFIX_OPERATION, // <operator> <expression>
+    NODE_INFIX_OPERATION,  // <expression> <operator> <expression>
+
+    NODE_PARENTHESIS, // (<expression>)
 
     NODE_LIST, // [<expression>*]
 
@@ -191,15 +196,12 @@ pub enum Kind {
     NODE_ATTRIBUTE_SELECT, // <expression>.<identifier>
     NODE_ATTRIBUTE_CHECK,  // <expression> ? <attribute-path>
 
+    NODE_BIND, // <identifier> @ <expression>
+
     NODE_LAMBDA, // <identifier | lambda-parameter-pattern>: <expression>
     NODE_LAMBDA_PARAMETER_IDENTIFIER, // <identifier>
     NODE_LAMBDA_PARAMETER_PATTERN, // { <<attribute>,>* }
     NODE_LAMBDA_PARAMETER_PATTERN_ATTRIBUTE, // <identifier> <? <expression>>?
-
-    NODE_APPLICATION, // <expression> <expression>
-
-    NODE_PREFIX_OPERATION, // <operator> <expression>
-    NODE_INFIX_OPERATION,  // <expression> <operator> <expression>
 
     /// A node which starts with a [`TOKEN_INTERPOLATION_START`], ends with a
     /// [`TOKEN_INTERPOLATION_END`] while having a node at the middle that can
