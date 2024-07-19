@@ -31,9 +31,9 @@ use crate::{
 ///
 /// ```ignore
 /// match_node! { rowan_node =>
-///     IfElse:(if_else) => { todo!() },
-///     Identifier:(identifier) => { todo!() },
-///     _ => todo!(),
+///     IfElse:(if_else) => { unimplemented!() },
+///     Identifier:(identifier) => { unimplemented!() },
+///     _ => unimplemented!(),
 /// }
 /// ```
 #[macro_export]
