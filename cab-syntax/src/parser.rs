@@ -606,11 +606,11 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
                 while !(until | TOKEN_RIGHT_CURLYBRACE)
                     .contains(this.peek_expecting(IDENTIFIER_TOKENS | TOKEN_RIGHT_CURLYBRACE)?)
                 {
-                    let Expect::Found(true) = this.parse_lambda_pattern_attribute_until(
+                    if let Expect::Found(false) = this.parse_lambda_pattern_attribute_until(
                         until | TOKEN_RIGHT_CURLYBRACE | TOKEN_COLON,
-                    ) else {
+                    ) {
                         break;
-                    };
+                    }
                 }
 
                 this.expect_until(
