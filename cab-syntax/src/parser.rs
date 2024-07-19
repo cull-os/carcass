@@ -6,7 +6,6 @@ use std::{
         FromResidual,
         Try,
     },
-    panic::Location,
 };
 
 use enumset::{
@@ -497,23 +496,15 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
         self.builder.checkpoint()
     }
 
-    #[track_caller]
     fn node<T>(&mut self, kind: Kind, closure: impl FnOnce(&mut Self) -> T) -> T {
-        log::trace!(
-            "starting node {kind:?} in {location}",
-            location = Location::caller()
-        );
         self.builder.start_node(Language::kind_to_raw(kind));
 
         let result = closure(self);
 
-        log::trace!("ending node at {location}", location = Location::caller());
         self.builder.finish_node();
         result
     }
 
-    #[track_caller]
-    #[allow(unused)]
     fn node_failable<K>(&mut self, kind: Kind, closure: impl FnOnce(&mut Self) -> Expect<K>) {
         let checkpoint = self.checkpoint();
 
@@ -523,28 +514,21 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
         }
     }
 
-    #[track_caller]
     fn node_from<T>(
         &mut self,
         checkpoint: rowan::Checkpoint,
         kind: Kind,
         closure: impl FnOnce(&mut Self) -> T,
     ) -> T {
-        log::trace!(
-            "starting node {kind:?} at {checkpoint:?} in {location}",
-            location = Location::caller()
-        );
         self.builder
             .start_node_at(checkpoint, Language::kind_to_raw(kind));
 
         let result = closure(self);
 
-        log::trace!("ending node at {location}", location = Location::caller());
         self.builder.finish_node();
         result
     }
 
-    #[track_caller]
     fn node_failable_from<K>(
         &mut self,
         checkpoint: rowan::Checkpoint,
