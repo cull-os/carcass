@@ -380,23 +380,16 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
         let mut index = 0;
 
         loop {
-            match self.tokens.peek_nth(peek_index) {
-                None => return None,
+            let &(kind, _) = self.tokens.peek_nth(peek_index)?;
 
-                Some(&(kind, _)) => {
-                    if !kind.is_trivia() {
-                        index += 1;
-                    }
+            if index >= n && !kind.is_trivia() {
+                return Some(kind);
+            }
 
-                    // If it is trivia or we haven't reached the desired real index,
-                    // move on to the next iteration.
-                    if kind.is_trivia() || index < n {
-                        peek_index += 1;
-                        continue;
-                    }
+            peek_index += 1;
 
-                    return Some(kind);
-                },
+            if !kind.is_trivia() {
+                index += 1;
             }
         }
     }
@@ -547,16 +540,21 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
         self.node_failable(NODE_PARENTHESIS, |this| {
             this.expect_until(
                 TOKEN_LEFT_PARENTHESIS.into(),
-                until | TOKEN_RIGHT_PARENTHESIS,
+                until | EXPRESSION_TOKENS | TOKEN_RIGHT_PARENTHESIS,
             )?;
+
             this.parse_expression_until(until | TOKEN_RIGHT_PARENTHESIS)?;
+
             this.expect_until(TOKEN_RIGHT_PARENTHESIS.into(), until)
         });
     }
 
     fn parse_list_until(&mut self, until: EnumSet<Kind>) {
         self.node_failable(NODE_LIST, |this| {
-            this.expect_until(TOKEN_LEFT_BRACKET.into(), until | TOKEN_RIGHT_BRACKET)?;
+            this.expect_until(
+                TOKEN_LEFT_BRACKET.into(),
+                until | EXPRESSION_TOKENS | TOKEN_RIGHT_BRACKET,
+            )?;
 
             while this.peek_expecting(EXPRESSION_TOKENS | TOKEN_RIGHT_BRACKET)?
                 != TOKEN_RIGHT_BRACKET
@@ -568,17 +566,91 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
         });
     }
 
-    // TODO: Peek and do lambda parameter parsing.
-    //
-    // # Attribute set initials:
-    // {
-    // { foo
-    // { foo;
-    // { foo =
+    // TODO: Peek and do lambda parameter parsing
+    // *that supports stringlike identifiers for the initial identifier*.
     //
     // # Lambda pattern initials:
     // { foo,
     // { foo ?
+    // { foo }
+    //
+    // # Attribute set initials: Anything that isn't the above.
+    //
+    // Seems like I'm either going to use a sublexer that doesn't actually consume
+    // anything, or write code that goes in 300 indentation levels to support
+    // templated identifiers in lambda patterns.
+    #[rustfmt::skip]
+    fn parse_attribute_set_or_lambda_pattern_until(&mut self, until: EnumSet<Kind>) {
+        if matches!(self.peek_nth(1), Some(TOKEN_IDENTIFIER))
+        && matches!(self.peek_nth(2), Some(TOKEN_COMMA | TOKEN_QUESTIONMARK | TOKEN_RIGHT_CURLYBRACE)) {
+            self.parse_lambda_pattern_until(until)
+        } else {
+            self.parse_attribute_set_until(until)
+        }
+    }
+
+    fn parse_lambda_pattern_until(&mut self, until: EnumSet<Kind>) {
+        self.node_failable(NODE_LAMBDA, |this| {
+            this.node(NODE_LAMBDA_PARAMETER_PATTERN, |this| {
+                this.expect_until(
+                    TOKEN_LEFT_CURLYBRACE.into(),
+                    until
+                        | IDENTIFIER_TOKENS
+                        | TOKEN_COMMA
+                        | TOKEN_QUESTIONMARK
+                        | EXPRESSION_TOKENS
+                        | TOKEN_RIGHT_CURLYBRACE
+                        | TOKEN_COLON,
+                )?;
+
+                while !(until | TOKEN_RIGHT_CURLYBRACE)
+                    .contains(this.peek_expecting(IDENTIFIER_TOKENS | TOKEN_RIGHT_CURLYBRACE)?)
+                {
+                    let Expect::Found(true) = this.parse_lambda_pattern_attribute_until(
+                        until | TOKEN_RIGHT_CURLYBRACE | TOKEN_COLON,
+                    ) else {
+                        break;
+                    };
+                }
+
+                this.expect_until(
+                    TOKEN_RIGHT_CURLYBRACE.into(),
+                    until | TOKEN_COLON | EXPRESSION_TOKENS,
+                )
+            })?;
+
+            this.expect_until(TOKEN_COLON.into(), until | EXPRESSION_TOKENS)?;
+
+            this.parse_expression_until(until)
+        });
+    }
+
+    fn parse_lambda_pattern_attribute_until(&mut self, until: EnumSet<Kind>) -> Expect<bool> {
+        self.node(NODE_LAMBDA_PARAMETER_PATTERN_ATTRIBUTE, |this| {
+            this.parse_identifier_until(
+                until
+                    | TOKEN_COMMA
+                    | TOKEN_QUESTIONMARK
+                    | EXPRESSION_TOKENS
+                    | TOKEN_RIGHT_CURLYBRACE,
+            );
+
+            if this.peek_expecting(TOKEN_COMMA | TOKEN_QUESTIONMARK | TOKEN_RIGHT_CURLYBRACE)?
+                == TOKEN_QUESTIONMARK
+            {
+                this.next().unwrap();
+                this.parse_expression_until(until)?;
+            }
+
+            if this.peek_expecting(TOKEN_COMMA | TOKEN_RIGHT_BRACKET)? != TOKEN_RIGHT_BRACKET {
+                this.expect_until(TOKEN_COMMA.into(), until)?;
+                Expect::Found(true)
+            } else {
+                Expect::Found(false)
+            }
+        })
+    }
+
     fn parse_attribute_set_until(&mut self, until: EnumSet<Kind>) {
         self.node_failable(NODE_ATTRIBUTE_SET, |this| {
             this.expect_until(TOKEN_LEFT_CURLYBRACE.into(), until | TOKEN_RIGHT_CURLYBRACE)?;
@@ -599,9 +671,11 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
         // First identifier down. If the next token is a semicolon,
         // this is a NODE_ATTRIBUTE_INHERIT. If it is a period or
         // an equals, this is a NODE_ATTRIBUTE.
-        self.parse_identifier_until(until | TOKEN_EQUAL | EXPRESSION_TOKENS | TOKEN_SEMICOLON);
+        self.parse_identifier_until(
+            until | TOKEN_EQUAL | TOKEN_PERIOD | EXPRESSION_TOKENS | TOKEN_SEMICOLON,
+        );
 
-        if self.peek_expecting(TOKEN_SEMICOLON | TOKEN_PERIOD | TOKEN_EQUAL)? == TOKEN_SEMICOLON {
+        if self.peek_expecting(TOKEN_PERIOD | TOKEN_EQUAL | TOKEN_SEMICOLON)? == TOKEN_SEMICOLON {
             self.node_from(checkpoint, NODE_ATTRIBUTE_INHERIT, |this| {
                 this.next().unwrap();
             });
@@ -657,7 +731,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
         });
     }
 
-    fn parse_identifier_or_simple_lambda_until(&mut self, until: EnumSet<Kind>) {
+    fn parse_identifier_or_lambda_simple_until(&mut self, until: EnumSet<Kind>) {
         let checkpoint = self.checkpoint();
 
         self.parse_identifier_until(until | TOKEN_COLON);
@@ -674,17 +748,13 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
     }
 
     fn parse_identifier_until(&mut self, until: EnumSet<Kind>) {
-        self.node_failable(NODE_IDENTIFIER, |this| {
-            // If it is a normal identifier, we don't do anything
-            // else as it only has a single token as .expect_until() consumes it.
-            if this.peek_expecting(IDENTIFIER_TOKENS)? == TOKEN_IDENTIFIER_START {
-                this.parse_stringlike(TOKEN_IDENTIFIER_START, TOKEN_IDENTIFIER_END);
-            } else {
-                this.expect_until(IDENTIFIER_TOKENS, until)?;
-            }
-
-            Expect::Found(())
-        })
+        if self.peek() == Some(TOKEN_IDENTIFIER_START) {
+            self.parse_stringlike(TOKEN_IDENTIFIER_START, TOKEN_IDENTIFIER_END);
+        } else {
+            self.node_failable(NODE_IDENTIFIER, |this| {
+                this.expect_until(IDENTIFIER_TOKENS, until)
+            });
+        }
     }
 
     fn parse_stringlike(&mut self, start: Kind, end: Kind) {
@@ -788,7 +858,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
             },
 
             TOKEN_LEFT_CURLYBRACE => {
-                self.parse_attribute_set_until(until);
+                self.parse_attribute_set_or_lambda_pattern_until(until);
             },
 
             TOKEN_PLUS | TOKEN_MINUS | TOKEN_LITERAL_NOT => {
@@ -800,7 +870,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
             },
 
             kind if IDENTIFIER_TOKENS.contains(kind) => {
-                self.parse_identifier_or_simple_lambda_until(until);
+                self.parse_identifier_or_lambda_simple_until(until);
             },
 
             TOKEN_STRING_START => {
