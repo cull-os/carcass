@@ -263,7 +263,7 @@ pub struct Parse {
 }
 
 impl Parse {
-    /// Creates a [`RowanNode`] from the underlying GreenNode.
+    /// Creates a [`rowan::SyntaxNode`] from the underlying GreenNode.
     pub fn syntax(self) -> RowanNode {
         RowanNode::new_root(self.node)
     }

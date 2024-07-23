@@ -23,7 +23,7 @@ use crate::{
     Token,
 };
 
-/// A macro that allows you to match on a [`RowanNode`] efficiently.
+/// A macro that allows you to match on a [`rowan::SyntaxNode`] efficiently.
 ///
 /// The branches must all implement [`Node`] for this macro to work properly.
 ///
