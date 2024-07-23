@@ -23,6 +23,32 @@ use crate::{
     Token,
 };
 
+const MAXIMUM_HORIZONTAL_LENGTH: usize = 50;
+
+const INDENT: &str = "  ";
+
+fn prefix_with(
+    formatter: &mut fmt::Formatter<'_>,
+    prefix: &str,
+    thing: impl fmt::Display,
+) -> fmt::Result {
+    let formatted = format!("{thing}");
+
+    for line in formatted.lines() {
+        writeln!(formatter, "{prefix}{line}")?;
+    }
+
+    Ok(())
+}
+
+fn should_format_lined(items: &[String]) -> bool {
+    items.iter().any(|string| string.contains('\n'))
+        || items
+            .iter()
+            .fold(0, |length, string| length + string.chars().count())
+            > MAXIMUM_HORIZONTAL_LENGTH
+}
+
 /// A macro that allows you to match on a [`rowan::SyntaxNode`] efficiently.
 ///
 /// The branches must all implement [`Node`] for this macro to work properly.
@@ -262,7 +288,7 @@ node! {
         InfixOperation,
         Path,
         Identifier,
-        String,
+        SString,
         Island,
         Number,
         IfElse,
@@ -289,13 +315,29 @@ impl Parenthesis {
 // LIST
 
 node! { #[from(NODE_LIST)] struct List => |self, formatter| {
+    let items: Vec<_> = self.items().map(|expression| format!("{expression}")).collect();
+
+    let should_format_lined = should_format_lined(&items);
+
     write!(formatter, "[")?;
 
-    for expression in self.items() {
-        write!(formatter, " {expression}")?;
+    if should_format_lined {
+        writeln!(formatter)?;
     }
 
-    write!(formatter, " ]")
+    for item in items {
+        if should_format_lined {
+            prefix_with(formatter, INDENT, item)
+        } else {
+            write!(formatter, " {item}")
+        }?
+    }
+
+    if !should_format_lined {
+        write!(formatter, " ")?;
+    }
+
+    write!(formatter, "]")
 }}
 
 impl List {
@@ -309,17 +351,36 @@ impl List {
 // ATTRIBUTE SET
 
 node! { #[from(NODE_ATTRIBUTE_SET)] struct AttributeSet => |self, formatter| {
+    let items: Vec<_> = self
+        .inherits()
+        .map(|inherit| format!("{inherit}"))
+        .chain(
+            self.attributes()
+            .map(|attribute| format!("{attribute}"))
+        )
+        .collect();
+
+    let should_format_lined = should_format_lined(&items);
+
     write!(formatter, "{{")?;
 
-    for inherit in self.inherits() {
-        write!(formatter, " {inherit}")?;
+    if should_format_lined {
+        writeln!(formatter)?;
     }
 
-    for attribute in self.attributes() {
-        write!(formatter, " {attribute}")?;
+    for item in items {
+        if should_format_lined {
+            prefix_with(formatter, INDENT, item)
+        } else {
+            write!(formatter, " {item}")
+        }?
     }
 
-    write!(formatter, " }}")
+    if !should_format_lined {
+        write!(formatter, " ")?;
+    }
+
+    write!(formatter, "}}")
 }}
 
 impl AttributeSet {
@@ -455,19 +516,33 @@ impl LambdaParameterIdentifier {
 }
 
 node! { #[from(NODE_LAMBDA_PARAMETER_PATTERN)] struct LambdaParameterPattern => |self, formatter| {
+    let items: Vec<_> = self.attributes().map(|attribute| format!("{attribute}")).collect();
+
+    let should_format_lined = should_format_lined(&items);
+
     write!(formatter, "{{")?;
 
-    let mut attributes = self.attributes();
+    if should_format_lined {
+        writeln!(formatter)?;
 
-    if let Some(attribute) = attributes.next() {
-        write!(formatter, " {attribute}")?;
+        for item in items {
+            prefix_with(formatter, INDENT, format!("{item},"))?;
+        }
+
+        write!(formatter, "}}")
+    } else {
+        let mut items = items.iter();
+
+        if let Some(item) = items.next() {
+            write!(formatter, " {item}")?;
+        }
+
+        for item in items {
+            write!(formatter, ", {item}")?;
+        }
+
+        write!(formatter, " }}")
     }
-
-    for attribute in attributes {
-        write!(formatter, ", {attribute}")?;
-    }
-
-    write!(formatter, " }}")
 }}
 
 #[rustfmt::skip]
@@ -778,10 +853,10 @@ impl Identifier {
     }
 }
 
-node! { #[from(NODE_STRING)] struct String; }
+node! { #[from(NODE_STRING)] struct SString; }
 
 parted! {
-    impl String {
+    impl SString {
         let content_kind = TOKEN_CONTENT;
         type ContentToken = token::Content;
     }

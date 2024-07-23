@@ -849,9 +849,9 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
                 while !(until | TOKEN_RIGHT_CURLYBRACE)
                     .contains(this.peek_expecting(IDENTIFIER_TOKENS | TOKEN_RIGHT_CURLYBRACE)?)
                 {
-                    let Expect::Found(true) = this.parse_lambda_pattern_attribute(
-                        until | TOKEN_RIGHT_CURLYBRACE | TOKEN_COLON,
-                    ) else {
+                    let Expect::Found(true) =
+                        this.parse_lambda_pattern_attribute(until | TOKEN_RIGHT_CURLYBRACE)
+                    else {
                         break;
                     };
                 }
@@ -885,7 +885,9 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
                 this.parse_expression(until)?;
             }
 
-            if this.peek_expecting(TOKEN_COMMA | TOKEN_RIGHT_BRACKET)? != TOKEN_RIGHT_BRACKET {
+            let peek = this.peek_expecting(TOKEN_COMMA | TOKEN_RIGHT_CURLYBRACE)?;
+
+            if peek != TOKEN_RIGHT_CURLYBRACE {
                 this.expect(TOKEN_COMMA.into(), until)?;
                 Expect::Found(true)
             } else {
