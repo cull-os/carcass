@@ -14,5 +14,5 @@ self @ {
     # We don't need this, but this is the way
     # you'd do the equivalent of `packages` in mkShell.
     lolhtml
-  ]
+  ];
 }

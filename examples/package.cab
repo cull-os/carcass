@@ -29,5 +29,5 @@ self @ {
   targetBuildDependencies = packages ==> [
     # We don't need this, but this is the way you'd do nativeBuildInputs.
     lolhtml
-  ]
+  ];
 }

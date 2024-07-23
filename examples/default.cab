@@ -40,7 +40,7 @@ self @ {
     # You can even do string interpolation!
     #
     # This also applies to islands (e.g. <${forge}:${owner}/${repo}>).
-    bar = self.default <== { python = packages.`python-3.13` };
+    bar = self.default <== { python = packages.`python-3.13`; };
   };
 
   systems.myhost = packages.system { # Like lib.nixosSystem
