@@ -1,7 +1,7 @@
 //! [`Token`] definitions for the Cab language.
 use std::{
     fmt,
-    ops::Deref,
+    ops,
 };
 
 use crate::{
@@ -12,7 +12,7 @@ use crate::{
     RowanToken,
 };
 
-pub trait Token: Deref<Target = RowanToken> {
+pub trait Token: ops::Deref<Target = RowanToken> {
     /// Determines if this token can be created from this Kind.
     fn can_cast(from: Kind) -> bool;
 
@@ -50,7 +50,7 @@ macro_rules! token {
             }
         }
 
-        impl Deref for $name {
+        impl ops::Deref for $name {
             type Target = RowanToken;
 
             fn deref(&self) -> &Self::Target {

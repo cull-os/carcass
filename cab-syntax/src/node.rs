@@ -1,7 +1,7 @@
 //! [`Node`] definitions for the Cab language.
 use std::ops::{
-    Deref,
-    Not,
+    self,
+    Not as _,
 };
 
 use rowan::ast::AstNode as _;
@@ -47,7 +47,7 @@ macro_rules! match_node {
     };
 }
 
-pub trait Node: rowan::ast::AstNode<Language = Language> + Deref<Target = RowanNode> {
+pub trait Node: rowan::ast::AstNode<Language = Language> + ops::Deref<Target = RowanNode> {
     /// Returns the Nth immediate children node that can be cast to the given
     /// typed node.
     fn nth<N: Node>(&self, n: usize) -> Option<N> {
@@ -86,7 +86,7 @@ pub trait Node: rowan::ast::AstNode<Language = Language> + Deref<Target = RowanN
     }
 }
 
-impl<T: rowan::ast::AstNode<Language = Language> + Deref<Target = RowanNode>> Node for T {}
+impl<T: rowan::ast::AstNode<Language = Language> + ops::Deref<Target = RowanNode>> Node for T {}
 
 macro_rules! node {
     (
@@ -112,7 +112,7 @@ macro_rules! node {
             }
         }
 
-        impl Deref for $name {
+        impl ops::Deref for $name {
             type Target = RowanNode;
 
             fn deref(&self) -> &Self::Target {
@@ -156,7 +156,7 @@ macro_rules! node {
             }
         }
 
-        impl Deref for $name {
+        impl ops::Deref for $name {
             type Target = RowanNode;
 
             fn deref(&self) -> &Self::Target {
