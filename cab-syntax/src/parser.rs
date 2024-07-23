@@ -12,10 +12,7 @@ use peekmore::{
     PeekMore as _,
     PeekMoreIterator as PeekMore,
 };
-use rowan::{
-    ast::AstNode as _,
-    Language as _,
-};
+use rowan::ast::AstNode as _;
 
 use crate::{
     node::{
@@ -27,7 +24,6 @@ use crate::{
         self,
         *,
     },
-    Language,
     RowanNode,
 };
 
@@ -414,7 +410,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
             .next()
             .map(|(kind, slice)| {
                 self.offset += rowan::TextSize::of(slice);
-                self.builder.token(Language::kind_to_raw(kind), slice);
+                self.builder.token(kind.into(), slice);
                 kind
             })
             .ok_or_else(|| {
@@ -491,7 +487,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
     }
 
     fn node<T>(&mut self, kind: Kind, closure: impl FnOnce(&mut Self) -> T) -> T {
-        self.builder.start_node(Language::kind_to_raw(kind));
+        self.builder.start_node(kind.into());
 
         let result = closure(self);
 
@@ -514,8 +510,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
         kind: Kind,
         closure: impl FnOnce(&mut Self) -> T,
     ) -> T {
-        self.builder
-            .start_node_at(checkpoint, Language::kind_to_raw(kind));
+        self.builder.start_node_at(checkpoint, kind.into());
 
         let result = closure(self);
 
