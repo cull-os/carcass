@@ -536,6 +536,123 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
         }
     }
 
+    fn parse_expression(&mut self, until: EnumSet<Kind>) -> Expect<()> {
+        if self.depth >= 512 {
+            let error = ParseError::RecursionLimitExceeded { at: self.offset };
+
+            self.node(NODE_ERROR, |this| {
+                this.next_direct_while(|_| true);
+            });
+
+            return Expect::Deadly(error);
+        }
+
+        self.depth += 1;
+
+        match self.peek_expecting(EXPRESSION_TOKENS)? {
+            TOKEN_PLUS | TOKEN_MINUS | TOKEN_LITERAL_NOT => self.parse_prefix_operation(until),
+
+            TOKEN_LEFT_PARENTHESIS => {
+                self.parse_parenthesis(until);
+            },
+
+            TOKEN_LEFT_BRACKET => {
+                self.parse_list(until);
+            },
+
+            // TODO: Peek and do lambda parameter parsing
+            // *that supports stringlike identifiers for the initial identifier*.
+            //
+            // # Lambda pattern initials:
+            // { foo,
+            // { foo ?
+            // { foo }
+            //
+            // # Attribute set initials: Anything that isn't the above.
+            //
+            // Seems like I'm either going to use a sublexer that doesn't actually consume
+            // anything, or write code that goes in 300 indentation levels to support
+            // templated identifiers in lambda patterns.
+            #[rustfmt::skip]
+            TOKEN_LEFT_CURLYBRACE => {
+                if matches!(self.peek_nth(1), Some(TOKEN_IDENTIFIER))
+                && matches!(self.peek_nth(2), Some(TOKEN_COMMA | TOKEN_QUESTIONMARK | TOKEN_RIGHT_CURLYBRACE)) {
+                    self.parse_lambda_pattern(until)
+                } else {
+                    self.parse_attribute_set(until)
+                }
+            },
+
+            kind if IDENTIFIER_TOKENS.contains(kind) => {
+                let checkpoint = self.checkpoint();
+
+                self.parse_identifier(until);
+
+                match self.peek() {
+                    Some(TOKEN_COLON) => self.parse_lambda(checkpoint, until),
+
+                    Some(TOKEN_AT) => self.parse_bind(checkpoint, until),
+
+                    _ => {},
+                }
+            },
+
+            TOKEN_PATH => {
+                self.parse_path();
+            },
+
+            TOKEN_STRING_START => {
+                self.parse_stringlike(TOKEN_STRING_START, TOKEN_STRING_END);
+            },
+
+            TOKEN_ISLAND_START => {
+                self.parse_stringlike(TOKEN_ISLAND_START, TOKEN_ISLAND_END);
+            },
+
+            TOKEN_INTEGER | TOKEN_FLOAT => {
+                self.parse_number(until);
+            },
+
+            TOKEN_LITERAL_IF => {
+                self.parse_if_else(until);
+            },
+
+            got => {
+                // TODO: Find a way to merge this with expect?
+                self.next_while_trivia();
+                let start = self.offset;
+
+                self.node(NODE_ERROR, |this| {
+                    this.next_while(|kind| !(until | EXPRESSION_TOKENS).contains(kind));
+                });
+
+                let error = ParseError::Unexpected {
+                    got: Some(got),
+                    expected: EXPRESSION_TOKENS,
+                    at: rowan::TextRange::new(start, self.offset),
+                };
+
+                return if self
+                    .peek()
+                    .map_or(false, |kind| EXPRESSION_TOKENS.contains(kind))
+                {
+                    self.errors.push(error);
+                    self.parse_expression(until)
+                } else if let Some(peek) = self.peek() {
+                    log::trace!("reached expect bound, not consuming {peek:?}",);
+                    self.errors.push(error);
+                    Expect::Recoverable
+                } else {
+                    log::trace!("expect consumed everything");
+                    Expect::Deadly(error)
+                };
+            },
+        }
+
+        self.depth -= 1;
+        Expect::Found(())
+    }
+
     fn parse_parenthesis(&mut self, until: EnumSet<Kind>) {
         self.node_failable(NODE_PARENTHESIS, |this| {
             this.expect(
@@ -811,122 +928,5 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
             }
             Expect::Found(())
         });
-    }
-
-    fn parse_expression(&mut self, until: EnumSet<Kind>) -> Expect<()> {
-        if self.depth >= 512 {
-            let error = ParseError::RecursionLimitExceeded { at: self.offset };
-
-            self.node(NODE_ERROR, |this| {
-                this.next_direct_while(|_| true);
-            });
-
-            return Expect::Deadly(error);
-        }
-
-        self.depth += 1;
-
-        match self.peek_expecting(EXPRESSION_TOKENS)? {
-            TOKEN_PLUS | TOKEN_MINUS | TOKEN_LITERAL_NOT => self.parse_prefix_operation(until),
-
-            TOKEN_LEFT_PARENTHESIS => {
-                self.parse_parenthesis(until);
-            },
-
-            TOKEN_LEFT_BRACKET => {
-                self.parse_list(until);
-            },
-
-            // TODO: Peek and do lambda parameter parsing
-            // *that supports stringlike identifiers for the initial identifier*.
-            //
-            // # Lambda pattern initials:
-            // { foo,
-            // { foo ?
-            // { foo }
-            //
-            // # Attribute set initials: Anything that isn't the above.
-            //
-            // Seems like I'm either going to use a sublexer that doesn't actually consume
-            // anything, or write code that goes in 300 indentation levels to support
-            // templated identifiers in lambda patterns.
-            #[rustfmt::skip]
-            TOKEN_LEFT_CURLYBRACE => {
-                if matches!(self.peek_nth(1), Some(TOKEN_IDENTIFIER))
-                && matches!(self.peek_nth(2), Some(TOKEN_COMMA | TOKEN_QUESTIONMARK | TOKEN_RIGHT_CURLYBRACE)) {
-                    self.parse_lambda_pattern(until)
-                } else {
-                    self.parse_attribute_set(until)
-                }
-            },
-
-            kind if IDENTIFIER_TOKENS.contains(kind) => {
-                let checkpoint = self.checkpoint();
-
-                self.parse_identifier(until);
-
-                match self.peek() {
-                    Some(TOKEN_COLON) => self.parse_lambda(checkpoint, until),
-
-                    Some(TOKEN_AT) => self.parse_bind(checkpoint, until),
-
-                    _ => {},
-                }
-            },
-
-            TOKEN_PATH => {
-                self.parse_path();
-            },
-
-            TOKEN_STRING_START => {
-                self.parse_stringlike(TOKEN_STRING_START, TOKEN_STRING_END);
-            },
-
-            TOKEN_ISLAND_START => {
-                self.parse_stringlike(TOKEN_ISLAND_START, TOKEN_ISLAND_END);
-            },
-
-            TOKEN_INTEGER | TOKEN_FLOAT => {
-                self.parse_number(until);
-            },
-
-            TOKEN_LITERAL_IF => {
-                self.parse_if_else(until);
-            },
-
-            got => {
-                // TODO: Find a way to merge this with expect?
-                self.next_while_trivia();
-                let start = self.offset;
-
-                self.node(NODE_ERROR, |this| {
-                    this.next_while(|kind| !(until | EXPRESSION_TOKENS).contains(kind));
-                });
-
-                let error = ParseError::Unexpected {
-                    got: Some(got),
-                    expected: EXPRESSION_TOKENS,
-                    at: rowan::TextRange::new(start, self.offset),
-                };
-
-                return if self
-                    .peek()
-                    .map_or(false, |kind| EXPRESSION_TOKENS.contains(kind))
-                {
-                    self.errors.push(error);
-                    self.parse_expression(until)
-                } else if let Some(peek) = self.peek() {
-                    log::trace!("reached expect bound, not consuming {peek:?}",);
-                    self.errors.push(error);
-                    Expect::Recoverable
-                } else {
-                    log::trace!("expect consumed everything");
-                    Expect::Deadly(error)
-                };
-            },
-        }
-
-        self.depth -= 1;
-        Expect::Found(())
     }
 }
