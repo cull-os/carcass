@@ -8,7 +8,7 @@ use std::{
 };
 
 use derive_more::Display;
-use rowan::ast::AstNode as _;
+use rowan::ast::AstNode;
 
 use crate::{
     token,
@@ -388,11 +388,15 @@ node! { #[from(NODE_ATTRIBUTE_SELECT)] struct AttributeSelect => |self, formatte
     Ok(())
 }}
 
+#[rustfmt::skip]
 impl AttributeSelect {
     get_node! { expression -> 0 @ Expression }
 
-    // Can't do `0 @ Identifier` here as the expression might also be an identifier.
-    get_node! { identifier -> 1 @ Expression }
+    get_node! { identifier_raw -> 1 @ Expression }
+
+    pub fn identifier(&self) -> Identifier {
+        Identifier::cast(self.identifier_raw().syntax().clone()).unwrap()
+    }
 
     get_node! { default -> 2 @ ? Expression }
 }
