@@ -900,7 +900,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
                 TOKEN_PLUS | TOKEN_MINUS | TOKEN_LITERAL_NOT,
                 until | EXPRESSION_TOKENS,
             )?;
-            this.parse_expression(until)
+            this.parse_expression_application(until)
         });
     }
 
