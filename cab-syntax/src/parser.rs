@@ -320,14 +320,14 @@ pub fn parse(input: &str) -> Parse {
             this.errors.push(error);
         }
 
-        if let Some(got) = this.peek() {
-            log::trace!("leftovers encountered: {got:?}");
+        if let Some(unexpected) = this.peek() {
+            log::trace!("leftovers encountered: {unexpected:?}");
 
             let start = this.offset;
 
             this.node(NODE_ERROR, |this| this.next_direct_while(|_| true));
             this.errors.push(ParseError::Unexpected {
-                got: Some(got),
+                got: Some(unexpected),
                 expected: EnumSet::EMPTY,
                 at: rowan::TextRange::new(start, this.offset),
             });
@@ -459,7 +459,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
         match self.peek_expecting(expected)? {
             next if expected.contains(next) => self.next().maybe(),
 
-            got => {
+            unexpected => {
                 // I don't know why I don't have to run next_while_trivia here to not capture
                 // the trivia for the error offsets, and I do not care anymore.
                 let start = self.offset;
@@ -469,7 +469,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
                 });
 
                 let error = ParseError::Unexpected {
-                    got: Some(got),
+                    got: Some(unexpected),
                     expected,
                     at: rowan::TextRange::new(start, self.offset),
                 };
@@ -673,7 +673,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
                 self.parse_if_else(until);
             },
 
-            got => {
+            unexpected => {
                 // TODO: Find a way to merge this with expect?
                 self.next_while_trivia();
                 let start = self.offset;
@@ -683,7 +683,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
                 });
 
                 let error = ParseError::Unexpected {
-                    got: Some(got),
+                    got: Some(unexpected),
                     expected: EXPRESSION_TOKENS,
                     at: rowan::TextRange::new(start, self.offset),
                 };
@@ -963,7 +963,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
                         break Expect::Found(());
                     },
 
-                    a => unreachable!("{a:?}"),
+                    unexpected => unreachable!("{unexpected:?}"),
                 }
             }
         });
