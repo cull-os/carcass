@@ -1,6 +1,8 @@
 use std::{
-    io,
-    io::Write,
+    io::{
+        self,
+        Write as _,
+    },
     process,
 };
 

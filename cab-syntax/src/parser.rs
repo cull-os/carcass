@@ -1,11 +1,7 @@
 use std::{
-    convert::Infallible,
+    convert,
     fmt,
-    ops::{
-        ControlFlow,
-        FromResidual,
-        Try,
-    },
+    ops,
 };
 
 use enumset::{
@@ -14,7 +10,7 @@ use enumset::{
 };
 use peekmore::{
     PeekMore as _,
-    PeekMoreIterator,
+    PeekMoreIterator as PeekMore,
 };
 use rowan::{
     ast::AstNode as _,
@@ -42,8 +38,8 @@ enum ExpectMust<K = Kind> {
     Deadly(Option<ParseError>),
 }
 
-impl<K> FromResidual for ExpectMust<K> {
-    fn from_residual(residual: <Self as Try>::Residual) -> Self {
+impl<K> ops::FromResidual for ExpectMust<K> {
+    fn from_residual(residual: <Self as ops::Try>::Residual) -> Self {
         match residual {
             Expect::Recoverable => Self::Deadly(None),
             Expect::Deadly(error) => Self::Deadly(Some(error)),
@@ -52,19 +48,19 @@ impl<K> FromResidual for ExpectMust<K> {
     }
 }
 
-impl<K> Try for ExpectMust<K> {
+impl<K> ops::Try for ExpectMust<K> {
     type Output = K;
-    type Residual = Expect<Infallible>;
+    type Residual = Expect<convert::Infallible>;
 
     fn from_output(output: Self::Output) -> Self {
         Self::Found(output)
     }
 
-    fn branch(self) -> ControlFlow<Self::Residual, Self::Output> {
+    fn branch(self) -> ops::ControlFlow<Self::Residual, Self::Output> {
         match self {
-            Self::Found(found) => ControlFlow::Continue(found),
-            Self::Deadly(None) => ControlFlow::Break(Expect::Recoverable),
-            Self::Deadly(Some(error)) => ControlFlow::Break(Expect::Deadly(error)),
+            Self::Found(found) => ops::ControlFlow::Continue(found),
+            Self::Deadly(None) => ops::ControlFlow::Break(Expect::Recoverable),
+            Self::Deadly(Some(error)) => ops::ControlFlow::Break(Expect::Deadly(error)),
         }
     }
 }
@@ -103,8 +99,8 @@ enum Expect<K = Kind> {
     Deadly(ParseError),
 }
 
-impl<K> FromResidual for Expect<K> {
-    fn from_residual(residual: <Self as Try>::Residual) -> Self {
+impl<K> ops::FromResidual for Expect<K> {
+    fn from_residual(residual: <Self as ops::Try>::Residual) -> Self {
         match residual {
             Expect::Recoverable => Self::Recoverable,
             Expect::Deadly(error) => Self::Deadly(error),
@@ -113,9 +109,9 @@ impl<K> FromResidual for Expect<K> {
     }
 }
 
-impl<K> Try for Expect<K> {
+impl<K> ops::Try for Expect<K> {
     type Output = Option<K>;
-    type Residual = Expect<Infallible>;
+    type Residual = Expect<convert::Infallible>;
 
     fn from_output(output: Self::Output) -> Self {
         match output {
@@ -124,11 +120,11 @@ impl<K> Try for Expect<K> {
         }
     }
 
-    fn branch(self) -> ControlFlow<Self::Residual, Self::Output> {
+    fn branch(self) -> ops::ControlFlow<Self::Residual, Self::Output> {
         match self {
-            Self::Found(found) => ControlFlow::Continue(Some(found)),
-            Self::Recoverable => ControlFlow::Continue(None),
-            Self::Deadly(error) => ControlFlow::Break(Expect::Deadly(error)),
+            Self::Found(found) => ops::ControlFlow::Continue(Some(found)),
+            Self::Recoverable => ops::ControlFlow::Continue(None),
+            Self::Deadly(error) => ops::ControlFlow::Break(Expect::Deadly(error)),
         }
     }
 }
@@ -354,7 +350,7 @@ pub fn parse(input: &str) -> Parse {
 struct Parser<'a, I: Iterator<Item = (Kind, &'a str)>> {
     builder: rowan::GreenNodeBuilder<'a>,
 
-    tokens: PeekMoreIterator<I>,
+    tokens: PeekMore<I>,
     errors: Vec<ParseError>,
 
     offset: rowan::TextSize,
