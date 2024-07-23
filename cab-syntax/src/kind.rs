@@ -38,7 +38,7 @@ pub enum Kind {
 
     #[display(fmt = "'$'")]
     TOKEN_DOLLAR,
-    #[display(fmy = "'|>'")]
+    #[display(fmt = "'|>'")]
     TOKEN_PIPE_MORE,
 
     #[display(fmt = "'@'")]
