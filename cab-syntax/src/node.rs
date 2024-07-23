@@ -470,7 +470,7 @@ impl Application {
 
 node! { #[from(NODE_PREFIX_OPERATION)] struct PrefixOperation => |self, formatter| write!(formatter, "{operator}{expression}", operator = self.operator(), expression = self.expression()) }
 
-#[derive(Display, Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Display, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PrefixOperator {
     #[display(fmt = "+")]
     Swwallation, // Get it?
@@ -510,7 +510,7 @@ impl PrefixOperation {
 
 node! { #[from(NODE_INFIX_OPERATION)] struct InfixOperation => |self, formatter| write!(formatter, "{left} {operator} {right}", left = self.left_expression(), operator = self.operator(), right = self.right_expression()) }
 
-#[derive(Display, Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Display, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum InfixOperator {
     #[display(fmt = "$")]
     Apply,
@@ -591,6 +591,26 @@ impl TryFrom<Kind> for InfixOperator {
             TOKEN_LITERAL_OR => Ok(Self::Or),
 
             _ => Err(()),
+        }
+    }
+}
+
+impl InfixOperator {
+    pub fn binding_power(self) -> (u16, u16) {
+        match self {
+            Self::Concat => (140, 145),
+            Self::Multiplication | Self::Power | Self::Division => (130, 135),
+            Self::Addition | Self::Negation => (120, 125),
+            Self::Override => (110, 115),
+            Self::Use => (100, 105),
+            Self::Update => (90, 95),
+            Self::LessOrEqual | Self::Less | Self::MoreOrEqual | Self::More => (80, 85),
+            Self::Equal | Self::NotEqual => (70, 75),
+            Self::And => (60, 65),
+            Self::Or => (50, 55),
+            Self::Implication => (30, 35),
+            Self::Apply => (20, 25),
+            Self::Pipe => (10, 15),
         }
     }
 }
