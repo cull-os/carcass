@@ -309,9 +309,9 @@ impl<'a> Tokenizer<'a> {
 
             '0' if matches!(self.peek_character(), Some('b' | 'o' | 'x')) => {
                 let is_valid_digit = match self.consume_character() {
-                    Some('b') => |c: char| matches!(c, '0' | '1'),
-                    Some('o') => |c: char| matches!(c, '0'..='7'),
-                    Some('x') => |c: char| c.is_ascii_hexdigit(),
+                    Some('b') => |c: char| matches!(c, '0' | '1' | '_'),
+                    Some('o') => |c: char| matches!(c, '0'..='7' | '_'),
+                    Some('x') => |c: char| c.is_ascii_hexdigit() || c == '_',
                     _ => unreachable!(),
                 };
 
@@ -334,15 +334,15 @@ impl<'a> Tokenizer<'a> {
             },
 
             initial_digit if initial_digit.is_ascii_digit() => {
-                self.consume_while(|c| c.is_ascii_digit());
+                let is_valid_digit = |c: char| c.is_ascii_digit() || c == '_';
+
+                self.consume_while(is_valid_digit);
 
                 if self.peek_character() == Some('.')
-                    && self
-                        .peek_character_nth(1)
-                        .map_or(false, |c| c.is_ascii_digit())
+                    && self.peek_character_nth(1).map_or(false, is_valid_digit)
                 {
                     self.consume_character();
-                    self.consume_while(|c| c.is_ascii_digit());
+                    self.consume_while(is_valid_digit);
 
                     TOKEN_FLOAT
                 } else {
@@ -351,7 +351,7 @@ impl<'a> Tokenizer<'a> {
             },
 
             '.' if self.peek_character().map_or(false, |c| c.is_ascii_digit()) => {
-                self.consume_while(|c| c.is_ascii_digit());
+                self.consume_while(|c| c.is_ascii_digit() || c == '_');
 
                 TOKEN_FLOAT
             },
