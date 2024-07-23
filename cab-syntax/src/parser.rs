@@ -537,6 +537,20 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
     }
 
     fn parse_expression(&mut self, until: EnumSet<Kind>) -> Expect<()> {
+        let checkpoint = self.checkpoint();
+
+        self.parse_expression_simple(until)?;
+
+        while self.peek().map_or(false, Kind::is_argument) {
+            self.node_failable_from(checkpoint, NODE_APPLICATION, |this| {
+                this.parse_expression_simple(until)
+            });
+        }
+
+        Expect::Found(())
+    }
+
+    fn parse_expression_simple(&mut self, until: EnumSet<Kind>) -> Expect<()> {
         if self.depth >= 512 {
             let error = ParseError::RecursionLimitExceeded { at: self.offset };
 
@@ -637,7 +651,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
                     .map_or(false, |kind| EXPRESSION_TOKENS.contains(kind))
                 {
                     self.errors.push(error);
-                    self.parse_expression(until)
+                    self.parse_expression_simple(until)
                 } else if let Some(peek) = self.peek() {
                     log::trace!("reached expect bound, not consuming {peek:?}",);
                     self.errors.push(error);
@@ -669,7 +683,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
     fn parse_bind(&mut self, checkpoint: rowan::Checkpoint, until: EnumSet<Kind>) {
         self.node_failable_from(checkpoint, NODE_BIND, |this| {
             this.expect(TOKEN_AT.into(), until | EXPRESSION_TOKENS)?;
-            this.parse_expression(until)
+            this.parse_expression_simple(until)
         });
     }
 
@@ -683,7 +697,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
             while this.peek_expecting(EXPRESSION_TOKENS | TOKEN_RIGHT_BRACKET)?
                 != TOKEN_RIGHT_BRACKET
             {
-                this.parse_expression(until | TOKEN_RIGHT_BRACKET)?;
+                this.parse_expression_simple(until | TOKEN_RIGHT_BRACKET)?;
             }
 
             this.expect(TOKEN_RIGHT_BRACKET.into(), until)
