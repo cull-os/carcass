@@ -7,7 +7,10 @@ use std::ops::{
 use rowan::ast::AstNode as _;
 
 use crate::{
-    token,
+    token::{
+        self,
+        Token,
+    },
     Kind::{
         self,
         *,
@@ -16,7 +19,6 @@ use crate::{
     RowanElement,
     RowanNode,
     RowanToken,
-    Token,
 };
 
 /// A macro that allows you to match on a [`rowan::SyntaxNode`] efficiently.

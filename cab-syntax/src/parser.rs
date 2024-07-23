@@ -15,10 +15,7 @@ use peekmore::{
 use rowan::ast::AstNode as _;
 
 use crate::{
-    node::{
-        InfixOperator,
-        Root,
-    },
+    node,
     tokenize,
     Kind::{
         self,
@@ -291,15 +288,15 @@ impl Parse {
         )
     }
 
-    /// Creates a [`Root`] node from [`Self::syntax`].
-    pub fn root(self) -> Root {
-        Root::cast(self.syntax()).unwrap()
+    /// Creates a [`node::Root`] node from [`Self::syntax`].
+    pub fn root(self) -> node::Root {
+        node::Root::cast(self.syntax()).unwrap()
     }
 
-    /// Returns [`Ok`] with the [`Root`] node if there are no errors, returns
-    /// [`Err`] with the list of errors obtained from [`Self::errors`]
-    /// otherwise.
-    pub fn result(self) -> Result<Root, Vec<ParseError>> {
+    /// Returns [`Ok`] with the [`node::Root`] node if there are no errors,
+    /// returns [`Err`] with the list of errors obtained from
+    /// [`Self::errors`] otherwise.
+    pub fn result(self) -> Result<node::Root, Vec<ParseError>> {
         if self.errors.is_empty() {
             Ok(self.root())
         } else {
@@ -547,7 +544,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
             let Some(next) = self.peek() else { break };
 
             let Ok((left_power, right_power)) =
-                InfixOperator::try_from(next).map(|operator| operator.binding_power())
+                node::InfixOperator::try_from(next).map(|operator| operator.binding_power())
             else {
                 break;
             };
