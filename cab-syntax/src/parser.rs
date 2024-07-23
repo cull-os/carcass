@@ -601,6 +601,8 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
 
         self.depth += 1;
 
+        let checkpoint = self.checkpoint();
+
         match self.peek_expecting(EXPRESSION_TOKENS)? {
             TOKEN_PLUS | TOKEN_MINUS | TOKEN_LITERAL_NOT => self.parse_prefix_operation(until),
 
@@ -699,6 +701,20 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
                     Expect::Deadly(error)
                 };
             },
+        }
+
+        while let Some(TOKEN_PERIOD) = self.peek() {
+            self.node_failable_from(checkpoint, NODE_ATTRIBUTE_SELECT, |this| {
+                this.next().unwrap();
+                this.parse_identifier(until | TOKEN_LITERAL_OR | EXPRESSION_TOKENS);
+
+                if let Some(TOKEN_LITERAL_OR) = this.peek() {
+                    this.next().unwrap();
+                    this.parse_expression(until)?;
+                }
+
+                Expect::Found(())
+            });
         }
 
         self.depth -= 1;

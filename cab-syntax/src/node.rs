@@ -253,6 +253,7 @@ node! {
         Parenthesis,
         List,
         AttributeSet,
+        AttributeSelect,
         Bind,
         Lambda,
         Application,
@@ -373,6 +374,27 @@ node! { #[from(NODE_ATTRIBUTE_PATH)] struct AttributePath => |self, formatter| {
 
 impl AttributePath {
     get_node! { identifiers -> [Identifier] }
+}
+
+// ATTRIBUTE SELECT
+
+node! { #[from(NODE_ATTRIBUTE_SELECT)] struct AttributeSelect => |self, formatter| {
+    write!(formatter, "{expression}.{identifier}", expression = self.expression(), identifier = self.identifier())?;
+
+    if let Some(default) = self.default() {
+        write!(formatter, " or {default}")?;
+    }
+
+    Ok(())
+}}
+
+impl AttributeSelect {
+    get_node! { expression -> 0 @ Expression }
+
+    // Can't do `0 @ Identifier` here as the expression might also be an identifier.
+    get_node! { identifier -> 1 @ Expression }
+
+    get_node! { default -> 2 @ ? Expression }
 }
 
 // BIND

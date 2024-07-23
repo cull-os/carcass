@@ -193,7 +193,7 @@ pub enum Kind {
     NODE_ATTRIBUTE_PATH,    // <identifier><.<identifier>>*
     NODE_ATTRIBUTE_INHERIT, // <identifier>;
 
-    NODE_ATTRIBUTE_SELECT, // <expression>.<identifier>
+    NODE_ATTRIBUTE_SELECT, // <expression>.<identifier> <or <expression>>?
     NODE_ATTRIBUTE_CHECK,  // <expression> ? <attribute-path>
 
     NODE_BIND, // <identifier> @ <expression>
