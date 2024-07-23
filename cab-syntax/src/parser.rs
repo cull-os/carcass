@@ -367,6 +367,18 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
         self.tokens.peek().map(|&(kind, _)| kind)
     }
 
+    fn peek_direct_expecting(&mut self, expected: EnumSet<Kind>) -> ExpectMust<Kind> {
+        self.peek_direct()
+            .ok_or_else(|| {
+                ParseError::Unexpected {
+                    got: None,
+                    expected,
+                    at: rowan::TextRange::empty(self.offset),
+                }
+            })
+            .into()
+    }
+
     fn peek_nth(&mut self, n: usize) -> Option<Kind> {
         let mut peek_index = 0;
         let mut index = 0;
@@ -462,12 +474,14 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
                     at: rowan::TextRange::new(start, self.offset),
                 };
 
-                if self.peek().map_or(false, |kind| expected.contains(kind)) {
+                let next = self.peek();
+
+                if next.map_or(false, |kind| expected.contains(kind)) {
                     log::trace!("found expected kind");
                     self.errors.push(error);
                     self.next().maybe()
-                } else if let Some(peek) = self.peek() {
-                    log::trace!("reached expect bound, not consuming {peek:?}",);
+                } else if let Some(next) = next {
+                    log::trace!("reached expect bound, not consuming {next:?}",);
                     self.errors.push(error);
                     Expect::Recoverable
                 } else {
@@ -873,9 +887,9 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
                 this.parse_expression(until)?;
             }
 
-            let peek = this.peek_expecting(TOKEN_COMMA | TOKEN_RIGHT_CURLYBRACE)?;
+            let next = this.peek_expecting(TOKEN_COMMA | TOKEN_RIGHT_CURLYBRACE)?;
 
-            if peek != TOKEN_RIGHT_CURLYBRACE {
+            if next != TOKEN_RIGHT_CURLYBRACE {
                 this.expect(TOKEN_COMMA.into(), until)?;
                 Expect::Found(true)
             } else {
@@ -923,37 +937,36 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
     }
 
     fn parse_stringlike(&mut self, start: Kind, end: Kind) {
-        self.node_failable(
-            match start {
-                TOKEN_IDENTIFIER_START => NODE_IDENTIFIER,
-                TOKEN_STRING_START => NODE_STRING,
-                TOKEN_ISLAND_START => NODE_ISLAND,
-                _ => unreachable!(),
-            },
-            |this| {
-                let current = this.next();
-                debug_assert_eq!(current, ExpectMust::Found(start));
+        let node = match start {
+            TOKEN_IDENTIFIER_START => NODE_IDENTIFIER,
+            TOKEN_STRING_START => NODE_STRING,
+            TOKEN_ISLAND_START => NODE_ISLAND,
+            _ => unreachable!(),
+        };
 
-                loop {
-                    match this.peek_direct() {
-                        Some(TOKEN_CONTENT) => {
-                            this.next_direct().unwrap();
-                        },
+        self.node_failable(node, |this| {
+            let current = this.next();
+            assert_eq!(current, ExpectMust::Found(start));
 
-                        Some(TOKEN_INTERPOLATION_START) => {
-                            this.parse_interpolation()?;
-                        },
+            loop {
+                match this.peek_direct_expecting(TOKEN_CONTENT | TOKEN_IDENTIFIER_START | end)? {
+                    TOKEN_CONTENT => {
+                        this.next_direct().unwrap();
+                    },
 
-                        Some(other) if other == end => {
-                            this.next_direct().unwrap();
-                            break Expect::Found(());
-                        },
+                    TOKEN_INTERPOLATION_START => {
+                        this.parse_interpolation()?;
+                    },
 
-                        _ => unreachable!(),
-                    }
+                    other if other == end => {
+                        this.next_direct().unwrap();
+                        break Expect::Found(());
+                    },
+
+                    a => unreachable!("{a:?}"),
                 }
-            },
-        );
+            }
+        });
     }
 
     fn parse_interpolation(&mut self) -> Expect<()> {

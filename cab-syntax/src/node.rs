@@ -598,7 +598,7 @@ macro_rules! parted {
                         },
 
                         rowan::NodeOrToken::Node(node) => {
-                            debug_assert_eq!(node.kind(), NODE_INTERPOLATION);
+                            assert_eq!(node.kind(), NODE_INTERPOLATION);
 
                             Some(InterpolationPart::Interpolation(
                                 Interpolation::cast(node.clone()).unwrap(),

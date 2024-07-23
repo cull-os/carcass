@@ -8,12 +8,19 @@ publish = false
 cargo-fuzz = true
 
 [dependencies]
-libfuzzer-sys   = "0.4"
-cab-syntax.path = "../cab-syntax"
+libfuzzer-sys = "0.4"
+cab.path      = "../cab"
 
 [[bin]]
-name  = "token"
-path  = "fuzz_targets/token.rs"
+name  = "tokenizer"
+path  = "fuzz_targets/tokenizer.rs"
+bench = false
+doc   = false
+test  = false
+
+[[bin]]
+name  = "parser"
+path  = "fuzz_targets/parser.rs"
 bench = false
 doc   = false
 test  = false

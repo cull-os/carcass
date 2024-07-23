@@ -66,7 +66,7 @@ impl<'a> Tokenizer<'a> {
     }
 
     fn context_pop(&mut self, context: TokenizerContext) {
-        debug_assert_eq!(self.context.last(), Some(&context));
+        assert_eq!(self.context.last(), Some(&context));
         self.context.pop();
     }
 
@@ -137,10 +137,7 @@ impl<'a> Tokenizer<'a> {
 
             match self.consume_character() {
                 Some('\\') => {
-                    if self.consume_character().is_none() {
-                        self.context_pop(TokenizerContext::Stringlike { end });
-                        return Some(TOKEN_ERROR);
-                    }
+                    self.consume_character();
                 },
 
                 Some('$') if self.try_consume_character('{') => {
@@ -153,7 +150,7 @@ impl<'a> Tokenizer<'a> {
                 Some(_) => {},
                 None => {
                     self.context_pop(TokenizerContext::Stringlike { end });
-                    return Some(TOKEN_ERROR);
+                    return Some(TOKEN_CONTENT);
                 },
             }
         }
@@ -174,10 +171,7 @@ impl<'a> Tokenizer<'a> {
 
             match self.consume_character().unwrap() {
                 '\\' => {
-                    if self.consume_character().is_none() {
-                        self.context_pop(TokenizerContext::Path);
-                        return Some(TOKEN_ERROR);
-                    }
+                    self.consume_character();
                 },
 
                 '$' if self.try_consume_character('{') => {
@@ -205,7 +199,7 @@ impl<'a> Tokenizer<'a> {
             },
             Some(TokenizerContext::StringlikeEnd { end }) => {
                 let end = *end;
-                debug_assert!(self.try_consume_string(end));
+                assert!(self.try_consume_string(end));
 
                 self.context_pop(TokenizerContext::StringlikeEnd { end });
 
@@ -217,7 +211,7 @@ impl<'a> Tokenizer<'a> {
             },
 
             Some(TokenizerContext::InterpolationStart) => {
-                debug_assert!(self.try_consume_string("${"));
+                assert!(self.try_consume_string("${"));
 
                 self.context_pop(TokenizerContext::InterpolationStart);
                 self.context_push(TokenizerContext::Interpolation { brackets: 0 });
