@@ -924,16 +924,11 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
         self.node_failable(NODE_IF_ELSE, |this| {
             this.expect(
                 TOKEN_LITERAL_IF.into(),
-                until | EXPRESSION_TOKENS | TOKEN_LITERAL_THEN,
+                until | EXPRESSION_TOKENS | TOKEN_LITERAL_THEN | TOKEN_LITERAL_ELSE,
             )?;
-            this.parse_expression(
-                until | TOKEN_LITERAL_THEN | EXPRESSION_TOKENS | TOKEN_LITERAL_ELSE,
-            )?;
+            this.parse_expression(until | TOKEN_LITERAL_THEN | TOKEN_LITERAL_ELSE)?;
 
-            this.expect(
-                TOKEN_LITERAL_THEN.into(),
-                until | EXPRESSION_TOKENS | TOKEN_LITERAL_ELSE,
-            )?;
+            this.expect(TOKEN_LITERAL_THEN.into(), until | TOKEN_LITERAL_ELSE)?;
             this.parse_expression(until | TOKEN_LITERAL_ELSE)?;
 
             if this.peek() == Some(TOKEN_LITERAL_ELSE) {
