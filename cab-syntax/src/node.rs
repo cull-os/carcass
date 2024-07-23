@@ -292,18 +292,7 @@ node! { #[from(NODE_LIST)] struct List => |self, formatter| {
     write!(formatter, "[")?;
 
     for expression in self.items() {
-        match expression {
-            Expression::Error(variant) => write!(formatter, " {variant}"),
-            Expression::Parenthesis(variant) => write!(formatter, " {variant}"),
-            Expression::List(variant) => write!(formatter, " {variant}"),
-            Expression::AttributeSet(variant) => write!(formatter, " {variant}"),
-            Expression::Path(variant) => write!(formatter, " {variant}"),
-            Expression::Identifier(variant) => write!(formatter, " {variant}"),
-            Expression::String(variant) => write!(formatter, " {variant}"),
-            Expression::Island(variant) => write!(formatter, " {variant}"),
-            Expression::Number(variant) => write!(formatter, " {variant}"),
-            _ => write!(formatter, " ({expression})"),
-        }?;
+        write!(formatter, " {expression}")?;
     }
 
     write!(formatter, " ]")
