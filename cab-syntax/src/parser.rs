@@ -703,17 +703,29 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
             },
         }
 
-        while let Some(TOKEN_PERIOD) = self.peek() {
+        while self.peek() == Some(TOKEN_PERIOD) {
             self.node_failable_from(checkpoint, NODE_ATTRIBUTE_SELECT, |this| {
                 this.next().unwrap();
                 this.parse_identifier(until | TOKEN_LITERAL_OR | EXPRESSION_TOKENS);
 
-                if let Some(TOKEN_LITERAL_OR) = this.peek() {
+                if this.peek() == Some(TOKEN_LITERAL_OR) {
                     this.next().unwrap();
                     this.parse_expression(until)?;
                 }
 
                 Expect::Found(())
+            });
+        }
+
+        if self.peek() == Some(TOKEN_QUESTIONMARK) {
+            self.node_from(checkpoint, NODE_ATTRIBUTE_CHECK, |this| {
+                this.next().unwrap();
+                this.parse_identifier(until | TOKEN_PERIOD);
+
+                while this.peek() == Some(TOKEN_PERIOD) {
+                    this.next().unwrap();
+                    this.parse_identifier(until | TOKEN_PERIOD);
+                }
             });
         }
 

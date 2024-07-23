@@ -254,6 +254,7 @@ node! {
         List,
         AttributeSet,
         AttributeSelect,
+        AttributeCheck,
         Bind,
         Lambda,
         Application,
@@ -392,13 +393,38 @@ node! { #[from(NODE_ATTRIBUTE_SELECT)] struct AttributeSelect => |self, formatte
 impl AttributeSelect {
     get_node! { expression -> 0 @ Expression }
 
-    get_node! { identifier_raw -> 1 @ Expression }
-
     pub fn identifier(&self) -> Identifier {
-        Identifier::cast(self.identifier_raw().syntax().clone()).unwrap()
+        let expression: Expression = self.nth(1).unwrap();
+        Identifier::cast(expression.syntax().clone()).unwrap()
     }
 
     get_node! { default -> 2 @ ? Expression }
+}
+
+// ATTRIBUTE CHECK
+
+node! { #[from(NODE_ATTRIBUTE_CHECK)] struct AttributeCheck => |self, formatter| {
+    let mut attributes = self.attributes();
+
+    write!(formatter, "{expression} ? {attribute}", expression = self.expression(), attribute = attributes.next().unwrap())?;
+
+    for attribute in attributes {
+        write!(formatter, ".{attribute}")?
+    }
+
+    Ok(())
+}}
+
+impl AttributeCheck {
+    get_node! { expression -> 0 @ Expression }
+
+    pub fn attributes(&self) -> impl Iterator<Item = Identifier> {
+        let expressions: rowan::ast::AstChildren<Expression> = self.children();
+
+        expressions
+            .skip(1)
+            .map(|expression| Identifier::cast(expression.syntax().clone()).unwrap())
+    }
 }
 
 // BIND
