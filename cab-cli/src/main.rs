@@ -68,9 +68,6 @@ enum Dump {
 
     /// Dump the provided file's syntax.
     Syntax,
-
-    /// Dump the provided file in a clean manner.
-    Clean,
 }
 
 #[tokio::main]
@@ -137,7 +134,7 @@ async fn main() -> io::Result<()> {
                     }
                 },
 
-                Dump::Syntax | Dump::Clean => {
+                Dump::Syntax => {
                     let parse = syntax::parse(&contents);
 
                     let error_config = term::Config::default();
@@ -164,14 +161,7 @@ async fn main() -> io::Result<()> {
                         term::emit(&mut err.lock(), &error_config, &files, &diagnostic).ok();
                     }
 
-                    if matches!(command, Dump::Syntax) {
-                        write!(out, "{syntax:#?}", syntax = parse.syntax())
-                    } else if let Ok(root) = parse.result() {
-                        write!(out, "{root}")
-                    } else {
-                        Ok(())
-                    }
-                    .unwrap_or_else(|error| {
+                    write!(out, "{syntax:#?}", syntax = parse.syntax()).unwrap_or_else(|error| {
                         log::error!("failed to write to stdout: {error}");
                         process::exit(1);
                     });

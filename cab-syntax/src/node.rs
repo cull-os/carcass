@@ -1,14 +1,10 @@
 //! [`Node`] definitions for the Cab language.
-use std::{
-    fmt,
-    ops::{
-        Deref,
-        Not,
-    },
+use std::ops::{
+    Deref,
+    Not,
 };
 
-use derive_more::Display;
-use rowan::ast::AstNode;
+use rowan::ast::AstNode as _;
 
 use crate::{
     token,
@@ -22,32 +18,6 @@ use crate::{
     RowanToken,
     Token,
 };
-
-const MAXIMUM_HORIZONTAL_LENGTH: usize = 50;
-
-const INDENT: &str = "  ";
-
-fn prefix_with(
-    formatter: &mut fmt::Formatter<'_>,
-    prefix: &str,
-    thing: impl fmt::Display,
-) -> fmt::Result {
-    let formatted = format!("{thing}");
-
-    for line in formatted.lines() {
-        writeln!(formatter, "{prefix}{line}")?;
-    }
-
-    Ok(())
-}
-
-fn should_format_lined(items: &[String]) -> bool {
-    items.iter().any(|string| string.contains('\n'))
-        || items
-            .iter()
-            .fold(0, |length, string| length + string.chars().count())
-            > MAXIMUM_HORIZONTAL_LENGTH
-}
 
 /// A macro that allows you to match on a [`rowan::SyntaxNode`] efficiently.
 ///
@@ -157,28 +127,12 @@ macro_rules! node {
     };
 
     (
-        #[from($kind:ident)]
-        struct $name:ident => |$self:ident, $formatter:ident| $format_expr:expr
-    ) => {
-        node! { #[from($kind)] struct $name; }
-
-        impl fmt::Display for $name {
-            fn fmt(&$self, $formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-                $format_expr
-            }
-        }
-    };
-
-    (
         #[from($($variant:ident),* $(,)?)]
         enum $name:ident;
     ) => {
-        #[derive(Display, Debug, Clone, PartialEq, Eq, Hash)]
+        #[derive(Debug, Clone, PartialEq, Eq, Hash)]
         pub enum $name {
-            $(
-                #[display(fmt = "{_0}")]
-                $variant($variant),
-            )*
+            $($variant($variant),)*
         }
 
         impl rowan::ast::AstNode for $name {
@@ -265,7 +219,7 @@ macro_rules! get_node {
     };
 }
 
-node! { #[from(NODE_ROOT)] struct Root => |self, formatter| write!(formatter, "{expression}", expression = self.expression()) }
+node! { #[from(NODE_ROOT)] struct Root; }
 
 impl Root {
     get_node! { expression -> 0 @ Expression }
@@ -298,11 +252,11 @@ node! {
 
 // ERROR
 
-node! { #[from(NODE_ERROR)] struct Error => |self, formatter| write!(formatter, "ERROR") }
+node! { #[from(NODE_ERROR)] struct Error; }
 
 // PARENTHESIS
 
-node! { #[from(NODE_PARENTHESIS)] struct Parenthesis => |self, formatter| write!(formatter, "({expression})", expression = self.expression()) }
+node! { #[from(NODE_PARENTHESIS)] struct Parenthesis; }
 
 impl Parenthesis {
     get_token! { left_parenthesis -> TOKEN_LEFT_PARENTHESIS }
@@ -314,31 +268,7 @@ impl Parenthesis {
 
 // LIST
 
-node! { #[from(NODE_LIST)] struct List => |self, formatter| {
-    let items: Vec<_> = self.items().map(|expression| format!("{expression}")).collect();
-
-    let should_format_lined = should_format_lined(&items);
-
-    write!(formatter, "[")?;
-
-    if should_format_lined {
-        writeln!(formatter)?;
-    }
-
-    for item in items {
-        if should_format_lined {
-            prefix_with(formatter, INDENT, item)
-        } else {
-            write!(formatter, " {item}")
-        }?
-    }
-
-    if !should_format_lined {
-        write!(formatter, " ")?;
-    }
-
-    write!(formatter, "]")
-}}
+node! { #[from(NODE_LIST)] struct List; }
 
 impl List {
     get_token! { left_bracket -> TOKEN_LEFT_BRACKET }
@@ -350,38 +280,7 @@ impl List {
 
 // ATTRIBUTE SET
 
-node! { #[from(NODE_ATTRIBUTE_SET)] struct AttributeSet => |self, formatter| {
-    let items: Vec<_> = self
-        .inherits()
-        .map(|inherit| format!("{inherit}"))
-        .chain(
-            self.attributes()
-            .map(|attribute| format!("{attribute}"))
-        )
-        .collect();
-
-    let should_format_lined = should_format_lined(&items);
-
-    write!(formatter, "{{")?;
-
-    if should_format_lined {
-        writeln!(formatter)?;
-    }
-
-    for item in items {
-        if should_format_lined {
-            prefix_with(formatter, INDENT, item)
-        } else {
-            write!(formatter, " {item}")
-        }?
-    }
-
-    if !should_format_lined {
-        write!(formatter, " ")?;
-    }
-
-    write!(formatter, "}}")
-}}
+node! { #[from(NODE_ATTRIBUTE_SET)] struct AttributeSet; }
 
 impl AttributeSet {
     get_token! { left_curlybrace -> TOKEN_LEFT_CURLYBRACE }
@@ -393,7 +292,7 @@ impl AttributeSet {
     get_token! { right_curlybrace -> TOKEN_RIGHT_CURLYBRACE }
 }
 
-node! { #[from(NODE_ATTRIBUTE_INHERIT)] struct AttributeInherit => |self, formatter| write!(formatter, "{identifier};", identifier = self.identifier()) }
+node! { #[from(NODE_ATTRIBUTE_INHERIT)] struct AttributeInherit; }
 
 impl AttributeInherit {
     get_node! { identifier -> 0 @ Identifier }
@@ -401,7 +300,7 @@ impl AttributeInherit {
     get_token! { semicolon -> TOKEN_SEMICOLON }
 }
 
-node! { #[from(NODE_ATTRIBUTE)] struct Attribute => |self, formatter| write!(formatter, "{path} = {value};", path = self.path(), value = self.value()) }
+node! { #[from(NODE_ATTRIBUTE)] struct Attribute; }
 
 impl Attribute {
     get_node! { path -> 0 @ AttributePath }
@@ -411,17 +310,7 @@ impl Attribute {
     get_token! { semicolon -> TOKEN_SEMICOLON }
 }
 
-node! { #[from(NODE_ATTRIBUTE_PATH)] struct AttributePath => |self, formatter| {
-    let mut identifiers = self.identifiers();
-
-    write!(formatter, "{identifier}", identifier = identifiers.next().unwrap())?;
-
-    for identifier in identifiers {
-        write!(formatter, ".{identifier}")?;
-    }
-
-    Ok(())
-}}
+node! { #[from(NODE_ATTRIBUTE_PATH)] struct AttributePath; }
 
 impl AttributePath {
     get_node! { identifiers -> [Identifier] }
@@ -429,15 +318,7 @@ impl AttributePath {
 
 // ATTRIBUTE SELECT
 
-node! { #[from(NODE_ATTRIBUTE_SELECT)] struct AttributeSelect => |self, formatter| {
-    write!(formatter, "{expression}.{identifier}", expression = self.expression(), identifier = self.identifier())?;
-
-    if let Some(default) = self.default() {
-        write!(formatter, " or {default}")?;
-    }
-
-    Ok(())
-}}
+node! { #[from(NODE_ATTRIBUTE_SELECT)] struct AttributeSelect; }
 
 #[rustfmt::skip]
 impl AttributeSelect {
@@ -453,17 +334,7 @@ impl AttributeSelect {
 
 // ATTRIBUTE CHECK
 
-node! { #[from(NODE_ATTRIBUTE_CHECK)] struct AttributeCheck => |self, formatter| {
-    let mut attributes = self.attributes();
-
-    write!(formatter, "{expression} ? {attribute}", expression = self.expression(), attribute = attributes.next().unwrap())?;
-
-    for attribute in attributes {
-        write!(formatter, ".{attribute}")?
-    }
-
-    Ok(())
-}}
+node! { #[from(NODE_ATTRIBUTE_CHECK)] struct AttributeCheck; }
 
 impl AttributeCheck {
     get_node! { expression -> 0 @ Expression }
@@ -479,7 +350,7 @@ impl AttributeCheck {
 
 // BIND
 
-node! { #[from(NODE_BIND)] struct Bind => |self, formatter| write!(formatter, "{identifier} @ {expression}", identifier = self.identifier(), expression = self.expression()) }
+node! { #[from(NODE_BIND)] struct Bind; }
 
 impl Bind {
     get_node! { identifier -> 0 @ Identifier }
@@ -491,7 +362,7 @@ impl Bind {
 
 // LAMBDA
 
-node! { #[from(NODE_LAMBDA)] struct Lambda => |self, formatter| write!(formatter, "{parameter}: {expression}", parameter = self.parameter(), expression = self.expression()) }
+node! { #[from(NODE_LAMBDA)] struct Lambda; }
 
 impl Lambda {
     get_node! { parameter -> 0 @ LambdaParameter }
@@ -509,41 +380,13 @@ node! {
     enum LambdaParameter;
 }
 
-node! { #[from(NODE_LAMBDA_PARAMETER_IDENTIFIER)] struct LambdaParameterIdentifier => |self, formatter| write!(formatter, "{identifier}", identifier = self.identifier()) }
+node! { #[from(NODE_LAMBDA_PARAMETER_IDENTIFIER)] struct LambdaParameterIdentifier; }
 
 impl LambdaParameterIdentifier {
     get_node! { identifier -> 0 @ Identifier }
 }
 
-node! { #[from(NODE_LAMBDA_PARAMETER_PATTERN)] struct LambdaParameterPattern => |self, formatter| {
-    let items: Vec<_> = self.attributes().map(|attribute| format!("{attribute}")).collect();
-
-    let should_format_lined = should_format_lined(&items);
-
-    write!(formatter, "{{")?;
-
-    if should_format_lined {
-        writeln!(formatter)?;
-
-        for item in items {
-            prefix_with(formatter, INDENT, format!("{item},"))?;
-        }
-
-        write!(formatter, "}}")
-    } else {
-        let mut items = items.iter();
-
-        if let Some(item) = items.next() {
-            write!(formatter, " {item}")?;
-        }
-
-        for item in items {
-            write!(formatter, ", {item}")?;
-        }
-
-        write!(formatter, " }}")
-    }
-}}
+node! { #[from(NODE_LAMBDA_PARAMETER_PATTERN)] struct LambdaParameterPattern; }
 
 #[rustfmt::skip]
 impl LambdaParameterPattern {
@@ -554,15 +397,7 @@ impl LambdaParameterPattern {
     get_token! { right_curlybrace -> TOKEN_RIGHT_CURLYBRACE }
 }
 
-node! { #[from(NODE_LAMBDA_PARAMETER_PATTERN_ATTRIBUTE)] struct LambdaParameterPatternAttribute => |self, formatter| {
-    write!(formatter, "{identifier}", identifier = self.identifier())?;
-
-    if let Some(default) = self.default() {
-        write!(formatter, " ? {default}")?;
-    }
-
-    Ok(())
-}}
+node! { #[from(NODE_LAMBDA_PARAMETER_PATTERN_ATTRIBUTE)] struct LambdaParameterPatternAttribute; }
 
 impl LambdaParameterPatternAttribute {
     get_node! { identifier -> 0 @ Identifier }
@@ -574,7 +409,7 @@ impl LambdaParameterPatternAttribute {
 
 // APPLICATION
 
-node! { #[from(NODE_APPLICATION)] struct Application => |self, formatter| write!(formatter, "{left} {right}", left = self.left_expression(), right = self.right_expression()) }
+node! { #[from(NODE_APPLICATION)] struct Application; }
 
 impl Application {
     get_node! { left_expression -> 0 @ Expression }
@@ -584,16 +419,13 @@ impl Application {
 
 // PREFIX OPERATION
 
-node! { #[from(NODE_PREFIX_OPERATION)] struct PrefixOperation => |self, formatter| write!(formatter, "{operator}{expression}", operator = self.operator(), expression = self.expression()) }
+node! { #[from(NODE_PREFIX_OPERATION)] struct PrefixOperation; }
 
-#[derive(Display, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PrefixOperator {
-    #[display(fmt = "+")]
     Swwallation, // Get it?
-    #[display(fmt = "-")]
     Negation,
 
-    #[display(fmt = "not ")]
     Not,
 }
 
@@ -624,54 +456,34 @@ impl PrefixOperation {
 
 // INFIX OPERATION
 
-node! { #[from(NODE_INFIX_OPERATION)] struct InfixOperation => |self, formatter| write!(formatter, "{left} {operator} {right}", left = self.left_expression(), operator = self.operator(), right = self.right_expression()) }
+node! { #[from(NODE_INFIX_OPERATION)] struct InfixOperation; }
 
-#[derive(Display, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum InfixOperator {
-    #[display(fmt = "$")]
     Apply,
-    #[display(fmt = "|>")]
     Pipe,
 
-    #[display(fmt = "++")]
     Concat,
 
-    #[display(fmt = "==>")]
     Use,
-    #[display(fmt = "<==")]
     Override,
-    #[display(fmt = "//")]
     Update,
 
-    #[display(fmt = "==")]
     Equal,
-    #[display(fmt = "!=")]
     NotEqual,
-    #[display(fmt = "<=")]
     LessOrEqual,
-    #[display(fmt = "<")]
     Less,
-    #[display(fmt = ">=")]
     MoreOrEqual,
-    #[display(fmt = ">")]
     More,
-    #[display(fmt = "->")]
     Implication,
 
-    #[display(fmt = "+")]
     Addition,
-    #[display(fmt = "-")]
     Negation,
-    #[display(fmt = "*")]
     Multiplication,
-    #[display(fmt = "**")]
     Power,
-    #[display(fmt = "/")]
     Division,
 
-    #[display(fmt = "and")]
     And,
-    #[display(fmt = "or")]
     Or,
 }
 
@@ -745,7 +557,7 @@ impl InfixOperation {
 
 // INTERPOLATION
 
-node! { #[from(NODE_INTERPOLATION)] struct Interpolation => |self, formatter| write!(formatter, "${{{expression}}}", expression = self.expression()) }
+node! { #[from(NODE_INTERPOLATION)] struct Interpolation; }
 
 impl Interpolation {
     get_token! { interpolation_start -> TOKEN_INTERPOLATION_START }
@@ -755,13 +567,10 @@ impl Interpolation {
     get_token! { interpolation_end -> TOKEN_INTERPOLATION_END }
 }
 
-#[derive(Display, Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum InterpolationPart<T> {
-    #[display(fmt = "{}", _0.text())]
     Delimiter(RowanToken),
-    #[display(fmt = "{}", _0.text())]
     Content(T),
-    #[display(fmt = "{_0}")]
     Interpolation(Interpolation),
 }
 
@@ -797,18 +606,9 @@ macro_rules! parted {
                 })
             }
         }
-
-        impl fmt::Display for $name {
-            fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-                for part in self.parts() {
-                    write!(formatter, "{part}")?;
-                }
-
-                Ok(())
-            }
-        }
     };
 }
+
 // PATH, IDENTIFIER, STRING, ISLAND
 
 node! { #[from(NODE_PATH)] struct Path; }
@@ -820,13 +620,11 @@ parted! {
     }
 }
 
-node! { #[from(NODE_IDENTIFIER)] struct Identifier => |self, formatter| write!(formatter, "{value}", value = self.value()) }
+node! { #[from(NODE_IDENTIFIER)] struct Identifier; }
 
-#[derive(Display, Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum IdentifierValue {
-    #[display(fmt = "{}", _0.text())]
     Simple(token::Identifier),
-    #[display(fmt = "{_0}")]
     Complex(IdentifierComplex),
 }
 
@@ -873,13 +671,11 @@ parted! {
 
 // NUMBER
 
-node! { #[from(NODE_NUMBER)] struct Number => |self, formatter| write!(formatter, "{value}", value = self.value()) }
+node! { #[from(NODE_NUMBER)] struct Number; }
 
-#[derive(Display, Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum NumberValue {
-    #[display(fmt = "{}", _0.value())]
     Integer(token::Integer),
-    #[display(fmt = "{}", _0.value())]
     Float(token::Float),
 }
 
@@ -897,15 +693,7 @@ impl Number {
     }
 }
 
-node! { #[from(NODE_IF_ELSE)] struct IfElse => |self, formatter| {
-    write!(formatter, "if {condition} then {trvke}", condition = self.condition(), trvke = self.true_expression())?;
-
-    if let Some(nope) = self.false_expression() {
-        write!(formatter, " else {nope}")?;
-    }
-
-    Ok(())
-}}
+node! { #[from(NODE_IF_ELSE)] struct IfElse; }
 
 impl IfElse {
     get_token! { if_ -> TOKEN_LITERAL_IF }
