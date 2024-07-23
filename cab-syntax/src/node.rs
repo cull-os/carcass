@@ -696,7 +696,7 @@ impl Number {
 node! { #[from(NODE_IF_ELSE)] struct IfElse; }
 
 impl IfElse {
-    get_token! { if_ -> TOKEN_LITERAL_IF }
+    get_token! { r#if -> TOKEN_LITERAL_IF }
 
     get_node! { condition -> 0 @ Expression }
 
@@ -704,7 +704,7 @@ impl IfElse {
 
     get_node! { true_expression -> 1 @ Expression }
 
-    get_token! { else_ -> ? TOKEN_LITERAL_ELSE }
+    get_token! { r#else -> ? TOKEN_LITERAL_ELSE }
 
     get_node! { false_expression -> 2 @ ? Expression }
 }
