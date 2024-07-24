@@ -6,10 +6,7 @@ use std::{
 };
 
 use cab::syntax::parse;
-use clap::{
-    Parser,
-    Subcommand,
-};
+use clap::Parser as _;
 use clap_verbosity_flag::{
     InfoLevel,
     Verbosity,
@@ -21,7 +18,7 @@ use yansi::{
     Paint,
 };
 
-#[derive(Parser)]
+#[derive(clap::Parser)]
 struct Cli {
     #[command(flatten)]
     verbosity: Verbosity<InfoLevel>,
@@ -30,7 +27,7 @@ struct Cli {
     command: Command,
 }
 
-#[derive(Subcommand, Debug, Clone)]
+#[derive(clap::Subcommand, Debug, Clone)]
 enum Command {
     Check {
         /// Whether to immediately exit after the first failure.
@@ -43,7 +40,7 @@ enum Command {
 }
 
 /// Checks the specified crate for correctness.
-#[derive(Subcommand, Debug, Clone)]
+#[derive(clap::Subcommand, Debug, Clone)]
 enum Check {
     /// Compares the test data and expected results with the actual results.
     Syntax {

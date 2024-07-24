@@ -7,10 +7,7 @@ use cab::syntax::{
     self,
     ParseError,
 };
-use clap::{
-    Parser,
-    Subcommand,
-};
+use clap::Parser as _;
 use clap_stdin::FileOrStdin;
 use clap_verbosity_flag::{
     InfoLevel,
@@ -33,7 +30,7 @@ use yansi::{
     Paint as _,
 };
 
-#[derive(Parser)]
+#[derive(clap::Parser)]
 #[command(version, about)]
 struct Cli {
     #[command(flatten)]
@@ -43,7 +40,7 @@ struct Cli {
     command: Command,
 }
 
-#[derive(Subcommand, Debug, Clone)]
+#[derive(clap::Subcommand, Debug, Clone)]
 enum Command {
     /// Various commands related to debugging.
     Dump {
@@ -56,7 +53,7 @@ enum Command {
     },
 }
 
-#[derive(Subcommand, Debug, Clone, Copy)]
+#[derive(clap::Subcommand, Debug, Clone, Copy)]
 enum Dump {
     /// Dump the provided file's tokens.
     Token {
