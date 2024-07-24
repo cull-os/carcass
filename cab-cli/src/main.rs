@@ -34,7 +34,7 @@ use yansi::{
 };
 
 #[derive(Parser)]
-#[command(name = "cab", version, about)]
+#[command(version, about)]
 struct Cli {
     #[command(flatten)]
     verbosity: Verbosity<InfoLevel>,
