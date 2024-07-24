@@ -18,6 +18,9 @@
 !fuzz/
 !fuzz/fuzz_targets/
 
+!xtask/
+!xtask/src/
+
 !.gitignore
 
 !*.cab

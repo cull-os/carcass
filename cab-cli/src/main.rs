@@ -1,8 +1,5 @@
 use std::{
-    io::{
-        self,
-        Write as _,
-    },
+    io::Write as _,
     process,
 };
 
@@ -73,7 +70,7 @@ enum Dump {
 }
 
 #[tokio::main]
-async fn main() -> io::Result<()> {
+async fn main() {
     let cli = Cli::parse();
 
     yansi::whenever(Condition::TTY_AND_COLOR);
@@ -171,6 +168,4 @@ async fn main() -> io::Result<()> {
             }
         },
     }
-
-    Ok(())
 }

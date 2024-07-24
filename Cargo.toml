@@ -5,4 +5,5 @@ members  = [ "cab",
   "cab-cli",
   "cab-syntax",
   "fuzz",
+  "xtask",
 ]
