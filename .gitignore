@@ -18,8 +18,8 @@
 !fuzz/
 !fuzz/fuzz_targets/
 
-!xtask/
-!xtask/src/
+!task/
+!task/src/
 
 !.gitignore
 

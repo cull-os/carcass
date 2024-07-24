@@ -22,7 +22,6 @@ use yansi::{
 };
 
 #[derive(Parser)]
-#[command(name = "xtask")]
 struct Cli {
     #[command(flatten)]
     verbosity: Verbosity<InfoLevel>,
@@ -119,7 +118,7 @@ fn actual_main() -> Result<(), Box<dyn error::Error>> {
 
                 log::warn!(
                     "behaviour has changed for {name}! diffing expected vs. actual syntax:",
-                    name = name.red()
+                    name = name.yellow()
                 );
 
                 let mut child = process::Command::new(&diff_tool)

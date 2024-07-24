@@ -818,6 +818,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "task"
+version = "0.1.0"
+dependencies = [
+ "cab",
+ "clap",
+ "clap-verbosity-flag",
+ "env_logger",
+ "log",
+ "tokio",
+ "which",
+ "yansi",
+]
+
+[[package]]
 name = "termcolor"
 version = "1.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1097,20 +1111,6 @@ name = "winsafe"
 version = "0.0.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d135d17ab770252ad95e9a872d365cf3090e3be864a34ab46f48555993efc904"
-
-[[package]]
-name = "xtask"
-version = "0.1.0"
-dependencies = [
- "cab",
- "clap",
- "clap-verbosity-flag",
- "env_logger",
- "log",
- "tokio",
- "which",
- "yansi",
-]
 
 [[package]]
 name = "yansi"
