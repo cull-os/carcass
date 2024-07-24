@@ -168,7 +168,6 @@ impl Parse {
             .iter()
             .rev()
             .take_while(|error| matches!(error, ParseError::Unexpected { got: None, .. }))
-            .map(|error| log::trace!("found end of file error: {error}"))
             .count() as isize
             - 1;
 
@@ -205,15 +204,11 @@ pub fn parse(input: &str) -> Parse {
 
         // Reached an unrecoverable error.
         if let Err(error) = this.parse_expression(EnumSet::EMPTY) {
-            log::trace!("unrecoverable error encountered: {error:?}");
-
             this.node_from(checkpoint, NODE_ERROR, |_| {});
             this.errors.push(error);
         }
 
         if let Some(unexpected) = this.peek() {
-            log::trace!("leftovers encountered: {unexpected:?}");
-
             let start = this.offset;
 
             this.node(NODE_ERROR, |this| this.next_direct_while(|_| true));
@@ -251,6 +246,55 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
 
             offset: 0.into(),
             depth: 0,
+        }
+    }
+
+    fn checkpoint(&mut self) -> rowan::Checkpoint {
+        self.next_while_trivia();
+        self.builder.checkpoint()
+    }
+
+    fn node<T>(&mut self, kind: Kind, closure: impl FnOnce(&mut Self) -> T) -> T {
+        self.builder.start_node(kind.into());
+
+        let result = closure(self);
+
+        self.builder.finish_node();
+        result
+    }
+
+    fn node_failable<K>(&mut self, kind: Kind, closure: impl FnOnce(&mut Self) -> ParseResult<K>) {
+        let checkpoint = self.checkpoint();
+
+        if let Err(error) = self.node(kind, closure) {
+            self.node_from(checkpoint, NODE_ERROR, |_| {});
+            self.errors.push(error);
+        }
+    }
+
+    fn node_from<T>(
+        &mut self,
+        checkpoint: rowan::Checkpoint,
+        kind: Kind,
+        closure: impl FnOnce(&mut Self) -> T,
+    ) -> T {
+        self.builder.start_node_at(checkpoint, kind.into());
+
+        let result = closure(self);
+
+        self.builder.finish_node();
+        result
+    }
+
+    fn node_failable_from<K>(
+        &mut self,
+        checkpoint: rowan::Checkpoint,
+        kind: Kind,
+        closure: impl FnOnce(&mut Self) -> ParseResult<K>,
+    ) {
+        if let Err(error) = self.node_from(checkpoint, kind, closure) {
+            self.node_from(checkpoint, NODE_ERROR, |_| {});
+            self.errors.push(error);
         }
     }
 
@@ -367,67 +411,15 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
                 let next = self.peek();
 
                 if next.map_or(false, |kind| expected.contains(kind)) {
-                    log::trace!("found expected kind");
                     self.errors.push(error);
                     self.next().map(Some)
-                } else if let Some(next) = next {
-                    log::trace!("reached expect bound, not consuming {next:?}",);
+                } else if next.is_some() {
                     self.errors.push(error);
                     recoverable()
                 } else {
-                    log::trace!("expect consumed everything");
                     deadly(error)
                 }
             },
-        }
-    }
-
-    fn checkpoint(&mut self) -> rowan::Checkpoint {
-        self.next_while_trivia();
-        self.builder.checkpoint()
-    }
-
-    fn node<T>(&mut self, kind: Kind, closure: impl FnOnce(&mut Self) -> T) -> T {
-        self.builder.start_node(kind.into());
-
-        let result = closure(self);
-
-        self.builder.finish_node();
-        result
-    }
-
-    fn node_failable<K>(&mut self, kind: Kind, closure: impl FnOnce(&mut Self) -> ParseResult<K>) {
-        let checkpoint = self.checkpoint();
-
-        if let Err(error) = self.node(kind, closure) {
-            self.node_from(checkpoint, NODE_ERROR, |_| {});
-            self.errors.push(error);
-        }
-    }
-
-    fn node_from<T>(
-        &mut self,
-        checkpoint: rowan::Checkpoint,
-        kind: Kind,
-        closure: impl FnOnce(&mut Self) -> T,
-    ) -> T {
-        self.builder.start_node_at(checkpoint, kind.into());
-
-        let result = closure(self);
-
-        self.builder.finish_node();
-        result
-    }
-
-    fn node_failable_from<K>(
-        &mut self,
-        checkpoint: rowan::Checkpoint,
-        kind: Kind,
-        closure: impl FnOnce(&mut Self) -> ParseResult<K>,
-    ) {
-        if let Err(error) = self.node_from(checkpoint, kind, closure) {
-            self.node_from(checkpoint, NODE_ERROR, |_| {});
-            self.errors.push(error);
         }
     }
 
@@ -578,18 +570,15 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
                     at: rowan::TextRange::new(start, self.offset),
                 };
 
-                return if self
-                    .peek()
-                    .map_or(false, |kind| EXPRESSION_TOKENS.contains(kind))
-                {
+                let next = self.peek();
+
+                return if next.map_or(false, |kind| EXPRESSION_TOKENS.contains(kind)) {
                     self.errors.push(error);
                     self.parse_expression_single(until)
-                } else if let Some(peek) = self.peek() {
-                    log::trace!("reached expect bound, not consuming {peek:?}",);
+                } else if next.is_some() {
                     self.errors.push(error);
                     recoverable()
                 } else {
-                    log::trace!("expect consumed everything");
                     deadly(error)
                 };
             },
