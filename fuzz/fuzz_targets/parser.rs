@@ -47,7 +47,7 @@ fuzz_target!(|data: &str| -> Corpus {
         hasher.finish()
     };
 
-    let base_file = format!("{syntax_hash:x}");
+    let base_file = format!("{syntax_hash:016x}");
 
     let (data_file, syntax_file) = {
         let root = path::Path::new("cab-syntax/test/data");
