@@ -381,8 +381,16 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
         condition
     }
 
-    fn next_while(&mut self, predicate: impl Fn(Kind) -> bool) {
-        while self.peek().map_or(false, &predicate) {
+    fn next_while(&mut self, mut predicate: impl FnMut(Kind) -> bool) {
+        loop {
+            let Some(next) = self.peek() else {
+                break;
+            };
+
+            if !predicate(next) {
+                break;
+            }
+
             self.next().unwrap();
         }
     }
@@ -822,7 +830,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
             assert_eq!(current, Ok(start));
 
             loop {
-                match this.peek_direct_expecting(TOKEN_CONTENT | TOKEN_IDENTIFIER_START | end)? {
+                match this.peek_direct_expecting(TOKEN_CONTENT | end)? {
                     TOKEN_CONTENT => {
                         this.next_direct().unwrap();
                     },
@@ -848,9 +856,42 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
 
             this.parse_expression(TOKEN_RIGHT_CURLYBRACE.into())?;
 
-            this.expect(TOKEN_INTERPOLATION_END.into(), EnumSet::EMPTY)?;
+            if this.next_if(TOKEN_INTERPOLATION_END) {
+                return found(());
+            }
 
-            Ok(Some(()))
+            this.node(NODE_ERROR, |this| {
+                let start = this.offset;
+                let unexpected = this.peek();
+
+                let mut depth: usize = 0;
+
+                this.next_while(|kind| {
+                    match kind {
+                        TOKEN_INTERPOLATION_START => depth += 1,
+
+                        TOKEN_INTERPOLATION_END if depth == 0 => return false,
+                        TOKEN_INTERPOLATION_END => depth -= 1,
+
+                        _ => {},
+                    }
+
+                    true
+                });
+
+                let error = ParseError::Unexpected {
+                    got: unexpected,
+                    expected: TOKEN_INTERPOLATION_END.into(),
+                    at: rowan::TextRange::new(start, this.offset),
+                };
+
+                if depth > 0 || this.next().is_err() {
+                    Err(error)
+                } else {
+                    this.errors.push(error);
+                    found(())
+                }
+            })
         })
     }
 
