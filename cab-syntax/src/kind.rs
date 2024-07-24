@@ -250,7 +250,8 @@ impl Kind {
     pub fn is_argument(self) -> bool {
         matches!(
             self,
-            TOKEN_LEFT_PARENTHESIS
+            TOKEN_ERROR
+                | TOKEN_LEFT_PARENTHESIS
                 | TOKEN_LEFT_BRACKET
                 | TOKEN_LEFT_CURLYBRACE
                 | TOKEN_INTEGER
@@ -265,6 +266,6 @@ impl Kind {
 
     /// Whether if the token should be ignored by the parser.
     pub fn is_trivia(self) -> bool {
-        matches!(self, TOKEN_ERROR | TOKEN_COMMENT | TOKEN_WHITESPACE)
+        matches!(self, TOKEN_COMMENT | TOKEN_WHITESPACE)
     }
 }
