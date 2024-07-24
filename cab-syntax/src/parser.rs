@@ -447,6 +447,12 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
         self.next_direct()
     }
 
+    fn next_if(&mut self, expected: Kind) -> bool {
+        if self.peek() == Some(expected) {
+            self.next();
+        }
+    }
+
     fn next_while(&mut self, predicate: impl Fn(Kind) -> bool) {
         while self.peek().map_or(false, &predicate) {
             self.next().unwrap();
@@ -705,13 +711,11 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
             },
         }
 
-        while self.peek() == Some(TOKEN_PERIOD) {
+        while self.next_if(TOKEN_PERIOD) {
             self.node_failable_from(checkpoint, NODE_ATTRIBUTE_SELECT, |this| {
-                this.next().unwrap();
                 this.parse_identifier(until | TOKEN_LITERAL_OR | EXPRESSION_TOKENS);
 
-                if this.peek() == Some(TOKEN_LITERAL_OR) {
-                    this.next().unwrap();
+                if this.next_if(TOKEN_LITERAL_OR) {
                     this.parse_expression(until)?;
                 }
 
@@ -719,13 +723,11 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
             });
         }
 
-        if self.peek() == Some(TOKEN_QUESTIONMARK) {
+        if self.next_if(TOKEN_QUESTIONMARK) {
             self.node_from(checkpoint, NODE_ATTRIBUTE_CHECK, |this| {
-                this.next().unwrap();
                 this.parse_identifier(until | TOKEN_PERIOD);
 
-                while this.peek() == Some(TOKEN_PERIOD) {
-                    this.next().unwrap();
+                while this.next_if(TOKEN_PERIOD) {
                     this.parse_identifier(until | TOKEN_PERIOD);
                 }
             });
@@ -1000,8 +1002,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
             this.expect(TOKEN_LITERAL_THEN.into(), until | TOKEN_LITERAL_ELSE)?;
             this.parse_expression(until | TOKEN_LITERAL_ELSE)?;
 
-            if this.peek() == Some(TOKEN_LITERAL_ELSE) {
-                this.next().unwrap();
+            if this.next_if(TOKEN_LITERAL_ELSE) {
                 this.parse_expression(until)?;
             }
             Expect::Found(())
