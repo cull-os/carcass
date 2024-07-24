@@ -111,7 +111,7 @@ fn actual_main() -> Result<(), Box<dyn error::Error>> {
 
                 if expected_syntax == actual_syntax {
                     log::info!(
-                        "expected syntax and actual syntax matched for {name}",
+                        "expected and actual syntax matched for {name}",
                         name = name.green()
                     );
                     continue;
