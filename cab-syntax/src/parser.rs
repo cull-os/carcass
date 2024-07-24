@@ -1,8 +1,4 @@
-use std::{
-    convert,
-    fmt,
-    ops,
-};
+use std::fmt;
 
 use enumset::{
     enum_set,
@@ -24,103 +20,20 @@ use crate::{
     RowanNode,
 };
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[must_use]
-enum ExpectMust<K = Kind> {
-    Found(K),
-    Deadly(Option<ParseError>),
+type MustParseResult<T = ()> = Result<T, ParseError>;
+
+type ParseResult<T = ()> = Result<Option<T>, ParseError>;
+
+fn found<T>(value: T) -> ParseResult<T> {
+    Ok(Some(value))
 }
 
-impl<K> ops::FromResidual for ExpectMust<K> {
-    fn from_residual(residual: <Self as ops::Try>::Residual) -> Self {
-        match residual {
-            Expect::Recoverable => Self::Deadly(None),
-            Expect::Deadly(error) => Self::Deadly(Some(error)),
-            _ => unreachable!(),
-        }
-    }
+fn recoverable<T>() -> ParseResult<T> {
+    Ok(None)
 }
 
-impl<K> ops::Try for ExpectMust<K> {
-    type Output = K;
-    type Residual = Expect<convert::Infallible>;
-
-    fn from_output(output: Self::Output) -> Self {
-        Self::Found(output)
-    }
-
-    fn branch(self) -> ops::ControlFlow<Self::Residual, Self::Output> {
-        match self {
-            Self::Found(found) => ops::ControlFlow::Continue(found),
-            Self::Deadly(None) => ops::ControlFlow::Break(Expect::Recoverable),
-            Self::Deadly(Some(error)) => ops::ControlFlow::Break(Expect::Deadly(error)),
-        }
-    }
-}
-
-impl<K> ExpectMust<K> {
-    fn maybe(self) -> Expect<K> {
-        match self {
-            Self::Found(found) => Expect::Found(found),
-            Self::Deadly(None) => Expect::Recoverable,
-            Self::Deadly(Some(error)) => Expect::Deadly(error),
-        }
-    }
-
-    fn unwrap(self) -> K {
-        match self {
-            Self::Found(found) => found,
-            _ => panic!("asserted on a failed expect"),
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[must_use]
-enum Expect<K = Kind> {
-    Found(K),
-    Recoverable,
-    Deadly(ParseError),
-}
-
-impl<K> ops::FromResidual for Expect<K> {
-    fn from_residual(residual: <Self as ops::Try>::Residual) -> Self {
-        match residual {
-            Expect::Recoverable => Self::Recoverable,
-            Expect::Deadly(error) => Self::Deadly(error),
-            _ => unreachable!(),
-        }
-    }
-}
-
-impl<K> ops::Try for Expect<K> {
-    type Output = Option<K>;
-    type Residual = Expect<convert::Infallible>;
-
-    fn from_output(output: Self::Output) -> Self {
-        match output {
-            Some(found) => Self::Found(found),
-            None => Self::Recoverable,
-        }
-    }
-
-    fn branch(self) -> ops::ControlFlow<Self::Residual, Self::Output> {
-        match self {
-            Self::Found(found) => ops::ControlFlow::Continue(Some(found)),
-            Self::Recoverable => ops::ControlFlow::Continue(None),
-            Self::Deadly(error) => ops::ControlFlow::Break(Expect::Deadly(error)),
-        }
-    }
-}
-
-impl<K> Expect<K> {
-    fn must(self) -> ExpectMust<K> {
-        match self {
-            Self::Found(found) => ExpectMust::Found(found),
-            Self::Recoverable => ExpectMust::Deadly(None),
-            Self::Deadly(error) => ExpectMust::Deadly(Some(error)),
-        }
-    }
+fn deadly<T>(error: ParseError) -> ParseResult<T> {
+    Err(error)
 }
 
 const EXPRESSION_TOKENS: EnumSet<Kind> = enum_set!(
@@ -291,7 +204,7 @@ pub fn parse(input: &str) -> Parse {
         let checkpoint = this.checkpoint();
 
         // Reached an unrecoverable error.
-        if let Expect::Deadly(error) = this.parse_expression(EnumSet::EMPTY) {
+        if let Err(error) = this.parse_expression(EnumSet::EMPTY) {
             log::trace!("unrecoverable error encountered: {error:?}");
 
             this.node_from(checkpoint, NODE_ERROR, |_| {});
@@ -345,18 +258,12 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
         self.tokens.peek().map(|&(kind, _)| kind)
     }
 
-    fn peek_direct_expecting(&mut self, expected: EnumSet<Kind>) -> ExpectMust {
-        match self.peek_direct() {
-            Some(kind) => Expect::Found(kind),
-            None => {
-                Expect::Deadly(ParseError::Unexpected {
-                    got: None,
-                    expected,
-                    at: rowan::TextRange::empty(self.offset),
-                })
-            },
-        }
-        .must()
+    fn peek_direct_expecting(&mut self, expected: EnumSet<Kind>) -> MustParseResult<Kind> {
+        self.peek_direct().ok_or(ParseError::Unexpected {
+            got: None,
+            expected,
+            at: rowan::TextRange::empty(self.offset),
+        })
     }
 
     fn peek_nth(&mut self, n: usize) -> Option<Kind> {
@@ -382,36 +289,27 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
         self.peek_nth(0)
     }
 
-    fn peek_expecting(&mut self, expected: EnumSet<Kind>) -> ExpectMust {
-        match self.peek() {
-            Some(kind) => Expect::Found(kind),
-            None => {
-                Expect::Deadly(ParseError::Unexpected {
-                    got: None,
-                    expected,
-                    at: rowan::TextRange::empty(self.offset),
-                })
-            },
-        }
-        .must()
+    fn peek_expecting(&mut self, expected: EnumSet<Kind>) -> MustParseResult<Kind> {
+        self.peek().ok_or(ParseError::Unexpected {
+            got: None,
+            expected,
+            at: rowan::TextRange::empty(self.offset),
+        })
     }
 
-    fn next_direct(&mut self) -> ExpectMust {
-        match self.tokens.next().map(|(kind, slice)| {
-            self.offset += rowan::TextSize::of(slice);
-            self.builder.token(kind.into(), slice);
-            kind
-        }) {
-            Some(kind) => Expect::Found(kind),
-            None => {
-                Expect::Deadly(ParseError::Unexpected {
-                    got: None,
-                    expected: EnumSet::EMPTY,
-                    at: rowan::TextRange::empty(self.offset),
-                })
-            },
-        }
-        .must()
+    fn next_direct(&mut self) -> MustParseResult<Kind> {
+        self.tokens
+            .next()
+            .map(|(kind, slice)| {
+                self.offset += rowan::TextSize::of(slice);
+                self.builder.token(kind.into(), slice);
+                kind
+            })
+            .ok_or(ParseError::Unexpected {
+                got: None,
+                expected: EnumSet::EMPTY,
+                at: rowan::TextRange::empty(self.offset),
+            })
     }
 
     fn next_direct_while(&mut self, predicate: impl Fn(Kind) -> bool) {
@@ -424,7 +322,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
         self.next_direct_while(Kind::is_trivia)
     }
 
-    fn next(&mut self) -> ExpectMust {
+    fn next(&mut self) -> MustParseResult<Kind> {
         self.next_while_trivia();
         self.next_direct()
     }
@@ -445,11 +343,11 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
         }
     }
 
-    fn expect(&mut self, expected: EnumSet<Kind>, until: EnumSet<Kind>) -> Expect {
+    fn expect(&mut self, expected: EnumSet<Kind>, until: EnumSet<Kind>) -> ParseResult<Kind> {
         let checkpoint = self.checkpoint();
 
         match self.peek_expecting(expected)? {
-            next if expected.contains(next) => self.next().maybe(),
+            next if expected.contains(next) => self.next().map(Some),
 
             unexpected => {
                 // I don't know why I don't have to run next_while_trivia here to not capture
@@ -471,14 +369,14 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
                 if next.map_or(false, |kind| expected.contains(kind)) {
                     log::trace!("found expected kind");
                     self.errors.push(error);
-                    self.next().maybe()
+                    self.next().map(Some)
                 } else if let Some(next) = next {
                     log::trace!("reached expect bound, not consuming {next:?}",);
                     self.errors.push(error);
-                    Expect::Recoverable
+                    recoverable()
                 } else {
                     log::trace!("expect consumed everything");
-                    Expect::Deadly(error)
+                    deadly(error)
                 }
             },
         }
@@ -498,10 +396,10 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
         result
     }
 
-    fn node_failable<K>(&mut self, kind: Kind, closure: impl FnOnce(&mut Self) -> Expect<K>) {
+    fn node_failable<K>(&mut self, kind: Kind, closure: impl FnOnce(&mut Self) -> ParseResult<K>) {
         let checkpoint = self.checkpoint();
 
-        if let Expect::Deadly(error) = self.node(kind, closure) {
+        if let Err(error) = self.node(kind, closure) {
             self.node_from(checkpoint, NODE_ERROR, |_| {});
             self.errors.push(error);
         }
@@ -525,15 +423,15 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
         &mut self,
         checkpoint: rowan::Checkpoint,
         kind: Kind,
-        closure: impl FnOnce(&mut Self) -> Expect<K>,
+        closure: impl FnOnce(&mut Self) -> ParseResult<K>,
     ) {
-        if let Expect::Deadly(error) = self.node_from(checkpoint, kind, closure) {
+        if let Err(error) = self.node_from(checkpoint, kind, closure) {
             self.node_from(checkpoint, NODE_ERROR, |_| {});
             self.errors.push(error);
         }
     }
 
-    fn parse_expression(&mut self, until: EnumSet<Kind>) -> Expect<()> {
+    fn parse_expression(&mut self, until: EnumSet<Kind>) -> ParseResult {
         self.parse_expression_binding_power(0, until)
     }
 
@@ -541,7 +439,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
         &mut self,
         minimum_power: u16,
         until: EnumSet<Kind>,
-    ) -> Expect<()> {
+    ) -> ParseResult {
         let checkpoint = self.checkpoint();
 
         self.parse_expression_application(until)?;
@@ -565,10 +463,10 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
             });
         }
 
-        Expect::Found(())
+        found(())
     }
 
-    fn parse_expression_application(&mut self, until: EnumSet<Kind>) -> Expect<()> {
+    fn parse_expression_application(&mut self, until: EnumSet<Kind>) -> ParseResult {
         let checkpoint = self.checkpoint();
 
         self.parse_expression_single(until)?;
@@ -579,10 +477,10 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
             });
         }
 
-        Expect::Found(())
+        found(())
     }
 
-    fn parse_expression_single(&mut self, until: EnumSet<Kind>) -> Expect<()> {
+    fn parse_expression_single(&mut self, until: EnumSet<Kind>) -> ParseResult {
         if self.depth >= 512 {
             let error = ParseError::RecursionLimitExceeded { at: self.offset };
 
@@ -590,7 +488,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
                 this.next_direct_while(|_| true);
             });
 
-            return Expect::Deadly(error);
+            return deadly(error);
         }
 
         self.depth += 1;
@@ -689,10 +587,10 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
                 } else if let Some(peek) = self.peek() {
                     log::trace!("reached expect bound, not consuming {peek:?}",);
                     self.errors.push(error);
-                    Expect::Recoverable
+                    recoverable()
                 } else {
                     log::trace!("expect consumed everything");
-                    Expect::Deadly(error)
+                    deadly(error)
                 };
             },
         }
@@ -705,7 +603,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
                     this.parse_expression(until)?;
                 }
 
-                Expect::Found(())
+                found(())
             });
         }
 
@@ -720,7 +618,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
         }
 
         self.depth -= 1;
-        Expect::Found(())
+        found(())
     }
 
     fn parse_parenthesis(&mut self, until: EnumSet<Kind>) {
@@ -774,7 +672,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
         });
     }
 
-    fn parse_attribute(&mut self, until: EnumSet<Kind>) -> Expect<()> {
+    fn parse_attribute(&mut self, until: EnumSet<Kind>) -> ParseResult {
         let checkpoint = self.checkpoint();
 
         // First identifier down. If the next token is a semicolon,
@@ -797,7 +695,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
                             until | TOKEN_EQUAL | EXPRESSION_TOKENS | TOKEN_SEMICOLON,
                         );
                     }
-                    Expect::Found(())
+                    found(())
                 })?;
 
                 this.expect(
@@ -809,7 +707,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
             })?;
         }
 
-        Expect::Found(())
+        found(())
     }
 
     fn parse_lambda(&mut self, checkpoint: rowan::Checkpoint, until: EnumSet<Kind>) {
@@ -839,7 +737,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
                 while !(until | TOKEN_RIGHT_CURLYBRACE)
                     .contains(this.peek_expecting(IDENTIFIER_TOKENS | TOKEN_RIGHT_CURLYBRACE)?)
                 {
-                    let Expect::Found(true) =
+                    let Ok(Some(())) =
                         this.parse_lambda_pattern_attribute(until | TOKEN_RIGHT_CURLYBRACE)
                     else {
                         break;
@@ -858,7 +756,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
         });
     }
 
-    fn parse_lambda_pattern_attribute(&mut self, until: EnumSet<Kind>) -> Expect<bool> {
+    fn parse_lambda_pattern_attribute(&mut self, until: EnumSet<Kind>) -> ParseResult {
         self.node(NODE_LAMBDA_PARAMETER_PATTERN_ATTRIBUTE, |this| {
             this.parse_identifier(
                 until
@@ -879,9 +777,9 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
 
             if next != TOKEN_RIGHT_CURLYBRACE {
                 this.expect(TOKEN_COMMA.into(), until)?;
-                Expect::Found(true)
+                found(())
             } else {
-                Expect::Found(false)
+                recoverable()
             }
         })
     }
@@ -908,7 +806,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
                         this.parse_interpolation()?;
                     },
 
-                    _ => break Expect::Found(()),
+                    _ => break found(()),
                 }
             }
         });
@@ -934,7 +832,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
 
         self.node_failable(node, |this| {
             let current = this.next();
-            assert_eq!(current, ExpectMust::Found(start));
+            assert_eq!(current, Ok(start));
 
             loop {
                 match this.peek_direct_expecting(TOKEN_CONTENT | TOKEN_IDENTIFIER_START | end)? {
@@ -948,7 +846,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
 
                     other if other == end => {
                         this.next_direct().unwrap();
-                        break Expect::Found(());
+                        break Ok(Some(()));
                     },
 
                     unexpected => unreachable!("{unexpected:?}"),
@@ -957,17 +855,15 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
         });
     }
 
-    fn parse_interpolation(&mut self) -> Expect<()> {
+    fn parse_interpolation(&mut self) -> ParseResult {
         self.node(NODE_INTERPOLATION, |this| {
-            this.expect(TOKEN_INTERPOLATION_START.into(), EnumSet::EMPTY)
-                .must()?;
+            this.expect(TOKEN_INTERPOLATION_START.into(), EnumSet::EMPTY)?;
 
             this.parse_expression(TOKEN_RIGHT_CURLYBRACE.into())?;
 
-            this.expect(TOKEN_INTERPOLATION_END.into(), EnumSet::EMPTY)
-                .must()?;
+            this.expect(TOKEN_INTERPOLATION_END.into(), EnumSet::EMPTY)?;
 
-            Expect::Found(())
+            Ok(Some(()))
         })
     }
 
@@ -991,7 +887,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
             if this.next_if(TOKEN_LITERAL_ELSE) {
                 this.parse_expression(until)?;
             }
-            Expect::Found(())
+            Ok(Some(()))
         });
     }
 }
