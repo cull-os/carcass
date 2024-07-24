@@ -27,8 +27,8 @@ fuzz_target!(|data: &str| {
     {
         yansi::whenever(Condition::TTY_AND_COLOR);
 
-        if let Ok(root) = parse.result() {
-            let syntax = format!("{syntax:#?}", syntax = *root);
+        if let Ok(node) = parse.result() {
+            let syntax = format!("{syntax:#?}", syntax = *node);
 
             let hash = {
                 let mut hasher = hash::DefaultHasher::new();
@@ -40,7 +40,7 @@ fuzz_target!(|data: &str| {
                 let base = format!("{hash:x}");
 
                 println!(
-                    "Found a valid parse! Wrote it to {base}.",
+                    "found a valid parse! wrote it to {base}",
                     base = base.green().bold()
                 );
 
