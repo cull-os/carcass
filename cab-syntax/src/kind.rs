@@ -152,7 +152,7 @@ pub enum Kind {
     #[display(fmt = "a path")]
     TOKEN_PATH,
 
-    #[display(fmt = "the content of a string-like")]
+    #[display(fmt = "content")]
     TOKEN_CONTENT,
 
     /// A normal non-quoted identifier. The initial character must not match
