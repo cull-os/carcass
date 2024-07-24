@@ -4,7 +4,7 @@ use crate::Kind::{
 };
 
 fn is_valid_initial_identifier_character(c: char) -> bool {
-    !c.is_ascii_digit() && c.is_alphanumeric() || matches!(c, '_' | '-')
+    !c.is_ascii_digit() && is_valid_identifier_character(c)
 }
 
 fn is_valid_identifier_character(c: char) -> bool {
