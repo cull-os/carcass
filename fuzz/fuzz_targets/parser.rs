@@ -13,46 +13,64 @@ use std::{
 };
 
 use cab::syntax::parse;
-use libfuzzer_sys::fuzz_target;
+use libfuzzer_sys::{
+    fuzz_target,
+    Corpus,
+};
 use yansi::{
     Condition,
     Paint as _,
 };
 
-fuzz_target!(|data: &str| {
+fuzz_target!(|data: &str| -> Corpus {
     let parse = hint::black_box(parse(data));
 
-    if env::var("FUZZ_PARSER_SAVE_VALID")
+    if !env::var("FUZZ_PARSER_SAVE_VALID")
         .is_ok_and(|value| !matches!(value.as_ref(), "" | "0" | "false"))
     {
-        yansi::whenever(Condition::TTY_AND_COLOR);
+        return Corpus::Keep;
+    }
 
-        if let Ok(node) = parse.result() {
-            let syntax = format!("{syntax:#?}", syntax = *node);
+    yansi::whenever(Condition::TTY_AND_COLOR);
 
-            let hash = {
-                let mut hasher = hash::DefaultHasher::new();
-                syntax.hash(&mut hasher);
-                hasher.finish()
-            };
+    let Ok(node) = parse.result() else {
+        return Corpus::Reject;
+    };
 
-            let (data_file, syntax_file) = {
-                let base = format!("{hash:x}");
+    print!("found a valid parse!");
 
-                println!(
-                    "found a valid parse! wrote it to {base}",
-                    base = base.green().bold()
-                );
+    let syntax = format!("{syntax:#?}", syntax = *node);
 
-                (base.clone() + ".cab", base + ".expect")
-            };
+    let syntax_hash = {
+        let mut hasher = hash::DefaultHasher::new();
+        syntax.hash(&mut hasher);
+        hasher.finish()
+    };
 
-            let root = path::Path::new("cab-syntax/test/data");
+    let base_file = format!("{syntax_hash:x}");
 
-            fs::create_dir_all(root).unwrap();
+    let (data_file, syntax_file) = {
+        let root = path::Path::new("cab-syntax/test/data");
+        fs::create_dir_all(root).unwrap();
 
-            fs::write(root.join(data_file), data).unwrap();
-            fs::write(root.join(syntax_file), syntax).unwrap();
-        }
+        (
+            root.join(base_file.clone() + ".cab"),
+            root.join(base_file.clone() + ".expect"),
+        )
+    };
+
+    if data_file.exists() {
+        println!(
+            " seems like it was already known before, skipping writing {name}",
+            name = base_file.yellow().bold()
+        );
+
+        Corpus::Reject
+    } else {
+        println!(" wrote it to {name}", name = base_file.green().bold());
+        fs::write(data_file, data).unwrap();
+        fs::write(syntax_file, syntax).unwrap();
+
+        Corpus::Keep
     }
 });
