@@ -58,15 +58,6 @@ impl<K> ops::Try for ExpectMust<K> {
     }
 }
 
-impl<K> From<Result<K, ParseError>> for ExpectMust<K> {
-    fn from(result: Result<K, ParseError>) -> Self {
-        match result {
-            Ok(value) => Self::Found(value),
-            Err(error) => Self::Deadly(Some(error)),
-        }
-    }
-}
-
 impl<K> ExpectMust<K> {
     fn maybe(self) -> Expect<K> {
         match self {
@@ -118,15 +109,6 @@ impl<K> ops::Try for Expect<K> {
             Self::Found(found) => ops::ControlFlow::Continue(Some(found)),
             Self::Recoverable => ops::ControlFlow::Continue(None),
             Self::Deadly(error) => ops::ControlFlow::Break(Expect::Deadly(error)),
-        }
-    }
-}
-
-impl<K> From<Result<K, ParseError>> for Expect<K> {
-    fn from(result: Result<K, ParseError>) -> Self {
-        match result {
-            Ok(value) => Self::Found(value),
-            Err(error) => Self::Deadly(error),
         }
     }
 }
@@ -363,16 +345,18 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
         self.tokens.peek().map(|&(kind, _)| kind)
     }
 
-    fn peek_direct_expecting(&mut self, expected: EnumSet<Kind>) -> ExpectMust<Kind> {
-        self.peek_direct()
-            .ok_or_else(|| {
-                ParseError::Unexpected {
+    fn peek_direct_expecting(&mut self, expected: EnumSet<Kind>) -> ExpectMust {
+        match self.peek_direct() {
+            Some(kind) => Expect::Found(kind),
+            None => {
+                Expect::Deadly(ParseError::Unexpected {
                     got: None,
                     expected,
                     at: rowan::TextRange::empty(self.offset),
-                }
-            })
-            .into()
+                })
+            },
+        }
+        .must()
     }
 
     fn peek_nth(&mut self, n: usize) -> Option<Kind> {
@@ -399,33 +383,35 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
     }
 
     fn peek_expecting(&mut self, expected: EnumSet<Kind>) -> ExpectMust {
-        self.peek()
-            .ok_or_else(|| {
-                ParseError::Unexpected {
+        match self.peek() {
+            Some(kind) => Expect::Found(kind),
+            None => {
+                Expect::Deadly(ParseError::Unexpected {
                     got: None,
                     expected,
                     at: rowan::TextRange::empty(self.offset),
-                }
-            })
-            .into()
+                })
+            },
+        }
+        .must()
     }
 
     fn next_direct(&mut self) -> ExpectMust {
-        self.tokens
-            .next()
-            .map(|(kind, slice)| {
-                self.offset += rowan::TextSize::of(slice);
-                self.builder.token(kind.into(), slice);
-                kind
-            })
-            .ok_or_else(|| {
-                ParseError::Unexpected {
+        match self.tokens.next().map(|(kind, slice)| {
+            self.offset += rowan::TextSize::of(slice);
+            self.builder.token(kind.into(), slice);
+            kind
+        }) {
+            Some(kind) => Expect::Found(kind),
+            None => {
+                Expect::Deadly(ParseError::Unexpected {
                     got: None,
                     expected: EnumSet::EMPTY,
                     at: rowan::TextRange::empty(self.offset),
-                }
-            })
-            .into()
+                })
+            },
+        }
+        .must()
     }
 
     fn next_direct_while(&mut self, predicate: impl Fn(Kind) -> bool) {
@@ -444,9 +430,13 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
     }
 
     fn next_if(&mut self, expected: Kind) -> bool {
-        if self.peek() == Some(expected) {
-            self.next();
+        let condition = self.peek() == Some(expected);
+
+        if condition {
+            self.next().unwrap();
         }
+
+        condition
     }
 
     fn next_while(&mut self, predicate: impl Fn(Kind) -> bool) {
