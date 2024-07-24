@@ -260,16 +260,12 @@ impl Parse {
     /// Returns an iterator over the underlying [`ParseError`]s, removing
     /// duplicates and only returning useful errors.
     pub fn errors(&self) -> Box<dyn Iterator<Item = &ParseError> + '_> {
-        if self
+        if let Some(recursion_error) = self
             .errors
             .iter()
-            .any(|error| matches!(error, ParseError::RecursionLimitExceeded { .. }))
+            .find(|error| matches!(error, ParseError::RecursionLimitExceeded { .. }))
         {
-            return Box::new(
-                self.errors
-                    .iter()
-                    .filter(|error| matches!(error, ParseError::RecursionLimitExceeded { .. })),
-            );
+            return Box::new([recursion_error].into_iter());
         }
 
         let extra_error_count = self
