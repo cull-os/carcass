@@ -854,7 +854,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
         self.node(NODE_INTERPOLATION, |this| {
             this.expect(TOKEN_INTERPOLATION_START.into(), EnumSet::EMPTY)?;
 
-            this.parse_expression(TOKEN_RIGHT_CURLYBRACE.into())?;
+            this.parse_expression(TOKEN_INTERPOLATION_END.into())?;
 
             if this.next_if(TOKEN_INTERPOLATION_END) {
                 return found(());
@@ -885,7 +885,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
                     at: rowan::TextRange::new(start, this.offset),
                 };
 
-                if depth > 0 || this.next().is_err() {
+                if this.next().is_err() || depth > 0 {
                     Err(error)
                 } else {
                     this.errors.push(error);
