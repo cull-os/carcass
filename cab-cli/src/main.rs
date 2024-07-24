@@ -33,7 +33,7 @@ use codespan_reporting::{
 use log::Level;
 use yansi::{
     Condition,
-    Paint,
+    Paint as _,
 };
 
 #[derive(Parser)]

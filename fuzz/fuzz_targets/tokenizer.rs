@@ -1,12 +1,12 @@
 #![no_main]
 
-use std::hint::black_box;
+use std::hint;
 
 use cab::syntax::tokenize;
 use libfuzzer_sys::fuzz_target;
 
 fuzz_target!(|data: &str| {
     for token in tokenize(data) {
-        black_box(token);
+        hint::black_box(token);
     }
 });
