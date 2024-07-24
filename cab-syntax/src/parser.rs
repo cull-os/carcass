@@ -72,8 +72,8 @@ pub enum ParseError {
         /// The token that was not expected. This being [`None`] means that the
         /// end of the file was reached.
         got: Option<Kind>,
-        /// The expected token. This being [`None`] means that the end of the
-        /// file was expected, but there were leftovers.
+        /// The expected token. This being [`EnumSet::EMPTY`] means that the end
+        /// of the file was expected, but there were leftovers.
         expected: EnumSet<Kind>,
         /// The range that contains the unexpected token sequence.
         at: rowan::TextRange,
