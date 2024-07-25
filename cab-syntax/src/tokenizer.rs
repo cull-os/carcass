@@ -301,6 +301,7 @@ impl<'a> Tokenizer<'a> {
             '*' if self.try_consume_character('*') => TOKEN_ASTERISK_ASTERISK,
             '*' => TOKEN_ASTERISK,
 
+            // TODO: Add support for scientific notation.
             '0' if matches!(self.peek_character(), Some('b' | 'o' | 'x')) => {
                 let is_valid_digit = match self.consume_character() {
                     Some('b') => |c: char| matches!(c, '0' | '1' | '_'),
