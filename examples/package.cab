@@ -4,11 +4,11 @@
 # a derivation when the `buildSystem` and `targetSystem` are overriden,
 # you will get a symlink to `/cull/store/<name>` in `./result`.
 
-self @ {
+inputs @ {
   buildSystem = undefined;
   targetSystem = undefined;
 
-  packages = import <github:cull-os/packages> <== self;
+  packages = import <github:cull-os/packages> <== inputs;
 } ==> packages.rustPackage {
   name = "cab";
   version = readFile ../cab-cli/Cargo.toml
@@ -27,7 +27,7 @@ self @ {
   source = ..;
 
   targetBuildDependencies = packages ==> [
-    # We don't need this, but this is the way you'd do nativeBuildInputs.
+    # We don't need this, but this is the way you'd do the equivalent of nixpkgs' `nativeBuildInputs`.
     lolhtml
   ];
 }

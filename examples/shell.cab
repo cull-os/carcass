@@ -4,15 +4,20 @@
 # a derivation when the `buildSystem` and `targetSystem` are overriden,
 # you will get launched into a shell just like `nix develop`.
 
-self @ {
+inputs @ {
   buildSystem = undefined;
   targetSystem = undefined;
 
-  packages = import <github:cull-os/packages> <== self;
+  packages = import <github:cull-os/packages> <== inputs;
 } ==> packages.shell {
   pathPackages = packages ==> [
     # We don't need this, but this is the way
     # you'd do the equivalent of `packages` in mkShell.
-    lolhtml
+    cargo-fuzz
+  ];
+
+  # Same as `lib.makeLibraryPath` of nixpkgs.
+  environment.LD_LIBRARY_PATH = packages.libraryPath [
+    gmp4
   ];
 }

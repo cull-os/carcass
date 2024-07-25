@@ -1,4 +1,7 @@
-self @ {
+# That is a bind operator. It is used to refer to the final
+# form of the thing it is being bind-ed to. This is quite
+# similar to the `fix` and `makeScope`-related functions inside nixpkgs.
+inputs @ {
   # These variables have to be overriden.
   # Currently they aren't defined. They don't exist at all
   # but will when you override them.
@@ -8,9 +11,11 @@ self @ {
   buildSystem = undefined;
   targetSystem = undefined;
 
-  # When `packages` isn't given, it will default to the <github:cull-os/packages> island.
+  # When `packages` isn't overriden, it will default to the expression it is assigned to.
   # The lock of this island is stored in `default.cab.lock`.
-  packages = import <github:cull-os/packages> <== self;
+  packages = <github:cull-os/packages>;
+
+  pack = import inputs.packages <== inputs;
 
   # This is not a function. This is equivalent to `with` in Nix.
   # This is used instead of `let-in` too.
@@ -25,14 +30,12 @@ self @ {
 } ==> {
   description = "Hello, Cab!";
 
-  # `fix` is a builtin function. No `builtins` namespace or `lib` needed!
-  # That is also the Haskell `$`.
-  packages = fix $ self: {
+  packages = self @ {
     default = import ./package.cab <== inputs;
     foo = self.default;
   };
 
-  shells = fix $ self: {
+  shells = self @ {
     default = import ./shell.cab <== inputs;
     foo = self.default;
     # Identifiers are denoted using normal characters or anything that can be put into a string
