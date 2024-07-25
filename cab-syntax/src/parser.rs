@@ -818,6 +818,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
             });
         }
 
+        // TODO: Make this an InfixOperation while handling the path-ness properly.
         if self.next_if(TOKEN_QUESTIONMARK) {
             self.node_from(checkpoint, NODE_ATTRIBUTE_CHECK, |this| {
                 this.parse_identifier(until | TOKEN_PERIOD);
