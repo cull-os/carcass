@@ -124,6 +124,23 @@ impl<'a> Tokenizer<'a> {
         Some(next)
     }
 
+    fn consume_scientific(&mut self) -> Kind {
+        if self.try_consume_character('e') || self.try_consume_character('E') {
+            let _ = self.try_consume_character('+') || self.try_consume_character('-');
+
+            let start = self.offset;
+            self.consume_while(|c| c.is_ascii_digit());
+
+            if self.offset - start == 0 {
+                TOKEN_ERROR
+            } else {
+                TOKEN_FLOAT
+            }
+        } else {
+            TOKEN_FLOAT
+        }
+    }
+
     fn consume_stringlike(&mut self, end: &'a str) -> Option<Kind> {
         loop {
             if self.remaining().starts_with(end) {
@@ -301,7 +318,6 @@ impl<'a> Tokenizer<'a> {
             '*' if self.try_consume_character('*') => TOKEN_ASTERISK_ASTERISK,
             '*' => TOKEN_ASTERISK,
 
-            // TODO: Add support for scientific notation.
             '0' if matches!(self.peek_character(), Some('b' | 'o' | 'x')) => {
                 let is_valid_digit = match self.consume_character() {
                     Some('b') => |c: char| matches!(c, '0' | '1' | '_'),
@@ -318,8 +334,7 @@ impl<'a> Tokenizer<'a> {
                 {
                     self.consume_character();
                     self.consume_while(is_valid_digit);
-
-                    TOKEN_FLOAT
+                    self.consume_scientific()
                 } else if self.offset - start > 0 {
                     TOKEN_INTEGER
                 } else {
@@ -338,8 +353,7 @@ impl<'a> Tokenizer<'a> {
                 {
                     self.consume_character();
                     self.consume_while(is_valid_digit);
-
-                    TOKEN_FLOAT
+                    self.consume_scientific()
                 } else {
                     TOKEN_INTEGER
                 }
@@ -347,8 +361,7 @@ impl<'a> Tokenizer<'a> {
 
             '.' if self.peek_character().map_or(false, |c| c.is_ascii_digit()) => {
                 self.consume_while(|c| c.is_ascii_digit() || c == '_');
-
-                TOKEN_FLOAT
+                self.consume_scientific()
             },
 
             initial_letter if is_valid_initial_identifier_character(initial_letter) => {
