@@ -431,198 +431,6 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
         }
     }
 
-    fn parse_expression(&mut self, until: EnumSet<Kind>) -> ParseResult {
-        self.parse_expression_binding_power(0, until)
-    }
-
-    fn parse_expression_binding_power(
-        &mut self,
-        minimum_power: u16,
-        until: EnumSet<Kind>,
-    ) -> ParseResult {
-        let checkpoint = self.checkpoint();
-
-        if let Some(((), right_power)) = self.peek().and_then(|next| {
-            node::PrefixOperator::try_from(next)
-                .map(|operator| operator.binding_power())
-                .ok()
-        }) {
-            self.node_failable(NODE_PREFIX_OPERATION, |this| {
-                this.next().unwrap();
-                this.parse_expression_binding_power(right_power, until)
-            });
-        } else {
-            self.parse_expression_application(until)?;
-        }
-
-        while let Some((left_power, right_power)) = self.peek().and_then(|next| {
-            node::InfixOperator::try_from(next)
-                .map(|operator| operator.binding_power())
-                .ok()
-        }) {
-            if left_power < minimum_power {
-                break;
-            }
-
-            self.node_failable_from(checkpoint, NODE_INFIX_OPERATION, |this| {
-                this.next().unwrap();
-                this.parse_expression_binding_power(right_power, until)
-            });
-        }
-
-        found(())
-    }
-
-    fn parse_expression_application(&mut self, until: EnumSet<Kind>) -> ParseResult {
-        let checkpoint = self.checkpoint();
-
-        self.parse_expression_single(until)?;
-
-        while self.peek().map_or(false, Kind::is_argument) {
-            self.node_failable_from(checkpoint, NODE_APPLICATION, |this| {
-                this.parse_expression_single(until)
-            });
-        }
-
-        found(())
-    }
-
-    fn parse_expression_single(&mut self, until: EnumSet<Kind>) -> ParseResult {
-        if self.depth >= 512 {
-            let error = ParseError::RecursionLimitExceeded { at: self.offset };
-
-            self.node(NODE_ERROR, |this| {
-                this.next_direct_while(|_| true);
-            });
-
-            return deadly(error);
-        }
-
-        self.depth += 1;
-
-        let checkpoint = self.checkpoint();
-
-        match self.peek_expecting(EXPRESSION_TOKENS)? {
-            TOKEN_LEFT_PARENTHESIS => {
-                self.parse_parenthesis(until);
-            },
-
-            TOKEN_LEFT_BRACKET => {
-                self.parse_list(until);
-            },
-
-            // TODO: Peek and do lambda parameter parsing
-            // *that supports stringlike identifiers for the initial identifier*.
-            //
-            // # Lambda pattern initials:
-            // { foo,
-            // { foo ?
-            // { foo }
-            //
-            // # Attribute set initials: Anything that isn't the above.
-            //
-            // Seems like I'm either going to use a sublexer that doesn't actually consume
-            // anything, or write code that goes in 300 indentation levels to support
-            // templated identifiers in lambda patterns.
-            #[rustfmt::skip]
-            TOKEN_LEFT_CURLYBRACE => {
-                if matches!(self.peek_nth(1), Some(TOKEN_IDENTIFIER))
-                && matches!(self.peek_nth(2), Some(TOKEN_COMMA | TOKEN_QUESTIONMARK | TOKEN_RIGHT_CURLYBRACE)) {
-                    self.parse_lambda_pattern(until)
-                } else {
-                    self.parse_attribute_set(until)
-                }
-            },
-
-            kind if IDENTIFIER_TOKENS.contains(kind) => {
-                let checkpoint = self.checkpoint();
-
-                self.parse_identifier(until);
-
-                match self.peek() {
-                    Some(TOKEN_COLON) => self.parse_lambda(checkpoint, until),
-
-                    Some(TOKEN_AT) => self.parse_bind(checkpoint, until),
-
-                    _ => {},
-                }
-            },
-
-            TOKEN_PATH => {
-                self.parse_path();
-            },
-
-            TOKEN_STRING_START => {
-                self.parse_stringlike(TOKEN_STRING_START, TOKEN_STRING_END);
-            },
-
-            TOKEN_ISLAND_START => {
-                self.parse_stringlike(TOKEN_ISLAND_START, TOKEN_ISLAND_END);
-            },
-
-            TOKEN_INTEGER | TOKEN_FLOAT => {
-                self.parse_number(until);
-            },
-
-            TOKEN_LITERAL_IF => {
-                self.parse_if_else(until);
-            },
-
-            unexpected => {
-                // TODO: Find a way to merge this with expect?
-                self.next_while_trivia();
-                let start = self.offset;
-
-                self.node(NODE_ERROR, |this| {
-                    this.next_while(|kind| !(until | EXPRESSION_TOKENS).contains(kind));
-                });
-
-                let error = ParseError::Unexpected {
-                    got: Some(unexpected),
-                    expected: EXPRESSION_TOKENS,
-                    at: rowan::TextRange::new(start, self.offset),
-                };
-
-                let next = self.peek();
-
-                return if next.map_or(false, |kind| EXPRESSION_TOKENS.contains(kind)) {
-                    self.errors.push(error);
-                    self.parse_expression_single(until)
-                } else if next.is_some() {
-                    self.errors.push(error);
-                    recoverable()
-                } else {
-                    deadly(error)
-                };
-            },
-        }
-
-        while self.next_if(TOKEN_PERIOD) {
-            self.node_failable_from(checkpoint, NODE_ATTRIBUTE_SELECT, |this| {
-                this.parse_identifier(until | TOKEN_LITERAL_OR | EXPRESSION_TOKENS);
-
-                if this.next_if(TOKEN_LITERAL_OR) {
-                    this.parse_expression(until)?;
-                }
-
-                found(())
-            });
-        }
-
-        if self.next_if(TOKEN_QUESTIONMARK) {
-            self.node_from(checkpoint, NODE_ATTRIBUTE_CHECK, |this| {
-                this.parse_identifier(until | TOKEN_PERIOD);
-
-                while this.next_if(TOKEN_PERIOD) {
-                    this.parse_identifier(until | TOKEN_PERIOD);
-                }
-            });
-        }
-
-        self.depth -= 1;
-        found(())
-    }
-
     fn parse_parenthesis(&mut self, until: EnumSet<Kind>) {
         self.node_failable(NODE_PARENTHESIS, |this| {
             this.expect(
@@ -886,5 +694,197 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
             }
             Ok(Some(()))
         });
+    }
+
+    fn parse_expression_single(&mut self, until: EnumSet<Kind>) -> ParseResult {
+        if self.depth >= 512 {
+            let error = ParseError::RecursionLimitExceeded { at: self.offset };
+
+            self.node(NODE_ERROR, |this| {
+                this.next_direct_while(|_| true);
+            });
+
+            return deadly(error);
+        }
+
+        self.depth += 1;
+
+        let checkpoint = self.checkpoint();
+
+        match self.peek_expecting(EXPRESSION_TOKENS)? {
+            TOKEN_LEFT_PARENTHESIS => {
+                self.parse_parenthesis(until);
+            },
+
+            TOKEN_LEFT_BRACKET => {
+                self.parse_list(until);
+            },
+
+            // TODO: Peek and do lambda parameter parsing
+            // *that supports stringlike identifiers for the initial identifier*.
+            //
+            // # Lambda pattern initials:
+            // { foo,
+            // { foo ?
+            // { foo }
+            //
+            // # Attribute set initials: Anything that isn't the above.
+            //
+            // Seems like I'm either going to use a sublexer that doesn't actually consume
+            // anything, or write code that goes in 300 indentation levels to support
+            // templated identifiers in lambda patterns.
+            #[rustfmt::skip]
+            TOKEN_LEFT_CURLYBRACE => {
+                if matches!(self.peek_nth(1), Some(TOKEN_IDENTIFIER))
+                && matches!(self.peek_nth(2), Some(TOKEN_COMMA | TOKEN_QUESTIONMARK | TOKEN_RIGHT_CURLYBRACE)) {
+                    self.parse_lambda_pattern(until)
+                } else {
+                    self.parse_attribute_set(until)
+                }
+            },
+
+            kind if IDENTIFIER_TOKENS.contains(kind) => {
+                let checkpoint = self.checkpoint();
+
+                self.parse_identifier(until);
+
+                match self.peek() {
+                    Some(TOKEN_COLON) => self.parse_lambda(checkpoint, until),
+
+                    Some(TOKEN_AT) => self.parse_bind(checkpoint, until),
+
+                    _ => {},
+                }
+            },
+
+            TOKEN_PATH => {
+                self.parse_path();
+            },
+
+            TOKEN_STRING_START => {
+                self.parse_stringlike(TOKEN_STRING_START, TOKEN_STRING_END);
+            },
+
+            TOKEN_ISLAND_START => {
+                self.parse_stringlike(TOKEN_ISLAND_START, TOKEN_ISLAND_END);
+            },
+
+            TOKEN_INTEGER | TOKEN_FLOAT => {
+                self.parse_number(until);
+            },
+
+            TOKEN_LITERAL_IF => {
+                self.parse_if_else(until);
+            },
+
+            unexpected => {
+                // TODO: Find a way to merge this with expect?
+                self.next_while_trivia();
+                let start = self.offset;
+
+                self.node(NODE_ERROR, |this| {
+                    this.next_while(|kind| !(until | EXPRESSION_TOKENS).contains(kind));
+                });
+
+                let error = ParseError::Unexpected {
+                    got: Some(unexpected),
+                    expected: EXPRESSION_TOKENS,
+                    at: rowan::TextRange::new(start, self.offset),
+                };
+
+                let next = self.peek();
+
+                return if next.map_or(false, |kind| EXPRESSION_TOKENS.contains(kind)) {
+                    self.errors.push(error);
+                    self.parse_expression_single(until)
+                } else if next.is_some() {
+                    self.errors.push(error);
+                    recoverable()
+                } else {
+                    deadly(error)
+                };
+            },
+        }
+
+        while self.next_if(TOKEN_PERIOD) {
+            self.node_failable_from(checkpoint, NODE_ATTRIBUTE_SELECT, |this| {
+                this.parse_identifier(until | TOKEN_LITERAL_OR | EXPRESSION_TOKENS);
+
+                if this.next_if(TOKEN_LITERAL_OR) {
+                    this.parse_expression(until)?;
+                }
+
+                found(())
+            });
+        }
+
+        if self.next_if(TOKEN_QUESTIONMARK) {
+            self.node_from(checkpoint, NODE_ATTRIBUTE_CHECK, |this| {
+                this.parse_identifier(until | TOKEN_PERIOD);
+
+                while this.next_if(TOKEN_PERIOD) {
+                    this.parse_identifier(until | TOKEN_PERIOD);
+                }
+            });
+        }
+
+        self.depth -= 1;
+        found(())
+    }
+
+    fn parse_expression_application(&mut self, until: EnumSet<Kind>) -> ParseResult {
+        let checkpoint = self.checkpoint();
+
+        self.parse_expression_single(until)?;
+
+        while self.peek().map_or(false, Kind::is_argument) {
+            self.node_failable_from(checkpoint, NODE_APPLICATION, |this| {
+                this.parse_expression_single(until)
+            });
+        }
+
+        found(())
+    }
+
+    fn parse_expression_binding_power(
+        &mut self,
+        minimum_power: u16,
+        until: EnumSet<Kind>,
+    ) -> ParseResult {
+        let checkpoint = self.checkpoint();
+
+        if let Some(((), right_power)) = self.peek().and_then(|next| {
+            node::PrefixOperator::try_from(next)
+                .map(|operator| operator.binding_power())
+                .ok()
+        }) {
+            self.node_failable(NODE_PREFIX_OPERATION, |this| {
+                this.next().unwrap();
+                this.parse_expression_binding_power(right_power, until)
+            });
+        } else {
+            self.parse_expression_application(until)?;
+        }
+
+        while let Some((left_power, right_power)) = self.peek().and_then(|next| {
+            node::InfixOperator::try_from(next)
+                .map(|operator| operator.binding_power())
+                .ok()
+        }) {
+            if left_power < minimum_power {
+                break;
+            }
+
+            self.node_failable_from(checkpoint, NODE_INFIX_OPERATION, |this| {
+                this.next().unwrap();
+                this.parse_expression_binding_power(right_power, until)
+            });
+        }
+
+        found(())
+    }
+
+    fn parse_expression(&mut self, until: EnumSet<Kind>) -> ParseResult {
+        self.parse_expression_binding_power(0, until)
     }
 }
