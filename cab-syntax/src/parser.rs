@@ -185,7 +185,7 @@ impl<N: Node> Parse<N> {
         )
     }
 
-    /// Creates a [`Node`] node from [`Self::syntax`].
+    /// Creates a [`Node`] node from [`Parse::syntax`].
     pub fn node(self) -> N {
         N::cast(self.syntax()).unwrap()
     }

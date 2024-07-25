@@ -1,4 +1,4 @@
-//! Formatting utilities for [`crate::node::Expression`]s.
+//! Formatting utilities for [`Expression`]s.
 use std::io;
 
 use yansi::Paint as _;
