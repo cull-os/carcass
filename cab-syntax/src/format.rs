@@ -221,8 +221,8 @@ fn s_impl(
             *bracket_count += 1;
 
             write!(formatter, "{delimiter}{operator}{delimiter}", delimiter = "`".green().bold(), operator = match operation.operator() {
-                PrefixOperator::Swwallation => "-",
-                PrefixOperator::Negation => "+",
+                PrefixOperator::Swwallation => "+",
+                PrefixOperator::Negation => "-",
 
                 PrefixOperator::Not => "not",
             }.green())?;
