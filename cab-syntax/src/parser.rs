@@ -382,11 +382,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
     }
 
     fn next_while(&mut self, mut predicate: impl FnMut(Kind) -> bool) {
-        loop {
-            let Some(next) = self.peek() else {
-                break;
-            };
-
+        while let Some(next) = self.peek() {
             if !predicate(next) {
                 break;
             }
@@ -442,15 +438,11 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
 
         self.parse_expression_application(until)?;
 
-        loop {
-            let Some(next) = self.peek() else { break };
-
-            let Ok((left_power, right_power)) =
-                node::InfixOperator::try_from(next).map(|operator| operator.binding_power())
-            else {
-                break;
-            };
-
+        while let Some((left_power, right_power)) = self.peek().and_then(|next| {
+            node::InfixOperator::try_from(next)
+                .map(|operator| operator.binding_power())
+                .ok()
+        }) {
             if left_power < minimum_power {
                 break;
             }
