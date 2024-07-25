@@ -3,6 +3,11 @@ use crate::Kind::{
     *,
 };
 
+/// Returns an iterator of tokens that reference the given string.
+pub fn tokenize(input: &str) -> impl Iterator<Item = (Kind, &str)> {
+    Tokenizer::new(input)
+}
+
 fn is_valid_initial_identifier_character(c: char) -> bool {
     !c.is_ascii_digit() && is_valid_identifier_character(c)
 }
@@ -13,11 +18,6 @@ fn is_valid_identifier_character(c: char) -> bool {
 
 fn is_valid_path_character(c: char) -> bool {
     c.is_alphanumeric() || matches!(c, '.' | '/' | '_' | '-' | '\\' | '$')
-}
-
-/// Returns an iterator of tokens that reference the given string.
-pub fn tokenize(input: &str) -> impl Iterator<Item = (Kind, &str)> {
-    Tokenizer::new(input)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -420,5 +420,55 @@ impl<'a> Tokenizer<'a> {
 
             _ => TOKEN_ERROR,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    macro_rules! assert_token_matches {
+        ($string:literal,$($pattern:pat),* $(,)?) => {{
+            let mut tokens = tokenize($string);
+
+            $(assert!(matches!(tokens.next(), Some($pattern)));)*
+
+            assert_eq!(tokens.next(), None);
+        }};
+    }
+
+    #[test]
+    fn no_empty_tokens() {
+        assert_token_matches!(
+            "'foo ${bar}'",
+            (TOKEN_STRING_START, "'"),
+            (TOKEN_CONTENT, "foo "),
+            (TOKEN_INTERPOLATION_START, "${"),
+            (TOKEN_IDENTIFIER, "bar"),
+            (TOKEN_INTERPOLATION_END, "}"),
+            (TOKEN_STRING_END, "'"),
+        );
+    }
+
+    #[test]
+    fn path() {
+        assert_token_matches!(
+            "../foo${𓃰}///baz",
+            (TOKEN_PATH, "../foo"),
+            (TOKEN_INTERPOLATION_START, "${"),
+            (TOKEN_IDENTIFIER, "𓃰"),
+            (TOKEN_INTERPOLATION_END, "}"),
+            (TOKEN_PATH, "///baz"),
+        );
+    }
+
+    #[test]
+    fn errors_are_individual() {
+        assert_token_matches!(
+            "~~~",
+            (TOKEN_ERROR, "~"),
+            (TOKEN_ERROR, "~"),
+            (TOKEN_ERROR, "~")
+        );
     }
 }

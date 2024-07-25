@@ -22,3 +22,9 @@ features = [ "full" ]
 [dependencies.yansi]
 version = "1.0.1"
 features = [ "detect-env", "detect-tty", "hyperlink" ]
+
+[[bin]]
+name  = "task"
+bench = false
+doc   = false
+test  = false
