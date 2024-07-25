@@ -12,11 +12,11 @@ use crate::{
 
 /// Formats the given node as an S-expression. The node must be a valid
 /// [`Expression`] or this function will panic.
-pub fn format_s_expression(formatter: &mut impl io::Write, node: &RowanNode) -> io::Result<()> {
-    format_s_expression_impl(formatter, node, &mut 0)
+pub fn s(formatter: &mut impl io::Write, node: &RowanNode) -> io::Result<()> {
+    s_impl(formatter, node, &mut 0)
 }
 
-fn format_s_expression_impl_parted<T: Token>(
+fn s_impl_parted<T: Token>(
     parts: impl Iterator<Item = InterpolationPart<T>>,
     formatter: &mut impl io::Write,
     bracket_count: &mut u32,
@@ -37,7 +37,7 @@ fn format_s_expression_impl_parted<T: Token>(
 
             InterpolationPart::Interpolation(interpolation) => {
                 write!(formatter, "{start}", start = "${".yellow())?;
-                format_s_expression_impl(formatter, &interpolation.expression(), bracket_count)?;
+                s_impl(formatter, &interpolation.expression(), bracket_count)?;
                 write!(formatter, "{end}", end = "}".yellow())?;
             },
         }
@@ -46,7 +46,7 @@ fn format_s_expression_impl_parted<T: Token>(
     Ok(())
 }
 
-fn format_s_expression_impl(
+fn s_impl(
     formatter: &mut impl io::Write,
     node: &RowanNode,
     bracket_count: &mut u32,
@@ -57,7 +57,7 @@ fn format_s_expression_impl(
 
     match_node! { node =>
         Root as root => {
-            format_s_expression_impl(formatter, &root.expression(), bracket_count)
+            s_impl(formatter, &root.expression(), bracket_count)
         },
 
         Error as _error => {
@@ -67,7 +67,7 @@ fn format_s_expression_impl(
         Parenthesis as parenthesis => {
             write!(formatter, "{left}", left = "(".paint(get_bracket_style(*bracket_count)))?;
             *bracket_count += 1;
-            format_s_expression_impl(formatter, &parenthesis.expression(), bracket_count)?;
+            s_impl(formatter, &parenthesis.expression(), bracket_count)?;
             *bracket_count -= 1;
             write!(formatter, "{right}", right = ")".paint(get_bracket_style(*bracket_count)))
         },
@@ -80,7 +80,7 @@ fn format_s_expression_impl(
 
             for item in items.iter() {
                 write!(formatter, " ")?;
-                format_s_expression_impl(formatter, item, bracket_count)?;
+                s_impl(formatter, item, bracket_count)?;
             }
 
             *bracket_count -= 1;
@@ -97,7 +97,7 @@ fn format_s_expression_impl(
             let inherits: Vec<_> = set.inherits().collect();
             for inherit in inherits.iter() {
                 write!(formatter, " ")?;
-                format_s_expression_impl(formatter, &inherit.identifier(), bracket_count)?;
+                s_impl(formatter, &inherit.identifier(), bracket_count)?;
                 write!(formatter, ";")?;
             }
 
@@ -107,15 +107,15 @@ fn format_s_expression_impl(
 
                 let mut identifiers = attribute.path().identifiers();
                 if let Some(first) = identifiers.next() {
-                    format_s_expression_impl(formatter, &first, bracket_count)?;
+                    s_impl(formatter, &first, bracket_count)?;
                 }
                 for identifier in identifiers {
                     write!(formatter, ".")?;
-                    format_s_expression_impl(formatter, &identifier, bracket_count)?;
+                    s_impl(formatter, &identifier, bracket_count)?;
                 }
 
                 write!(formatter, " = ")?;
-                format_s_expression_impl(formatter, &attribute.value(), bracket_count)?;
+                s_impl(formatter, &attribute.value(), bracket_count)?;
                 write!(formatter, ";")?;
             }
 
@@ -131,9 +131,9 @@ fn format_s_expression_impl(
             *bracket_count += 1;
 
             write!(formatter, "{delimiter}{content}{delimiter} ", delimiter = "`".green().bold(), content = ".".green())?;
-            format_s_expression_impl(formatter, &select.identifier(), bracket_count)?;
+            s_impl(formatter, &select.identifier(), bracket_count)?;
             write!(formatter, " ")?;
-            format_s_expression_impl(formatter, &select.expression(), bracket_count)?;
+            s_impl(formatter, &select.expression(), bracket_count)?;
 
             *bracket_count -= 1;
             write!(formatter, "{right}", right = ")".paint(get_bracket_style(*bracket_count)))
@@ -144,11 +144,11 @@ fn format_s_expression_impl(
             *bracket_count += 1;
 
             write!(formatter, "{delimiter}{content}{delimiter} ", delimiter = "`".green().bold(), content = "?".green())?;
-            format_s_expression_impl(formatter, &check.expression(), bracket_count)?;
+            s_impl(formatter, &check.expression(), bracket_count)?;
 
             for attribute in check.attributes() {
                 write!(formatter, " ")?;
-                format_s_expression_impl(formatter, &attribute, bracket_count)?;
+                s_impl(formatter, &attribute, bracket_count)?;
             }
 
             *bracket_count -= 1;
@@ -160,9 +160,9 @@ fn format_s_expression_impl(
             *bracket_count += 1;
 
             write!(formatter, "bind ")?;
-            format_s_expression_impl(formatter, &bind.identifier(), bracket_count)?;
+            s_impl(formatter, &bind.identifier(), bracket_count)?;
             write!(formatter, " ")?;
-            format_s_expression_impl(formatter, &bind.expression(), bracket_count)?;
+            s_impl(formatter, &bind.expression(), bracket_count)?;
 
             *bracket_count -= 1;
             write!(formatter, "{right}", right = ")".paint(get_bracket_style(*bracket_count)))
@@ -171,7 +171,7 @@ fn format_s_expression_impl(
 
         Lambda as lambda => {
             match lambda.parameter() {
-                LambdaParameter::LambdaParameterIdentifier(parameter) => format_s_expression_impl(formatter, &parameter.identifier(), bracket_count)?,
+                LambdaParameter::LambdaParameterIdentifier(parameter) => s_impl(formatter, &parameter.identifier(), bracket_count)?,
                 LambdaParameter::LambdaParameterPattern(parameter) => {
                     write!(formatter, "{left}", left = "{".paint(get_bracket_style(*bracket_count)))?;
                     *bracket_count += 1;
@@ -179,11 +179,11 @@ fn format_s_expression_impl(
                     let attributes: Vec<_> = parameter.attributes().collect();
 
                     for (index, attribute) in attributes.iter().enumerate() {
-                        format_s_expression_impl(formatter, &attribute.identifier(), bracket_count)?;
+                        s_impl(formatter, &attribute.identifier(), bracket_count)?;
 
                         if let Some(default) = attribute.default() {
                             write!(formatter, " ? ")?;
-                            format_s_expression_impl(formatter, &default, bracket_count)?;
+                            s_impl(formatter, &default, bracket_count)?;
                         }
 
                         if index + 1 != attributes.len() {
@@ -200,16 +200,16 @@ fn format_s_expression_impl(
             }
 
             write!(formatter, ": ")?;
-            format_s_expression_impl(formatter, &lambda.expression(), bracket_count)
+            s_impl(formatter, &lambda.expression(), bracket_count)
         },
 
         Application as application => {
             write!(formatter, "{left}", left = "(".paint(get_bracket_style(*bracket_count)))?;
             *bracket_count += 1;
 
-            format_s_expression_impl(formatter, &application.left_expression(), bracket_count)?;
+            s_impl(formatter, &application.left_expression(), bracket_count)?;
             write!(formatter, " ")?;
-            format_s_expression_impl(formatter, &application.right_expression(), bracket_count)?;
+            s_impl(formatter, &application.right_expression(), bracket_count)?;
 
             *bracket_count -= 1;
             write!(formatter, "{right}", right = ")".paint(get_bracket_style(*bracket_count)))
@@ -226,7 +226,7 @@ fn format_s_expression_impl(
                 PrefixOperator::Not => "not",
             }.green())?;
             write!(formatter, " ")?;
-            format_s_expression_impl(formatter, &operation.expression(), bracket_count)?;
+            s_impl(formatter, &operation.expression(), bracket_count)?;
 
             *bracket_count -= 1;
             write!(formatter, "{right}", right = ")".paint(get_bracket_style(*bracket_count)))
@@ -264,15 +264,15 @@ fn format_s_expression_impl(
                 InfixOperator::Or => "or",
             }.green())?;
             write!(formatter, " ")?;
-            format_s_expression_impl(formatter, &operation.left_expression(), bracket_count)?;
+            s_impl(formatter, &operation.left_expression(), bracket_count)?;
             write!(formatter, " ")?;
-            format_s_expression_impl(formatter, &operation.right_expression(), bracket_count)?;
+            s_impl(formatter, &operation.right_expression(), bracket_count)?;
 
             *bracket_count -= 1;
             write!(formatter, "{right}", right = ")".paint(get_bracket_style(*bracket_count)))
         },
 
-        Path as path => format_s_expression_impl_parted(path.parts(), formatter, bracket_count),
+        Path as path => s_impl_parted(path.parts(), formatter, bracket_count),
 
         Identifier as identifier => {
             match identifier.value() {
@@ -282,13 +282,13 @@ fn format_s_expression_impl(
                     identifier => identifier.new(),
                 }),
 
-                IdentifierValue::Complex(complex) => format_s_expression_impl_parted(complex.parts(), formatter, bracket_count),
+                IdentifierValue::Complex(complex) => s_impl_parted(complex.parts(), formatter, bracket_count),
             }
         },
 
-        SString as sstring => format_s_expression_impl_parted(sstring.parts(), formatter, bracket_count),
+        SString as sstring => s_impl_parted(sstring.parts(), formatter, bracket_count),
 
-        Island as island => format_s_expression_impl_parted(island.parts(), formatter, bracket_count),
+        Island as island => s_impl_parted(island.parts(), formatter, bracket_count),
 
         Number as number => {
             match number.value() {
@@ -303,13 +303,13 @@ fn format_s_expression_impl(
 
             write!(formatter, "{if} ", r#if = "if-else".red().bold())?;
 
-            format_s_expression_impl(formatter, &if_else.condition(), bracket_count)?;
+            s_impl(formatter, &if_else.condition(), bracket_count)?;
             write!(formatter, " ")?;
-            format_s_expression_impl(formatter, &if_else.true_expression(), bracket_count)?;
+            s_impl(formatter, &if_else.true_expression(), bracket_count)?;
 
             if let Some(false_expression) = if_else.false_expression() {
                 write!(formatter, " ")?;
-                format_s_expression_impl(formatter, &false_expression, bracket_count)?;
+                s_impl(formatter, &false_expression, bracket_count)?;
             }
 
             *bracket_count -= 1;

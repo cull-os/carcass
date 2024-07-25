@@ -66,7 +66,7 @@ enum Dump {
     Syntax,
 
     /// Dump the provided file as a colored S-expression.
-    Clean,
+    S,
 }
 
 #[tokio::main]
@@ -133,7 +133,7 @@ async fn main() {
                     }
                 },
 
-                Dump::Syntax | Dump::Clean => {
+                Dump::Syntax | Dump::S => {
                     let parse = syntax::parse::<syntax::node::Root>(&contents);
 
                     let error_config = term::Config::default();
@@ -163,7 +163,7 @@ async fn main() {
                     if matches!(command, Dump::Syntax) {
                         write!(out, "{syntax:#?}", syntax = parse.syntax())
                     } else if let Ok(node) = parse.result() {
-                        syntax::format_s_expression(&mut out, &node)
+                        syntax::format::s(&mut out, &node)
                     } else {
                         Ok(())
                     }
