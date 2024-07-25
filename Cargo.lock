@@ -125,13 +125,6 @@ name = "cab"
 version = "0.0.1"
 dependencies = [
  "cab-syntax",
-]
-
-[[package]]
-name = "cab-cli"
-version = "0.0.1"
-dependencies = [
- "cab",
  "clap",
  "clap-stdin",
  "clap-verbosity-flag",

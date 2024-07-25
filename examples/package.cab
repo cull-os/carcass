@@ -11,7 +11,7 @@ inputs @ {
   packages = import <github:cull-os/packages> <== inputs;
 } ==> packages.rustPackage {
   name = "cab";
-  version = readFile ../cab-cli/Cargo.toml
+  version = readFile ../cab/Cargo.toml
     # That is a pipe operator!
     |> fromTOML
     # Since the . operator is used to access attributes,

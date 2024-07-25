@@ -2,7 +2,6 @@
 resolver = "2"
 members  = [ "cab",
   "cab",
-  "cab-cli",
   "cab-syntax",
   "fuzz",
   "task",

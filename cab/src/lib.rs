@@ -1,1 +1,1 @@
-pub use syntax;
+pub use cab_syntax as syntax;
