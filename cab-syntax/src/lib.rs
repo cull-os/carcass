@@ -3,6 +3,9 @@
 mod color;
 pub use color::*;
 
+mod format;
+pub use format::*;
+
 mod kind;
 pub use kind::*;
 

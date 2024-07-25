@@ -186,7 +186,7 @@ impl<N: Node> Parse<N> {
     }
 
     /// Creates a [`Node`] node from [`Self::syntax`].
-    pub fn root(self) -> N {
+    pub fn node(self) -> N {
         N::cast(self.syntax()).unwrap()
     }
 
@@ -195,7 +195,7 @@ impl<N: Node> Parse<N> {
     /// [`Self::errors`] otherwise.
     pub fn result(self) -> Result<N, Vec<ParseError>> {
         if self.errors.is_empty() {
-            Ok(self.root())
+            Ok(self.node())
         } else {
             Err(self.errors().cloned().collect())
         }

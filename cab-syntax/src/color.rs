@@ -1,23 +1,18 @@
-use yansi::{
-    Color,
-    Style,
-};
-
-const fn generate_style(r: u8, g: u8, b: u8) -> Style {
+const fn generate_style(r: u8, g: u8, b: u8) -> yansi::Style {
     let color = if (0.2126 * r as f32 + 0.7152 * g as f32 + 0.0722 * b as f32) < 140.0 {
-        Color::Rgb(0xFF, 0xFF, 0xFF)
+        yansi::Color::Rgb(0xFF, 0xFF, 0xFF)
     } else {
-        Color::Rgb(0, 0, 0)
+        yansi::Color::Rgb(0, 0, 0)
     };
 
     color.on_rgb(r, g, b)
 }
 
 /// A list of visually distinct colors. Useful for coloring
-/// individual tokens.
+/// individual tokens and brackets.
 ///
 /// Generated using <https://mokole.com/palette.html>.
-pub const COLORS: &[Style] = &[
+pub const COLORS: &[yansi::Style] = &[
     generate_style(0x00, 0x00, 0x00),
     generate_style(0x2F, 0x4F, 0x4F),
     generate_style(0x55, 0x6B, 0x2F),

@@ -64,6 +64,9 @@ enum Dump {
 
     /// Dump the provided file's syntax.
     Syntax,
+
+    /// Dump the provided file as a colored S-expression.
+    Clean,
 }
 
 #[tokio::main]
@@ -130,7 +133,7 @@ async fn main() {
                     }
                 },
 
-                Dump::Syntax => {
+                Dump::Syntax | Dump::Clean => {
                     let parse = syntax::parse::<syntax::node::Root>(&contents);
 
                     let error_config = term::Config::default();
@@ -157,7 +160,12 @@ async fn main() {
                         term::emit(&mut err.lock(), &error_config, &files, &diagnostic).ok();
                     }
 
-                    write!(out, "{syntax:#?}", syntax = parse.syntax()).unwrap_or_else(|error| {
+                    if matches!(command, Dump::Syntax) {
+                        write!(out, "{syntax:#?}", syntax = parse.syntax())
+                    } else {
+                        syntax::format_s_expression(&mut out, &parse.node())
+                    }
+                    .unwrap_or_else(|error| {
                         log::error!("failed to write to stdout: {error}");
                         process::exit(1);
                     });

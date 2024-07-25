@@ -29,24 +29,26 @@ use crate::{
 ///
 /// ```ignore
 /// match_node! { rowan_node =>
-///     IfElse:(if_else) => { unimplemented!() },
-///     Identifier:(identifier) => { unimplemented!() },
-///     _ => unimplemented!(),
+///     IfElse as if_else => { unimplemented!() },
+///     Identifier as identifier => { unimplemented!() },
+///     else => unimplemented!(),
 /// }
 /// ```
 #[macro_export]
 macro_rules! match_node {
     ($raw:expr =>
-        $($typed:ty:($name:ident) => $result:expr,)*
-        _ => $catch:expr $(,)?
-    ) => {
-        $(if $typed::can_cast($raw) {
-            let $name = $typed::cast($raw.clone()).unwrap();
+        $($typed:ty as $name:ident => $result:expr,)*
+        else => $catch:expr $(,)?
+    ) => {{
+        use ::rowan::ast::AstNode as _;
+
+        $(if <$typed>::can_cast($raw.kind()) {
+            let $name = <$typed>::cast($raw.clone()).unwrap();
             $result
         } else )*{
             $catch
         }
-    };
+    }};
 }
 
 pub trait Node: rowan::ast::AstNode<Language = Language> + ops::Deref<Target = RowanNode> {
@@ -480,7 +482,7 @@ pub enum InfixOperator {
     Implication,
 
     Addition,
-    Negation,
+    Subtraction,
     Multiplication,
     Power,
     Division,
@@ -512,7 +514,7 @@ impl TryFrom<Kind> for InfixOperator {
             TOKEN_MINUS_MORE => Ok(Self::Implication),
 
             TOKEN_PLUS => Ok(Self::Addition),
-            TOKEN_MINUS => Ok(Self::Negation),
+            TOKEN_MINUS => Ok(Self::Subtraction),
             TOKEN_ASTERISK => Ok(Self::Multiplication),
             TOKEN_ASTERISK_ASTERISK => Ok(Self::Power),
             TOKEN_SLASH => Ok(Self::Division),
@@ -530,7 +532,7 @@ impl InfixOperator {
         match self {
             Self::Concat => (140, 145),
             Self::Multiplication | Self::Power | Self::Division => (130, 135),
-            Self::Addition | Self::Negation => (120, 125),
+            Self::Addition | Self::Subtraction => (120, 125),
             Self::Override => (110, 115),
             Self::Use => (100, 105),
             Self::Update => (90, 95),
