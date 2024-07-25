@@ -1,4 +1,7 @@
-use std::fmt;
+use std::{
+    fmt,
+    marker,
+};
 
 use enumset::{
     enum_set,
@@ -8,10 +11,12 @@ use peekmore::{
     PeekMore as _,
     PeekMoreIterator as PeekMore,
 };
-use rowan::ast::AstNode as _;
 
 use crate::{
-    node,
+    node::{
+        self,
+        Node,
+    },
     tokenize,
     Kind::{
         self,
@@ -141,12 +146,14 @@ impl fmt::Display for ParseError {
 /// A parse result that contains a [`rowan::GreenNode`] and a list of
 /// [`ParseError`]s.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Parse {
+pub struct Parse<N: node::Node> {
     node: rowan::GreenNode,
     errors: Vec<ParseError>,
+
+    __: marker::PhantomData<N>,
 }
 
-impl Parse {
+impl<N: Node> Parse<N> {
     /// Creates a [`rowan::SyntaxNode`] from the underlying GreenNode.
     pub fn syntax(self) -> RowanNode {
         RowanNode::new_root(self.node)
@@ -178,15 +185,15 @@ impl Parse {
         )
     }
 
-    /// Creates a [`node::Root`] node from [`Self::syntax`].
-    pub fn root(self) -> node::Root {
-        node::Root::cast(self.syntax()).unwrap()
+    /// Creates a [`Node`] node from [`Self::syntax`].
+    pub fn root(self) -> N {
+        N::cast(self.syntax()).unwrap()
     }
 
-    /// Returns [`Ok`] with the [`node::Root`] node if there are no errors,
+    /// Returns [`Ok`] with the [`Node`] node if there are no errors,
     /// returns [`Err`] with the list of errors obtained from
     /// [`Self::errors`] otherwise.
-    pub fn result(self) -> Result<node::Root, Vec<ParseError>> {
+    pub fn result(self) -> Result<N, Vec<ParseError>> {
         if self.errors.is_empty() {
             Ok(self.root())
         } else {
@@ -196,7 +203,7 @@ impl Parse {
 }
 
 /// Parses a string reference and returns a [`Parse`].
-pub fn parse(input: &str) -> Parse {
+pub fn parse<N: Node>(input: &str) -> Parse<N> {
     let mut parser = Parser::new(tokenize(input));
 
     parser.node(NODE_ROOT, |this| {
@@ -223,6 +230,8 @@ pub fn parse(input: &str) -> Parse {
     Parse {
         node: parser.builder.finish(),
         errors: parser.errors,
+
+        __: marker::PhantomData,
     }
 }
 

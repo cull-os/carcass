@@ -131,7 +131,7 @@ async fn main() {
                 },
 
                 Dump::Syntax => {
-                    let parse = syntax::parse(&contents);
+                    let parse = syntax::parse::<syntax::node::Root>(&contents);
 
                     let error_config = term::Config::default();
 

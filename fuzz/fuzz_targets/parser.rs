@@ -12,7 +12,7 @@ use std::{
     path,
 };
 
-use cab::syntax::parse;
+use cab::syntax;
 use libfuzzer_sys::{
     fuzz_target,
     Corpus,
@@ -23,7 +23,7 @@ use yansi::{
 };
 
 fuzz_target!(|data: &str| -> Corpus {
-    let parse = hint::black_box(parse(data));
+    let parse = hint::black_box(syntax::parse::<syntax::node::Root>(data));
 
     if !env::var("FUZZ_PARSER_SAVE_VALID")
         .is_ok_and(|value| !matches!(value.as_ref(), "" | "0" | "false"))

@@ -5,7 +5,7 @@ use std::{
     process,
 };
 
-use cab::syntax::parse;
+use cab::syntax;
 use clap::Parser as _;
 use clap_verbosity_flag::{
     InfoLevel,
@@ -99,7 +99,7 @@ fn actual_main() -> Result<(), Box<dyn error::Error>> {
                 let expected_syntax = fs::read_to_string(&expected_syntax_file)?;
 
                 let actual_syntax = {
-                    let node = parse(data.as_ref()).syntax();
+                    let node = syntax::parse::<syntax::node::Root>(data.as_ref()).syntax();
                     format!("{node:#?}")
                 };
 
