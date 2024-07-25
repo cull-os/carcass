@@ -448,6 +448,15 @@ impl TryFrom<Kind> for PrefixOperator {
     }
 }
 
+impl PrefixOperator {
+    pub fn binding_power(self) -> ((), u16) {
+        match self {
+            Self::Swwallation | Self::Negation => ((), 165),
+            Self::Not => ((), 75),
+        }
+    }
+}
+
 #[rustfmt::skip]
 impl PrefixOperation {
     pub fn operator(&self) -> PrefixOperator {
@@ -530,14 +539,15 @@ impl TryFrom<Kind> for InfixOperator {
 impl InfixOperator {
     pub fn binding_power(self) -> (u16, u16) {
         match self {
-            Self::Concat => (140, 145),
-            Self::Multiplication | Self::Power | Self::Division => (130, 135),
-            Self::Addition | Self::Subtraction => (120, 125),
-            Self::Override => (110, 115),
-            Self::Use => (100, 105),
-            Self::Update => (90, 95),
-            Self::LessOrEqual | Self::Less | Self::MoreOrEqual | Self::More => (80, 85),
-            Self::Equal | Self::NotEqual => (70, 75),
+            Self::Concat => (150, 155),
+            Self::Multiplication | Self::Power | Self::Division => (140, 145),
+            Self::Addition | Self::Subtraction => (130, 135),
+            Self::Override => (120, 125),
+            Self::Use => (110, 115),
+            Self::Update => (100, 105),
+            Self::LessOrEqual | Self::Less | Self::MoreOrEqual | Self::More => (90, 95),
+            Self::Equal | Self::NotEqual => (80, 85),
+            // PrefixOperator::Not
             Self::And => (60, 65),
             Self::Or => (50, 55),
             Self::Implication => (30, 35),

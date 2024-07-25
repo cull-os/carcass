@@ -45,9 +45,6 @@ const EXPRESSION_TOKENS: EnumSet<Kind> = enum_set!(
     TOKEN_LEFT_PARENTHESIS
         | TOKEN_LEFT_BRACKET
         | TOKEN_LEFT_CURLYBRACE
-        | TOKEN_PLUS
-        | TOKEN_MINUS
-        | TOKEN_LITERAL_NOT
         | TOKEN_PATH
         | TOKEN_IDENTIFIER
         | TOKEN_IDENTIFIER_START
@@ -445,7 +442,18 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
     ) -> ParseResult {
         let checkpoint = self.checkpoint();
 
-        self.parse_expression_application(until)?;
+        if let Some(((), right_power)) = self.peek().and_then(|next| {
+            node::PrefixOperator::try_from(next)
+                .map(|operator| operator.binding_power())
+                .ok()
+        }) {
+            self.node_failable(NODE_PREFIX_OPERATION, |this| {
+                this.next().unwrap();
+                this.parse_expression_binding_power(right_power, until)
+            });
+        } else {
+            self.parse_expression_application(until)?;
+        }
 
         while let Some((left_power, right_power)) = self.peek().and_then(|next| {
             node::InfixOperator::try_from(next)
@@ -495,8 +503,6 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
         let checkpoint = self.checkpoint();
 
         match self.peek_expecting(EXPRESSION_TOKENS)? {
-            TOKEN_PLUS | TOKEN_MINUS | TOKEN_LITERAL_NOT => self.parse_prefix_operation(until),
-
             TOKEN_LEFT_PARENTHESIS => {
                 self.parse_parenthesis(until);
             },
@@ -778,16 +784,6 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
                 recoverable()
             }
         })
-    }
-
-    fn parse_prefix_operation(&mut self, until: EnumSet<Kind>) {
-        self.node_failable(NODE_PREFIX_OPERATION, |this| {
-            this.expect(
-                TOKEN_PLUS | TOKEN_MINUS | TOKEN_LITERAL_NOT,
-                until | EXPRESSION_TOKENS,
-            )?;
-            this.parse_expression_application(until)
-        });
     }
 
     fn parse_path(&mut self) {
