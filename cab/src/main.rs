@@ -162,8 +162,10 @@ async fn main() {
 
                     if matches!(command, Dump::Syntax) {
                         write!(out, "{syntax:#?}", syntax = parse.syntax())
+                    } else if let Ok(node) = parse.result() {
+                        syntax::format_s_expression(&mut out, &node)
                     } else {
-                        syntax::format_s_expression(&mut out, &parse.node())
+                        Ok(())
                     }
                     .unwrap_or_else(|error| {
                         log::error!("failed to write to stdout: {error}");
