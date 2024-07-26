@@ -134,7 +134,7 @@ async fn main() {
                 },
 
                 Dump::Syntax | Dump::S => {
-                    let parse = syntax::parse::<syntax::node::Root>(&contents);
+                    let parse = syntax::parse::<syntax::node::Expression>(&contents);
 
                     let error_config = term::Config::default();
 
@@ -161,7 +161,7 @@ async fn main() {
                     }
 
                     if matches!(command, Dump::Syntax) {
-                        write!(out, "{syntax:#?}", syntax = parse.syntax())
+                        write!(out, "{syntax:#?}", syntax = parse.syntax)
                     } else if let Ok(node) = parse.result() {
                         syntax::format::s(&mut out, &node)
                     } else {

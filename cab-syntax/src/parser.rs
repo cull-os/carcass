@@ -1,7 +1,4 @@
-use std::{
-    fmt,
-    marker,
-};
+use std::fmt;
 
 use enumset::{
     enum_set,
@@ -69,7 +66,7 @@ pub enum ParseError {
     },
 
     /// An error that happens when the parser was not expecting a particular
-    /// token.
+    /// token or node.
     Unexpected {
         /// The token that was not expected. This being [`None`] means that the
         /// end of the file was reached.
@@ -140,22 +137,21 @@ impl fmt::Display for ParseError {
     }
 }
 
-/// A parse result that contains a [`rowan::GreenNode`] and a list of
-/// [`ParseError`]s.
+/// A parse result that contains a [`rowan::SyntaxNode`],
+/// contains a [`Node`] if it was successfully created,
+/// and a list of [`ParseError`]s.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Parse<N: node::Node> {
-    node: rowan::GreenNode,
-    errors: Vec<ParseError>,
+    /// The underlying [`rowan::SyntaxNode`].
+    pub syntax: RowanNode,
 
-    __: marker::PhantomData<N>,
+    /// The [`Node`], if it was successfully created.
+    pub node: Option<N>,
+
+    errors: Vec<ParseError>,
 }
 
 impl<N: Node> Parse<N> {
-    /// Creates a [`rowan::SyntaxNode`] from the underlying GreenNode.
-    pub fn syntax(self) -> RowanNode {
-        RowanNode::new_root(self.node)
-    }
-
     /// Returns an iterator over the underlying [`ParseError`]s, removing
     /// duplicates and only returning useful errors.
     pub fn errors(&self) -> Box<dyn Iterator<Item = &ParseError> + '_> {
@@ -182,17 +178,12 @@ impl<N: Node> Parse<N> {
         )
     }
 
-    /// Creates a [`Node`] node from [`Parse::syntax`].
-    pub fn node(self) -> N {
-        N::cast(self.syntax()).unwrap()
-    }
-
     /// Returns [`Ok`] with the [`Node`] node if there are no errors,
     /// returns [`Err`] with the list of errors obtained from
     /// [`Self::errors`] otherwise.
     pub fn result(self) -> Result<N, Vec<ParseError>> {
         if self.errors.is_empty() {
-            Ok(self.node())
+            Ok(self.node.unwrap())
         } else {
             Err(self.errors().cloned().collect())
         }
@@ -224,11 +215,34 @@ pub fn parse<N: Node>(input: &str) -> Parse<N> {
         }
     });
 
-    Parse {
-        node: parser.builder.finish(),
-        errors: parser.errors,
+    let syntax = RowanNode::new_root(parser.builder.finish());
 
-        __: marker::PhantomData,
+    let child = syntax.first_child().unwrap();
+    let child_text_range = child.text_range();
+    let child_kind = child.kind();
+
+    let mut errors = parser.errors;
+
+    let node = if let Some(expected) = N::inherent_kind() {
+        let cast = N::cast(child);
+
+        if cast.is_none() {
+            errors.push(ParseError::Unexpected {
+                got: Some(child_kind),
+                expected: expected.into(),
+                at: child_text_range,
+            })
+        }
+
+        cast
+    } else {
+        N::cast(child)
+    };
+
+    Parse {
+        syntax,
+        node,
+        errors,
     }
 }
 

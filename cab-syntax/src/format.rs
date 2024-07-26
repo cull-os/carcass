@@ -57,10 +57,6 @@ fn s_impl(
     }
 
     match_node! { node =>
-        Root as root => {
-            s_impl(formatter, &root.expression(), bracket_count)
-        },
-
         Error as _error => {
             write!(formatter, "{error}", error = "error".red().bold())
         },

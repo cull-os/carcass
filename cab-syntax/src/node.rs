@@ -52,6 +52,12 @@ macro_rules! match_node {
 }
 
 pub trait Node: rowan::ast::AstNode<Language = Language> + ops::Deref<Target = RowanNode> {
+    /// Returns its inherent kind, returning None if it is a node that can have
+    /// multiple values.
+    fn inherent_kind() -> Option<Kind> {
+        None
+    }
+
     /// Returns the Nth immediate children node that can be cast to the given
     /// typed node.
     fn nth<N: Node>(&self, n: usize) -> Option<N> {
@@ -90,8 +96,6 @@ pub trait Node: rowan::ast::AstNode<Language = Language> + ops::Deref<Target = R
     }
 }
 
-impl<T: rowan::ast::AstNode<Language = Language> + ops::Deref<Target = RowanNode>> Node for T {}
-
 macro_rules! node {
     (
         #[from($kind:ident)]
@@ -104,7 +108,7 @@ macro_rules! node {
             type Language = Language;
 
             fn can_cast(kind: Kind) -> bool {
-                kind == $kind
+                kind == Self::KIND
             }
 
             fn cast(from: RowanNode) -> Option<Self> {
@@ -121,6 +125,12 @@ macro_rules! node {
 
             fn deref(&self) -> &Self::Target {
                 self.syntax()
+            }
+        }
+
+        impl Node for $name {
+            fn inherent_kind() -> Option<Kind> {
+                Some(Self::KIND)
             }
         }
 
@@ -167,6 +177,8 @@ macro_rules! node {
                 self.syntax()
             }
         }
+
+        impl Node for $name {}
 
         $(
             impl From<$variant> for $name {
@@ -221,12 +233,6 @@ macro_rules! get_node {
             self.children()
         }
     };
-}
-
-node! { #[from(NODE_ROOT)] struct Root; }
-
-impl Root {
-    get_node! { expression -> 0 @ Expression }
 }
 
 // EXPRESSION

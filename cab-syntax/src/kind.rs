@@ -176,44 +176,65 @@ pub enum Kind {
     #[display(fmt = "the end of an island")]
     TOKEN_ISLAND_END,
 
+    #[display(fmt = "{}", unreachable!())]
     NODE_ROOT,
+    #[display(fmt = "an erroneous expression")]
     NODE_ERROR,
 
-    NODE_APPLICATION, // <expression> <expression>
+    #[display(fmt = "a function application")]
+    NODE_APPLICATION,
 
-    NODE_PREFIX_OPERATION, // <operator> <expression>
-    NODE_INFIX_OPERATION,  // <expression> <operator> <expression>
+    #[display(fmt = "a prefix operation")]
+    NODE_PREFIX_OPERATION,
+    #[display(fmt = "an infix operation")]
+    NODE_INFIX_OPERATION,
 
-    NODE_PARENTHESIS, // (<expression>)
+    #[display(fmt = "a parenthesized expression")]
+    NODE_PARENTHESIS,
 
-    NODE_LIST, // [<expression>*]
+    #[display(fmt = "a list")]
+    NODE_LIST,
 
-    NODE_ATTRIBUTE_SET,     // { <attribute | attribute-inherit>* }
-    NODE_ATTRIBUTE,         // <attribute-path> = <expression>;
-    NODE_ATTRIBUTE_PATH,    // <identifier><.<identifier>>*
-    NODE_ATTRIBUTE_INHERIT, // <identifier>;
+    #[display(fmt = "an attribute set")]
+    NODE_ATTRIBUTE_SET,
+    #[display(fmt = "{}", unreachable!())]
+    NODE_ATTRIBUTE,
+    #[display(fmt = "{}", unreachable!())]
+    NODE_ATTRIBUTE_PATH,
+    #[display(fmt = "{}", unreachable!())]
+    NODE_ATTRIBUTE_INHERIT,
 
-    NODE_ATTRIBUTE_SELECT, // <expression>.<identifier> <or <expression>>?
-    NODE_ATTRIBUTE_CHECK,  // <expression> ? <attribute-path>
+    #[display(fmt = "an attribute select")]
+    NODE_ATTRIBUTE_SELECT,
+    #[display(fmt = "an attribute check")]
+    NODE_ATTRIBUTE_CHECK,
 
-    NODE_BIND, // <identifier> @ <expression>
+    #[display(fmt = "a bind expression")]
+    NODE_BIND,
 
-    NODE_LAMBDA, // <identifier | lambda-parameter-pattern>: <expression>
-    NODE_LAMBDA_PARAMETER_IDENTIFIER, // <identifier>
-    NODE_LAMBDA_PARAMETER_PATTERN, // { <<attribute>,>* }
-    NODE_LAMBDA_PARAMETER_PATTERN_ATTRIBUTE, // <identifier> <? <expression>>?
+    #[display(fmt = "a lambda")]
+    NODE_LAMBDA,
+    #[display(fmt = "{}", unreachable!())]
+    NODE_LAMBDA_PARAMETER_IDENTIFIER,
+    #[display(fmt = "{}", unreachable!())]
+    NODE_LAMBDA_PARAMETER_PATTERN,
+    #[display(fmt = "{}", unreachable!())]
+    NODE_LAMBDA_PARAMETER_PATTERN_ATTRIBUTE,
 
     /// A node which starts with a [`TOKEN_INTERPOLATION_START`], ends with a
     /// [`TOKEN_INTERPOLATION_END`] while having a node at the middle that can
     /// be cast to an [Expression](crate::node::Expression)
+    #[display(fmt = "{}", unreachable!())]
     NODE_INTERPOLATION,
 
     /// A node that only has [`TOKEN_PATH`]s and [`NODE_INTERPOLATION`]s as its
     /// direct children without any delimiters.
+    #[display(fmt = "a path")]
     NODE_PATH,
 
     /// A stringlike that is delimited by a single backtick. See [`NODE_STRING`]
     /// for the definition of stringlike.
+    #[display(fmt = "an identifier")]
     NODE_IDENTIFIER,
 
     /// A stringlike that is delimited by a single `"` or any number of `'`.
@@ -221,17 +242,21 @@ pub enum Kind {
     /// A stringlike is a sequence of nodes and tokens, where all the immediate
     /// children tokens are [`TOKEN_CONTENT`]s, while all the immediate children
     /// nodes are all [`NODE_INTERPOLATION`]s.
+    #[display(fmt = "a string")]
     NODE_STRING,
 
     /// A stringlike that is delimited by `<` and `>`. See [`NODE_STRING`] for
     /// the definition of stringlike.
+    #[display(fmt = "a number")]
     NODE_ISLAND,
 
     /// A node containing a single token, which can be either a
     /// [`TOKEN_INTEGER`] or [`TOKEN_FLOAT`].
+    #[display(fmt = "a number")]
     NODE_NUMBER,
 
-    NODE_IF_ELSE, // if <expression> then <expression> else <expression>
+    #[display(fmt = "an if else")]
+    NODE_IF_ELSE,
 }
 
 impl From<Kind> for rowan::SyntaxKind {
