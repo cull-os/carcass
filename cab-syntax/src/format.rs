@@ -238,7 +238,7 @@ fn s_impl(
             *bracket_count += 1;
 
             write!(formatter, "{delimiter}{operator}{delimiter}", delimiter = "`".green().bold(), operator = match operation.operator() {
-                InfixOperator::Apply => "//",
+                InfixOperator::Apply => "$",
                 InfixOperator::Pipe => "|>",
 
                 InfixOperator::Concat => "++",

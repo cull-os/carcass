@@ -550,8 +550,8 @@ impl InfixOperator {
             // PrefixOperator::Not
             Self::And => (60, 65),
             Self::Or => (50, 55),
-            Self::Implication => (30, 35),
-            Self::Apply => (20, 25),
+            Self::Implication => (35, 30),
+            Self::Apply => (25, 20),
             Self::Pipe => (10, 15),
         }
     }
