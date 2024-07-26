@@ -90,7 +90,7 @@ fn actual_main() -> Result<(), Box<dyn error::Error>> {
                 }))
             });
 
-            let mut failed = false;
+            let mut fail_count = 0;
 
             let diff_tool = which("difft").or_else(|_| which("diff"))?;
 
@@ -135,13 +135,14 @@ fn actual_main() -> Result<(), Box<dyn error::Error>> {
                     fs::write(&expected_syntax_file, &actual_syntax)?;
                 }
 
-                failed = true;
+                fail_count += 1;
                 if fail_fast {
                     break;
                 }
             }
 
-            if failed {
+            if fail_count > 0 {
+                log::error!("behaviour has changed for {fail_count} test cases");
                 process::exit(1);
             }
         },
