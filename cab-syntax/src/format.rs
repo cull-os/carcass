@@ -221,6 +221,8 @@ impl<'a, W: io::Write> Formatter<'a, W> {
             },
 
             Lambda as lambda => {
+                self.bracket_start("(")?;
+
                 match lambda.parameter() {
                     LambdaParameter::LambdaParameterIdentifier(parameter) => self.s(&parameter.identifier())?,
                     LambdaParameter::LambdaParameterPattern(parameter) => {
@@ -249,7 +251,8 @@ impl<'a, W: io::Write> Formatter<'a, W> {
                 }
 
                 self.write(": ")?;
-                self.s(&lambda.expression())
+                self.s(&lambda.expression())?;
+                self.bracket_end(")")
             },
 
             Application as application => {
