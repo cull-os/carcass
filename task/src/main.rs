@@ -142,7 +142,10 @@ fn actual_main() -> Result<(), Box<dyn error::Error>> {
             }
 
             if fail_count > 0 {
-                log::error!("behaviour has changed for {fail_count} test cases");
+                if !fail_fast {
+                    log::error!("behaviour has changed for {fail_count} test cases");
+                }
+
                 process::exit(1);
             }
         },
