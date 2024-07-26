@@ -4,8 +4,10 @@ use std::io;
 use yansi::Paint as _;
 
 use crate::{
-    match_node,
-    node::*,
+    node::{
+        self,
+        *,
+    },
     token::Token,
     RowanNode,
     COLORS,
@@ -56,7 +58,7 @@ fn s_impl(
         COLORS[bracket_count as usize % COLORS.len()]
     }
 
-    match_node! { node =>
+    node::r#match! { node =>
         Error as _error => {
             write!(formatter, "{error}", error = "error".red().bold())
         },

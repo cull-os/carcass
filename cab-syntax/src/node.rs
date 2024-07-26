@@ -21,21 +21,9 @@ use crate::{
     RowanToken,
 };
 
-/// A macro that allows you to match on a [`rowan::SyntaxNode`] efficiently.
-///
-/// The branches must all implement [`Node`] for this macro to work properly.
-///
-/// # Example
-///
-/// ```ignore
-/// match_node! { rowan_node =>
-///     IfElse as if_else => { unimplemented!() },
-///     Identifier as identifier => { unimplemented!() },
-///     else => unimplemented!(),
-/// }
-/// ```
 #[macro_export]
-macro_rules! match_node {
+#[doc(hidden)]
+macro_rules! __node_match {
     ($raw:expr =>
         $($typed:ty as $name:ident => $result:expr,)*
         else => $catch:expr $(,)?
@@ -50,6 +38,21 @@ macro_rules! match_node {
         }
     }};
 }
+
+/// A macro that allows you to match on a [`rowan::SyntaxNode`] efficiently.
+/// The branches must all implement [`Node`] for this macro to work properly.
+///
+/// # Example
+///
+/// ```ignore
+/// node::r#match! { rowan_node =>
+///    IfElse as if_else => { unimplemented!() },
+///    Identifier as identifier => { unimplemented!() },
+///    else => unimplemented!(),
+/// }
+/// ```
+#[doc(inline)]
+pub use crate::__node_match as r#match;
 
 pub trait Node: rowan::ast::AstNode<Language = Language> + ops::Deref<Target = RowanNode> {
     /// Returns its inherent kind, returning None if it is a node that can have
