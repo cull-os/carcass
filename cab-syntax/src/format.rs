@@ -1,7 +1,7 @@
 //! Formatting utilities for [`Expression`]s.
 use std::io;
 
-use yansi::Paint as _;
+use yansi::Paint;
 
 use crate::{
     node::{
@@ -16,305 +16,315 @@ use crate::{
 /// Formats the given node as an S-expression. The node must be a valid
 /// [`Expression`] or this function will panic.
 pub fn s(formatter: &mut impl io::Write, node: &RowanNode) -> io::Result<()> {
-    s_impl(formatter, node, &mut 0)
+    Formatter::new(formatter).s(node)
 }
 
-fn s_impl_parted<T: Token>(
-    parts: impl Iterator<Item = InterpolationPart<T>>,
-    formatter: &mut impl io::Write,
-    bracket_count: &mut u32,
-) -> io::Result<()> {
-    for part in parts {
-        match part {
-            InterpolationPart::Delimiter(token) => {
-                write!(
-                    formatter,
-                    "{delimiter}",
-                    delimiter = token.text().green().bold()
-                )?;
-            },
+#[derive(Debug)]
+struct Formatter<'a, W: io::Write> {
+    inner: &'a mut W,
 
-            InterpolationPart::Content(token) => {
-                write!(formatter, "{content}", content = token.text().green())?;
-            },
+    bracket_count: u32,
+}
 
-            InterpolationPart::Interpolation(interpolation) => {
-                write!(formatter, "{start}", start = "${".yellow())?;
-                s_impl(formatter, &interpolation.expression(), bracket_count)?;
-                write!(formatter, "{end}", end = "}".yellow())?;
-            },
+impl<'a, W: io::Write> Formatter<'a, W> {
+    fn new(inner: &'a mut W) -> Self {
+        Self {
+            inner,
+
+            bracket_count: 0,
         }
     }
 
-    Ok(())
-}
-
-fn s_impl(
-    formatter: &mut impl io::Write,
-    node: &RowanNode,
-    bracket_count: &mut u32,
-) -> io::Result<()> {
-    fn get_bracket_style(bracket_count: u32) -> yansi::Style {
-        COLORS[bracket_count as usize % COLORS.len()]
+    fn paint_bracket<'b>(&self, bracket: &'b str) -> yansi::Painted<&'b str> {
+        let style = COLORS[self.bracket_count as usize & COLORS.len()];
+        bracket.paint(style)
     }
 
-    node::r#match! { node =>
-        Error as _error => {
-            write!(formatter, "{error}", error = "error".red().bold())
-        },
+    fn bracket_start(&mut self, bracket: &str) -> io::Result<()> {
+        write!(
+            self.inner,
+            "{painted}",
+            painted = self.paint_bracket(bracket)
+        )?;
+        self.bracket_count += 1;
 
-        Parenthesis as parenthesis => {
-            write!(formatter, "{left}", left = "(".paint(get_bracket_style(*bracket_count)))?;
-            *bracket_count += 1;
-            s_impl(formatter, &parenthesis.expression(), bracket_count)?;
-            *bracket_count -= 1;
-            write!(formatter, "{right}", right = ")".paint(get_bracket_style(*bracket_count)))
-        },
+        Ok(())
+    }
 
-        List as list => {
-            write!(formatter, "{left}", left = "[".paint(get_bracket_style(*bracket_count)))?;
-            *bracket_count += 1;
+    fn bracket_end(&mut self, bracket: &str) -> io::Result<()> {
+        self.bracket_count -= 1;
+        write!(
+            self.inner,
+            "{painted}",
+            painted = self.paint_bracket(bracket)
+        )
+    }
 
-            let items: Vec<_> = list.items().collect();
+    fn write(&mut self, painted: yansi::Painted<&str>) -> io::Result<()> {
+        write!(self.inner, "{painted}")
+    }
 
-            for item in items.iter() {
-                write!(formatter, " ")?;
-                s_impl(formatter, item, bracket_count)?;
-            }
+    fn s_parted<T: Token>(
+        &mut self,
+        parts: impl Iterator<Item = InterpolationPart<T>>,
+    ) -> io::Result<()> {
+        for part in parts {
+            match part {
+                InterpolationPart::Delimiter(token) => {
+                    self.write(token.text().green().bold())?;
+                },
 
-            *bracket_count -= 1;
-            if !items.is_empty() {
-                write!(formatter, " ")?;
-            }
-            write!(formatter, "{right}", right = "]".paint(get_bracket_style(*bracket_count)))
-        },
+                InterpolationPart::Content(token) => {
+                    self.write(token.text().green())?;
+                },
 
-        AttributeSet as set => {
-            write!(formatter, "{left}", left = "{".paint(get_bracket_style(*bracket_count)))?;
-            *bracket_count += 1;
-
-            let inherits: Vec<_> = set.inherits().collect();
-            for inherit in inherits.iter() {
-                write!(formatter, " ")?;
-                s_impl(formatter, &inherit.identifier(), bracket_count)?;
-                write!(formatter, ";")?;
-            }
-
-            let attributes: Vec<_> = set.attributes().collect();
-            for attribute in attributes.iter() {
-                write!(formatter, " ")?;
-
-                let mut identifiers = attribute.path().identifiers();
-                if let Some(first) = identifiers.next() {
-                    s_impl(formatter, &first, bracket_count)?;
-                }
-                for identifier in identifiers {
-                    write!(formatter, ".")?;
-                    s_impl(formatter, &identifier, bracket_count)?;
-                }
-
-                write!(formatter, " = ")?;
-                s_impl(formatter, &attribute.value(), bracket_count)?;
-                write!(formatter, ";")?;
-            }
-
-            *bracket_count -= 1;
-            if !inherits.is_empty() || !attributes.is_empty() {
-                write!(formatter, " ")?;
-            }
-            write!(formatter, "{right}", right = "}".paint(get_bracket_style(*bracket_count)))
-        },
-
-        AttributeSelect as select => {
-            write!(formatter, "{left}", left = "(".paint(get_bracket_style(*bracket_count)))?;
-            *bracket_count += 1;
-
-            write!(formatter, "{delimiter}{content}{delimiter} ", delimiter = "`".green().bold(), content = ".".green())?;
-            s_impl(formatter, &select.identifier(), bracket_count)?;
-            write!(formatter, " ")?;
-            s_impl(formatter, &select.expression(), bracket_count)?;
-
-            *bracket_count -= 1;
-            write!(formatter, "{right}", right = ")".paint(get_bracket_style(*bracket_count)))
-        },
-
-        AttributeCheck as check => {
-            write!(formatter, "{left}", left = "(".paint(get_bracket_style(*bracket_count)))?;
-            *bracket_count += 1;
-
-            write!(formatter, "{delimiter}{content}{delimiter} ", delimiter = "`".green().bold(), content = "?".green())?;
-            s_impl(formatter, &check.expression(), bracket_count)?;
-
-            for attribute in check.attributes() {
-                write!(formatter, " ")?;
-                s_impl(formatter, &attribute, bracket_count)?;
-            }
-
-            *bracket_count -= 1;
-            write!(formatter, "{right}", right = ")".paint(get_bracket_style(*bracket_count)))
-        },
-
-        Bind as bind => {
-            write!(formatter, "{left}", left = "(".paint(get_bracket_style(*bracket_count)))?;
-            *bracket_count += 1;
-
-            write!(formatter, "bind ")?;
-            s_impl(formatter, &bind.identifier(), bracket_count)?;
-            write!(formatter, " ")?;
-            s_impl(formatter, &bind.expression(), bracket_count)?;
-
-            *bracket_count -= 1;
-            write!(formatter, "{right}", right = ")".paint(get_bracket_style(*bracket_count)))
-
-        },
-
-        Lambda as lambda => {
-            match lambda.parameter() {
-                LambdaParameter::LambdaParameterIdentifier(parameter) => s_impl(formatter, &parameter.identifier(), bracket_count)?,
-                LambdaParameter::LambdaParameterPattern(parameter) => {
-                    write!(formatter, "{left}", left = "{".paint(get_bracket_style(*bracket_count)))?;
-                    *bracket_count += 1;
-
-                    let attributes: Vec<_> = parameter.attributes().collect();
-
-                    for (index, attribute) in attributes.iter().enumerate() {
-                        s_impl(formatter, &attribute.identifier(), bracket_count)?;
-
-                        if let Some(default) = attribute.default() {
-                            write!(formatter, " ? ")?;
-                            s_impl(formatter, &default, bracket_count)?;
-                        }
-
-                        if index + 1 != attributes.len() {
-                            write!(formatter, ", ")?;
-                        }
-                    }
-
-                    *bracket_count -= 1;
-                    if !attributes.is_empty() {
-                        write!(formatter, " ")?;
-                    }
-                    write!(formatter, "{right}", right = "}".paint(get_bracket_style(*bracket_count)))?;
+                InterpolationPart::Interpolation(interpolation) => {
+                    self.write("${".yellow())?;
+                    self.s(&interpolation.expression())?;
+                    self.write("}".yellow())?;
                 },
             }
+        }
 
-            write!(formatter, ": ")?;
-            s_impl(formatter, &lambda.expression(), bracket_count)
-        },
+        Ok(())
+    }
 
-        Application as application => {
-            write!(formatter, "{left}", left = "(".paint(get_bracket_style(*bracket_count)))?;
-            *bracket_count += 1;
+    fn s(&mut self, node: &RowanNode) -> io::Result<()> {
+        node::r#match! { node =>
+            Error as _error => {
+                self.write("error".red().bold())
+            },
 
-            s_impl(formatter, &application.left_expression(), bracket_count)?;
-            write!(formatter, " ")?;
-            s_impl(formatter, &application.right_expression(), bracket_count)?;
+            Parenthesis as parenthesis => {
+                self.bracket_start("(")?;
+                self.s(&parenthesis.expression())?;
+                self.bracket_end(")")
+            },
 
-            *bracket_count -= 1;
-            write!(formatter, "{right}", right = ")".paint(get_bracket_style(*bracket_count)))
-        },
+            List as list => {
+                self.bracket_start("[")?;
 
-        PrefixOperation as operation => {
-            write!(formatter, "{left}", left = "(".paint(get_bracket_style(*bracket_count)))?;
-            *bracket_count += 1;
+                let items: Vec<_> = list.items().collect();
 
-            write!(formatter, "{delimiter}{operator}{delimiter}", delimiter = "`".green().bold(), operator = match operation.operator() {
-                PrefixOperator::Swwallation => "+",
-                PrefixOperator::Negation => "-",
+                for item in items.iter() {
+                    write!(self.inner, " ")?;
+                    self.s(item)?;
+                }
 
-                PrefixOperator::Not => "not",
-            }.green())?;
-            write!(formatter, " ")?;
-            s_impl(formatter, &operation.expression(), bracket_count)?;
+                if !items.is_empty() {
+                    write!(self.inner, " ")?;
+                }
+                self.bracket_end("]")
+            },
 
-            *bracket_count -= 1;
-            write!(formatter, "{right}", right = ")".paint(get_bracket_style(*bracket_count)))
-        },
+            AttributeSet as set => {
+                self.bracket_start("{")?;
 
-        InfixOperation as operation => {
-            write!(formatter, "{left}", left = "(".paint(get_bracket_style(*bracket_count)))?;
-            *bracket_count += 1;
+                let inherits: Vec<_> = set.inherits().collect();
+                for inherit in inherits.iter() {
+                    write!(self.inner, " ")?;
+                    self.s(&inherit.identifier())?;
+                    write!(self.inner, ";")?;
+                }
 
-            write!(formatter, "{delimiter}{operator}{delimiter}", delimiter = "`".green().bold(), operator = match operation.operator() {
-                InfixOperator::Apply => "$",
-                InfixOperator::Pipe => "|>",
+                let attributes: Vec<_> = set.attributes().collect();
+                for attribute in attributes.iter() {
+                    write!(self.inner, " ")?;
 
-                InfixOperator::Concat => "++",
+                    let mut identifiers = attribute.path().identifiers();
+                    if let Some(first) = identifiers.next() {
+                        self.s(&first)?;
+                    }
+                    for identifier in identifiers {
+                        write!(self.inner, ".")?;
+                        self.s(&identifier)?;
+                    }
 
-                InfixOperator::Use => "==>",
-                InfixOperator::Override => "<==",
-                InfixOperator::Update => "//",
+                    write!(self.inner, " = ")?;
+                    self.s(&attribute.value())?;
+                    write!(self.inner, ";")?;
+                }
 
-                InfixOperator::Equal => "==",
-                InfixOperator::NotEqual => "!=",
-                InfixOperator::LessOrEqual => "<=",
-                InfixOperator::Less => "<",
-                InfixOperator::MoreOrEqual => ">=",
-                InfixOperator::More => ">",
-                InfixOperator::Implication => "->",
+                if !inherits.is_empty() || !attributes.is_empty() {
+                    write!(self.inner, " ")?;
+                }
+                self.bracket_end("}")
+            },
 
-                InfixOperator::Addition => "+",
-                InfixOperator::Subtraction => "-",
-                InfixOperator::Multiplication => "*",
-                InfixOperator::Power => "**",
-                InfixOperator::Division => "/",
+            AttributeSelect as select => {
+                self.bracket_start("(")?;
 
-                InfixOperator::And => "and",
-                InfixOperator::Or => "or",
-            }.green())?;
-            write!(formatter, " ")?;
-            s_impl(formatter, &operation.left_expression(), bracket_count)?;
-            write!(formatter, " ")?;
-            s_impl(formatter, &operation.right_expression(), bracket_count)?;
+                write!(self.inner, "{delimiter}{content}{delimiter} ", delimiter = "`".green().bold(), content = ".".green())?;
+                self.s(&select.identifier())?;
+                write!(self.inner, " ")?;
+                self.s(&select.expression())?;
 
-            *bracket_count -= 1;
-            write!(formatter, "{right}", right = ")".paint(get_bracket_style(*bracket_count)))
-        },
+                self.bracket_end(")")
+            },
 
-        Path as path => s_impl_parted(path.parts(), formatter, bracket_count),
+            AttributeCheck as check => {
+                self.bracket_start("(")?;
 
-        Identifier as identifier => {
-            match identifier.value() {
-                IdentifierValue::Simple(token) => write!(formatter, "{identifier}", identifier = match token.text() {
-                    boolean @ ("true" | "false") => boolean.magenta().bold(),
-                    inexistent @ ("null" | "undefined") => inexistent.cyan().bold(),
-                    identifier => identifier.new(),
-                }),
+                write!(self.inner, "{delimiter}{content}{delimiter} ", delimiter = "`".green().bold(), content = "?".green())?;
+                self.s(&check.expression())?;
 
-                IdentifierValue::Complex(complex) => s_impl_parted(complex.parts(), formatter, bracket_count),
-            }
-        },
+                for attribute in check.attributes() {
+                    write!(self.inner, " ")?;
+                    self.s(&attribute)?;
+                }
 
-        SString as sstring => s_impl_parted(sstring.parts(), formatter, bracket_count),
+                self.bracket_end(")")
+            },
 
-        Island as island => s_impl_parted(island.parts(), formatter, bracket_count),
+            Bind as bind => {
+                self.bracket_start("(")?;
 
-        Number as number => {
-            match number.value() {
-                NumberValue::Integer(token) => write!(formatter, "{number}", number = token.value().blue().bold()),
-                NumberValue::Float(token) => write!(formatter, "{number}", number = token.value().blue().bold()),
-            }
-        },
+                write!(self.inner, "bind ")?;
+                self.s(&bind.identifier())?;
+                write!(self.inner, " ")?;
+                self.s(&bind.expression())?;
 
-        IfElse as if_else => {
-            write!(formatter, "{left}", left = "(".paint(get_bracket_style(*bracket_count)))?;
-            *bracket_count += 1;
+                self.bracket_end(")")
+            },
 
-            write!(formatter, "{if} ", r#if = "if-else".red().bold())?;
+            Lambda as lambda => {
+                match lambda.parameter() {
+                    LambdaParameter::LambdaParameterIdentifier(parameter) => self.s(&parameter.identifier())?,
+                    LambdaParameter::LambdaParameterPattern(parameter) => {
+                        self.bracket_start("{")?;
 
-            s_impl(formatter, &if_else.condition(), bracket_count)?;
-            write!(formatter, " ")?;
-            s_impl(formatter, &if_else.true_expression(), bracket_count)?;
+                        let attributes: Vec<_> = parameter.attributes().collect();
 
-            if let Some(false_expression) = if_else.false_expression() {
-                write!(formatter, " ")?;
-                s_impl(formatter, &false_expression, bracket_count)?;
-            }
+                        for (index, attribute) in attributes.iter().enumerate() {
+                            self.s(&attribute.identifier())?;
 
-            *bracket_count -= 1;
-            write!(formatter, "{right}", right = ")".paint(get_bracket_style(*bracket_count)))
-        },
+                            if let Some(default) = attribute.default() {
+                                write!(self.inner, " ? ")?;
+                                self.s(&default)?;
+                            }
 
-        else => unreachable!(),
+                            if index + 1 != attributes.len() {
+                                write!(self.inner, ", ")?;
+                            }
+                        }
+
+                        if !attributes.is_empty() {
+                            write!(self.inner, " ")?;
+                        }
+                        self.bracket_end("}")?;
+                    },
+                }
+
+                write!(self.inner, ": ")?;
+                self.s(&lambda.expression())
+            },
+
+            Application as application => {
+                self.bracket_start("(")?;
+
+                self.s(&application.left_expression())?;
+                write!(self.inner, " ")?;
+                self.s(&application.right_expression())?;
+
+                self.bracket_end(")")
+            },
+
+            PrefixOperation as operation => {
+                self.bracket_start("(")?;
+
+                write!(self.inner, "{delimiter}{operator}{delimiter}", delimiter = "`".green().bold(), operator = match operation.operator() {
+                    PrefixOperator::Swwallation => "+",
+                    PrefixOperator::Negation => "-",
+
+                    PrefixOperator::Not => "not",
+                }.green())?;
+                write!(self.inner, " ")?;
+                self.s(&operation.expression())?;
+
+                self.bracket_end(")")
+            },
+
+            InfixOperation as operation => {
+                self.bracket_start("(")?;
+
+                write!(self.inner, "{delimiter}{operator}{delimiter}", delimiter = "`".green().bold(), operator = match operation.operator() {
+                    InfixOperator::Apply => "$",
+                    InfixOperator::Pipe => "|>",
+
+                    InfixOperator::Concat => "++",
+
+                    InfixOperator::Use => "==>",
+                    InfixOperator::Override => "<==",
+                    InfixOperator::Update => "//",
+
+                    InfixOperator::Equal => "==",
+                    InfixOperator::NotEqual => "!=",
+                    InfixOperator::LessOrEqual => "<=",
+                    InfixOperator::Less => "<",
+                    InfixOperator::MoreOrEqual => ">=",
+                    InfixOperator::More => ">",
+                    InfixOperator::Implication => "->",
+
+                    InfixOperator::Addition => "+",
+                    InfixOperator::Subtraction => "-",
+                    InfixOperator::Multiplication => "*",
+                    InfixOperator::Power => "**",
+                    InfixOperator::Division => "/",
+
+                    InfixOperator::And => "and",
+                    InfixOperator::Or => "or",
+                }.green())?;
+                write!(self.inner, " ")?;
+                self.s(&operation.left_expression())?;
+                write!(self.inner, " ")?;
+                self.s(&operation.right_expression())?;
+
+                self.bracket_end(")")
+            },
+
+            Path as path => self.s_parted(&mut path.parts()),
+
+            Identifier as identifier => {
+                match identifier.value() {
+                    IdentifierValue::Simple(token) => write!(self.inner, "{identifier}", identifier = match token.text() {
+                        boolean @ ("true" | "false") => boolean.magenta().bold(),
+                        inexistent @ ("null" | "undefined") => inexistent.cyan().bold(),
+                        identifier => identifier.new(),
+                    }),
+
+                    IdentifierValue::Complex(complex) => self.s_parted(&mut complex.parts()),
+                }
+            },
+
+            SString as sstring => self.s_parted(&mut sstring.parts()),
+
+            Island as island => self.s_parted(&mut island.parts()),
+
+            Number as number => {
+                match number.value() {
+                    NumberValue::Integer(token) => write!(self.inner, "{number}", number = token.value().blue().bold()),
+                    NumberValue::Float(token) => write!(self.inner, "{number}", number = token.value().blue().bold()),
+                }
+            },
+
+            IfElse as if_else => {
+                self.bracket_start("(")?;
+
+                self.write("if-else".red().bold())?;
+
+                self.s(&if_else.condition())?;
+                write!(self.inner, " ")?;
+                self.s(&if_else.true_expression())?;
+
+                if let Some(false_expression) = if_else.false_expression() {
+                    write!(self.inner, " ")?;
+                    self.s(&false_expression)?;
+                }
+
+                self.bracket_end(")")
+            },
+
+            else => unreachable!(),
+        }
     }
 }
