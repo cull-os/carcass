@@ -67,6 +67,33 @@ impl<'a, W: io::Write> Formatter<'a, W> {
         write!(self.inner, "{painted}")
     }
 
+    fn write_delimited(&mut self, delimiter: char, content: &str) -> io::Result<()> {
+        write!(
+            self.inner,
+            "{delimiter}{content}{delimiter}",
+            delimiter = delimiter.green().bold(),
+            content = content.green()
+        )
+    }
+
+    fn s_identifier_as_string(&mut self, identifier: &Identifier) -> io::Result<()> {
+        match identifier.value() {
+            IdentifierValue::Simple(token) => self.write_delimited('"', token.text()),
+
+            IdentifierValue::Complex(complex) => {
+                self.write('"'.green().bold())?;
+
+                self.s_parted(
+                    complex
+                        .parts()
+                        .filter(|part| !matches!(part, InterpolationPart::Delimiter(_))),
+                )?;
+
+                self.write('"'.green().bold())
+            },
+        }
+    }
+
     fn s_parted<T: Token>(
         &mut self,
         parts: impl Iterator<Item = InterpolationPart<T>>,
@@ -157,8 +184,9 @@ impl<'a, W: io::Write> Formatter<'a, W> {
             AttributeSelect as select => {
                 self.bracket_start("(")?;
 
-                write!(self.inner, "{delimiter}{content}{delimiter} ", delimiter = "`".green().bold(), content = ".".green())?;
-                self.s(&select.identifier())?;
+                self.write_delimited('`', ".")?;
+                self.write(" ")?;
+                self.s_identifier_as_string(&select.identifier())?;
                 self.write(" ")?;
                 self.s(&select.expression())?;
 
@@ -168,7 +196,8 @@ impl<'a, W: io::Write> Formatter<'a, W> {
             AttributeCheck as check => {
                 self.bracket_start("(")?;
 
-                write!(self.inner, "{delimiter}{content}{delimiter} ", delimiter = "`".green().bold(), content = "?".green())?;
+                self.write_delimited('`', "?")?;
+                self.write(" ")?;
                 self.s(&check.expression())?;
 
                 for attribute in check.attributes() {
@@ -182,8 +211,9 @@ impl<'a, W: io::Write> Formatter<'a, W> {
             Bind as bind => {
                 self.bracket_start("(")?;
 
-                self.write("bind ")?;
-                self.s(&bind.identifier())?;
+                self.write_delimited('`', "@")?;
+                self.write(" ")?;
+                self.s_identifier_as_string(&bind.identifier())?;
                 self.write(" ")?;
                 self.s(&bind.expression())?;
 
@@ -235,12 +265,12 @@ impl<'a, W: io::Write> Formatter<'a, W> {
             PrefixOperation as operation => {
                 self.bracket_start("(")?;
 
-                write!(self.inner, "{delimiter}{operator}{delimiter}", delimiter = "`".green().bold(), operator = match operation.operator() {
+                self.write_delimited('`', match operation.operator() {
                     PrefixOperator::Swwallation => "+",
                     PrefixOperator::Negation => "-",
 
                     PrefixOperator::Not => "not",
-                }.green())?;
+                })?;
                 self.write(" ")?;
                 self.s(&operation.expression())?;
 
@@ -250,34 +280,45 @@ impl<'a, W: io::Write> Formatter<'a, W> {
             InfixOperation as operation => {
                 self.bracket_start("(")?;
 
-                write!(self.inner, "{delimiter}{operator}{delimiter}", delimiter = "`".green().bold(), operator = match operation.operator() {
-                    InfixOperator::Apply => "$",
-                    InfixOperator::Pipe => "|>",
+                let operator = match operation.operator() {
+                    InfixOperator::Apply => None,
+                    InfixOperator::Pipe => {
+                        self.s(&operation.right_expression())?;
+                        self.write(" ")?;
+                        self.s(&operation.left_expression())?;
 
-                    InfixOperator::Concat => "++",
+                        return self.bracket_end(")");
+                    },
 
-                    InfixOperator::Use => "==>",
-                    InfixOperator::Override => "<==",
-                    InfixOperator::Update => "//",
+                    InfixOperator::Concat => Some("++"),
 
-                    InfixOperator::Equal => "==",
-                    InfixOperator::NotEqual => "!=",
-                    InfixOperator::LessOrEqual => "<=",
-                    InfixOperator::Less => "<",
-                    InfixOperator::MoreOrEqual => ">=",
-                    InfixOperator::More => ">",
-                    InfixOperator::Implication => "->",
+                    InfixOperator::Use => Some("==>"),
+                    InfixOperator::Override => Some("<=="),
+                    InfixOperator::Update => Some("//"),
 
-                    InfixOperator::Addition => "+",
-                    InfixOperator::Subtraction => "-",
-                    InfixOperator::Multiplication => "*",
-                    InfixOperator::Power => "**",
-                    InfixOperator::Division => "/",
+                    InfixOperator::Equal => Some("=="),
+                    InfixOperator::NotEqual => Some("!="),
+                    InfixOperator::LessOrEqual => Some("<="),
+                    InfixOperator::Less => Some("<"),
+                    InfixOperator::MoreOrEqual => Some(">="),
+                    InfixOperator::More => Some(">"),
+                    InfixOperator::Implication => Some("->"),
 
-                    InfixOperator::And => "and",
-                    InfixOperator::Or => "or",
-                }.green())?;
-                self.write(" ")?;
+                    InfixOperator::Addition => Some("+"),
+                    InfixOperator::Subtraction => Some("-"),
+                    InfixOperator::Multiplication => Some("*"),
+                    InfixOperator::Power => Some("**"),
+                    InfixOperator::Division => Some("/"),
+
+                    InfixOperator::And => Some("and"),
+                    InfixOperator::Or => Some("or"),
+                };
+
+                if let Some(operator) = operator {
+                    self.write_delimited('`', operator)?;
+                    self.write(" ")?;
+                }
+
                 self.s(&operation.left_expression())?;
                 self.write(" ")?;
                 self.s(&operation.right_expression())?;
@@ -285,23 +326,24 @@ impl<'a, W: io::Write> Formatter<'a, W> {
                 self.bracket_end(")")
             },
 
-            Path as path => self.s_parted(&mut path.parts()),
+            Path as path => self.s_parted(path.parts()),
 
             Identifier as identifier => {
                 match identifier.value() {
                     IdentifierValue::Simple(token) => self.write(match token.text() {
                         boolean @ ("true" | "false") => boolean.magenta().bold(),
                         inexistent @ ("null" | "undefined") => inexistent.cyan().bold(),
+                        import @ "import" => import.yellow().bold(),
                         identifier => identifier.new(),
                     }),
 
-                    IdentifierValue::Complex(complex) => self.s_parted(&mut complex.parts()),
+                    IdentifierValue::Complex(complex) => self.s_parted(complex.parts()),
                 }
             },
 
-            SString as sstring => self.s_parted(&mut sstring.parts()),
+            SString as sstring => self.s_parted(sstring.parts()),
 
-            Island as island => self.s_parted(&mut island.parts()),
+            Island as island => self.s_parted(island.parts()),
 
             Number as number => {
                 match number.value() {
@@ -313,7 +355,12 @@ impl<'a, W: io::Write> Formatter<'a, W> {
             IfElse as if_else => {
                 self.bracket_start("(")?;
 
-                write!(self.inner, "{delimiter}{content}{delimiter} ", delimiter = "`".green().bold(), content = "if".green())?;
+                if if_else.false_expression().is_some() {
+                    self.write_delimited('`', "if else")?;
+                } else {
+                    self.write_delimited('`', "if")?;
+                }
+                self.write(" ")?;
 
                 self.s(&if_else.condition())?;
                 self.write(" ")?;
