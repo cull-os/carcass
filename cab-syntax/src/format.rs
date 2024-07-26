@@ -1,5 +1,8 @@
 //! Formatting utilities for [`Expression`]s.
-use std::io;
+use std::{
+    fmt,
+    io,
+};
 
 use yansi::Paint;
 
@@ -60,7 +63,7 @@ impl<'a, W: io::Write> Formatter<'a, W> {
         )
     }
 
-    fn write(&mut self, painted: yansi::Painted<&str>) -> io::Result<()> {
+    fn write(&mut self, painted: impl fmt::Display) -> io::Result<()> {
         write!(self.inner, "{painted}")
     }
 
@@ -107,12 +110,12 @@ impl<'a, W: io::Write> Formatter<'a, W> {
                 let items: Vec<_> = list.items().collect();
 
                 for item in items.iter() {
-                    write!(self.inner, " ")?;
+                    self.write(" ")?;
                     self.s(item)?;
                 }
 
                 if !items.is_empty() {
-                    write!(self.inner, " ")?;
+                    self.write(" ")?;
                 }
                 self.bracket_end("]")
             },
@@ -122,31 +125,31 @@ impl<'a, W: io::Write> Formatter<'a, W> {
 
                 let inherits: Vec<_> = set.inherits().collect();
                 for inherit in inherits.iter() {
-                    write!(self.inner, " ")?;
+                    self.write(" ")?;
                     self.s(&inherit.identifier())?;
-                    write!(self.inner, ";")?;
+                    self.write(";")?;
                 }
 
                 let attributes: Vec<_> = set.attributes().collect();
                 for attribute in attributes.iter() {
-                    write!(self.inner, " ")?;
+                    self.write(" ")?;
 
                     let mut identifiers = attribute.path().identifiers();
                     if let Some(first) = identifiers.next() {
                         self.s(&first)?;
                     }
                     for identifier in identifiers {
-                        write!(self.inner, ".")?;
+                        self.write(".")?;
                         self.s(&identifier)?;
                     }
 
-                    write!(self.inner, " = ")?;
+                    self.write(" = ")?;
                     self.s(&attribute.value())?;
-                    write!(self.inner, ";")?;
+                    self.write(";")?;
                 }
 
                 if !inherits.is_empty() || !attributes.is_empty() {
-                    write!(self.inner, " ")?;
+                    self.write(" ")?;
                 }
                 self.bracket_end("}")
             },
@@ -156,7 +159,7 @@ impl<'a, W: io::Write> Formatter<'a, W> {
 
                 write!(self.inner, "{delimiter}{content}{delimiter} ", delimiter = "`".green().bold(), content = ".".green())?;
                 self.s(&select.identifier())?;
-                write!(self.inner, " ")?;
+                self.write(" ")?;
                 self.s(&select.expression())?;
 
                 self.bracket_end(")")
@@ -169,7 +172,7 @@ impl<'a, W: io::Write> Formatter<'a, W> {
                 self.s(&check.expression())?;
 
                 for attribute in check.attributes() {
-                    write!(self.inner, " ")?;
+                    self.write(" ")?;
                     self.s(&attribute)?;
                 }
 
@@ -179,9 +182,9 @@ impl<'a, W: io::Write> Formatter<'a, W> {
             Bind as bind => {
                 self.bracket_start("(")?;
 
-                write!(self.inner, "bind ")?;
+                self.write("bind ")?;
                 self.s(&bind.identifier())?;
-                write!(self.inner, " ")?;
+                self.write(" ")?;
                 self.s(&bind.expression())?;
 
                 self.bracket_end(")")
@@ -199,23 +202,23 @@ impl<'a, W: io::Write> Formatter<'a, W> {
                             self.s(&attribute.identifier())?;
 
                             if let Some(default) = attribute.default() {
-                                write!(self.inner, " ? ")?;
+                                self.write(" ? ")?;
                                 self.s(&default)?;
                             }
 
                             if index + 1 != attributes.len() {
-                                write!(self.inner, ", ")?;
+                                self.write(", ")?;
                             }
                         }
 
                         if !attributes.is_empty() {
-                            write!(self.inner, " ")?;
+                            self.write(" ")?;
                         }
                         self.bracket_end("}")?;
                     },
                 }
 
-                write!(self.inner, ": ")?;
+                self.write(": ")?;
                 self.s(&lambda.expression())
             },
 
@@ -223,7 +226,7 @@ impl<'a, W: io::Write> Formatter<'a, W> {
                 self.bracket_start("(")?;
 
                 self.s(&application.left_expression())?;
-                write!(self.inner, " ")?;
+                self.write(" ")?;
                 self.s(&application.right_expression())?;
 
                 self.bracket_end(")")
@@ -238,7 +241,7 @@ impl<'a, W: io::Write> Formatter<'a, W> {
 
                     PrefixOperator::Not => "not",
                 }.green())?;
-                write!(self.inner, " ")?;
+                self.write(" ")?;
                 self.s(&operation.expression())?;
 
                 self.bracket_end(")")
@@ -274,9 +277,9 @@ impl<'a, W: io::Write> Formatter<'a, W> {
                     InfixOperator::And => "and",
                     InfixOperator::Or => "or",
                 }.green())?;
-                write!(self.inner, " ")?;
+                self.write(" ")?;
                 self.s(&operation.left_expression())?;
-                write!(self.inner, " ")?;
+                self.write(" ")?;
                 self.s(&operation.right_expression())?;
 
                 self.bracket_end(")")
@@ -286,7 +289,7 @@ impl<'a, W: io::Write> Formatter<'a, W> {
 
             Identifier as identifier => {
                 match identifier.value() {
-                    IdentifierValue::Simple(token) => write!(self.inner, "{identifier}", identifier = match token.text() {
+                    IdentifierValue::Simple(token) => self.write(match token.text() {
                         boolean @ ("true" | "false") => boolean.magenta().bold(),
                         inexistent @ ("null" | "undefined") => inexistent.cyan().bold(),
                         identifier => identifier.new(),
@@ -302,8 +305,8 @@ impl<'a, W: io::Write> Formatter<'a, W> {
 
             Number as number => {
                 match number.value() {
-                    NumberValue::Integer(token) => write!(self.inner, "{number}", number = token.value().blue().bold()),
-                    NumberValue::Float(token) => write!(self.inner, "{number}", number = token.value().blue().bold()),
+                    NumberValue::Integer(token) => self.write(token.value().blue().bold()),
+                    NumberValue::Float(token) => self.write(token.value().blue().bold()),
                 }
             },
 
@@ -311,13 +314,14 @@ impl<'a, W: io::Write> Formatter<'a, W> {
                 self.bracket_start("(")?;
 
                 self.write("if-else".red().bold())?;
+                self.write(" ")?;
 
                 self.s(&if_else.condition())?;
-                write!(self.inner, " ")?;
+                self.write(" ")?;
                 self.s(&if_else.true_expression())?;
 
                 if let Some(false_expression) = if_else.false_expression() {
-                    write!(self.inner, " ")?;
+                    self.write(" ")?;
                     self.s(&false_expression)?;
                 }
 
