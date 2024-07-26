@@ -313,8 +313,7 @@ impl<'a, W: io::Write> Formatter<'a, W> {
             IfElse as if_else => {
                 self.bracket_start("(")?;
 
-                self.write("if-else".red().bold())?;
-                self.write(" ")?;
+                write!(self.inner, "{delimiter}{content}{delimiter} ", delimiter = "`".green().bold(), content = "if".green())?;
 
                 self.s(&if_else.condition())?;
                 self.write(" ")?;
