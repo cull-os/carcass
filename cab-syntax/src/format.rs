@@ -39,7 +39,7 @@ impl<'a, W: io::Write> Formatter<'a, W> {
     }
 
     fn paint_bracket<'b>(&self, bracket: &'b str) -> yansi::Painted<&'b str> {
-        let style = COLORS[self.bracket_count as usize & COLORS.len()];
+        let style = COLORS[self.bracket_count as usize % COLORS.len()];
         bracket.paint(style)
     }
 
