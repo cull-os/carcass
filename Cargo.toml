@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members  = [ "cab",
+members  = [
   "cab",
   "cab-syntax",
   "fuzz",
