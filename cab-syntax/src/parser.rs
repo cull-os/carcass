@@ -116,8 +116,8 @@ impl fmt::Display for ParseError {
                 while let Some(item) = iterator.next() {
                     write!(
                         formatter,
-                        "{item}{seperator}",
-                        seperator =
+                        "{item}{separator}",
+                        separator =
                             match (iterator.peek().is_some(), iterator.peek_nth(1).is_some()) {
                                 (false, false) => "",
                                 (true, false) => " or ",

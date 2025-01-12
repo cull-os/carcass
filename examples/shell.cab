@@ -1,7 +1,7 @@
 # You can use this file standalone as well. No need for a default.cab.
 #
-# Just invoke `cab enter shell.cab` and since this file evaulates to
-# a derivation when the `buildSystem` and `targetSystem` are overriden,
+# Just invoke `cab enter shell.cab` and since this file evaluates to
+# a derivation when the `buildSystem` and `targetSystem` are overridden,
 # you will get launched into a shell just like `nix develop`.
 
 inputs @ {

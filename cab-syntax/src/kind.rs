@@ -2,8 +2,8 @@ use derive_more::Display;
 use Kind::*;
 
 /// derive_more causes [`unreachable`] to warn too many times
-/// so we're just supressing them like this. No, #[allow(unreachable_code)]
-/// doesn't supress the ones coming from the #[derive(Display)].
+/// so we're just suppressing them like this. No, #[allow(unreachable_code)]
+/// doesn't suppress the ones coming from the #[derive(Display)].
 fn reachable_unreachable() -> &'static str {
     unreachable!()
 }

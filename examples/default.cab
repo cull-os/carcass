@@ -2,7 +2,7 @@
 # form of the thing it is being bind-ed to. This is quite
 # similar to the `fix` and `makeScope`-related functions inside nixpkgs.
 inputs @ {
-  # These variables have to be overriden.
+  # These variables have to be overridden.
   # Currently they aren't defined. They don't exist at all
   # but will when you override them.
   #
@@ -11,7 +11,7 @@ inputs @ {
   buildSystem = undefined;
   targetSystem = undefined;
 
-  # When `packages` isn't overriden, it will default to the expression it is assigned to.
+  # When `packages` isn't overridden, it will default to the expression it is assigned to.
   # The lock of this island is stored in `default.cab.lock`.
   packages = <github:cull-os/packages>;
 
@@ -26,7 +26,7 @@ inputs @ {
   #   overrideMe = { foo = 3; } ==> foo * foo;
   # } ==> [ overrideMe (overrideMe <== { foo = 2; }) ]
   #
-  # That will evauluate to `[ 9 4 ]`.
+  # That will evaluate to `[ 9 4 ]`.
 } ==> {
   description = "Hello, Cab!";
 
