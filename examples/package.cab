@@ -17,7 +17,7 @@ inputs @ {
     # Since the . operator is used to access attributes,
     # the builtin functions have a function named `.` that is defined as:
     #
-    # `.` = attribute: set: set.`${attribute}`;
+    # `.` = attribute: set: set.`\(attribute)`;
     #
     # And you can use it to do neat stuff like this.
     # (though you should really prefer `toml: toml.package.version` here, this is just an example)

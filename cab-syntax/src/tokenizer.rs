@@ -17,7 +17,7 @@ fn is_valid_identifier_character(c: char) -> bool {
 }
 
 fn is_valid_path_character(c: char) -> bool {
-    c.is_alphanumeric() || matches!(c, '.' | '/' | '_' | '-' | '\\' | '$')
+    c.is_alphanumeric() || matches!(c, '.' | '/' | '_' | '-' | '\\')
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -26,7 +26,7 @@ enum TokenizerContext<'a> {
     Stringlike { end: &'a str },
     StringlikeEnd { end: &'a str },
     InterpolationStart,
-    Interpolation { brackets: u32 },
+    Interpolation { parentheses: u32 },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -150,15 +150,15 @@ impl<'a> Tokenizer<'a> {
             let start_offset = self.offset;
 
             match self.consume_character() {
-                Some('\\') => {
-                    self.consume_character();
-                },
-
-                Some('$') if self.try_consume_character('{') => {
+                Some('\\') if self.try_consume_character('(') => {
                     self.offset = start_offset;
                     self.context_push(TokenizerContext::InterpolationStart);
 
                     return Some(TOKEN_CONTENT);
+                },
+
+                Some('\\') => {
+                    self.consume_character();
                 },
 
                 Some(_) => {},
@@ -184,15 +184,15 @@ impl<'a> Tokenizer<'a> {
             let start_offset = self.offset;
 
             match self.consume_character().unwrap() {
-                '\\' => {
-                    self.consume_character();
-                },
-
-                '$' if self.try_consume_character('{') => {
+                '\\' if self.try_consume_character('(') => {
                     self.offset = start_offset;
                     self.context_push(TokenizerContext::InterpolationStart);
 
                     return Some(TOKEN_PATH);
+                },
+
+                '\\' => {
+                    self.consume_character();
                 },
 
                 _ => {},
@@ -224,10 +224,10 @@ impl<'a> Tokenizer<'a> {
             },
 
             Some(TokenizerContext::InterpolationStart) => {
-                assert!(self.try_consume_string("${"));
+                assert!(self.try_consume_string(r"\("));
 
                 self.context_pop(TokenizerContext::InterpolationStart);
-                self.context_push(TokenizerContext::Interpolation { brackets: 0 });
+                self.context_push(TokenizerContext::Interpolation { parentheses: 0 });
                 return Some(TOKEN_INTERPOLATION_START);
             },
 
@@ -264,8 +264,30 @@ impl<'a> Tokenizer<'a> {
 
             '@' => TOKEN_AT,
 
-            '(' => TOKEN_LEFT_PARENTHESIS,
-            ')' => TOKEN_RIGHT_PARENTHESIS,
+            '(' => {
+                if let Some(TokenizerContext::Interpolation { parentheses }) =
+                    self.context.last_mut()
+                {
+                    *parentheses += 1;
+                }
+
+                TOKEN_LEFT_PARENTHESIS
+            },
+            ')' => {
+                if let Some(TokenizerContext::Interpolation { parentheses }) =
+                    self.context.last_mut()
+                {
+                    match parentheses.checked_sub(1) {
+                        Some(new) => *parentheses = new,
+                        None => {
+                            self.context_pop(TokenizerContext::Interpolation { parentheses: 0 });
+                            return Some(TOKEN_INTERPOLATION_END);
+                        },
+                    }
+                }
+
+                TOKEN_RIGHT_PARENTHESIS
+            },
 
             '+' if self.try_consume_character('+') => TOKEN_PLUS_PLUS,
             '[' => TOKEN_LEFT_BRACKET,
@@ -274,28 +296,8 @@ impl<'a> Tokenizer<'a> {
             '=' if self.try_consume_string("=>") => TOKEN_EQUAL_EQUAL_MORE,
             '<' if self.try_consume_string("==") => TOKEN_LESS_EQUAL_EQUAL,
             '/' if self.try_consume_character('/') => TOKEN_SLASH_SLASH,
-            '{' => {
-                if let Some(TokenizerContext::Interpolation { brackets }) = self.context.last_mut()
-                {
-                    *brackets += 1
-                }
-
-                TOKEN_LEFT_CURLYBRACE
-            },
-            '}' => {
-                if let Some(TokenizerContext::Interpolation { brackets }) = self.context.last_mut()
-                {
-                    match brackets.checked_sub(1) {
-                        Some(new) => *brackets = new,
-                        None => {
-                            self.context_pop(TokenizerContext::Interpolation { brackets: 0 });
-                            return Some(TOKEN_INTERPOLATION_END);
-                        },
-                    }
-                }
-
-                TOKEN_RIGHT_CURLYBRACE
-            },
+            '{' => TOKEN_LEFT_CURLYBRACE,
+            '}' => TOKEN_RIGHT_CURLYBRACE,
             '?' => TOKEN_QUESTIONMARK,
             ';' => TOKEN_SEMICOLON,
 
@@ -417,7 +419,7 @@ impl<'a> Tokenizer<'a> {
 
             '<' if self
                 .peek_character()
-                .is_some_and(|c| c == '$' || is_valid_initial_identifier_character(c)) =>
+                .is_some_and(|c| c == '\\' || is_valid_initial_identifier_character(c)) =>
             {
                 self.context_push(TokenizerContext::Stringlike { end: ">" });
 
@@ -437,7 +439,7 @@ mod tests {
     use super::*;
 
     macro_rules! assert_token_matches {
-        ($string:literal,$($pattern:pat),* $(,)?) => {{
+        ($string:literal, $($pattern:pat),* $(,)?) => {{
             let mut tokens = tokenize($string);
 
             $(assert!(matches!(tokens.next(), Some($pattern)));)*
@@ -449,12 +451,12 @@ mod tests {
     #[test]
     fn no_empty_tokens() {
         assert_token_matches!(
-            "'foo ${bar}'",
+            r"'foo \(bar)'",
             (TOKEN_STRING_START, "'"),
             (TOKEN_CONTENT, "foo "),
-            (TOKEN_INTERPOLATION_START, "${"),
+            (TOKEN_INTERPOLATION_START, r"\("),
             (TOKEN_IDENTIFIER, "bar"),
-            (TOKEN_INTERPOLATION_END, "}"),
+            (TOKEN_INTERPOLATION_END, ")"),
             (TOKEN_STRING_END, "'"),
         );
     }
@@ -462,11 +464,11 @@ mod tests {
     #[test]
     fn path() {
         assert_token_matches!(
-            "../foo${𓃰}///baz",
+            r"../foo\(𓃰)///baz",
             (TOKEN_PATH, "../foo"),
-            (TOKEN_INTERPOLATION_START, "${"),
+            (TOKEN_INTERPOLATION_START, r"\("),
             (TOKEN_IDENTIFIER, "𓃰"),
-            (TOKEN_INTERPOLATION_END, "}"),
+            (TOKEN_INTERPOLATION_END, ")"),
             (TOKEN_PATH, "///baz"),
         );
     }

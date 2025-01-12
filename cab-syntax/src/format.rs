@@ -109,9 +109,9 @@ impl<'a, W: io::Write> Formatter<'a, W> {
                 },
 
                 InterpolationPart::Interpolation(interpolation) => {
-                    self.write("${".yellow())?;
+                    self.write(r"\(".yellow())?;
                     self.s(&interpolation.expression())?;
-                    self.write("}".yellow())?;
+                    self.write(")".yellow())?;
                 },
             }
         }

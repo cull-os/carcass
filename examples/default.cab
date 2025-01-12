@@ -42,7 +42,7 @@ inputs @ {
     # sandwiched between ``.
     # You can even do string interpolation!
     #
-    # This also applies to islands (e.g. <${forge}:${owner}/${repo}>).
+    # This also applies to islands (e.g. <\(forge):\(owner)/\(repo)>).
     bar = self.default <== { python = packages.`python-3.13`; };
   };
 

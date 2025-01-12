@@ -132,9 +132,9 @@ pub enum Kind {
     #[display("the keyword 'not'")]
     TOKEN_LITERAL_NOT,
 
-    #[display("'${{'")]
+    #[display(r"'\('")]
     TOKEN_INTERPOLATION_START,
-    #[display("'}}'")]
+    #[display("')'")]
     TOKEN_INTERPOLATION_END,
 
     /// A path. Valid paths start with `./`, `..` or `/`, followed by
@@ -143,14 +143,14 @@ pub enum Kind {
     ///
     /// The `\` character can be used to escape characters that are normally
     /// not allowed in paths, like spaces and other weird characters.
-    /// It is also useful to escape `${` literally, to not begin string
-    /// interpolation like so: `./\$\{foo`
+    /// It is also useful to escape `\(` literally, to not begin string
+    /// interpolation like so: `./\\\(foo`
     ///
     /// Every path part will be represented using this kind, so a path node with
     /// interpolation will be represented as the following:
     ///
     /// ```txt
-    /// ./foo${bar}baz -- TOKEN_PATH
+    /// ./foo\(bar)baz -- TOKEN_PATH
     /// +---/\|\|/\-- TOKEN_INTERPOLATION_END
     /// |     | +-- TOKEN_IDENTIFIER
     /// |     +-- TOKEN_INTERPOLATION_START
