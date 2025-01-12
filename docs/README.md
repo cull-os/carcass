@@ -10,8 +10,6 @@ Contributors are expected to follow the [code of conduct](CODE_OF_CONDUCT.md).
 ## License
 
 ```
-MIT License
-
 Copyright (c) 2024-present Cab Contributors
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
