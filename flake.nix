@@ -37,12 +37,10 @@
     }));
   in {
     devShells = eachPkgs (pkgs: let
-      rustToolchain = pkgs.fenix.complete.toolchain;
-
       cab = pkgs.mkShell {
         packages = [
           # You will need a nightly Rust compiler.
-          rustToolchain
+          pkgs.fenix.complete.toolchain
 
           # Fuzzing.
           pkgs.cargo-fuzz
