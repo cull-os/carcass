@@ -147,21 +147,19 @@ impl<'a> Tokenizer<'a> {
                 return Some(TOKEN_CONTENT);
             }
 
-            let start_offset = self.offset;
-
-            match self.consume_character() {
-                Some('\\') if self.try_consume_character('(') => {
-                    self.offset = start_offset;
+            match self.peek_character() {
+                Some('\\') if self.peek_character_nth(1) == Some('(') => {
                     self.context_push(TokenizerContext::InterpolationStart);
 
                     return Some(TOKEN_CONTENT);
                 },
 
-                Some('\\') => {
-                    self.consume_character();
+                Some(_) => {
+                    if let Some('\\') = self.consume_character() {
+                        self.consume_character();
+                    };
                 },
 
-                Some(_) => {},
                 None => {
                     self.context_pop(TokenizerContext::Stringlike { end });
                     return Some(TOKEN_CONTENT);
@@ -181,21 +179,18 @@ impl<'a> Tokenizer<'a> {
                 return Some(TOKEN_PATH);
             }
 
-            let start_offset = self.offset;
-
-            match self.consume_character().unwrap() {
-                '\\' if self.try_consume_character('(') => {
-                    self.offset = start_offset;
+            match self.peek_character().unwrap() {
+                '\\' if self.peek_character_nth(1) == Some('(') => {
                     self.context_push(TokenizerContext::InterpolationStart);
 
                     return Some(TOKEN_PATH);
                 },
 
-                '\\' => {
-                    self.consume_character();
+                _ => {
+                    if let Some('\\') = self.consume_character() {
+                        self.consume_character();
+                    };
                 },
-
-                _ => {},
             }
         }
     }
@@ -241,8 +236,10 @@ impl<'a> Tokenizer<'a> {
             },
 
             '#' => {
-                // ### or more gets multiline
-                if self.consume_while(|c| c == '#') >= 2 {
+                // ### or more is multiline.
+                if self.consume_while(|c| c == '#') < 2 {
+                    self.consume_while(|c| !matches!(c, '\r' | '\n'));
+                } else {
                     let end = self.consumed_since(start_offset);
 
                     let Some(end_after) = self.remaining().find(end) else {
@@ -252,8 +249,6 @@ impl<'a> Tokenizer<'a> {
                     };
 
                     self.offset += end_after + end.len();
-                } else {
-                    self.consume_while(|c| !matches!(c, '\r' | '\n'));
                 }
 
                 TOKEN_COMMENT
@@ -322,7 +317,9 @@ impl<'a> Tokenizer<'a> {
                     _ => unreachable!(),
                 };
 
-                let consumed = self.consume_while(is_valid_digit);
+                if self.consume_while(is_valid_digit) == 0 {
+                    return Some(TOKEN_ERROR);
+                }
 
                 if self.peek_character() == Some('.')
                     && self.peek_character_nth(1).is_some_and(is_valid_digit)
@@ -330,11 +327,8 @@ impl<'a> Tokenizer<'a> {
                     self.consume_character();
                     self.consume_while(is_valid_digit);
                     self.consume_scientific()
-                } else if consumed > 0 {
-                    TOKEN_INTEGER
                 } else {
-                    // There was no character consumed after the initial 0{b,o,x}.
-                    TOKEN_ERROR
+                    TOKEN_INTEGER
                 }
             },
 
@@ -412,7 +406,7 @@ impl<'a> Tokenizer<'a> {
 
             '<' if self
                 .peek_character()
-                .is_some_and(|c| c == '\\' || is_valid_initial_identifier_character(c)) =>
+                .is_some_and(|c| is_valid_initial_identifier_character(c) || c == '\\') =>
             {
                 self.context_push(TokenizerContext::Stringlike { end: ">" });
 
