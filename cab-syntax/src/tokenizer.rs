@@ -128,7 +128,7 @@ impl<'a> Tokenizer<'a> {
         if self.try_consume_character('e') || self.try_consume_character('E') {
             let _ = self.try_consume_character('+') || self.try_consume_character('-');
 
-            if self.consume_while(|c| c.is_ascii_digit()) == 0 {
+            if self.consume_while(|c| c.is_ascii_digit() || c == '_') == 0 {
                 TOKEN_ERROR
             } else {
                 TOKEN_FLOAT
@@ -352,11 +352,6 @@ impl<'a> Tokenizer<'a> {
                 } else {
                     TOKEN_INTEGER
                 }
-            },
-
-            '.' if self.peek_character().is_some_and(|c| c.is_ascii_digit()) => {
-                self.consume_while(|c| c.is_ascii_digit() || c == '_');
-                self.consume_scientific()
             },
 
             initial_letter if is_valid_initial_identifier_character(initial_letter) => {
