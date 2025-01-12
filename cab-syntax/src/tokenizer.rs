@@ -20,7 +20,7 @@ fn is_valid_path_character(c: char) -> bool {
     c.is_alphanumeric() || matches!(c, '.' | '/' | '_' | '-' | '\\' | '$')
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum TokenizerContext<'a> {
     Path,
     Stringlike { end: &'a str },
@@ -206,7 +206,7 @@ impl<'a> Tokenizer<'a> {
     fn consume_kind(&mut self) -> Option<Kind> {
         let start_offset = self.offset;
 
-        match self.context.last() {
+        match self.context.last().copied() {
             Some(TokenizerContext::Path) => {
                 return self.consume_path();
             },
