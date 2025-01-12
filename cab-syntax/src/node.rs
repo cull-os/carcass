@@ -5,6 +5,7 @@ use std::ops::{
 };
 
 use rowan::ast::AstNode as _;
+use static_assertions::assert_obj_safe;
 
 use crate::{
     token::{
@@ -54,46 +55,68 @@ macro_rules! __node_match {
 #[doc(inline)]
 pub use crate::__node_match as r#match;
 
+assert_obj_safe!(Node);
 pub trait Node: rowan::ast::AstNode<Language = Language> + ops::Deref<Target = RowanNode> {
     /// Returns its inherent kind, returning None if it is a node that can have
     /// multiple values.
-    fn inherent_kind() -> Option<Kind> {
+    fn inherent_kind() -> Option<Kind>
+    where
+        Self: Sized,
+    {
         None
     }
 
-    /// Returns the Nth immediate children node that can be cast to the given
+    /// Returns the Nth immediate child node that can be cast to the given
     /// typed node.
-    fn nth<N: Node>(&self, n: usize) -> Option<N> {
+    fn nth<N: Node>(&self, n: usize) -> Option<N>
+    where
+        Self: Sized,
+    {
         self.children::<N>().nth(n)
     }
 
     /// Returns all immediate children nodes that can be cast to the given typed
     /// node.
-    fn children<N: Node>(&self) -> rowan::ast::AstChildren<N> {
+    fn children<N: Node>(&self) -> rowan::ast::AstChildren<N>
+    where
+        Self: Sized,
+    {
         rowan::ast::support::children(self.syntax())
     }
 
     /// Returns the first immediate children token that can be cast to the given
     /// typed token.
-    fn token<T: Token>(&self) -> Option<T> {
+    fn token<T: Token>(&self) -> Option<T>
+    where
+        Self: Sized,
+    {
         self.children_tokens().next()
     }
 
     /// Returns the first immediate children token that is the given kind.
-    fn token_untyped(&self, kind: Kind) -> Option<RowanToken> {
+    fn token_untyped(&self, kind: Kind) -> Option<RowanToken>
+    where
+        Self: Sized,
+    {
         self.children_tokens_untyped().find(|it| it.kind() == kind)
     }
 
     /// Returns all immediate children tokens that can be cast to the given
     /// typed token.
-    fn children_tokens<T: Token>(&self) -> impl Iterator<Item = T> {
+    fn children_tokens<T: Token>(&self) -> impl Iterator<Item = T>
+    where
+        Self: Sized,
+    {
         self.children_with_tokens()
             .filter_map(RowanElement::into_token)
             .filter_map(T::cast)
     }
 
     /// Returns all immediate children tokens.
-    fn children_tokens_untyped(&self) -> impl Iterator<Item = RowanToken> {
+    fn children_tokens_untyped(&self) -> impl Iterator<Item = RowanToken>
+    where
+        Self: Sized,
+    {
         self.children_with_tokens()
             .filter_map(RowanElement::into_token)
     }
