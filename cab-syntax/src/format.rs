@@ -110,7 +110,7 @@ impl<'a, W: io::Write> Formatter<'a, W> {
 
                 InterpolationPart::Interpolation(interpolation) => {
                     self.write(r"\(".yellow())?;
-                    self.s(&interpolation.expression())?;
+                    self.s(&interpolation.expression().unwrap())?;
                     self.write(")".yellow())?;
                 },
             }
@@ -226,7 +226,7 @@ impl<'a, W: io::Write> Formatter<'a, W> {
                 self.write(" ")?;
                 self.s_identifier_as_string(&bind.identifier())?;
                 self.write(" ")?;
-                self.s(&bind.expression())?;
+                self.s(&bind.expression().unwrap())?;
 
                 self.bracket_end(")")
             },
@@ -262,7 +262,7 @@ impl<'a, W: io::Write> Formatter<'a, W> {
                 }
 
                 self.write(": ")?;
-                self.s(&lambda.expression())?;
+                self.s(&lambda.expression().unwrap())?;
                 self.bracket_end(")")
             },
 
@@ -297,7 +297,7 @@ impl<'a, W: io::Write> Formatter<'a, W> {
                 let operator = match operation.operator() {
                     InfixOperator::Apply => None,
                     InfixOperator::Pipe => {
-                        self.s(&operation.right_expression())?;
+                        self.s(&operation.right_expression().unwrap())?;
                         self.write(" ")?;
                         self.s(&operation.left_expression())?;
 
@@ -333,7 +333,7 @@ impl<'a, W: io::Write> Formatter<'a, W> {
 
                 self.s(&operation.left_expression())?;
                 self.write(" ")?;
-                self.s(&operation.right_expression())?;
+                self.s(&operation.right_expression().unwrap())?;
 
                 self.bracket_end(")")
             },
@@ -374,9 +374,9 @@ impl<'a, W: io::Write> Formatter<'a, W> {
                 }
                 self.write(" ")?;
 
-                self.s(&if_else.condition())?;
+                self.s(&if_else.condition().unwrap())?;
                 self.write(" ")?;
-                self.s(&if_else.true_expression())?;
+                self.s(&if_else.true_expression().unwrap())?;
 
                 if let Some(false_expression) = if_else.false_expression() {
                     self.write(" ")?;
