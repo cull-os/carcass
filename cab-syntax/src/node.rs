@@ -309,8 +309,6 @@ node! { #[from(NODE_ATTRIBUTE_INHERIT)] struct AttributeInherit; }
 
 impl AttributeInherit {
     get_node! { identifier -> 0 @ Identifier }
-
-    get_token! { semicolon -> TOKEN_SEMICOLON }
 }
 
 node! { #[from(NODE_ATTRIBUTE)] struct Attribute; }
@@ -319,8 +317,6 @@ impl Attribute {
     get_node! { path -> 0 @ AttributePath }
 
     get_node! { value -> 0 @ Expression }
-
-    get_token! { semicolon -> TOKEN_SEMICOLON }
 }
 
 node! { #[from(NODE_ATTRIBUTE_PATH)] struct AttributePath; }

@@ -489,49 +489,47 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
             while !(until | TOKEN_RIGHT_CURLYBRACE)
                 .contains(this.peek_expecting(IDENTIFIER_TOKENS | TOKEN_RIGHT_CURLYBRACE)?)
             {
-                this.parse_attribute(until | TOKEN_RIGHT_CURLYBRACE)?;
+                let Some(true) = this.parse_attribute(until | TOKEN_RIGHT_CURLYBRACE)? else {
+                    break;
+                };
             }
 
             this.expect(TOKEN_RIGHT_CURLYBRACE.into(), until)
         });
     }
 
-    fn parse_attribute(&mut self, until: EnumSet<Kind>) -> ParseResult {
+    fn parse_attribute(&mut self, until: EnumSet<Kind>) -> ParseResult<bool> {
         let checkpoint = self.checkpoint();
 
-        // First identifier down. If the next token is a semicolon,
-        // this is a NODE_ATTRIBUTE_INHERIT. If it is a period or
-        // an equals, this is a NODE_ATTRIBUTE.
-        self.parse_identifier(
-            until | TOKEN_EQUAL | TOKEN_PERIOD | EXPRESSION_TOKENS | TOKEN_SEMICOLON,
-        );
+        // First identifier down. If the next token is a comma or a right curlybrace,
+        // this is a NODE_ATTRIBUTE_INHERIT. If it is a period or an equals, this is a
+        // NODE_ATTRIBUTE.
+        self.parse_identifier(until | TOKEN_EQUAL | TOKEN_PERIOD | EXPRESSION_TOKENS | TOKEN_COMMA);
 
-        if self.peek_expecting(TOKEN_PERIOD | TOKEN_EQUAL | TOKEN_SEMICOLON)? == TOKEN_SEMICOLON {
+        if matches!(
+            self.peek_expecting(TOKEN_PERIOD | TOKEN_EQUAL | TOKEN_COMMA | TOKEN_RIGHT_CURLYBRACE)?,
+            TOKEN_COMMA | TOKEN_RIGHT_CURLYBRACE
+        ) {
             self.node_from(checkpoint, NODE_ATTRIBUTE_INHERIT, |this| {
-                this.next().unwrap();
-            });
+                found(this.next_if(TOKEN_COMMA))
+            })
         } else {
             self.node_from(checkpoint, NODE_ATTRIBUTE, |this| {
                 this.node_from(checkpoint, NODE_ATTRIBUTE_PATH, |this| {
                     while this.peek_expecting(TOKEN_PERIOD | TOKEN_EQUAL)? == TOKEN_PERIOD {
                         this.next().unwrap();
                         this.parse_identifier(
-                            until | TOKEN_EQUAL | EXPRESSION_TOKENS | TOKEN_SEMICOLON,
+                            until | TOKEN_EQUAL | EXPRESSION_TOKENS | TOKEN_COMMA,
                         );
                     }
                     found(())
                 })?;
 
-                this.expect(
-                    TOKEN_EQUAL.into(),
-                    until | EXPRESSION_TOKENS | TOKEN_SEMICOLON,
-                )?;
-                this.parse_expression(until | TOKEN_SEMICOLON)?;
-                this.expect(TOKEN_SEMICOLON.into(), until)
-            })?;
+                this.expect(TOKEN_EQUAL.into(), until | EXPRESSION_TOKENS | TOKEN_COMMA)?;
+                this.parse_expression(until | TOKEN_COMMA)?;
+                found(this.next_if(TOKEN_COMMA))
+            })
         }
-
-        found(())
     }
 
     fn parse_lambda(&mut self, checkpoint: rowan::Checkpoint, until: EnumSet<Kind>) {
@@ -561,7 +559,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
                 while !(until | TOKEN_RIGHT_CURLYBRACE)
                     .contains(this.peek_expecting(IDENTIFIER_TOKENS | TOKEN_RIGHT_CURLYBRACE)?)
                 {
-                    let Ok(Some(())) =
+                    let Ok(Some(true)) =
                         this.parse_lambda_pattern_attribute(until | TOKEN_RIGHT_CURLYBRACE)
                     else {
                         break;
@@ -580,7 +578,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
         });
     }
 
-    fn parse_lambda_pattern_attribute(&mut self, until: EnumSet<Kind>) -> ParseResult {
+    fn parse_lambda_pattern_attribute(&mut self, until: EnumSet<Kind>) -> ParseResult<bool> {
         self.node(NODE_LAMBDA_PARAMETER_PATTERN_ATTRIBUTE, |this| {
             this.parse_identifier(
                 until
@@ -601,9 +599,9 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
 
             if next != TOKEN_RIGHT_CURLYBRACE {
                 this.expect(TOKEN_COMMA.into(), until)?;
-                found(())
+                found(true)
             } else {
-                recoverable()
+                found(false)
             }
         })
     }

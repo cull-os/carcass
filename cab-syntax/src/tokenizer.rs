@@ -292,7 +292,6 @@ impl<'a> Tokenizer<'a> {
             '{' => TOKEN_LEFT_CURLYBRACE,
             '}' => TOKEN_RIGHT_CURLYBRACE,
             '?' => TOKEN_QUESTIONMARK,
-            ';' => TOKEN_SEMICOLON,
 
             '!' if self.try_consume_character('=') => TOKEN_EXCLAMATION_EQUAL,
             '=' if self.try_consume_character('=') => TOKEN_EQUAL_EQUAL,

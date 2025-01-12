@@ -151,14 +151,22 @@ impl<'a, W: io::Write> Formatter<'a, W> {
                 self.bracket_start("{")?;
 
                 let inherits: Vec<_> = set.inherits().collect();
-                for inherit in inherits.iter() {
+                let attributes: Vec<_> = set.attributes().collect();
+
+                for (index, inherit) in inherits.iter().enumerate() {
                     self.write(" ")?;
                     self.s(&inherit.identifier())?;
-                    self.write(";")?;
+
+                    if index + 1 != inherits.len() {
+                        self.write(",")?;
+                    }
                 }
 
-                let attributes: Vec<_> = set.attributes().collect();
-                for attribute in attributes.iter() {
+                if inherits.len() + attributes.len() != 0 {
+                    self.write(",")?;
+                }
+
+                for (index, attribute) in attributes.iter().enumerate() {
                     self.write(" ")?;
 
                     let mut identifiers = attribute.path().identifiers();
@@ -172,7 +180,10 @@ impl<'a, W: io::Write> Formatter<'a, W> {
 
                     self.write(" = ")?;
                     self.s(&attribute.value())?;
-                    self.write(";")?;
+
+                    if index + 1 != attributes.len() {
+                        self.write(",")?;
+                    }
                 }
 
                 if !inherits.is_empty() || !attributes.is_empty() {

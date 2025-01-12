@@ -78,8 +78,6 @@ pub enum Kind {
     TOKEN_RIGHT_CURLYBRACE,
     #[display("'?'")]
     TOKEN_QUESTIONMARK,
-    #[display("';'")]
-    TOKEN_SEMICOLON,
 
     #[display("'!='")]
     TOKEN_EXCLAMATION_EQUAL,
