@@ -71,8 +71,8 @@ pub enum ParseError {
         /// The token that was not expected. This being [`None`] means that the
         /// end of the file was reached.
         got: Option<Kind>,
-        /// The expected token. This being [`EnumSet::EMPTY`] means that the end
-        /// of the file was expected, but there were leftovers.
+        /// The expected token. This being [`EnumSet::empty()`] means that the
+        /// end of the file was expected, but there were leftovers.
         expected: EnumSet<Kind>,
         /// The range that contains the unexpected token sequence.
         at: rowan::TextRange,
@@ -86,7 +86,7 @@ impl fmt::Display for ParseError {
 
             Self::Unexpected {
                 got: Some(got),
-                expected: EnumSet::EMPTY,
+                expected: const { EnumSet::empty() },
                 ..
             } => {
                 write!(formatter, "expected end of file, got {got}")
@@ -198,7 +198,7 @@ pub fn parse<N: Node>(input: &str) -> Parse<N> {
         let checkpoint = this.checkpoint();
 
         // Reached an unrecoverable error.
-        if let Err(error) = this.parse_expression(EnumSet::EMPTY) {
+        if let Err(error) = this.parse_expression(EnumSet::empty()) {
             this.node_from(checkpoint, NODE_ERROR, |_| {});
             this.errors.push(error);
         }
@@ -209,7 +209,7 @@ pub fn parse<N: Node>(input: &str) -> Parse<N> {
             this.node(NODE_ERROR, |this| this.next_direct_while(|_| true));
             this.errors.push(ParseError::Unexpected {
                 got: Some(unexpected),
-                expected: EnumSet::EMPTY,
+                expected: EnumSet::empty(),
                 at: rowan::TextRange::new(start, this.offset),
             });
         }
@@ -371,13 +371,13 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
             })
             .ok_or(ParseError::Unexpected {
                 got: None,
-                expected: EnumSet::EMPTY,
+                expected: EnumSet::empty(),
                 at: rowan::TextRange::empty(self.offset),
             })
     }
 
     fn next_direct_while(&mut self, predicate: impl Fn(Kind) -> bool) {
-        while self.peek_direct().map_or(false, &predicate) {
+        while self.peek_direct().is_some_and(&predicate) {
             self.next_direct().unwrap();
         }
     }
@@ -432,7 +432,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
 
                 let next = self.peek();
 
-                if next.map_or(false, |kind| expected.contains(kind)) {
+                if next.is_some_and(|kind| expected.contains(kind)) {
                     self.errors.push(error);
                     self.next().map(Some)
                 } else if next.is_some() {
@@ -676,11 +676,11 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
 
     fn parse_interpolation(&mut self) -> ParseResult {
         self.node(NODE_INTERPOLATION, |this| {
-            this.expect(TOKEN_INTERPOLATION_START.into(), EnumSet::EMPTY)?;
+            this.expect(TOKEN_INTERPOLATION_START.into(), EnumSet::empty())?;
 
             this.parse_expression(TOKEN_INTERPOLATION_END.into())?;
 
-            this.expect(TOKEN_INTERPOLATION_END.into(), EnumSet::EMPTY)?;
+            this.expect(TOKEN_INTERPOLATION_END.into(), EnumSet::empty())?;
 
             found(())
         })
@@ -808,7 +808,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
 
                 let next = self.peek();
 
-                return if next.map_or(false, |kind| EXPRESSION_TOKENS.contains(kind)) {
+                return if next.is_some_and(|kind| EXPRESSION_TOKENS.contains(kind)) {
                     self.errors.push(error);
                     self.parse_expression_single(until)
                 } else if next.is_some() {
@@ -852,7 +852,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
 
         self.parse_expression_single(until)?;
 
-        while self.peek().map_or(false, Kind::is_argument) {
+        while self.peek().is_some_and(Kind::is_argument) {
             self.node_failable_from(checkpoint, NODE_APPLICATION, |this| {
                 this.parse_expression_single(until)
             });

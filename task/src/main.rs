@@ -80,7 +80,7 @@ fn actual_main() -> Result<(), Box<dyn error::Error>> {
             let test_data = fs::read_dir("cab-syntax/test/data")?.filter_map(|entry| {
                 let mut path = entry.ok()?.path();
 
-                if !path.extension().is_some_and(|extension| extension == "cab") {
+                if path.extension().is_none_or(|extension| extension != "cab") {
                     return None;
                 }
 

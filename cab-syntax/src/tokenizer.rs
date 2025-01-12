@@ -177,7 +177,7 @@ impl<'a> Tokenizer<'a> {
         loop {
             if self
                 .peek_character()
-                .map_or(true, |c| !is_valid_path_character(c))
+                .is_none_or(|c| !is_valid_path_character(c))
             {
                 self.context_pop(TokenizerContext::Path);
 
@@ -215,7 +215,6 @@ impl<'a> Tokenizer<'a> {
                 return self.consume_stringlike(end);
             },
             Some(TokenizerContext::StringlikeEnd { end }) => {
-                let end = *end;
                 assert!(self.try_consume_string(end));
 
                 self.context_pop(TokenizerContext::StringlikeEnd { end });
@@ -330,7 +329,7 @@ impl<'a> Tokenizer<'a> {
                 self.consume_while(is_valid_digit);
 
                 if self.peek_character() == Some('.')
-                    && self.peek_character_nth(1).map_or(false, is_valid_digit)
+                    && self.peek_character_nth(1).is_some_and(is_valid_digit)
                 {
                     self.consume_character();
                     self.consume_while(is_valid_digit);
@@ -349,7 +348,7 @@ impl<'a> Tokenizer<'a> {
                 self.consume_while(is_valid_digit);
 
                 if self.peek_character() == Some('.')
-                    && self.peek_character_nth(1).map_or(false, is_valid_digit)
+                    && self.peek_character_nth(1).is_some_and(is_valid_digit)
                 {
                     self.consume_character();
                     self.consume_while(is_valid_digit);
@@ -359,7 +358,7 @@ impl<'a> Tokenizer<'a> {
                 }
             },
 
-            '.' if self.peek_character().map_or(false, |c| c.is_ascii_digit()) => {
+            '.' if self.peek_character().is_some_and(|c| c.is_ascii_digit()) => {
                 self.consume_while(|c| c.is_ascii_digit() || c == '_');
                 self.consume_scientific()
             },
@@ -386,7 +385,7 @@ impl<'a> Tokenizer<'a> {
 
                 return self.consume_kind();
             },
-            '/' if self.peek_character().map_or(false, is_valid_path_character) => {
+            '/' if self.peek_character().is_some_and(is_valid_path_character) => {
                 self.offset -= 1;
                 self.context_push(TokenizerContext::Path);
 
@@ -420,9 +419,9 @@ impl<'a> Tokenizer<'a> {
             '.' => TOKEN_PERIOD,
             '/' => TOKEN_SLASH,
 
-            '<' if self.peek_character().map_or(false, |c| {
-                c == '$' || is_valid_initial_identifier_character(c)
-            }) =>
+            '<' if self
+                .peek_character()
+                .is_some_and(|c| c == '$' || is_valid_initial_identifier_character(c)) =>
             {
                 self.context_push(TokenizerContext::Stringlike { end: ">" });
 

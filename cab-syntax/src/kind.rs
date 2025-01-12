@@ -1,6 +1,13 @@
 use derive_more::Display;
 use Kind::*;
 
+/// derive_more causes [`unreachable`] to warn too many times
+/// so we're just supressing them like this. No, #[allow(unreachable_code)]
+/// doesn't supress the ones coming from the #[derive(Display)].
+fn reachable_unreachable() -> &'static str {
+    unreachable!()
+}
+
 /// The Cab syntax kind.
 #[derive(
     Display,
@@ -21,11 +28,11 @@ use Kind::*;
 #[non_exhaustive]
 pub enum Kind {
     /// Represents any sequence of tokens that was not recognized.
-    #[display(fmt = "an unknown token sequence")]
+    #[display("an unknown token sequence")]
     TOKEN_ERROR,
 
     /// Anything that matches [`char::is_whitespace`].
-    #[display(fmt = "whitespace")]
+    #[display("whitespace")]
     TOKEN_WHITESPACE,
 
     /// Anything that starts with a `#`.
@@ -33,101 +40,101 @@ pub enum Kind {
     /// When the comment starts with more than 3 `#` characters, it will be
     /// multiline. Multiline comments can be closed with the initial delimiter,
     /// but they don't have to be.
-    #[display(fmt = "a comment")]
+    #[display("a comment")]
     TOKEN_COMMENT, // #[^\r\n]* and (#{3,}).*\1
 
-    #[display(fmt = "'$'")]
+    #[display("'$'")]
     TOKEN_DOLLAR,
-    #[display(fmt = "'|>'")]
+    #[display("'|>'")]
     TOKEN_PIPE_MORE,
 
-    #[display(fmt = "'@'")]
+    #[display("'@'")]
     TOKEN_AT,
 
-    #[display(fmt = "'('")]
+    #[display("'('")]
     TOKEN_LEFT_PARENTHESIS,
-    #[display(fmt = "')'")]
+    #[display("')'")]
     TOKEN_RIGHT_PARENTHESIS,
 
-    #[display(fmt = "'++'")]
+    #[display("'++'")]
     TOKEN_PLUS_PLUS,
-    #[display(fmt = "'['")]
+    #[display("'['")]
     TOKEN_LEFT_BRACKET,
-    #[display(fmt = "']'")]
+    #[display("']'")]
     TOKEN_RIGHT_BRACKET,
 
-    #[display(fmt = "'==>'")]
+    #[display("'==>'")]
     TOKEN_EQUAL_EQUAL_MORE,
-    #[display(fmt = "'<=='")]
+    #[display("'<=='")]
     TOKEN_LESS_EQUAL_EQUAL,
-    #[display(fmt = "'//'")]
+    #[display("'//'")]
     TOKEN_SLASH_SLASH,
-    #[display(fmt = "'.'")]
+    #[display("'.'")]
     TOKEN_PERIOD,
-    #[display(fmt = "'{{'")]
+    #[display("'{{'")]
     TOKEN_LEFT_CURLYBRACE,
-    #[display(fmt = "'}}'")]
+    #[display("'}}'")]
     TOKEN_RIGHT_CURLYBRACE,
-    #[display(fmt = "'?'")]
+    #[display("'?'")]
     TOKEN_QUESTIONMARK,
-    #[display(fmt = "';'")]
+    #[display("';'")]
     TOKEN_SEMICOLON,
 
-    #[display(fmt = "'!='")]
+    #[display("'!='")]
     TOKEN_EXCLAMATION_EQUAL,
-    #[display(fmt = "'=='")]
+    #[display("'=='")]
     TOKEN_EQUAL_EQUAL,
-    #[display(fmt = "'='")]
+    #[display("'='")]
     TOKEN_EQUAL,
-    #[display(fmt = "'<='")]
+    #[display("'<='")]
     TOKEN_LESS_EQUAL,
-    #[display(fmt = "'<'")]
+    #[display("'<'")]
     TOKEN_LESS,
-    #[display(fmt = "'>='")]
+    #[display("'>='")]
     TOKEN_MORE_EQUAL,
-    #[display(fmt = "'>'")]
+    #[display("'>'")]
     TOKEN_MORE,
-    #[display(fmt = "'->'")]
+    #[display("'->'")]
     TOKEN_MINUS_MORE,
 
-    #[display(fmt = "','")]
+    #[display("','")]
     TOKEN_COMMA,
-    #[display(fmt = "':'")]
+    #[display("':'")]
     TOKEN_COLON,
 
-    #[display(fmt = "'+'")]
+    #[display("'+'")]
     TOKEN_PLUS,
-    #[display(fmt = "'-'")]
+    #[display("'-'")]
     TOKEN_MINUS,
-    #[display(fmt = "'**'")]
+    #[display("'**'")]
     TOKEN_ASTERISK_ASTERISK,
-    #[display(fmt = "'*'")]
+    #[display("'*'")]
     TOKEN_ASTERISK,
-    #[display(fmt = "'/'")]
+    #[display("'/'")]
     TOKEN_SLASH,
 
-    #[display(fmt = "an integer")]
+    #[display("an integer")]
     TOKEN_INTEGER,
-    #[display(fmt = "a float")]
+    #[display("a float")]
     TOKEN_FLOAT,
 
-    #[display(fmt = "the keyword 'if'")]
+    #[display("the keyword 'if'")]
     TOKEN_LITERAL_IF,
-    #[display(fmt = "the keyword 'then'")]
+    #[display("the keyword 'then'")]
     TOKEN_LITERAL_THEN,
-    #[display(fmt = "the keyword 'else'")]
+    #[display("the keyword 'else'")]
     TOKEN_LITERAL_ELSE,
 
-    #[display(fmt = "the keyword 'and'")]
+    #[display("the keyword 'and'")]
     TOKEN_LITERAL_AND,
-    #[display(fmt = "the keyword 'or'")]
+    #[display("the keyword 'or'")]
     TOKEN_LITERAL_OR,
-    #[display(fmt = "the keyword 'not'")]
+    #[display("the keyword 'not'")]
     TOKEN_LITERAL_NOT,
 
-    #[display(fmt = "'${{'")]
+    #[display("'${{'")]
     TOKEN_INTERPOLATION_START,
-    #[display(fmt = "'}}'")]
+    #[display("'}}'")]
     TOKEN_INTERPOLATION_END,
 
     /// A path. Valid paths start with `./`, `..` or `/`, followed by
@@ -149,92 +156,92 @@ pub enum Kind {
     /// |     +-- TOKEN_INTERPOLATION_START
     /// +-- TOKEN_PATH
     /// ```
-    #[display(fmt = "a path")]
+    #[display("a path")]
     TOKEN_PATH,
 
-    #[display(fmt = "content")]
+    #[display("content")]
     TOKEN_CONTENT,
 
     /// A normal non-quoted identifier. The initial character must not match
     /// [`char::is_ascii_digit`], the other characters must be either
     /// [`char::is_alphanumeric`], `_` or `-`.
-    #[display(fmt = "an identifier")]
+    #[display("an identifier")]
     TOKEN_IDENTIFIER,
 
-    #[display(fmt = "an identifier")]
+    #[display("an identifier")]
     TOKEN_IDENTIFIER_START,
-    #[display(fmt = "the end of an identifier")]
+    #[display("the end of an identifier")]
     TOKEN_IDENTIFIER_END,
 
-    #[display(fmt = "a string")]
+    #[display("a string")]
     TOKEN_STRING_START,
-    #[display(fmt = "the end of a string")]
+    #[display("the end of a string")]
     TOKEN_STRING_END,
 
-    #[display(fmt = "an island")]
+    #[display("an island")]
     TOKEN_ISLAND_START,
-    #[display(fmt = "the end of an island")]
+    #[display("the end of an island")]
     TOKEN_ISLAND_END,
 
-    #[display(fmt = "{}", unreachable!())]
+    #[display("{}", reachable_unreachable())]
     NODE_ROOT,
-    #[display(fmt = "an erroneous expression")]
+    #[display("an erroneous expression")]
     NODE_ERROR,
 
-    #[display(fmt = "a function application")]
+    #[display("a function application")]
     NODE_APPLICATION,
 
-    #[display(fmt = "a prefix operation")]
+    #[display("a prefix operation")]
     NODE_PREFIX_OPERATION,
-    #[display(fmt = "an infix operation")]
+    #[display("an infix operation")]
     NODE_INFIX_OPERATION,
 
-    #[display(fmt = "a parenthesized expression")]
+    #[display("a parenthesized expression")]
     NODE_PARENTHESIS,
 
-    #[display(fmt = "a list")]
+    #[display("a list")]
     NODE_LIST,
 
-    #[display(fmt = "an attribute set")]
+    #[display("an attribute set")]
     NODE_ATTRIBUTE_SET,
-    #[display(fmt = "{}", unreachable!())]
+    #[display("{}", reachable_unreachable())]
     NODE_ATTRIBUTE,
-    #[display(fmt = "{}", unreachable!())]
+    #[display("{}", reachable_unreachable())]
     NODE_ATTRIBUTE_PATH,
-    #[display(fmt = "{}", unreachable!())]
+    #[display("{}", reachable_unreachable())]
     NODE_ATTRIBUTE_INHERIT,
 
-    #[display(fmt = "an attribute select")]
+    #[display("an attribute select")]
     NODE_ATTRIBUTE_SELECT,
-    #[display(fmt = "an attribute check")]
+    #[display("an attribute check")]
     NODE_ATTRIBUTE_CHECK,
 
-    #[display(fmt = "a bind expression")]
+    #[display("a bind expression")]
     NODE_BIND,
 
-    #[display(fmt = "a lambda")]
+    #[display("a lambda")]
     NODE_LAMBDA,
-    #[display(fmt = "{}", unreachable!())]
+    #[display("{}", reachable_unreachable())]
     NODE_LAMBDA_PARAMETER_IDENTIFIER,
-    #[display(fmt = "{}", unreachable!())]
+    #[display("{}", reachable_unreachable())]
     NODE_LAMBDA_PARAMETER_PATTERN,
-    #[display(fmt = "{}", unreachable!())]
+    #[display("{}", reachable_unreachable())]
     NODE_LAMBDA_PARAMETER_PATTERN_ATTRIBUTE,
 
     /// A node which starts with a [`TOKEN_INTERPOLATION_START`], ends with a
     /// [`TOKEN_INTERPOLATION_END`] while having a node at the middle that can
     /// be cast to an [Expression](crate::node::Expression)
-    #[display(fmt = "{}", unreachable!())]
+    #[display("{}", reachable_unreachable())]
     NODE_INTERPOLATION,
 
     /// A node that only has [`TOKEN_PATH`]s and [`NODE_INTERPOLATION`]s as its
     /// direct children without any delimiters.
-    #[display(fmt = "a path")]
+    #[display("a path")]
     NODE_PATH,
 
     /// A stringlike that is delimited by a single backtick. See [`NODE_STRING`]
     /// for the definition of stringlike.
-    #[display(fmt = "an identifier")]
+    #[display("an identifier")]
     NODE_IDENTIFIER,
 
     /// A stringlike that is delimited by a single `"` or any number of `'`.
@@ -242,20 +249,20 @@ pub enum Kind {
     /// A stringlike is a sequence of nodes and tokens, where all the immediate
     /// children tokens are [`TOKEN_CONTENT`]s, while all the immediate children
     /// nodes are all [`NODE_INTERPOLATION`]s.
-    #[display(fmt = "a string")]
+    #[display("a string")]
     NODE_STRING,
 
     /// A stringlike that is delimited by `<` and `>`. See [`NODE_STRING`] for
     /// the definition of stringlike.
-    #[display(fmt = "a number")]
+    #[display("a number")]
     NODE_ISLAND,
 
     /// A node containing a single token, which can be either a
     /// [`TOKEN_INTEGER`] or [`TOKEN_FLOAT`].
-    #[display(fmt = "a number")]
+    #[display("a number")]
     NODE_NUMBER,
 
-    #[display(fmt = "an if else")]
+    #[display("an if else")]
     NODE_IF_ELSE,
 }
 

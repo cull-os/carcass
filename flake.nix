@@ -37,26 +37,18 @@
     }));
   in {
     devShells = eachPkgs (pkgs: let
+      rustToolchain = pkgs.fenix.complete.toolchain;
+
       cab = pkgs.mkShell {
         packages = [
           # You will need a nightly Rust compiler.
-          pkgs.fenix.default.toolchain
+          rustToolchain
 
           # Fuzzing.
           pkgs.cargo-fuzz
-
-          # Required by the rug crate.
-          pkgs.gnum4
-          pkgs.gnumake
-          pkgs.diffutils
         ];
 
-        env.${if pkgs.stdenv.hostPlatform.isLinux then "LD_LIBRARY_PATH" else "DYLD_FALLBACK_LIBRARY_PATH"} = makeLibraryPath ([
-          # Required by the rug crate.
-          pkgs.gmp
-          pkgs.libmpc
-          pkgs.mpfr
-        ] ++ optionals pkgs.stdenv.targetPlatform.isLinux [
+        env.${if pkgs.stdenv.hostPlatform.isLinux then "LD_LIBRARY_PATH" else "DYLD_FALLBACK_LIBRARY_PATH"} = makeLibraryPath (optionals pkgs.stdenv.targetPlatform.isLinux [
           pkgs.stdenv.cc.cc.lib
         ]);
 

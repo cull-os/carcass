@@ -4,6 +4,8 @@ use std::{
     ops,
 };
 
+use num::Num;
+
 use crate::{
     Kind::{
         self,
@@ -120,14 +122,14 @@ impl Integer {
     /// octadecimal and hexadecimal notation if it exists.
     ///
     /// Will panic if the underlying token is not valid.
-    pub fn value(&self) -> rug::Integer {
+    pub fn value(&self) -> num::BigInt {
         let text = self.text();
 
         match text.chars().nth(1) {
-            Some('b') => rug::Integer::from_str_radix(text.get(2..).unwrap(), 2),
-            Some('o') => rug::Integer::from_str_radix(text.get(2..).unwrap(), 8),
-            Some('x') => rug::Integer::from_str_radix(text.get(2..).unwrap(), 16),
-            _ => rug::Integer::from_str_radix(text, 10),
+            Some('b') => num::BigInt::from_str_radix(text.get(2..).unwrap(), 2),
+            Some('o') => num::BigInt::from_str_radix(text.get(2..).unwrap(), 8),
+            Some('x') => num::BigInt::from_str_radix(text.get(2..).unwrap(), 16),
+            _ => num::BigInt::from_str_radix(text, 10),
         }
         .unwrap()
     }
@@ -137,19 +139,16 @@ token! { #[from(TOKEN_FLOAT)] struct Float; }
 
 impl Float {
     /// Returns the value of the float by parsing the underlying string.
-    pub fn value(&self) -> rug::Float {
+    pub fn value(&self) -> f64 {
         let text = self.text();
 
-        rug::Float::with_val(
-            53,
-            match text.chars().nth(1) {
-                Some('b') => rug::Float::parse_radix(text.get(2..).unwrap(), 2),
-                Some('o') => rug::Float::parse_radix(text.get(2..).unwrap(), 8),
-                Some('x') => rug::Float::parse_radix(text.get(2..).unwrap(), 16),
-                _ => rug::Float::parse_radix(text, 10),
-            }
-            .unwrap(),
-        )
+        match text.chars().nth(1) {
+            Some('b') => f64::from_str_radix(text.get(2..).unwrap(), 2),
+            Some('o') => f64::from_str_radix(text.get(2..).unwrap(), 8),
+            Some('x') => f64::from_str_radix(text.get(2..).unwrap(), 16),
+            _ => f64::from_str_radix(text, 10),
+        }
+        .unwrap()
     }
 }
 

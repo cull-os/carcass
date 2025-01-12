@@ -1,4 +1,4 @@
-#![feature(const_fn_floating_point_arithmetic)]
+#![feature(inline_const_pat)]
 
 mod color;
 pub use color::*;
