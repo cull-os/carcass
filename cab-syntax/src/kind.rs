@@ -56,6 +56,11 @@ pub enum Kind {
     #[display("')'")]
     TOKEN_RIGHT_PARENTHESIS,
 
+    #[display(r"'\('")]
+    TOKEN_INTERPOLATION_START,
+    #[display("')'")]
+    TOKEN_INTERPOLATION_END,
+
     #[display("'++'")]
     TOKEN_PLUS_PLUS,
     #[display("'['")]
@@ -131,11 +136,6 @@ pub enum Kind {
     TOKEN_LITERAL_OR,
     #[display("the keyword 'not'")]
     TOKEN_LITERAL_NOT,
-
-    #[display(r"'\('")]
-    TOKEN_INTERPOLATION_START,
-    #[display("')'")]
-    TOKEN_INTERPOLATION_END,
 
     /// A path. Valid paths start with `./`, `..` or `/`, followed by
     /// characters that are either [alphanumeric](char::is_alphanumeric) or
