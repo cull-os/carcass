@@ -259,7 +259,7 @@ impl<'a> Tokenizer<'a> {
                 TOKEN_COMMENT
             },
 
-            '$' => TOKEN_DOLLAR,
+            '<' if self.try_consume_character('|') => TOKEN_LESS_PIPE,
             '|' if self.try_consume_character('>') => TOKEN_PIPE_MORE,
 
             '@' => TOKEN_AT,

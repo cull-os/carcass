@@ -514,7 +514,7 @@ impl TryFrom<Kind> for InfixOperator {
 
     fn try_from(from: Kind) -> Result<Self, Self::Error> {
         match from {
-            TOKEN_DOLLAR => Ok(Self::Apply),
+            TOKEN_LESS_PIPE => Ok(Self::Apply),
             TOKEN_PIPE_MORE => Ok(Self::Pipe),
 
             TOKEN_PLUS_PLUS => Ok(Self::Concat),

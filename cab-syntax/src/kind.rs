@@ -43,8 +43,8 @@ pub enum Kind {
     #[display("a comment")]
     TOKEN_COMMENT, // #[^\r\n]* and (#{3,}).*\1
 
-    #[display("'$'")]
-    TOKEN_DOLLAR,
+    #[display("'<|'")]
+    TOKEN_LESS_PIPE,
     #[display("'|>'")]
     TOKEN_PIPE_MORE,
 
