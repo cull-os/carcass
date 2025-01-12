@@ -128,10 +128,7 @@ impl<'a> Tokenizer<'a> {
         if self.try_consume_character('e') || self.try_consume_character('E') {
             let _ = self.try_consume_character('+') || self.try_consume_character('-');
 
-            let start = self.offset;
-            self.consume_while(|c| c.is_ascii_digit());
-
-            if self.offset - start == 0 {
+            if self.consume_while(|c| c.is_ascii_digit()) == 0 {
                 TOKEN_ERROR
             } else {
                 TOKEN_FLOAT
@@ -325,8 +322,7 @@ impl<'a> Tokenizer<'a> {
                     _ => unreachable!(),
                 };
 
-                let start = self.offset;
-                self.consume_while(is_valid_digit);
+                let consumed = self.consume_while(is_valid_digit);
 
                 if self.peek_character() == Some('.')
                     && self.peek_character_nth(1).is_some_and(is_valid_digit)
@@ -334,7 +330,7 @@ impl<'a> Tokenizer<'a> {
                     self.consume_character();
                     self.consume_while(is_valid_digit);
                     self.consume_scientific()
-                } else if self.offset - start > 0 {
+                } else if consumed > 0 {
                     TOKEN_INTEGER
                 } else {
                     // There was no character consumed after the initial 0{b,o,x}.
