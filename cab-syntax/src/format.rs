@@ -295,8 +295,6 @@ impl<'a, W: io::Write> Formatter<'a, W> {
 
                     InfixOperator::Concat => Some("++"),
 
-                    InfixOperator::Use => Some("==>"),
-                    InfixOperator::Override => Some("<=="),
                     InfixOperator::Update => Some("//"),
 
                     InfixOperator::Equal => Some("=="),

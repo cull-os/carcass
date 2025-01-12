@@ -487,8 +487,6 @@ pub enum InfixOperator {
 
     Concat,
 
-    Use,
-    Override,
     Update,
 
     Equal,
@@ -519,8 +517,6 @@ impl TryFrom<Kind> for InfixOperator {
 
             TOKEN_PLUS_PLUS => Ok(Self::Concat),
 
-            TOKEN_EQUAL_EQUAL_MORE => Ok(Self::Use),
-            TOKEN_LESS_EQUAL_EQUAL => Ok(Self::Override),
             TOKEN_SLASH_SLASH => Ok(Self::Update),
 
             TOKEN_EQUAL_EQUAL => Ok(Self::Equal),
@@ -551,8 +547,6 @@ impl InfixOperator {
             Self::Concat => (150, 155),
             Self::Multiplication | Self::Power | Self::Division => (140, 145),
             Self::Addition | Self::Subtraction => (130, 135),
-            Self::Override => (120, 125),
-            Self::Use => (110, 115),
             Self::Update => (100, 105),
             Self::LessOrEqual | Self::Less | Self::MoreOrEqual | Self::More => (90, 95),
             Self::Equal | Self::NotEqual => (80, 85),

@@ -293,8 +293,6 @@ impl<'a> Tokenizer<'a> {
             '[' => TOKEN_LEFT_BRACKET,
             ']' => TOKEN_RIGHT_BRACKET,
 
-            '=' if self.try_consume_string("=>") => TOKEN_EQUAL_EQUAL_MORE,
-            '<' if self.try_consume_string("==") => TOKEN_LESS_EQUAL_EQUAL,
             '/' if self.try_consume_character('/') => TOKEN_SLASH_SLASH,
             '{' => TOKEN_LEFT_CURLYBRACE,
             '}' => TOKEN_RIGHT_CURLYBRACE,

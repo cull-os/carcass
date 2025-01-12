@@ -68,10 +68,6 @@ pub enum Kind {
     #[display("']'")]
     TOKEN_RIGHT_BRACKET,
 
-    #[display("'==>'")]
-    TOKEN_EQUAL_EQUAL_MORE,
-    #[display("'<=='")]
-    TOKEN_LESS_EQUAL_EQUAL,
     #[display("'//'")]
     TOKEN_SLASH_SLASH,
     #[display("'.'")]
