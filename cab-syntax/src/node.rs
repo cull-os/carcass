@@ -183,10 +183,10 @@ macro_rules! node {
             }
 
             fn cast(from: RowanNode) -> Option<Self> {
-                Some(match from.kind() {
-                    $($variant::KIND => Self::$variant($variant(from)),)*
-                    _ => return None,
-                })
+                match from.kind() {
+                    $($variant::KIND => Some(Self::$variant($variant(from))),)*
+                    _ => None,
+                }
             }
 
             fn syntax(&self) -> &RowanNode {
@@ -479,7 +479,7 @@ impl TryFrom<Kind> for PrefixOperator {
 impl PrefixOperator {
     pub fn binding_power(self) -> ((), u16) {
         match self {
-            Self::Swwallation | Self::Negation => ((), 165),
+            Self::Swwallation | Self::Negation => ((), 145),
             Self::Not => ((), 75),
         }
     }
@@ -563,9 +563,9 @@ impl TryFrom<Kind> for InfixOperator {
 impl InfixOperator {
     pub fn binding_power(self) -> (u16, u16) {
         match self {
-            Self::Concat => (150, 155),
-            Self::Multiplication | Self::Power | Self::Division => (140, 145),
-            Self::Addition | Self::Subtraction => (130, 135),
+            Self::Concat => (130, 135),
+            Self::Multiplication | Self::Power | Self::Division => (120, 125),
+            Self::Addition | Self::Subtraction => (110, 115),
             Self::Update => (100, 105),
             Self::LessOrEqual | Self::Less | Self::MoreOrEqual | Self::More => (90, 95),
             Self::Equal | Self::NotEqual => (80, 85),
