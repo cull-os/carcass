@@ -299,7 +299,7 @@ impl Parenthesis {
 
     get_node! { expression -> 0 @ Expression }
 
-    get_token! { right_parenthesis -> TOKEN_RIGHT_PARENTHESIS }
+    get_token! { right_parenthesis -> ? TOKEN_RIGHT_PARENTHESIS }
 }
 
 // LIST
@@ -311,7 +311,7 @@ impl List {
 
     get_node! { items -> [Expression] }
 
-    get_token! { right_bracket -> TOKEN_RIGHT_BRACKET }
+    get_token! { right_bracket -> ? TOKEN_RIGHT_BRACKET }
 }
 
 // ATTRIBUTE SET
@@ -325,7 +325,7 @@ impl AttributeSet {
 
     get_node! { attributes -> [Attribute] }
 
-    get_token! { right_curlybrace -> TOKEN_RIGHT_CURLYBRACE }
+    get_token! { right_curlybrace -> ? TOKEN_RIGHT_CURLYBRACE }
 }
 
 node! { #[from(NODE_ATTRIBUTE_INHERIT)] struct AttributeInherit; }
@@ -389,7 +389,7 @@ impl Bind {
 
     get_token! { at -> TOKEN_AT }
 
-    get_node! { expression -> 1 @ Expression }
+    get_node! { expression -> 1 @ ? Expression }
 }
 
 // LAMBDA
@@ -401,7 +401,7 @@ impl Lambda {
 
     get_token! { colon -> TOKEN_COLON }
 
-    get_node! { expression -> 0 @ Expression }
+    get_node! { expression -> 0 @ ? Expression }
 }
 
 node! {
@@ -426,7 +426,7 @@ impl LambdaParameterPattern {
 
     get_node! { attributes -> [LambdaParameterPatternAttribute] }
 
-    get_token! { right_curlybrace -> TOKEN_RIGHT_CURLYBRACE }
+    get_token! { right_curlybrace -> ? TOKEN_RIGHT_CURLYBRACE }
 }
 
 node! { #[from(NODE_LAMBDA_PARAMETER_PATTERN_ATTRIBUTE)] struct LambdaParameterPatternAttribute; }
@@ -588,7 +588,7 @@ impl InfixOperation {
             .find_map(|token| InfixOperator::try_from(token.kind()).ok()).unwrap()
     }
 
-    get_node! { right_expression -> 1 @ Expression }
+    get_node! { right_expression -> 1 @ ? Expression }
 }
 
 // INTERPOLATION
@@ -598,9 +598,9 @@ node! { #[from(NODE_INTERPOLATION)] struct Interpolation; }
 impl Interpolation {
     get_token! { interpolation_start -> TOKEN_INTERPOLATION_START }
 
-    get_node! { expression -> 0 @ Expression }
+    get_node! { expression -> 0 @ ? Expression }
 
-    get_token! { interpolation_end -> TOKEN_INTERPOLATION_END }
+    get_token! { interpolation_end -> ? TOKEN_INTERPOLATION_END }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -734,11 +734,11 @@ node! { #[from(NODE_IF_ELSE)] struct IfElse; }
 impl IfElse {
     get_token! { r#if -> TOKEN_LITERAL_IF }
 
-    get_node! { condition -> 0 @ Expression }
+    get_node! { condition -> 0 @ ? Expression }
 
-    get_token! { then -> TOKEN_LITERAL_THEN }
+    get_token! { then -> ? TOKEN_LITERAL_THEN }
 
-    get_node! { true_expression -> 1 @ Expression }
+    get_node! { true_expression -> 1 @ ? Expression }
 
     get_token! { r#else -> ? TOKEN_LITERAL_ELSE }
 
