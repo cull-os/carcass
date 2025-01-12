@@ -6,10 +6,10 @@ publish = false
 
 [dependencies]
 cab.path            = "../cab"
-clap-verbosity-flag = "2.2.0"
+clap-verbosity-flag = "3.0.2"
 env_logger          = "0.11.3"
 log                 = "0.4.21"
-which               = "6.0.1"
+which               = "7.0.1"
 
 [dependencies.clap]
 version = "4.5.4"
