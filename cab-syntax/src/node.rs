@@ -530,7 +530,7 @@ impl TryFrom<Kind> for InfixOperator {
             TOKEN_PLUS => Ok(Self::Addition),
             TOKEN_MINUS => Ok(Self::Subtraction),
             TOKEN_ASTERISK => Ok(Self::Multiplication),
-            TOKEN_ASTERISK_ASTERISK => Ok(Self::Power),
+            TOKEN_CARET => Ok(Self::Power),
             TOKEN_SLASH => Ok(Self::Division),
 
             TOKEN_LITERAL_AND => Ok(Self::And),

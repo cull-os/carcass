@@ -107,10 +107,10 @@ pub enum Kind {
     TOKEN_PLUS,
     #[display("'-'")]
     TOKEN_MINUS,
-    #[display("'**'")]
-    TOKEN_ASTERISK_ASTERISK,
     #[display("'*'")]
     TOKEN_ASTERISK,
+    #[display("'^'")]
+    TOKEN_CARET,
     #[display("'/'")]
     TOKEN_SLASH,
 

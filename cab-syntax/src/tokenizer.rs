@@ -311,8 +311,8 @@ impl<'a> Tokenizer<'a> {
 
             '+' => TOKEN_PLUS,
             '-' => TOKEN_MINUS,
-            '*' if self.try_consume_character('*') => TOKEN_ASTERISK_ASTERISK,
             '*' => TOKEN_ASTERISK,
+            '^' => TOKEN_CARET,
 
             '0' if matches!(self.peek_character(), Some('b' | 'o' | 'x')) => {
                 let is_valid_digit = match self.consume_character() {
