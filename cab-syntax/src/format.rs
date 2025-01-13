@@ -198,7 +198,7 @@ impl<'a, W: io::Write> Formatter<'a, W> {
                     InfixOperator::Addition => Some("+"),
                     InfixOperator::Subtraction => Some("-"),
                     InfixOperator::Multiplication => Some("*"),
-                    InfixOperator::Power => Some("**"),
+                    InfixOperator::Power => Some("^"),
                     InfixOperator::Division => Some("/"),
 
                     InfixOperator::And => Some("and"),
