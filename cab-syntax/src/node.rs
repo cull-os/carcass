@@ -395,7 +395,7 @@ impl TryFrom<Kind> for PrefixOperator {
 impl PrefixOperator {
     pub fn binding_power(self) -> ((), u16) {
         match self {
-            Self::Swwallation | Self::Negation => ((), 185),
+            Self::Swwallation | Self::Negation => ((), 165),
             Self::Not => ((), 115),
         }
     }
@@ -497,9 +497,9 @@ impl InfixOperator {
     pub fn binding_power(self) -> (u16, u16) {
         match self {
             Self::Select => (190, 195),
+            Self::Concat => (180, 185),
+            Self::Multiplication | Self::Power | Self::Division => (170, 175),
             // PrefixOperator::Swallation | PrefixOperator::Negation
-            Self::Concat => (170, 175),
-            Self::Multiplication | Self::Power | Self::Division => (160, 165),
             Self::Addition | Self::Subtraction => (150, 155),
             Self::Update => (140, 145),
             Self::LessOrEqual | Self::Less | Self::MoreOrEqual | Self::More | Self::Check => {
