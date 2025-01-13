@@ -789,11 +789,20 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
             if left_power < minimum_power {
                 break;
             }
+            let operator_token = self.next().unwrap();
 
-            self.node_failable_from(checkpoint, NODE_INFIX_OPERATION, |this| {
-                this.next().unwrap();
-                this.parse_expression_binding_power(right_power, until)
-            });
+            // Handle suffix-able infix operators. Not for purely suffix operators.
+            if node::SuffixOperator::try_from(operator_token).is_ok()
+                && self
+                    .peek()
+                    .is_none_or(|kind| !EXPRESSION_TOKENS.contains(kind))
+            {
+                self.node_from(checkpoint, NODE_SUFFIX_OPERATION, |_| {});
+            } else {
+                self.node_failable_from(checkpoint, NODE_INFIX_OPERATION, |this| {
+                    this.parse_expression_binding_power(right_power, until)
+                });
+            }
         }
 
         // TODO: Suffix operation.

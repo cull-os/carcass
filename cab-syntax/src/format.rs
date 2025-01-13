@@ -297,6 +297,19 @@ impl<'a, W: io::Write> Formatter<'a, W> {
                 self.bracket_end(")")
             },
 
+            SuffixOperation as operation => {
+                self.bracket_start("(")?;
+
+                self.s(&operation.expression())?;
+                self.write(" ")?;
+                self.write_delimited('`', match operation.operator() {
+                    SuffixOperator::Same => ",",
+                    SuffixOperator::Sequence => ";",
+                })?;
+
+                self.bracket_end(")")
+            },
+
             Path as path => self.s_parted(path.parts()),
 
             Identifier as identifier => {

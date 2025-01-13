@@ -274,6 +274,7 @@ node! {
         Application,
         PrefixOperation,
         InfixOperation,
+        SuffixOperation,
         Path,
         Identifier,
         SString,
@@ -568,12 +569,6 @@ impl TryFrom<Kind> for SuffixOperator {
 
             _ => Err(()),
         }
-    }
-}
-
-impl SuffixOperator {
-    pub fn binding_power(self) -> ((), u16) {
-        todo!()
     }
 }
 
