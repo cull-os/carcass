@@ -17,7 +17,7 @@ use crate::{
 };
 
 /// Formats the given node as an S-expression. The node must be a valid
-/// [`Expression`] or this function will panic.
+/// [`Expression`] or this will panic.
 pub fn s(formatter: &mut impl io::Write, node: &RowanNode) -> io::Result<()> {
     Formatter::new(formatter).s(node)
 }

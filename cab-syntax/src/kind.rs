@@ -182,7 +182,7 @@ pub enum Kind {
     #[display("an erroneous expression")]
     NODE_ERROR,
 
-    #[display("a function application")]
+    #[display("a lambda application")]
     NODE_APPLICATION,
 
     #[display("a prefix operation")]
@@ -212,21 +212,9 @@ pub enum Kind {
     #[display("an attribute check")]
     NODE_ATTRIBUTE_CHECK,
 
-    #[display("a bind expression")]
-    NODE_BIND,
-
-    #[display("a lambda")]
-    NODE_LAMBDA,
-    #[display("{}", reachable_unreachable())]
-    NODE_LAMBDA_PARAMETER_IDENTIFIER,
-    #[display("{}", reachable_unreachable())]
-    NODE_LAMBDA_PARAMETER_PATTERN,
-    #[display("{}", reachable_unreachable())]
-    NODE_LAMBDA_PARAMETER_PATTERN_ATTRIBUTE,
-
     /// A node which starts with a [`TOKEN_INTERPOLATION_START`], ends with a
     /// [`TOKEN_INTERPOLATION_END`] while having a node at the middle that can
-    /// be cast to an [Expression](crate::node::Expression)
+    /// be cast to an [Expression](crate::node::Expression).
     #[display("{}", reachable_unreachable())]
     NODE_INTERPOLATION,
 
@@ -269,7 +257,7 @@ impl From<Kind> for rowan::SyntaxKind {
 }
 
 impl Kind {
-    /// Whether if this token can be used as a function argument.
+    /// Whether if this token can be used as a lambda argument.
     ///
     /// ```txt
     /// max 42 (38) + 61
