@@ -532,80 +532,6 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
         }
     }
 
-    fn parse_lambda(&mut self, checkpoint: rowan::Checkpoint, until: EnumSet<Kind>) {
-        self.node_failable_from(checkpoint, NODE_LAMBDA, |this| {
-            this.node_from(checkpoint, NODE_LAMBDA_PARAMETER_IDENTIFIER, |_| {});
-
-            this.expect(TOKEN_EQUAL_GREATER.into(), until | EXPRESSION_TOKENS)?;
-
-            this.parse_expression(until)
-        })
-    }
-
-    fn parse_lambda_pattern(&mut self, until: EnumSet<Kind>) {
-        self.node_failable(NODE_LAMBDA, |this| {
-            this.node(NODE_LAMBDA_PARAMETER_PATTERN, |this| {
-                this.expect(
-                    TOKEN_LEFT_CURLYBRACE.into(),
-                    until
-                        | IDENTIFIER_TOKENS
-                        | TOKEN_COMMA
-                        | TOKEN_QUESTIONMARK
-                        | EXPRESSION_TOKENS
-                        | TOKEN_RIGHT_CURLYBRACE
-                        | TOKEN_EQUAL_GREATER,
-                )?;
-
-                while !(until | TOKEN_RIGHT_CURLYBRACE)
-                    .contains(this.peek_expecting(IDENTIFIER_TOKENS | TOKEN_RIGHT_CURLYBRACE)?)
-                {
-                    let Ok(Some(true)) =
-                        this.parse_lambda_pattern_attribute(until | TOKEN_RIGHT_CURLYBRACE)
-                    else {
-                        break;
-                    };
-                }
-
-                this.expect(
-                    TOKEN_RIGHT_CURLYBRACE.into(),
-                    until | TOKEN_EQUAL_GREATER | EXPRESSION_TOKENS,
-                )
-            })?;
-
-            this.expect(TOKEN_EQUAL_GREATER.into(), until | EXPRESSION_TOKENS)?;
-
-            this.parse_expression(until)
-        });
-    }
-
-    fn parse_lambda_pattern_attribute(&mut self, until: EnumSet<Kind>) -> ParseResult<bool> {
-        self.node(NODE_LAMBDA_PARAMETER_PATTERN_ATTRIBUTE, |this| {
-            this.parse_identifier(
-                until
-                    | TOKEN_COMMA
-                    | TOKEN_QUESTIONMARK
-                    | EXPRESSION_TOKENS
-                    | TOKEN_RIGHT_CURLYBRACE,
-            );
-
-            if this.peek_expecting(TOKEN_COMMA | TOKEN_QUESTIONMARK | TOKEN_RIGHT_CURLYBRACE)?
-                == TOKEN_QUESTIONMARK
-            {
-                this.next().unwrap();
-                this.parse_expression(until)?;
-            }
-
-            let next = this.peek_expecting(TOKEN_COMMA | TOKEN_RIGHT_CURLYBRACE)?;
-
-            if next != TOKEN_RIGHT_CURLYBRACE {
-                this.expect(TOKEN_COMMA.into(), until)?;
-                found(true)
-            } else {
-                found(false)
-            }
-        })
-    }
-
     fn parse_path(&mut self) {
         self.node_failable(NODE_PATH, |this| {
             loop {
@@ -724,66 +650,23 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
         let checkpoint = self.checkpoint();
 
         match self.peek_expecting(EXPRESSION_TOKENS)? {
-            TOKEN_LEFT_PARENTHESIS => {
-                self.parse_parenthesis(until);
-            },
+            TOKEN_LEFT_PARENTHESIS => self.parse_parenthesis(until),
 
-            TOKEN_LEFT_BRACKET => {
-                self.parse_list(until);
-            },
+            TOKEN_LEFT_BRACKET => self.parse_list(until),
 
-            // TODO: Peek and do lambda parameter parsing
-            // *that supports stringlike identifiers for the initial identifier*.
-            //
-            // # Lambda pattern initials:
-            // { foo,
-            // { foo ?
-            // { foo }
-            //
-            // # Attribute set initials: Anything that isn't the above.
-            //
-            // Seems like I'm either going to use a sublexer that doesn't actually consume
-            // anything, or write code that goes in 300 indentation levels to support
-            // templated identifiers in lambda patterns.
-            #[rustfmt::skip]
-            TOKEN_LEFT_CURLYBRACE => {
-                if matches!(self.peek_nth(1), Some(TOKEN_IDENTIFIER))
-                && matches!(self.peek_nth(2), Some(TOKEN_COMMA | TOKEN_QUESTIONMARK | TOKEN_RIGHT_CURLYBRACE)) {
-                    self.parse_lambda_pattern(until)
-                } else {
-                    self.parse_attribute_set(until)
-                }
-            },
+            TOKEN_LEFT_CURLYBRACE => self.parse_attribute_set(until),
 
-            kind if IDENTIFIER_TOKENS.contains(kind) => {
-                let checkpoint = self.checkpoint();
+            kind if IDENTIFIER_TOKENS.contains(kind) => self.parse_identifier(until),
 
-                self.parse_identifier(until);
+            TOKEN_PATH => self.parse_path(),
 
-                if let Some(TOKEN_EQUAL_GREATER) = self.peek() {
-                    self.parse_lambda(checkpoint, until)
-                }
-            },
+            TOKEN_STRING_START => self.parse_stringlike(TOKEN_STRING_START, TOKEN_STRING_END),
 
-            TOKEN_PATH => {
-                self.parse_path();
-            },
+            TOKEN_ISLAND_START => self.parse_stringlike(TOKEN_ISLAND_START, TOKEN_ISLAND_END),
 
-            TOKEN_STRING_START => {
-                self.parse_stringlike(TOKEN_STRING_START, TOKEN_STRING_END);
-            },
+            TOKEN_INTEGER | TOKEN_FLOAT => self.parse_number(until),
 
-            TOKEN_ISLAND_START => {
-                self.parse_stringlike(TOKEN_ISLAND_START, TOKEN_ISLAND_END);
-            },
-
-            TOKEN_INTEGER | TOKEN_FLOAT => {
-                self.parse_number(until);
-            },
-
-            TOKEN_LITERAL_IF => {
-                self.parse_if_else(until);
-            },
+            TOKEN_LITERAL_IF => self.parse_if_else(until),
 
             unexpected => {
                 // TODO: Find a way to merge this with expect?

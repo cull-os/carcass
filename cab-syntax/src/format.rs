@@ -219,41 +219,6 @@ impl<'a, W: io::Write> Formatter<'a, W> {
                 self.bracket_end(")")
             },
 
-            Lambda as lambda => {
-                self.bracket_start("(")?;
-
-                match lambda.parameter() {
-                    LambdaParameter::LambdaParameterIdentifier(parameter) => self.s(&parameter.identifier())?,
-                    LambdaParameter::LambdaParameterPattern(parameter) => {
-                        self.bracket_start("{")?;
-
-                        let attributes: Vec<_> = parameter.attributes().collect();
-
-                        for (index, attribute) in attributes.iter().enumerate() {
-                            self.s(&attribute.identifier())?;
-
-                            if let Some(default) = attribute.default() {
-                                self.write(" ? ")?;
-                                self.s(&default)?;
-                            }
-
-                            if index + 1 != attributes.len() {
-                                self.write(", ")?;
-                            }
-                        }
-
-                        if !attributes.is_empty() {
-                            self.write(" ")?;
-                        }
-                        self.bracket_end("}")?;
-                    },
-                }
-
-                self.write(" => ")?;
-                self.s(&lambda.expression().unwrap())?;
-                self.bracket_end(")")
-            },
-
             Application as application => {
                 self.bracket_start("(")?;
 

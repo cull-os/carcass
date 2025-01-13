@@ -271,7 +271,6 @@ node! {
         AttributeSet,
         AttributeSelect,
         AttributeCheck,
-        Lambda,
         Application,
         PrefixOperation,
         InfixOperation,
@@ -377,53 +376,6 @@ impl AttributeCheck {
             .skip(1)
             .map(|expression| Identifier::cast(expression.syntax().clone()).unwrap())
     }
-}
-
-// LAMBDA
-
-node! { #[from(NODE_LAMBDA)] struct Lambda; }
-
-impl Lambda {
-    get_node! { parameter -> 0 @ LambdaParameter }
-
-    get_token! { separator -> TOKEN_EQUAL_GREATER }
-
-    get_node! { expression -> 0 @ ? Expression }
-}
-
-node! {
-    #[from(
-        LambdaParameterIdentifier,
-        LambdaParameterPattern,
-    )]
-    enum LambdaParameter;
-}
-
-node! { #[from(NODE_LAMBDA_PARAMETER_IDENTIFIER)] struct LambdaParameterIdentifier; }
-
-impl LambdaParameterIdentifier {
-    get_node! { identifier -> 0 @ Identifier }
-}
-
-node! { #[from(NODE_LAMBDA_PARAMETER_PATTERN)] struct LambdaParameterPattern; }
-
-#[rustfmt::skip]
-impl LambdaParameterPattern {
-    get_token! { left_curlybrace -> TOKEN_LEFT_CURLYBRACE }
-
-    get_node! { attributes -> [LambdaParameterPatternAttribute] }
-
-    get_token! { right_curlybrace -> ? TOKEN_RIGHT_CURLYBRACE }
-}
-
-node! { #[from(NODE_LAMBDA_PARAMETER_PATTERN_ATTRIBUTE)] struct LambdaParameterPatternAttribute; }
-
-impl LambdaParameterPatternAttribute {
-    get_node! { identifier -> 0 @ Identifier }
-
-    get_token! { questionmark -> ? TOKEN_QUESTIONMARK }
-
-    get_node! { default -> 1 @ ? Expression }
 }
 
 // APPLICATION
