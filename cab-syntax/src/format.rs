@@ -178,7 +178,7 @@ impl<'a, W: io::Write> Formatter<'a, W> {
                         self.s(&identifier)?;
                     }
 
-                    self.write(" = ")?;
+                    self.write(" := ")?;
                     self.s(&attribute.value())?;
 
                     if index + 1 != attributes.len() {

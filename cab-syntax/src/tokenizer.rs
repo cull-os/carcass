@@ -293,7 +293,7 @@ impl<'a> Tokenizer<'a> {
 
             '!' if self.try_consume_character('=') => TOKEN_EXCLAMATION_EQUAL,
             '=' if self.try_consume_character('=') => TOKEN_EQUAL_EQUAL,
-            '=' => TOKEN_EQUAL,
+            ':' if self.try_consume_character('=') => TOKEN_COLON_EQUAL,
             '>' if self.try_consume_character('=') => TOKEN_MORE_EQUAL,
             '>' => TOKEN_MORE,
             '-' if self.try_consume_character('>') => TOKEN_MINUS_MORE,

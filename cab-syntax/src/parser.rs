@@ -497,10 +497,14 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
         // First identifier down. If the next token is a comma or a right curlybrace,
         // this is a NODE_ATTRIBUTE_INHERIT. If it is a period or an equals, this is a
         // NODE_ATTRIBUTE.
-        self.parse_identifier(until | TOKEN_EQUAL | TOKEN_PERIOD | EXPRESSION_TOKENS | TOKEN_COMMA);
+        self.parse_identifier(
+            until | TOKEN_COLON_EQUAL | TOKEN_PERIOD | EXPRESSION_TOKENS | TOKEN_COMMA,
+        );
 
         if matches!(
-            self.peek_expecting(TOKEN_PERIOD | TOKEN_EQUAL | TOKEN_COMMA | TOKEN_RIGHT_CURLYBRACE)?,
+            self.peek_expecting(
+                TOKEN_PERIOD | TOKEN_COLON_EQUAL | TOKEN_COMMA | TOKEN_RIGHT_CURLYBRACE
+            )?,
             TOKEN_COMMA | TOKEN_RIGHT_CURLYBRACE
         ) {
             self.node_from(checkpoint, NODE_ATTRIBUTE_INHERIT, |this| {
@@ -509,16 +513,19 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
         } else {
             self.node_from(checkpoint, NODE_ATTRIBUTE, |this| {
                 this.node_from(checkpoint, NODE_ATTRIBUTE_PATH, |this| {
-                    while this.peek_expecting(TOKEN_PERIOD | TOKEN_EQUAL)? == TOKEN_PERIOD {
+                    while this.peek_expecting(TOKEN_PERIOD | TOKEN_COLON_EQUAL)? == TOKEN_PERIOD {
                         this.next().unwrap();
                         this.parse_identifier(
-                            until | TOKEN_EQUAL | EXPRESSION_TOKENS | TOKEN_COMMA,
+                            until | TOKEN_COLON_EQUAL | EXPRESSION_TOKENS | TOKEN_COMMA,
                         );
                     }
                     found(())
                 })?;
 
-                this.expect(TOKEN_EQUAL.into(), until | EXPRESSION_TOKENS | TOKEN_COMMA)?;
+                this.expect(
+                    TOKEN_COLON_EQUAL.into(),
+                    until | EXPRESSION_TOKENS | TOKEN_COMMA,
+                )?;
                 this.parse_expression(until | TOKEN_COMMA)?;
                 found(this.next_if(TOKEN_COMMA))
             })

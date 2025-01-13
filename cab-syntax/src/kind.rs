@@ -80,8 +80,8 @@ pub enum Kind {
     TOKEN_EXCLAMATION_EQUAL,
     #[display("'=='")]
     TOKEN_EQUAL_EQUAL,
-    #[display("'='")]
-    TOKEN_EQUAL,
+    #[display("':='")]
+    TOKEN_COLON_EQUAL,
     #[display("'<='")]
     TOKEN_LESS_EQUAL,
     #[display("'<'")]
