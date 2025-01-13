@@ -1,8 +1,8 @@
 use std::fmt;
 
 use enumset::{
-    enum_set,
     EnumSet,
+    enum_set,
 };
 use peekmore::{
     PeekMore as _,
@@ -10,16 +10,16 @@ use peekmore::{
 };
 
 use crate::{
-    node::{
-        self,
-        Node,
-    },
-    tokenize,
     Kind::{
         self,
         *,
     },
     RowanNode,
+    node::{
+        self,
+        Node,
+    },
+    tokenize,
 };
 
 type MustParseResult<T = ()> = Result<T, ParseError>;
@@ -92,7 +92,7 @@ impl fmt::Display for ParseError {
                 write!(formatter, "expected end of file, got {got}")
             },
 
-            Self::Unexpected {
+            &Self::Unexpected {
                 got, mut expected, ..
             } => {
                 write!(formatter, "expected ")?;

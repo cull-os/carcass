@@ -2,7 +2,7 @@
 name        = "cab"
 description = "A reproducible derivation file composer"
 version     = "0.0.1"
-edition     = "2021"
+edition     = "2024"
 
 [dependencies]
 cab-syntax.path     = "../cab-syntax"
