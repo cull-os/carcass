@@ -1,7 +1,10 @@
 //! [`Node`] definitions for the Cab language.
-use std::ops::{
-    self,
-    Not as _,
+use std::{
+    collections::VecDeque,
+    ops::{
+        self,
+        Not as _,
+    },
 };
 
 use rowan::ast::AstNode as _;
@@ -303,10 +306,40 @@ impl Parenthesis {
 
 node! { #[from(NODE_LIST)] struct List; }
 
+#[rustfmt::skip]
 impl List {
     get_token! { left_bracket -> TOKEN_LEFT_BRACKET }
 
     get_node! { expression -> 0 @ ? Expression }
+
+    pub fn items(&self) -> Vec<Expression> {
+        let mut normals = Vec::new();
+        let mut sameables: VecDeque<_> = self.expression().into_iter().collect();
+
+        while let Some(expression) = sameables.pop_back() {
+            match expression {
+                Expression::InfixOperation(operation)
+                    if operation.operator() == InfixOperator::Same =>
+                {
+                    sameables.push_front(operation.left_expression());
+
+                    if let Some(expression) = operation.right_expression() {
+                        sameables.push_front(expression);
+                    }
+                },
+
+                Expression::SuffixOperation(operation)
+                    if operation.operator() == SuffixOperator::Same =>
+                {
+                    sameables.push_front(operation.expression());
+                },
+
+                normal => normals.push(normal),
+            }
+        }
+
+        normals
+    }
 
     get_token! { right_bracket -> ? TOKEN_RIGHT_BRACKET }
 }

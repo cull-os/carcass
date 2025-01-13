@@ -116,8 +116,13 @@ impl<'a, W: io::Write> Formatter<'a, W> {
             List as list => {
                 self.bracket_start("[")?;
 
-                if let Some(expression) = list.expression() {
-                    self.s(&expression)?;
+                let items = list.items();
+                for (index, item) in items.iter().enumerate() {
+                    self.s(item)?;
+
+                    if index + 1 != items.len() {
+                        self.write(", ")?;
+                    }
                 }
 
                 self.bracket_end("]")
@@ -126,6 +131,7 @@ impl<'a, W: io::Write> Formatter<'a, W> {
             AttributeSet as set => {
                 self.bracket_start("{")?;
 
+                // TODO: Pretty print.
                 if let Some(expression) = set.expression() {
                     self.s(&expression)?;
                 }
