@@ -540,7 +540,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
 
                     other if other == end => {
                         this.next_direct().unwrap();
-                        break Ok(Some(()));
+                        break found(());
                     },
 
                     _ => {
@@ -586,7 +586,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
             if this.next_if(TOKEN_LITERAL_ELSE) {
                 this.parse_expression(until)?;
             }
-            Ok(Some(()))
+            found(())
         });
     }
 
@@ -714,8 +714,6 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
                 });
             }
         }
-
-        // TODO: Suffix operation.
 
         found(())
     }
