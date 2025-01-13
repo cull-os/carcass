@@ -1,9 +1,6 @@
 # Cab
 
-Cab is a reproducible derivation file (`.drv`) composer,
-it does not build, but create self-contained derivation
-files that get built by a realizer-protocol compliant build
-server.
+Cab is a pure, reproducible expression language with the ability to compose derivation graphs.
 
 Contributors are expected to follow the [code of conduct](CODE_OF_CONDUCT.md).
 
