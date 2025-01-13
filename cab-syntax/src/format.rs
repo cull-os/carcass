@@ -162,7 +162,7 @@ impl<'a, W: io::Write> Formatter<'a, W> {
                     }
                 }
 
-                if inherits.len() + attributes.len() != 0 {
+                if !inherits.is_empty() && !attributes.is_empty() {
                     self.write(",")?;
                 }
 
