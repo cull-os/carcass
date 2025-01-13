@@ -1,5 +1,5 @@
-use derive_more::Display;
 use Kind::*;
+use derive_more::Display;
 
 /// derive_more causes [`unreachable`] to warn too many times
 /// so we're just suppressing them like this. No, #[allow(unreachable_code)]

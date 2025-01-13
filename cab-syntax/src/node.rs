@@ -11,10 +11,6 @@ use rowan::ast::AstNode as _;
 use static_assertions::assert_obj_safe;
 
 use crate::{
-    token::{
-        self,
-        Token,
-    },
     Kind::{
         self,
         *,
@@ -23,6 +19,10 @@ use crate::{
     RowanElement,
     RowanNode,
     RowanToken,
+    token::{
+        self,
+        Token,
+    },
 };
 
 #[macro_export]
@@ -312,33 +312,32 @@ impl List {
 
     get_node! { expression -> 0 @ ? Expression }
 
-    pub fn items(&self) -> Vec<Expression> {
-        let mut normals = Vec::new();
-        let mut sameables: VecDeque<_> = self.expression().into_iter().collect();
+    pub fn items(&self) -> impl Iterator<Item = Expression> {
+        gen {
+            let mut sameables: VecDeque<_> = self.expression().into_iter().collect();
 
-        while let Some(expression) = sameables.pop_back() {
-            match expression {
-                Expression::InfixOperation(operation)
-                    if operation.operator() == InfixOperator::Same =>
-                {
-                    sameables.push_front(operation.left_expression());
+            while let Some(expression) = sameables.pop_back() {
+                match expression {
+                    Expression::InfixOperation(operation)
+                        if operation.operator() == InfixOperator::Same =>
+                    {
+                        sameables.push_front(operation.left_expression());
 
-                    if let Some(expression) = operation.right_expression() {
-                        sameables.push_front(expression);
-                    }
-                },
+                        if let Some(expression) = operation.right_expression() {
+                            sameables.push_front(expression);
+                        }
+                    },
 
-                Expression::SuffixOperation(operation)
-                    if operation.operator() == SuffixOperator::Same =>
-                {
-                    sameables.push_front(operation.expression());
-                },
+                    Expression::SuffixOperation(operation)
+                        if operation.operator() == SuffixOperator::Same =>
+                    {
+                        sameables.push_front(operation.expression());
+                    },
 
-                normal => normals.push(normal),
+                    normal => yield normal,
+                }
             }
         }
-
-        normals
     }
 
     get_token! { right_bracket -> ? TOKEN_RIGHT_BRACKET }

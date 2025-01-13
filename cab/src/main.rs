@@ -141,9 +141,8 @@ async fn main() {
                     for error in parse.errors() {
                         let diagnostic = Diagnostic::error()
                             .with_message("syntax error")
-                            .with_labels(vec![Label::primary(
-                                file_id,
-                                match error {
+                            .with_labels(vec![
+                                Label::primary(file_id, match error {
                                     ParseError::Unexpected { at, .. } => {
                                         at.start().into()..at.end().into()
                                     },
@@ -153,9 +152,9 @@ async fn main() {
 
                                         as_usize..as_usize
                                     },
-                                },
-                            )
-                            .with_message(format!("{error}"))]);
+                                })
+                                .with_message(format!("{error}")),
+                            ]);
 
                         term::emit(&mut err.lock(), &error_config, &files, &diagnostic).ok();
                     }

@@ -7,13 +7,13 @@ use std::{
 use yansi::Paint;
 
 use crate::{
+    COLORS,
+    RowanNode,
     node::{
         self,
         *,
     },
     token::Token,
-    RowanNode,
-    COLORS,
 };
 
 /// Formats the given node as an S-expression. The node must be a valid
@@ -116,11 +116,11 @@ impl<'a, W: io::Write> Formatter<'a, W> {
             List as list => {
                 self.bracket_start("[")?;
 
-                let items = list.items();
-                for (index, item) in items.iter().enumerate() {
-                    self.s(item)?;
+                let mut items = list.items().peekable();
+                while let Some(item) = items.next() {
+                    self.s(&item)?;
 
-                    if index + 1 != items.len() {
+                    if items.peek().is_some() {
                         self.write(", ")?;
                     }
                 }

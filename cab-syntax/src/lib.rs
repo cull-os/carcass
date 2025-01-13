@@ -1,4 +1,4 @@
-#![feature(inline_const_pat)]
+#![feature(inline_const_pat, gen_blocks)]
 
 mod color;
 pub use color::*;

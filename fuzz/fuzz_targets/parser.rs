@@ -14,8 +14,8 @@ use std::{
 
 use cab::syntax;
 use libfuzzer_sys::{
-    fuzz_target,
     Corpus,
+    fuzz_target,
 };
 use yansi::{
     Condition,
