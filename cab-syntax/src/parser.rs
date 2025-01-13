@@ -697,6 +697,27 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
             },
         }
 
+        // TODO: Turn this into an infix operator where:
+        //
+        //     <expr1>.<expr2>
+        //
+        // evaluates <expr2> with ONLY the namespace of <expr1> imported.
+        //
+        // This will make it so:
+        //
+        //     a := { x, y };
+        //     a.x
+        //
+        // is equivalent to:
+        //
+        //     a := { x, y };
+        //     (clean-scope; * := a; x)
+        //
+        // and will enable neat stuff like:
+        //
+        //     a.[ x, y ]
+        //     a.{ newnameofx = x }
+        //     a.{ foo = keythatdoesntexist ?? "bar" }
         while self.next_if(TOKEN_PERIOD) {
             self.node_failable_from(checkpoint, NODE_ATTRIBUTE_SELECT, |this| {
                 this.parse_identifier(until | TOKEN_LITERAL_OR | EXPRESSION_TOKENS);
