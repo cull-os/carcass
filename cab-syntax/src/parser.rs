@@ -536,7 +536,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
         self.node_failable_from(checkpoint, NODE_LAMBDA, |this| {
             this.node_from(checkpoint, NODE_LAMBDA_PARAMETER_IDENTIFIER, |_| {});
 
-            this.expect(TOKEN_COLON.into(), until | EXPRESSION_TOKENS)?;
+            this.expect(TOKEN_EQUAL_GREATER.into(), until | EXPRESSION_TOKENS)?;
 
             this.parse_expression(until)
         })
@@ -553,7 +553,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
                         | TOKEN_QUESTIONMARK
                         | EXPRESSION_TOKENS
                         | TOKEN_RIGHT_CURLYBRACE
-                        | TOKEN_COLON,
+                        | TOKEN_EQUAL_GREATER,
                 )?;
 
                 while !(until | TOKEN_RIGHT_CURLYBRACE)
@@ -568,11 +568,11 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
 
                 this.expect(
                     TOKEN_RIGHT_CURLYBRACE.into(),
-                    until | TOKEN_COLON | EXPRESSION_TOKENS,
+                    until | TOKEN_EQUAL_GREATER | EXPRESSION_TOKENS,
                 )
             })?;
 
-            this.expect(TOKEN_COLON.into(), until | EXPRESSION_TOKENS)?;
+            this.expect(TOKEN_EQUAL_GREATER.into(), until | EXPRESSION_TOKENS)?;
 
             this.parse_expression(until)
         });
@@ -760,7 +760,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
 
                 self.parse_identifier(until);
 
-                if let Some(TOKEN_COLON) = self.peek() {
+                if let Some(TOKEN_EQUAL_GREATER) = self.peek() {
                     self.parse_lambda(checkpoint, until)
                 }
             },
@@ -889,6 +889,8 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
                 this.parse_expression_binding_power(right_power, until)
             });
         }
+
+        // TODO: Suffix operation.
 
         found(())
     }

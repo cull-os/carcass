@@ -43,6 +43,9 @@ pub enum Kind {
     #[display("a comment")]
     TOKEN_COMMENT, // #[^\r\n]* and (#{3,}).*\1
 
+    #[display("';'")]
+    TOKEN_SEMICOLON,
+
     #[display("'<|'")]
     TOKEN_LESS_PIPE,
     #[display("'|>'")]
@@ -76,12 +79,17 @@ pub enum Kind {
     #[display("'?'")]
     TOKEN_QUESTIONMARK,
 
+    #[display("':='")]
+    TOKEN_COLON_EQUAL,
+    #[display("'=>'")]
+    TOKEN_EQUAL_GREATER,
+    #[display("','")]
+    TOKEN_COMMA,
+
     #[display("'!='")]
     TOKEN_EXCLAMATION_EQUAL,
     #[display("'=='")]
     TOKEN_EQUAL_EQUAL,
-    #[display("':='")]
-    TOKEN_COLON_EQUAL,
     #[display("'<='")]
     TOKEN_LESS_EQUAL,
     #[display("'<'")]
@@ -92,11 +100,6 @@ pub enum Kind {
     TOKEN_MORE,
     #[display("'->'")]
     TOKEN_MINUS_MORE,
-
-    #[display("','")]
-    TOKEN_COMMA,
-    #[display("':'")]
-    TOKEN_COLON,
 
     #[display("'+'")]
     TOKEN_PLUS,
@@ -186,6 +189,8 @@ pub enum Kind {
     NODE_PREFIX_OPERATION,
     #[display("an infix operation")]
     NODE_INFIX_OPERATION,
+    #[display("a suffix operation")]
+    NODE_SUFFIX_OPERATION,
 
     #[display("a parenthesized expression")]
     NODE_PARENTHESIS,

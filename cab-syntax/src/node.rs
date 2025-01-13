@@ -386,7 +386,7 @@ node! { #[from(NODE_LAMBDA)] struct Lambda; }
 impl Lambda {
     get_node! { parameter -> 0 @ LambdaParameter }
 
-    get_token! { colon -> TOKEN_COLON }
+    get_token! { separator -> TOKEN_EQUAL_GREATER }
 
     get_node! { expression -> 0 @ ? Expression }
 }
@@ -466,8 +466,8 @@ impl TryFrom<Kind> for PrefixOperator {
 impl PrefixOperator {
     pub fn binding_power(self) -> ((), u16) {
         match self {
-            Self::Swwallation | Self::Negation => ((), 145),
-            Self::Not => ((), 75),
+            Self::Swwallation | Self::Negation => ((), 185),
+            Self::Not => ((), 115),
         }
     }
 }
@@ -476,7 +476,8 @@ impl PrefixOperator {
 impl PrefixOperation {
     pub fn operator(&self) -> PrefixOperator {
         self.children_tokens_untyped()
-            .find_map(|token| PrefixOperator::try_from(token.kind()).ok()).unwrap()
+            .find_map(|token| PrefixOperator::try_from(token.kind()).ok())
+            .unwrap()
     }
 
     get_node! { expression -> 0 @ Expression }
@@ -488,6 +489,9 @@ node! { #[from(NODE_INFIX_OPERATION)] struct InfixOperation; }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum InfixOperator {
+    Same,
+    Sequence,
+
     Apply,
     Pipe,
 
@@ -511,6 +515,9 @@ pub enum InfixOperator {
 
     And,
     Or,
+
+    Lambda,
+    Bind,
 }
 
 impl TryFrom<Kind> for InfixOperator {
@@ -518,6 +525,9 @@ impl TryFrom<Kind> for InfixOperator {
 
     fn try_from(from: Kind) -> Result<Self, Self::Error> {
         match from {
+            TOKEN_SEMICOLON => Ok(Self::Sequence),
+            TOKEN_COMMA => Ok(Self::Same),
+
             TOKEN_LESS_PIPE => Ok(Self::Apply),
             TOKEN_PIPE_MORE => Ok(Self::Pipe),
 
@@ -542,6 +552,9 @@ impl TryFrom<Kind> for InfixOperator {
             TOKEN_LITERAL_AND => Ok(Self::And),
             TOKEN_LITERAL_OR => Ok(Self::Or),
 
+            TOKEN_EQUAL_GREATER => Ok(Self::Lambda),
+            TOKEN_COLON_EQUAL => Ok(Self::Bind),
+
             _ => Err(()),
         }
     }
@@ -550,18 +563,22 @@ impl TryFrom<Kind> for InfixOperator {
 impl InfixOperator {
     pub fn binding_power(self) -> (u16, u16) {
         match self {
-            Self::Concat => (130, 135),
-            Self::Multiplication | Self::Power | Self::Division => (120, 125),
-            Self::Addition | Self::Subtraction => (110, 115),
-            Self::Update => (100, 105),
-            Self::LessOrEqual | Self::Less | Self::MoreOrEqual | Self::More => (90, 95),
-            Self::Equal | Self::NotEqual => (80, 85),
+            Self::Concat => (170, 175),
+            Self::Multiplication | Self::Power | Self::Division => (160, 165),
+            Self::Addition | Self::Subtraction => (150, 155),
+            Self::Update => (140, 145),
+            Self::LessOrEqual | Self::Less | Self::MoreOrEqual | Self::More => (130, 135),
+            Self::Equal | Self::NotEqual => (120, 125),
             // PrefixOperator::Not
-            Self::And => (60, 65),
-            Self::Or => (50, 55),
-            Self::Apply => (40, 35),
-            Self::Pipe => (25, 30),
-            Self::Implication => (15, 10),
+            Self::And => (100, 105),
+            Self::Or => (90, 95),
+            Self::Apply => (80, 75),
+            Self::Pipe => (65, 70),
+            Self::Implication => (55, 50),
+            Self::Lambda => (45, 40),
+            Self::Bind => (35, 30),
+            Self::Same => (25, 20),
+            Self::Sequence => (15, 10),
         }
     }
 }
@@ -572,10 +589,50 @@ impl InfixOperation {
 
     pub fn operator(&self) -> InfixOperator {
         self.children_tokens_untyped()
-            .find_map(|token| InfixOperator::try_from(token.kind()).ok()).unwrap()
+            .find_map(|token| InfixOperator::try_from(token.kind()).ok())
+            .unwrap()
     }
 
     get_node! { right_expression -> 1 @ ? Expression }
+}
+
+// SUFFIX OPERATION
+
+node! { #[from(NODE_SUFFIX_OPERATION)] struct SuffixOperation; }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum SuffixOperator {
+    Same,
+    Sequence,
+}
+
+impl TryFrom<Kind> for SuffixOperator {
+    type Error = ();
+
+    fn try_from(from: Kind) -> Result<Self, Self::Error> {
+        match from {
+            TOKEN_COMMA => Ok(Self::Same),
+            TOKEN_SEMICOLON => Ok(Self::Sequence),
+
+            _ => Err(()),
+        }
+    }
+}
+
+impl SuffixOperator {
+    pub fn binding_power(self) -> ((), u16) {
+        todo!()
+    }
+}
+
+impl SuffixOperation {
+    get_node! { expression -> 0 @ Expression }
+
+    pub fn operator(&self) -> SuffixOperator {
+        self.children_tokens_untyped()
+            .find_map(|token| SuffixOperator::try_from(token.kind()).ok())
+            .unwrap()
+    }
 }
 
 // INTERPOLATION

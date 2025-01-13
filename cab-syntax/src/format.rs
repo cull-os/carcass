@@ -249,7 +249,7 @@ impl<'a, W: io::Write> Formatter<'a, W> {
                     },
                 }
 
-                self.write(": ")?;
+                self.write(" => ")?;
                 self.s(&lambda.expression().unwrap())?;
                 self.bracket_end(")")
             },
@@ -283,6 +283,9 @@ impl<'a, W: io::Write> Formatter<'a, W> {
                 self.bracket_start("(")?;
 
                 let operator = match operation.operator() {
+                    InfixOperator::Sequence => Some(";"),
+                    InfixOperator::Same => Some(","),
+
                     InfixOperator::Apply => None,
                     InfixOperator::Pipe => {
                         self.s(&operation.right_expression().unwrap())?;
@@ -312,6 +315,9 @@ impl<'a, W: io::Write> Formatter<'a, W> {
 
                     InfixOperator::And => Some("and"),
                     InfixOperator::Or => Some("or"),
+
+                    InfixOperator::Lambda => Some("=>"),
+                    InfixOperator::Bind => Some(":="),
                 };
 
                 if let Some(operator) = operator {

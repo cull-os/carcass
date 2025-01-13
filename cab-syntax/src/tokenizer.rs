@@ -254,6 +254,8 @@ impl<'a> Tokenizer<'a> {
                 TOKEN_COMMENT
             },
 
+            ';' => TOKEN_SEMICOLON,
+
             '<' if self.try_consume_character('|') => TOKEN_LESS_PIPE,
             '|' if self.try_consume_character('>') => TOKEN_PIPE_MORE,
 
@@ -291,15 +293,15 @@ impl<'a> Tokenizer<'a> {
             '}' => TOKEN_RIGHT_CURLYBRACE,
             '?' => TOKEN_QUESTIONMARK,
 
+            ':' if self.try_consume_character('=') => TOKEN_COLON_EQUAL,
+            '=' if self.try_consume_character('>') => TOKEN_EQUAL_GREATER,
+            ',' => TOKEN_COMMA,
+
             '!' if self.try_consume_character('=') => TOKEN_EXCLAMATION_EQUAL,
             '=' if self.try_consume_character('=') => TOKEN_EQUAL_EQUAL,
-            ':' if self.try_consume_character('=') => TOKEN_COLON_EQUAL,
             '>' if self.try_consume_character('=') => TOKEN_MORE_EQUAL,
             '>' => TOKEN_MORE,
             '-' if self.try_consume_character('>') => TOKEN_MINUS_MORE,
-
-            ',' => TOKEN_COMMA,
-            ':' => TOKEN_COLON,
 
             '+' => TOKEN_PLUS,
             '-' => TOKEN_MINUS,
