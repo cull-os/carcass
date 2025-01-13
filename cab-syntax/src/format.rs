@@ -219,18 +219,6 @@ impl<'a, W: io::Write> Formatter<'a, W> {
                 self.bracket_end(")")
             },
 
-            Bind as bind => {
-                self.bracket_start("(")?;
-
-                self.write_delimited('`', "@")?;
-                self.write(" ")?;
-                self.s_identifier_as_string(&bind.identifier())?;
-                self.write(" ")?;
-                self.s(&bind.expression().unwrap())?;
-
-                self.bracket_end(")")
-            },
-
             Lambda as lambda => {
                 self.bracket_start("(")?;
 

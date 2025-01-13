@@ -257,8 +257,6 @@ impl<'a> Tokenizer<'a> {
             '<' if self.try_consume_character('|') => TOKEN_LESS_PIPE,
             '|' if self.try_consume_character('>') => TOKEN_PIPE_MORE,
 
-            '@' => TOKEN_AT,
-
             '(' => {
                 if let Some(TokenizerContext::Interpolation { parentheses }) =
                     self.context.last_mut()

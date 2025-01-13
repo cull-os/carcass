@@ -271,7 +271,6 @@ node! {
         AttributeSet,
         AttributeSelect,
         AttributeCheck,
-        Bind,
         Lambda,
         Application,
         PrefixOperation,
@@ -378,18 +377,6 @@ impl AttributeCheck {
             .skip(1)
             .map(|expression| Identifier::cast(expression.syntax().clone()).unwrap())
     }
-}
-
-// BIND
-
-node! { #[from(NODE_BIND)] struct Bind; }
-
-impl Bind {
-    get_node! { identifier -> 0 @ Identifier }
-
-    get_token! { at -> TOKEN_AT }
-
-    get_node! { expression -> 1 @ ? Expression }
 }
 
 // LAMBDA

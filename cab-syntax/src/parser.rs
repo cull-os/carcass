@@ -458,13 +458,6 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
         });
     }
 
-    fn parse_bind(&mut self, checkpoint: rowan::Checkpoint, until: EnumSet<Kind>) {
-        self.node_failable_from(checkpoint, NODE_BIND, |this| {
-            this.expect(TOKEN_AT.into(), until | EXPRESSION_TOKENS)?;
-            this.parse_expression_single(until)
-        });
-    }
-
     fn parse_list(&mut self, until: EnumSet<Kind>) {
         self.node_failable(NODE_LIST, |this| {
             this.expect(
@@ -760,12 +753,8 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
 
                 self.parse_identifier(until);
 
-                match self.peek() {
-                    Some(TOKEN_COLON) => self.parse_lambda(checkpoint, until),
-
-                    Some(TOKEN_AT) => self.parse_bind(checkpoint, until),
-
-                    _ => {},
+                if let Some(TOKEN_COLON) = self.peek() {
+                    self.parse_lambda(checkpoint, until)
                 }
             },
 

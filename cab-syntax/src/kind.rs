@@ -48,9 +48,6 @@ pub enum Kind {
     #[display("'|>'")]
     TOKEN_PIPE_MORE,
 
-    #[display("'@'")]
-    TOKEN_AT,
-
     #[display("'('")]
     TOKEN_LEFT_PARENTHESIS,
     #[display("')'")]
