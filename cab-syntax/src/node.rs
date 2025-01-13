@@ -395,8 +395,8 @@ impl TryFrom<Kind> for PrefixOperator {
 impl PrefixOperator {
     pub fn binding_power(self) -> ((), u16) {
         match self {
-            Self::Swwallation | Self::Negation => ((), 165),
-            Self::Not => ((), 115),
+            Self::Swwallation | Self::Negation => ((), 145),
+            Self::Not => ((), 95),
         }
     }
 }
@@ -496,26 +496,25 @@ impl TryFrom<Kind> for InfixOperator {
 impl InfixOperator {
     pub fn binding_power(self) -> (u16, u16) {
         match self {
-            Self::Select => (190, 195),
-            Self::Concat => (180, 185),
-            Self::Multiplication | Self::Power | Self::Division => (170, 175),
+            Self::Select => (170, 175),
+            Self::Concat => (160, 165),
+            Self::Multiplication | Self::Power | Self::Division => (150, 155),
             // PrefixOperator::Swallation | PrefixOperator::Negation
-            Self::Addition | Self::Subtraction => (150, 155),
-            Self::Update => (140, 145),
+            Self::Addition | Self::Subtraction => (130, 135),
+            Self::Update => (120, 125),
             Self::LessOrEqual | Self::Less | Self::MoreOrEqual | Self::More | Self::Check => {
-                (130, 135)
+                (110, 115)
             },
-            Self::Equal | Self::NotEqual => (120, 125),
+            Self::Equal | Self::NotEqual => (100, 105),
             // PrefixOperator::Not
-            Self::And => (100, 105),
-            Self::Or => (90, 95),
-            Self::Apply => (80, 75),
-            Self::Pipe => (65, 70),
+            Self::And => (80, 85),
+            Self::Or => (70, 75),
+            Self::Pipe => (65, 60),
             Self::Implication => (55, 50),
-            Self::Lambda => (45, 40),
-            Self::Bind => (35, 30),
-            Self::Same => (25, 20),
-            Self::Sequence => (15, 10),
+            Self::Bind => (45, 40),
+            Self::Lambda => (35, 30),
+            Self::Apply => (20, 25),
+            Self::Sequence | Self::Same => (15, 10),
         }
     }
 }
