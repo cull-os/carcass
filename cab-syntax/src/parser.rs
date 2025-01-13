@@ -465,10 +465,8 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
                 until | EXPRESSION_TOKENS | TOKEN_RIGHT_BRACKET,
             )?;
 
-            while this.peek_expecting(EXPRESSION_TOKENS | TOKEN_RIGHT_BRACKET)?
-                != TOKEN_RIGHT_BRACKET
-            {
-                this.parse_expression_single(until | TOKEN_RIGHT_BRACKET)?;
+            if this.peek() != Some(TOKEN_RIGHT_BRACKET) {
+                this.parse_expression(until | TOKEN_RIGHT_BRACKET)?;
             }
 
             this.expect(TOKEN_RIGHT_BRACKET.into(), until)
@@ -477,59 +475,17 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
 
     fn parse_attribute_set(&mut self, until: EnumSet<Kind>) {
         self.node_failable(NODE_ATTRIBUTE_SET, |this| {
-            this.expect(TOKEN_LEFT_CURLYBRACE.into(), until | TOKEN_RIGHT_CURLYBRACE)?;
+            this.expect(
+                TOKEN_LEFT_CURLYBRACE.into(),
+                until | EXPRESSION_TOKENS | TOKEN_RIGHT_CURLYBRACE,
+            )?;
 
-            while !(until | TOKEN_RIGHT_CURLYBRACE)
-                .contains(this.peek_expecting(IDENTIFIER_TOKENS | TOKEN_RIGHT_CURLYBRACE)?)
-            {
-                let Some(true) = this.parse_attribute(until | TOKEN_RIGHT_CURLYBRACE)? else {
-                    break;
-                };
+            if this.peek() != Some(TOKEN_RIGHT_CURLYBRACE) {
+                this.parse_expression(until | TOKEN_RIGHT_CURLYBRACE)?;
             }
 
             this.expect(TOKEN_RIGHT_CURLYBRACE.into(), until)
         });
-    }
-
-    fn parse_attribute(&mut self, until: EnumSet<Kind>) -> ParseResult<bool> {
-        let checkpoint = self.checkpoint();
-
-        // First identifier down. If the next token is a comma or a right curlybrace,
-        // this is a NODE_ATTRIBUTE_INHERIT. If it is a period or an equals, this is a
-        // NODE_ATTRIBUTE.
-        self.parse_identifier(
-            until | TOKEN_COLON_EQUAL | TOKEN_PERIOD | EXPRESSION_TOKENS | TOKEN_COMMA,
-        );
-
-        if matches!(
-            self.peek_expecting(
-                TOKEN_PERIOD | TOKEN_COLON_EQUAL | TOKEN_COMMA | TOKEN_RIGHT_CURLYBRACE
-            )?,
-            TOKEN_COMMA | TOKEN_RIGHT_CURLYBRACE
-        ) {
-            self.node_from(checkpoint, NODE_ATTRIBUTE_INHERIT, |this| {
-                found(this.next_if(TOKEN_COMMA))
-            })
-        } else {
-            self.node_from(checkpoint, NODE_ATTRIBUTE, |this| {
-                this.node_from(checkpoint, NODE_ATTRIBUTE_PATH, |this| {
-                    while this.peek_expecting(TOKEN_PERIOD | TOKEN_COLON_EQUAL)? == TOKEN_PERIOD {
-                        this.next().unwrap();
-                        this.parse_identifier(
-                            until | TOKEN_COLON_EQUAL | EXPRESSION_TOKENS | TOKEN_COMMA,
-                        );
-                    }
-                    found(())
-                })?;
-
-                this.expect(
-                    TOKEN_COLON_EQUAL.into(),
-                    until | EXPRESSION_TOKENS | TOKEN_COMMA,
-                )?;
-                this.parse_expression(until | TOKEN_COMMA)?;
-                found(this.next_if(TOKEN_COMMA))
-            })
-        }
     }
 
     fn parse_path(&mut self) {
@@ -647,8 +603,6 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
 
         self.depth += 1;
 
-        let checkpoint = self.checkpoint();
-
         match self.peek_expecting(EXPRESSION_TOKENS)? {
             TOKEN_LEFT_PARENTHESIS => self.parse_parenthesis(until),
 
@@ -695,50 +649,6 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
                     deadly(error)
                 };
             },
-        }
-
-        // TODO: Turn this into an infix operator where:
-        //
-        //     <expr1>.<expr2>
-        //
-        // evaluates <expr2> with ONLY the namespace of <expr1> imported.
-        //
-        // This will make it so:
-        //
-        //     a := { x, y };
-        //     a.x
-        //
-        // is equivalent to:
-        //
-        //     a := { x, y };
-        //     (clean-scope; * := a; x)
-        //
-        // and will enable neat stuff like:
-        //
-        //     a.[ x, y ]
-        //     a.{ newnameofx = x }
-        //     a.{ foo = keythatdoesntexist ?? "bar" }
-        while self.next_if(TOKEN_PERIOD) {
-            self.node_failable_from(checkpoint, NODE_ATTRIBUTE_SELECT, |this| {
-                this.parse_identifier(until | TOKEN_LITERAL_OR | EXPRESSION_TOKENS);
-
-                if this.next_if(TOKEN_LITERAL_OR) {
-                    this.parse_expression(until)?;
-                }
-
-                found(())
-            });
-        }
-
-        // TODO: Make this an InfixOperation while handling the path-ness properly.
-        if self.next_if(TOKEN_QUESTIONMARK) {
-            self.node_from(checkpoint, NODE_ATTRIBUTE_CHECK, |this| {
-                this.parse_identifier(until | TOKEN_PERIOD);
-
-                while this.next_if(TOKEN_PERIOD) {
-                    this.parse_identifier(until | TOKEN_PERIOD);
-                }
-            });
         }
 
         self.depth -= 1;

@@ -200,17 +200,6 @@ pub enum Kind {
 
     #[display("an attribute set")]
     NODE_ATTRIBUTE_SET,
-    #[display("{}", reachable_unreachable())]
-    NODE_ATTRIBUTE,
-    #[display("{}", reachable_unreachable())]
-    NODE_ATTRIBUTE_PATH,
-    #[display("{}", reachable_unreachable())]
-    NODE_ATTRIBUTE_INHERIT,
-
-    #[display("an attribute select")]
-    NODE_ATTRIBUTE_SELECT,
-    #[display("an attribute check")]
-    NODE_ATTRIBUTE_CHECK,
 
     /// A node which starts with a [`TOKEN_INTERPOLATION_START`], ends with a
     /// [`TOKEN_INTERPOLATION_END`] while having a node at the middle that can

@@ -269,8 +269,6 @@ node! {
         Parenthesis,
         List,
         AttributeSet,
-        AttributeSelect,
-        AttributeCheck,
         Application,
         PrefixOperation,
         InfixOperation,
@@ -308,7 +306,7 @@ node! { #[from(NODE_LIST)] struct List; }
 impl List {
     get_token! { left_bracket -> TOKEN_LEFT_BRACKET }
 
-    get_node! { items -> [Expression] }
+    get_node! { expression -> 0 @ ? Expression }
 
     get_token! { right_bracket -> ? TOKEN_RIGHT_BRACKET }
 }
@@ -320,63 +318,9 @@ node! { #[from(NODE_ATTRIBUTE_SET)] struct AttributeSet; }
 impl AttributeSet {
     get_token! { left_curlybrace -> TOKEN_LEFT_CURLYBRACE }
 
-    get_node! { inherits -> [AttributeInherit] }
-
-    get_node! { attributes -> [Attribute] }
+    get_node! { expression -> 0 @ ? Expression }
 
     get_token! { right_curlybrace -> ? TOKEN_RIGHT_CURLYBRACE }
-}
-
-node! { #[from(NODE_ATTRIBUTE_INHERIT)] struct AttributeInherit; }
-
-impl AttributeInherit {
-    get_node! { identifier -> 0 @ Identifier }
-}
-
-node! { #[from(NODE_ATTRIBUTE)] struct Attribute; }
-
-impl Attribute {
-    get_node! { path -> 0 @ AttributePath }
-
-    get_node! { value -> 0 @ Expression }
-}
-
-node! { #[from(NODE_ATTRIBUTE_PATH)] struct AttributePath; }
-
-impl AttributePath {
-    get_node! { identifiers -> [Identifier] }
-}
-
-// ATTRIBUTE SELECT
-
-node! { #[from(NODE_ATTRIBUTE_SELECT)] struct AttributeSelect; }
-
-#[rustfmt::skip]
-impl AttributeSelect {
-    get_node! { expression -> 0 @ Expression }
-
-    pub fn identifier(&self) -> Identifier {
-        let expression: Expression = self.nth(1).unwrap();
-        Identifier::cast(expression.syntax().clone()).unwrap()
-    }
-
-    get_node! { default -> 2 @ ? Expression }
-}
-
-// ATTRIBUTE CHECK
-
-node! { #[from(NODE_ATTRIBUTE_CHECK)] struct AttributeCheck; }
-
-impl AttributeCheck {
-    get_node! { expression -> 0 @ Expression }
-
-    pub fn attributes(&self) -> impl Iterator<Item = Identifier> {
-        let expressions: rowan::ast::AstChildren<Expression> = self.children();
-
-        expressions
-            .skip(1)
-            .map(|expression| Identifier::cast(expression.syntax().clone()).unwrap())
-    }
 }
 
 // APPLICATION
@@ -450,6 +394,8 @@ pub enum InfixOperator {
 
     Concat,
 
+    Select,
+    Check,
     Update,
 
     Equal,
@@ -486,6 +432,8 @@ impl TryFrom<Kind> for InfixOperator {
 
             TOKEN_PLUS_PLUS => Ok(Self::Concat),
 
+            TOKEN_PERIOD => Ok(Self::Select),
+            TOKEN_QUESTIONMARK => Ok(Self::Check),
             TOKEN_SLASH_SLASH => Ok(Self::Update),
 
             TOKEN_EQUAL_EQUAL => Ok(Self::Equal),
@@ -516,11 +464,15 @@ impl TryFrom<Kind> for InfixOperator {
 impl InfixOperator {
     pub fn binding_power(self) -> (u16, u16) {
         match self {
+            Self::Select => (190, 195),
+            // PrefixOperator::Swallation | PrefixOperator::Negation
             Self::Concat => (170, 175),
             Self::Multiplication | Self::Power | Self::Division => (160, 165),
             Self::Addition | Self::Subtraction => (150, 155),
             Self::Update => (140, 145),
-            Self::LessOrEqual | Self::Less | Self::MoreOrEqual | Self::More => (130, 135),
+            Self::LessOrEqual | Self::Less | Self::MoreOrEqual | Self::More | Self::Check => {
+                (130, 135)
+            },
             Self::Equal | Self::NotEqual => (120, 125),
             // PrefixOperator::Not
             Self::And => (100, 105),

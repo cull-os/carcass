@@ -76,24 +76,6 @@ impl<'a, W: io::Write> Formatter<'a, W> {
         )
     }
 
-    fn s_identifier_as_string(&mut self, identifier: &Identifier) -> io::Result<()> {
-        match identifier.value() {
-            IdentifierValue::Simple(token) => self.write_delimited('"', token.text()),
-
-            IdentifierValue::Complex(complex) => {
-                self.write('"'.green().bold())?;
-
-                self.s_parted(
-                    complex
-                        .parts()
-                        .filter(|part| !matches!(part, InterpolationPart::Delimiter(_))),
-                )?;
-
-                self.write('"'.green().bold())
-            },
-        }
-    }
-
     fn s_parted<T: Token>(
         &mut self,
         parts: impl Iterator<Item = InterpolationPart<T>>,
@@ -134,89 +116,21 @@ impl<'a, W: io::Write> Formatter<'a, W> {
             List as list => {
                 self.bracket_start("[")?;
 
-                let items: Vec<_> = list.items().collect();
-
-                for item in items.iter() {
-                    self.write(" ")?;
-                    self.s(item)?;
+                if let Some(expression) = list.expression() {
+                    self.s(&expression)?;
                 }
 
-                if !items.is_empty() {
-                    self.write(" ")?;
-                }
                 self.bracket_end("]")
             },
 
             AttributeSet as set => {
                 self.bracket_start("{")?;
 
-                let inherits: Vec<_> = set.inherits().collect();
-                let attributes: Vec<_> = set.attributes().collect();
-
-                for (index, inherit) in inherits.iter().enumerate() {
-                    self.write(" ")?;
-                    self.s(&inherit.identifier())?;
-
-                    if index + 1 != inherits.len() {
-                        self.write(",")?;
-                    }
+                if let Some(expression) = set.expression() {
+                    self.s(&expression)?;
                 }
 
-                if !inherits.is_empty() && !attributes.is_empty() {
-                    self.write(",")?;
-                }
-
-                for (index, attribute) in attributes.iter().enumerate() {
-                    self.write(" ")?;
-
-                    let mut identifiers = attribute.path().identifiers();
-                    if let Some(first) = identifiers.next() {
-                        self.s(&first)?;
-                    }
-                    for identifier in identifiers {
-                        self.write(".")?;
-                        self.s(&identifier)?;
-                    }
-
-                    self.write(" := ")?;
-                    self.s(&attribute.value())?;
-
-                    if index + 1 != attributes.len() {
-                        self.write(",")?;
-                    }
-                }
-
-                if !inherits.is_empty() || !attributes.is_empty() {
-                    self.write(" ")?;
-                }
                 self.bracket_end("}")
-            },
-
-            AttributeSelect as select => {
-                self.bracket_start("(")?;
-
-                self.write_delimited('`', ".")?;
-                self.write(" ")?;
-                self.s_identifier_as_string(&select.identifier())?;
-                self.write(" ")?;
-                self.s(&select.expression())?;
-
-                self.bracket_end(")")
-            },
-
-            AttributeCheck as check => {
-                self.bracket_start("(")?;
-
-                self.write_delimited('`', "?")?;
-                self.write(" ")?;
-                self.s(&check.expression())?;
-
-                for attribute in check.attributes() {
-                    self.write(" ")?;
-                    self.s(&attribute)?;
-                }
-
-                self.bracket_end(")")
             },
 
             Application as application => {
@@ -248,6 +162,9 @@ impl<'a, W: io::Write> Formatter<'a, W> {
                 self.bracket_start("(")?;
 
                 let operator = match operation.operator() {
+                    InfixOperator::Select => Some("."),
+                    InfixOperator::Check => Some("?"),
+
                     InfixOperator::Sequence => Some(";"),
                     InfixOperator::Same => Some(","),
 
