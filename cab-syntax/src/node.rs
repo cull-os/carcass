@@ -314,24 +314,24 @@ impl List {
 
     pub fn items(&self) -> impl Iterator<Item = Expression> {
         gen {
-            let mut sameables: VecDeque<_> = self.expression().into_iter().collect();
+            let mut expressions: VecDeque<_> = self.expression().into_iter().collect();
 
-            while let Some(expression) = sameables.pop_back() {
+            while let Some(expression) = expressions.pop_back() {
                 match expression {
                     Expression::InfixOperation(operation)
                         if operation.operator() == InfixOperator::Same =>
                     {
-                        sameables.push_front(operation.left_expression());
+                        expressions.push_front(operation.left_expression());
 
                         if let Some(expression) = operation.right_expression() {
-                            sameables.push_front(expression);
+                            expressions.push_front(expression);
                         }
                     },
 
                     Expression::SuffixOperation(operation)
                         if operation.operator() == SuffixOperator::Same =>
                     {
-                        sameables.push_front(operation.expression());
+                        expressions.push_front(operation.expression());
                     },
 
                     normal => yield normal,
