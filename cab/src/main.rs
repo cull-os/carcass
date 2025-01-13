@@ -65,8 +65,8 @@ enum Dump {
     /// Dump the provided file's syntax.
     Syntax,
 
-    /// Dump the provided file as a colored S-expression.
-    S,
+    /// Dump the provided file with parentheses to disambiguate.
+    Parenthesize,
 }
 
 #[tokio::main]
@@ -133,7 +133,7 @@ async fn main() {
                     }
                 },
 
-                Dump::Syntax | Dump::S => {
+                Dump::Syntax | Dump::Parenthesize => {
                     let parse = syntax::parse::<syntax::node::Expression>(&contents);
 
                     let error_config = term::Config::default();
@@ -162,7 +162,7 @@ async fn main() {
                     if matches!(command, Dump::Syntax) {
                         write!(out, "{syntax:#?}", syntax = parse.syntax)
                     } else if let Ok(node) = parse.result() {
-                        syntax::format::s(&mut out, &node)
+                        syntax::format::parenthesize(&mut out, &node)
                     } else {
                         Ok(())
                     }

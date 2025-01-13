@@ -16,10 +16,10 @@ use crate::{
     token::Token,
 };
 
-/// Formats the given node as an S-expression. The node must be a valid
-/// [`Expression`] or this will panic.
-pub fn s(formatter: &mut impl io::Write, node: &RowanNode) -> io::Result<()> {
-    Formatter::new(formatter).s(node)
+/// Formats the given node with parentheses to disambiguate.
+/// The node must be a valid [`Expression`] or this will panic.
+pub fn parenthesize(formatter: &mut impl io::Write, node: &RowanNode) -> io::Result<()> {
+    Formatter::new(formatter).parenthesize(node)
 }
 
 #[derive(Debug)]
@@ -67,16 +67,7 @@ impl<'a, W: io::Write> Formatter<'a, W> {
         write!(self.inner, "{painted}")
     }
 
-    fn write_delimited(&mut self, delimiter: char, content: &str) -> io::Result<()> {
-        write!(
-            self.inner,
-            "{delimiter}{content}{delimiter}",
-            delimiter = delimiter.green().bold(),
-            content = content.green()
-        )
-    }
-
-    fn s_parted<T: Token>(
+    fn parenthesize_parted<T: Token>(
         &mut self,
         parts: impl Iterator<Item = InterpolationPart<T>>,
     ) -> io::Result<()> {
@@ -92,7 +83,7 @@ impl<'a, W: io::Write> Formatter<'a, W> {
 
                 InterpolationPart::Interpolation(interpolation) => {
                     self.write(r"\(".yellow())?;
-                    self.s(&interpolation.expression().unwrap())?;
+                    self.parenthesize(&interpolation.expression().unwrap())?;
                     self.write(")".yellow())?;
                 },
             }
@@ -101,7 +92,7 @@ impl<'a, W: io::Write> Formatter<'a, W> {
         Ok(())
     }
 
-    fn s(&mut self, node: &RowanNode) -> io::Result<()> {
+    fn parenthesize(&mut self, node: &RowanNode) -> io::Result<()> {
         node::r#match! { node =>
             Error as _error => {
                 self.write("error".red().bold())
@@ -109,7 +100,7 @@ impl<'a, W: io::Write> Formatter<'a, W> {
 
             Parenthesis as parenthesis => {
                 self.bracket_start("(")?;
-                self.s(&parenthesis.expression())?;
+                self.parenthesize(&parenthesis.expression())?;
                 self.bracket_end(")")
             },
 
@@ -118,7 +109,7 @@ impl<'a, W: io::Write> Formatter<'a, W> {
 
                 let mut items = list.items().peekable();
                 while let Some(item) = items.next() {
-                    self.s(&item)?;
+                    self.parenthesize(&item)?;
 
                     if items.peek().is_some() {
                         self.write(", ")?;
@@ -133,7 +124,7 @@ impl<'a, W: io::Write> Formatter<'a, W> {
 
                 // TODO: Pretty print.
                 if let Some(expression) = set.expression() {
-                    self.s(&expression)?;
+                    self.parenthesize(&expression)?;
                 }
 
                 self.bracket_end("}")
@@ -142,9 +133,9 @@ impl<'a, W: io::Write> Formatter<'a, W> {
             Application as application => {
                 self.bracket_start("(")?;
 
-                self.s(&application.left_expression())?;
+                self.parenthesize(&application.left_expression())?;
                 self.write(" ")?;
-                self.s(&application.right_expression())?;
+                self.parenthesize(&application.right_expression())?;
 
                 self.bracket_end(")")
             },
@@ -152,14 +143,14 @@ impl<'a, W: io::Write> Formatter<'a, W> {
             PrefixOperation as operation => {
                 self.bracket_start("(")?;
 
-                self.write_delimited('`', match operation.operator() {
+                self.write(match operation.operator() {
                     PrefixOperator::Swwallation => "+",
                     PrefixOperator::Negation => "-",
 
                     PrefixOperator::Not => "not",
                 })?;
                 self.write(" ")?;
-                self.s(&operation.expression())?;
+                self.parenthesize(&operation.expression())?;
 
                 self.bracket_end(")")
             },
@@ -176,9 +167,9 @@ impl<'a, W: io::Write> Formatter<'a, W> {
 
                     InfixOperator::Apply => None,
                     InfixOperator::Pipe => {
-                        self.s(&operation.right_expression().unwrap())?;
+                        self.parenthesize(&operation.right_expression().unwrap())?;
                         self.write(" ")?;
-                        self.s(&operation.left_expression())?;
+                        self.parenthesize(&operation.left_expression())?;
 
                         return self.bracket_end(")");
                     },
@@ -208,14 +199,15 @@ impl<'a, W: io::Write> Formatter<'a, W> {
                     InfixOperator::Bind => Some(":="),
                 };
 
+                self.parenthesize(&operation.left_expression())?;
+                self.write(" ")?;
+
                 if let Some(operator) = operator {
-                    self.write_delimited('`', operator)?;
+                    self.write(operator)?;
                     self.write(" ")?;
                 }
 
-                self.s(&operation.left_expression())?;
-                self.write(" ")?;
-                self.s(&operation.right_expression().unwrap())?;
+                self.parenthesize(&operation.right_expression().unwrap())?;
 
                 self.bracket_end(")")
             },
@@ -223,9 +215,9 @@ impl<'a, W: io::Write> Formatter<'a, W> {
             SuffixOperation as operation => {
                 self.bracket_start("(")?;
 
-                self.s(&operation.expression())?;
+                self.parenthesize(&operation.expression())?;
                 self.write(" ")?;
-                self.write_delimited('`', match operation.operator() {
+                self.write(match operation.operator() {
                     SuffixOperator::Same => ",",
                     SuffixOperator::Sequence => ";",
                 })?;
@@ -233,7 +225,7 @@ impl<'a, W: io::Write> Formatter<'a, W> {
                 self.bracket_end(")")
             },
 
-            Path as path => self.s_parted(path.parts()),
+            Path as path => self.parenthesize_parted(path.parts()),
 
             Identifier as identifier => {
                 match identifier.value() {
@@ -244,13 +236,13 @@ impl<'a, W: io::Write> Formatter<'a, W> {
                         identifier => identifier.new(),
                     }),
 
-                    IdentifierValue::Complex(complex) => self.s_parted(complex.parts()),
+                    IdentifierValue::Complex(complex) => self.parenthesize_parted(complex.parts()),
                 }
             },
 
-            SString as sstring => self.s_parted(sstring.parts()),
+            SString as sstring => self.parenthesize_parted(sstring.parts()),
 
-            Island as island => self.s_parted(island.parts()),
+            Island as island => self.parenthesize_parted(island.parts()),
 
             Number as number => {
                 match number.value() {
@@ -262,20 +254,14 @@ impl<'a, W: io::Write> Formatter<'a, W> {
             IfElse as if_else => {
                 self.bracket_start("(")?;
 
-                if if_else.false_expression().is_some() {
-                    self.write_delimited('`', "if else")?;
-                } else {
-                    self.write_delimited('`', "if")?;
-                }
-                self.write(" ")?;
-
-                self.s(&if_else.condition().unwrap())?;
-                self.write(" ")?;
-                self.s(&if_else.true_expression().unwrap())?;
+                self.write("if ".red().bold())?;
+                self.parenthesize(&if_else.condition().unwrap())?;
+                self.write(" then ".red().bold())?;
+                self.parenthesize(&if_else.true_expression().unwrap())?;
 
                 if let Some(false_expression) = if_else.false_expression() {
-                    self.write(" ")?;
-                    self.s(&false_expression)?;
+                    self.write(" else".red().bold())?;
+                    self.parenthesize(&false_expression)?;
                 }
 
                 self.bracket_end(")")
