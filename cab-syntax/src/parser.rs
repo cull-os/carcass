@@ -680,8 +680,6 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
             .peek()
             .and_then(|kind| node::InfixOperator::try_from(kind).ok())
         {
-            dbg!(operator);
-
             let (left_power, right_power) = operator.binding_power();
             if left_power < minimum_power {
                 break;
