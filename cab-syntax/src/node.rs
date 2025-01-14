@@ -370,14 +370,14 @@ impl TryFrom<Kind> for PrefixOperator {
     type Error = ();
 
     fn try_from(from: Kind) -> Result<Self, Self::Error> {
-        match from {
-            TOKEN_PLUS => Ok(Self::Swwallation),
-            TOKEN_MINUS => Ok(Self::Negation),
+        Ok(match from {
+            TOKEN_PLUS => Self::Swwallation,
+            TOKEN_MINUS => Self::Negation,
 
-            TOKEN_LITERAL_NOT => Ok(Self::Not),
+            TOKEN_LITERAL_NOT => Self::Not,
 
-            _ => Err(()),
-        }
+            _ => return Err(()),
+        })
     }
 }
 
@@ -445,42 +445,42 @@ impl TryFrom<Kind> for InfixOperator {
     type Error = ();
 
     fn try_from(from: Kind) -> Result<Self, Self::Error> {
-        match from {
-            TOKEN_SEMICOLON => Ok(Self::Sequence),
-            TOKEN_COMMA => Ok(Self::Same),
+        Ok(match from {
+            TOKEN_SEMICOLON => Self::Sequence,
+            TOKEN_COMMA => Self::Same,
 
-            kind if kind.is_argument() => Ok(Self::ImplicitApply),
-            TOKEN_LESS_PIPE => Ok(Self::Apply),
-            TOKEN_PIPE_MORE => Ok(Self::Pipe),
+            kind if kind.is_argument() => Self::ImplicitApply,
+            TOKEN_LESS_PIPE => Self::Apply,
+            TOKEN_PIPE_MORE => Self::Pipe,
 
-            TOKEN_PLUS_PLUS => Ok(Self::Concat),
+            TOKEN_PLUS_PLUS => Self::Concat,
 
-            TOKEN_PERIOD => Ok(Self::Select),
-            TOKEN_QUESTIONMARK => Ok(Self::Check),
-            TOKEN_SLASH_SLASH => Ok(Self::Update),
+            TOKEN_PERIOD => Self::Select,
+            TOKEN_QUESTIONMARK => Self::Check,
+            TOKEN_SLASH_SLASH => Self::Update,
 
-            TOKEN_EQUAL_EQUAL => Ok(Self::Equal),
-            TOKEN_EXCLAMATION_EQUAL => Ok(Self::NotEqual),
-            TOKEN_LESS_EQUAL => Ok(Self::LessOrEqual),
-            TOKEN_LESS => Ok(Self::Less),
-            TOKEN_MORE_EQUAL => Ok(Self::MoreOrEqual),
-            TOKEN_MORE => Ok(Self::More),
-            TOKEN_MINUS_MORE => Ok(Self::Implication),
+            TOKEN_EQUAL_EQUAL => Self::Equal,
+            TOKEN_EXCLAMATION_EQUAL => Self::NotEqual,
+            TOKEN_LESS_EQUAL => Self::LessOrEqual,
+            TOKEN_LESS => Self::Less,
+            TOKEN_MORE_EQUAL => Self::MoreOrEqual,
+            TOKEN_MORE => Self::More,
+            TOKEN_MINUS_MORE => Self::Implication,
 
-            TOKEN_PLUS => Ok(Self::Addition),
-            TOKEN_MINUS => Ok(Self::Subtraction),
-            TOKEN_ASTERISK => Ok(Self::Multiplication),
-            TOKEN_CARET => Ok(Self::Power),
-            TOKEN_SLASH => Ok(Self::Division),
+            TOKEN_PLUS => Self::Addition,
+            TOKEN_MINUS => Self::Subtraction,
+            TOKEN_ASTERISK => Self::Multiplication,
+            TOKEN_CARET => Self::Power,
+            TOKEN_SLASH => Self::Division,
 
-            TOKEN_LITERAL_AND => Ok(Self::And),
-            TOKEN_LITERAL_OR => Ok(Self::Or),
+            TOKEN_LITERAL_AND => Self::And,
+            TOKEN_LITERAL_OR => Self::Or,
 
-            TOKEN_EQUAL_GREATER => Ok(Self::Lambda),
-            TOKEN_COLON_EQUAL => Ok(Self::Bind),
+            TOKEN_EQUAL_GREATER => Self::Lambda,
+            TOKEN_COLON_EQUAL => Self::Bind,
 
-            _ => Err(()),
-        }
+            _ => return Err(()),
+        })
     }
 }
 
