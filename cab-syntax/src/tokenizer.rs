@@ -301,6 +301,10 @@ impl<'a> Tokenizer<'a> {
             '=' if self.try_consume_character('=') => TOKEN_EQUAL_EQUAL,
             '>' if self.try_consume_character('=') => TOKEN_MORE_EQUAL,
             '>' => TOKEN_MORE,
+
+            '&' if self.try_consume_character('&') => TOKEN_AMPERSAND_AMPERSAND,
+            '|' if self.try_consume_character('|') => TOKEN_PIPE_PIPE,
+            '!' => TOKEN_EXCLAMATIONMARK,
             '-' if self.try_consume_character('>') => TOKEN_MINUS_MORE,
 
             '+' => TOKEN_PLUS,
@@ -354,10 +358,6 @@ impl<'a> Tokenizer<'a> {
                     "if" => TOKEN_LITERAL_IF,
                     "then" => TOKEN_LITERAL_THEN,
                     "else" => TOKEN_LITERAL_ELSE,
-
-                    "and" => TOKEN_LITERAL_AND,
-                    "or" => TOKEN_LITERAL_OR,
-                    "not" => TOKEN_LITERAL_NOT,
 
                     _ => TOKEN_IDENTIFIER,
                 }

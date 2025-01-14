@@ -137,7 +137,7 @@ impl<'a, W: io::Write> Formatter<'a, W> {
                     PrefixOperator::Swwallation => "+",
                     PrefixOperator::Negation => "-",
 
-                    PrefixOperator::Not => "not",
+                    PrefixOperator::Not => "!",
                 })?;
                 self.write(" ")?;
                 self.parenthesize(&operation.expression())?;
@@ -174,7 +174,6 @@ impl<'a, W: io::Write> Formatter<'a, W> {
                     InfixOperator::Less => Some("<"),
                     InfixOperator::MoreOrEqual => Some(">="),
                     InfixOperator::More => Some(">"),
-                    InfixOperator::Implication => Some("->"),
 
                     InfixOperator::Addition => Some("+"),
                     InfixOperator::Subtraction => Some("-"),
@@ -182,8 +181,9 @@ impl<'a, W: io::Write> Formatter<'a, W> {
                     InfixOperator::Power => Some("^"),
                     InfixOperator::Division => Some("/"),
 
-                    InfixOperator::And => Some("and"),
-                    InfixOperator::Or => Some("or"),
+                    InfixOperator::And => Some("&&"),
+                    InfixOperator::Or => Some("||"),
+                    InfixOperator::Implication => Some("->"),
 
                     InfixOperator::Lambda => Some("=>"),
                     InfixOperator::Bind => Some(":="),

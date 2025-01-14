@@ -98,6 +98,13 @@ pub enum Kind {
     TOKEN_MORE_EQUAL,
     #[display("'>'")]
     TOKEN_MORE,
+
+    #[display("'&&'")]
+    TOKEN_AMPERSAND_AMPERSAND,
+    #[display("'||'")]
+    TOKEN_PIPE_PIPE,
+    #[display("'!'")]
+    TOKEN_EXCLAMATIONMARK,
     #[display("'->'")]
     TOKEN_MINUS_MORE,
 
@@ -123,13 +130,6 @@ pub enum Kind {
     TOKEN_LITERAL_THEN,
     #[display("the keyword 'else'")]
     TOKEN_LITERAL_ELSE,
-
-    #[display("the keyword 'and'")]
-    TOKEN_LITERAL_AND,
-    #[display("the keyword 'or'")]
-    TOKEN_LITERAL_OR,
-    #[display("the keyword 'not'")]
-    TOKEN_LITERAL_NOT,
 
     /// A path. Valid paths start with `./`, `..` or `/`, followed by
     /// characters that are either [alphanumeric](char::is_alphanumeric) or
