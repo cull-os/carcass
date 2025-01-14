@@ -323,10 +323,7 @@ impl List {
                         if operation.operator() == InfixOperator::Same =>
                     {
                         expressions.push_front(operation.left_expression());
-
-                        if let Some(expression) = operation.right_expression() {
-                            expressions.push_front(expression);
-                        }
+                        expressions.push_front(operation.right_expression().unwrap());
                     },
 
                     Expression::SuffixOperation(operation)
