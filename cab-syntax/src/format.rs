@@ -261,7 +261,7 @@ impl<'a, W: io::Write> Formatter<'a, W> {
                 self.parenthesize(&if_else.true_expression().unwrap())?;
 
                 if let Some(false_expression) = if_else.false_expression() {
-                    self.write(" else".red().bold())?;
+                    self.write(" else ".red().bold())?;
                     self.parenthesize(&false_expression)?;
                 }
 
