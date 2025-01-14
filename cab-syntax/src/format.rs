@@ -99,9 +99,7 @@ impl<'a, W: io::Write> Formatter<'a, W> {
             },
 
             Parenthesis as parenthesis => {
-                self.bracket_start("(")?;
-                self.parenthesize(&parenthesis.expression())?;
-                self.bracket_end(")")
+                self.parenthesize(&parenthesis.expression())
             },
 
             List as list => {
