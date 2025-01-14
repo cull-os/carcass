@@ -385,8 +385,8 @@ impl TryFrom<Kind> for PrefixOperator {
 impl PrefixOperator {
     pub fn binding_power(self) -> ((), u16) {
         match self {
-            Self::Swwallation | Self::Negation => ((), 145),
-            Self::Not => ((), 125),
+            Self::Swwallation | Self::Negation => ((), 135),
+            Self::Not => ((), 115),
         }
     }
 }
@@ -488,25 +488,34 @@ impl TryFrom<Kind> for InfixOperator {
 impl InfixOperator {
     pub fn binding_power(self) -> (u16, u16) {
         match self {
-            Self::Select => (180, 185),
-            Self::ImplicitApply => (170, 175),
-            Self::Concat => (160, 165),
-            Self::Multiplication | Self::Power | Self::Division => (150, 155),
+            Self::Select => (170, 175),
+            Self::ImplicitApply => (160, 165),
+
+            Self::Concat => (150, 155),
+
+            Self::Multiplication | Self::Division => (140, 145),
+            Self::Power => (145, 140),
+
             // PrefixOperator::Swallation | PrefixOperator::Negation
-            Self::Addition | Self::Subtraction => (130, 135),
+            Self::Addition | Self::Subtraction => (120, 125),
             // PrefixOperator::Not
-            Self::Update => (110, 115),
+            Self::Update => (100, 105),
+
             Self::LessOrEqual | Self::Less | Self::MoreOrEqual | Self::More | Self::Check => {
-                (100, 105)
+                (90, 95)
             },
-            Self::Equal | Self::NotEqual => (90, 95),
-            Self::And => (80, 85),
-            Self::Or => (70, 75),
-            Self::Pipe => (65, 60),
+            Self::Equal | Self::NotEqual => (85, 80),
+
+            Self::And => (75, 70),
+            Self::Or => (65, 60),
             Self::Implication => (55, 50),
-            Self::Bind => (45, 40),
-            Self::Lambda => (35, 30),
-            Self::Apply => (20, 25),
+
+            Self::Lambda => (45, 40),
+            Self::Bind => (35, 30),
+
+            Self::Pipe => (20, 25),
+            Self::Apply => (25, 20),
+
             Self::Sequence | Self::Same => (15, 10),
         }
     }
