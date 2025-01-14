@@ -60,7 +60,7 @@ pub enum ParseError {
     /// An error that happens when you nest expressions in too deep.
     ///
     /// No normal expression will ever hit this, but just in case.
-    RecursionLimitExceeded {
+    NestingLimitExceeded {
         /// The starting point of the expression that was too nested.
         at: rowan::TextSize,
     },
@@ -82,7 +82,7 @@ pub enum ParseError {
 impl fmt::Display for ParseError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::RecursionLimitExceeded { .. } => write!(formatter, "recursion limit exceeded"),
+            Self::NestingLimitExceeded { .. } => write!(formatter, "nesting limit exceeded"),
 
             Self::Unexpected {
                 got: Some(got),
@@ -155,12 +155,12 @@ impl<N: Node> Parse<N> {
     /// Returns an iterator over the underlying [`ParseError`]s, removing
     /// duplicates and only returning useful errors.
     pub fn errors(&self) -> Box<dyn Iterator<Item = &ParseError> + '_> {
-        if let Some(recursion_error) = self
+        if let Some(nesting_error) = self
             .errors
             .iter()
-            .find(|error| matches!(error, ParseError::RecursionLimitExceeded { .. }))
+            .find(|error| matches!(error, ParseError::NestingLimitExceeded { .. }))
         {
-            return Box::new([recursion_error].into_iter());
+            return Box::new([nesting_error].into_iter());
         }
 
         let extra_error_count = self
@@ -617,7 +617,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
 
     fn parse_expression_single(&mut self, until: EnumSet<Kind>) -> ParseResult {
         if self.depth >= 512 {
-            let error = ParseError::RecursionLimitExceeded { at: self.offset };
+            let error = ParseError::NestingLimitExceeded { at: self.offset };
 
             self.node(NODE_ERROR, |this| {
                 this.next_direct_while(|_| true);

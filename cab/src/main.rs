@@ -147,7 +147,7 @@ async fn main() {
                                         at.start().into()..at.end().into()
                                     },
 
-                                    ParseError::RecursionLimitExceeded { at } => {
+                                    ParseError::NestingLimitExceeded { at } => {
                                         let as_usize = Into::<u32>::into(*at) as usize;
 
                                         as_usize..as_usize
