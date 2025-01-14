@@ -271,7 +271,7 @@ node! {
         Error,
         Parenthesis,
         List,
-        AttributeSet,
+        AttributeList,
         PrefixOperation,
         InfixOperation,
         SuffixOperation,
@@ -342,11 +342,11 @@ impl List {
     get_token! { right_bracket -> ? TOKEN_RIGHT_BRACKET }
 }
 
-// ATTRIBUTE SET
+// ATTRIBUTE LIST
 
-node! { #[from(NODE_ATTRIBUTE_SET)] struct AttributeSet; }
+node! { #[from(NODE_ATTRIBUTE_LIST)] struct AttributeList; }
 
-impl AttributeSet {
+impl AttributeList {
     get_token! { left_curlybrace -> TOKEN_LEFT_CURLYBRACE }
 
     get_node! { expression -> 0 @ ? Expression }

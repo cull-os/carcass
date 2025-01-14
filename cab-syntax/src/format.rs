@@ -119,11 +119,11 @@ impl<'a, W: io::Write> Formatter<'a, W> {
                 self.bracket_end("]")
             },
 
-            AttributeSet as set => {
+            AttributeList as list => {
                 self.bracket_start("{")?;
 
                 // TODO: Pretty print.
-                if let Some(expression) = set.expression() {
+                if let Some(expression) = list.expression() {
                     self.parenthesize(&expression)?;
                 }
 

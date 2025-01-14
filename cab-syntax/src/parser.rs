@@ -473,8 +473,8 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
         });
     }
 
-    fn parse_attribute_set(&mut self, until: EnumSet<Kind>) {
-        self.node_failable(NODE_ATTRIBUTE_SET, |this| {
+    fn parse_attribute_list(&mut self, until: EnumSet<Kind>) {
+        self.node_failable(NODE_ATTRIBUTE_LIST, |this| {
             this.expect(
                 TOKEN_LEFT_CURLYBRACE.into(),
                 until | EXPRESSION_TOKENS | TOKEN_RIGHT_CURLYBRACE,
@@ -608,7 +608,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
 
             TOKEN_LEFT_BRACKET => self.parse_list(until),
 
-            TOKEN_LEFT_CURLYBRACE => self.parse_attribute_set(until),
+            TOKEN_LEFT_CURLYBRACE => self.parse_attribute_list(until),
 
             kind if IDENTIFIER_TOKENS.contains(kind) => self.parse_identifier(until),
 
