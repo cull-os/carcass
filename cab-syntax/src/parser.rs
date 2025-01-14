@@ -572,22 +572,39 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
         });
     }
 
-    fn parse_if_else(&mut self, until: EnumSet<Kind>) {
-        self.node_failable(NODE_IF_ELSE, |this| {
-            this.expect(
-                TOKEN_LITERAL_IF.into(),
-                until | EXPRESSION_TOKENS | TOKEN_LITERAL_THEN | TOKEN_LITERAL_ELSE,
-            )?;
-            this.parse_expression(until | TOKEN_LITERAL_THEN | TOKEN_LITERAL_ELSE)?;
+    fn parse_if(&mut self, until: EnumSet<Kind>) -> ParseResult {
+        let checkpoint = self.checkpoint();
 
-            this.expect(TOKEN_LITERAL_THEN.into(), until | TOKEN_LITERAL_ELSE)?;
-            this.parse_expression(until | TOKEN_LITERAL_ELSE)?;
+        self.expect(
+            TOKEN_LITERAL_IF.into(),
+            until | EXPRESSION_TOKENS | TOKEN_LITERAL_IS | TOKEN_LITERAL_THEN | TOKEN_LITERAL_ELSE,
+        )?;
 
-            if this.next_if(TOKEN_LITERAL_ELSE) {
-                this.parse_expression(until)?;
-            }
-            found(())
-        });
+        self.parse_expression(until | TOKEN_LITERAL_IS | TOKEN_LITERAL_THEN | TOKEN_LITERAL_ELSE)?;
+
+        match self.expect(
+            TOKEN_LITERAL_IS | TOKEN_LITERAL_THEN,
+            until | TOKEN_LITERAL_ELSE,
+        )? {
+            Some(TOKEN_LITERAL_IS) => {
+                self.node_from(checkpoint, NODE_IF_IS, |this| this.parse_expression(until))
+            },
+            Some(TOKEN_LITERAL_THEN) => {
+                self.node_failable_from(checkpoint, NODE_IF_ELSE, |this| {
+                    this.parse_expression(until | TOKEN_LITERAL_ELSE)?;
+
+                    if this.next_if(TOKEN_LITERAL_ELSE) {
+                        this.parse_expression(until)?;
+                    }
+
+                    found(())
+                });
+
+                found(())
+            },
+
+            _ => recoverable(),
+        }
     }
 
     fn parse_expression_single(&mut self, until: EnumSet<Kind>) -> ParseResult {
@@ -620,7 +637,9 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
 
             TOKEN_INTEGER | TOKEN_FLOAT => self.parse_number(until),
 
-            TOKEN_LITERAL_IF => self.parse_if_else(until),
+            TOKEN_LITERAL_IF => {
+                self.parse_if(until)?;
+            },
 
             unexpected => {
                 // TODO: Find a way to merge this with expect?

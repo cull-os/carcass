@@ -241,6 +241,17 @@ impl<'a, W: io::Write> Formatter<'a, W> {
                 }
             },
 
+            IfIs as if_is => {
+                self.bracket_start("(")?;
+
+                self.write("if ".red().bold())?;
+                self.parenthesize(&if_is.expression().unwrap())?;
+                self.write(" is ".red().bold())?;
+                self.parenthesize(&if_is.match_expression().unwrap())?;
+
+                self.bracket_end(")")
+            },
+
             IfElse as if_else => {
                 self.bracket_start("(")?;
 

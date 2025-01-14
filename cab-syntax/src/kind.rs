@@ -126,6 +126,8 @@ pub enum Kind {
 
     #[display("the keyword 'if'")]
     TOKEN_LITERAL_IF,
+    #[display("the keyword 'is'")]
+    TOKEN_LITERAL_IS,
     #[display("the keyword 'then'")]
     TOKEN_LITERAL_THEN,
     #[display("the keyword 'else'")]
@@ -232,6 +234,8 @@ pub enum Kind {
     #[display("a number")]
     NODE_NUMBER,
 
+    #[display("an if is")]
+    NODE_IF_IS,
     #[display("an if else")]
     NODE_IF_ELSE,
 }

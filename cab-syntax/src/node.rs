@@ -280,6 +280,7 @@ node! {
         SString,
         Island,
         Number,
+        IfIs,
         IfElse,
     )]
     enum Expression;
@@ -698,6 +699,22 @@ impl Number {
         unreachable!()
     }
 }
+
+// IF IS
+
+node! { #[from(NODE_IF_IS)] struct IfIs; }
+
+impl IfIs {
+    get_token! { r#if -> TOKEN_LITERAL_IF }
+
+    get_node! { expression -> 0 @ ? Expression }
+
+    get_token! { is -> ? TOKEN_LITERAL_IS }
+
+    get_node! { match_expression -> 1 @ ? Expression }
+}
+
+// IF ELSE
 
 node! { #[from(NODE_IF_ELSE)] struct IfElse; }
 

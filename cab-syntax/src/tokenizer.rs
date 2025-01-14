@@ -356,6 +356,7 @@ impl<'a> Tokenizer<'a> {
 
                 const KEYWORDS: phf::Map<&'static str, Kind> = phf::phf_map! {
                     "if" => TOKEN_LITERAL_IF,
+                    "is" => TOKEN_LITERAL_IS,
                     "then" => TOKEN_LITERAL_THEN,
                     "else" => TOKEN_LITERAL_ELSE,
                 };
