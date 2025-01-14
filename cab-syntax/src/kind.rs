@@ -270,7 +270,7 @@ impl Kind {
         )
     }
 
-    /// Whether if the token should be ignored by the parser.
+    /// Whether if the token should be ignored by the noder.
     pub fn is_trivia(self) -> bool {
         matches!(self, TOKEN_COMMENT | TOKEN_WHITESPACE)
     }

@@ -5,7 +5,7 @@ use std::{
 
 use cab::syntax::{
     self,
-    ParseError,
+    NodeError,
 };
 use clap::Parser as _;
 use clap_stdin::FileOrStdin;
@@ -143,11 +143,11 @@ async fn main() {
                             .with_message("syntax error")
                             .with_labels(vec![
                                 Label::primary(file_id, match error {
-                                    ParseError::Unexpected { at, .. } => {
+                                    NodeError::Unexpected { at, .. } => {
                                         at.start().into()..at.end().into()
                                     },
 
-                                    ParseError::NestingLimitExceeded { at } => {
+                                    NodeError::NestingLimitExceeded { at } => {
                                         let as_usize = Into::<u32>::into(*at) as usize;
 
                                         as_usize..as_usize

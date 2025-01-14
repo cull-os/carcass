@@ -22,19 +22,19 @@ use crate::{
     tokenize,
 };
 
-type MustParseResult<T = ()> = Result<T, ParseError>;
+type MustNodeResult<T = ()> = Result<T, NodeError>;
 
-type ParseResult<T = ()> = Result<Option<T>, ParseError>;
+type NodeResult<T = ()> = Result<Option<T>, NodeError>;
 
-fn found<T>(value: T) -> ParseResult<T> {
+fn found<T>(value: T) -> NodeResult<T> {
     Ok(Some(value))
 }
 
-fn recoverable<T>() -> ParseResult<T> {
+fn recoverable<T>() -> NodeResult<T> {
     Ok(None)
 }
 
-fn deadly<T>(error: ParseError) -> ParseResult<T> {
+fn deadly<T>(error: NodeError) -> NodeResult<T> {
     Err(error)
 }
 
@@ -54,9 +54,9 @@ const EXPRESSION_TOKENS: EnumSet<Kind> = enum_set!(
 
 const IDENTIFIER_TOKENS: EnumSet<Kind> = enum_set!(TOKEN_IDENTIFIER | TOKEN_IDENTIFIER_START);
 
-/// A parse error.
+/// A node error.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ParseError {
+pub enum NodeError {
     /// An error that happens when you nest expressions in too deep.
     ///
     /// No normal expression will ever hit this, but just in case.
@@ -65,7 +65,7 @@ pub enum ParseError {
         at: rowan::TextSize,
     },
 
-    /// An error that happens when the parser was not expecting a particular
+    /// An error that happens when the noder was not expecting a particular
     /// token or node.
     Unexpected {
         /// The token that was not expected. This being [`None`] means that the
@@ -79,7 +79,7 @@ pub enum ParseError {
     },
 }
 
-impl fmt::Display for ParseError {
+impl fmt::Display for NodeError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::NestingLimitExceeded { .. } => write!(formatter, "nesting limit exceeded"),
@@ -139,7 +139,7 @@ impl fmt::Display for ParseError {
 
 /// A parse result that contains a [`rowan::SyntaxNode`],
 /// contains a [`Node`] if it was successfully created,
-/// and a list of [`ParseError`]s.
+/// and a list of [`NodeError`]s.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Parse<N: node::Node> {
     /// The underlying [`rowan::SyntaxNode`].
@@ -148,17 +148,17 @@ pub struct Parse<N: node::Node> {
     /// The [`Node`], if it was successfully created.
     pub node: Option<N>,
 
-    errors: Vec<ParseError>,
+    errors: Vec<NodeError>,
 }
 
 impl<N: Node> Parse<N> {
     /// Returns an iterator over the underlying [`ParseError`]s, removing
     /// duplicates and only returning useful errors.
-    pub fn errors(&self) -> Box<dyn Iterator<Item = &ParseError> + '_> {
+    pub fn errors(&self) -> Box<dyn Iterator<Item = &NodeError> + '_> {
         if let Some(nesting_error) = self
             .errors
             .iter()
-            .find(|error| matches!(error, ParseError::NestingLimitExceeded { .. }))
+            .find(|error| matches!(error, NodeError::NestingLimitExceeded { .. }))
         {
             return Box::new([nesting_error].into_iter());
         }
@@ -167,7 +167,7 @@ impl<N: Node> Parse<N> {
             .errors
             .iter()
             .rev()
-            .take_while(|error| matches!(error, ParseError::Unexpected { got: None, .. }))
+            .take_while(|error| matches!(error, NodeError::Unexpected { got: None, .. }))
             .count() as isize
             - 1;
 
@@ -181,7 +181,7 @@ impl<N: Node> Parse<N> {
     /// Returns [`Ok`] with the [`Node`] node if there are no errors,
     /// returns [`Err`] with the list of errors obtained from
     /// [`Self::errors`] otherwise.
-    pub fn result(self) -> Result<N, Vec<ParseError>> {
+    pub fn result(self) -> Result<N, Vec<NodeError>> {
         if self.errors.is_empty() {
             Ok(self.node.unwrap())
         } else {
@@ -192,13 +192,13 @@ impl<N: Node> Parse<N> {
 
 /// Parses a string reference and returns a [`Parse`].
 pub fn parse<N: Node>(input: &str) -> Parse<N> {
-    let mut parser = Parser::new(tokenize(input));
+    let mut noder = Noder::new(tokenize(input));
 
-    parser.node(NODE_ROOT, |this| {
+    noder.node(NODE_ROOT, |this| {
         let checkpoint = this.checkpoint();
 
         // Reached an unrecoverable error.
-        if let Err(error) = this.parse_expression(EnumSet::empty()) {
+        if let Err(error) = this.node_expression(EnumSet::empty()) {
             this.node_from(checkpoint, NODE_ERROR, |_| {});
             this.errors.push(error);
         }
@@ -207,7 +207,7 @@ pub fn parse<N: Node>(input: &str) -> Parse<N> {
             let start = this.offset;
 
             this.node(NODE_ERROR, |this| this.next_direct_while(|_| true));
-            this.errors.push(ParseError::Unexpected {
+            this.errors.push(NodeError::Unexpected {
                 got: Some(unexpected),
                 expected: EnumSet::empty(),
                 at: rowan::TextRange::new(start, this.offset),
@@ -215,19 +215,19 @@ pub fn parse<N: Node>(input: &str) -> Parse<N> {
         }
     });
 
-    let syntax = RowanNode::new_root(parser.builder.finish());
+    let syntax = RowanNode::new_root(noder.builder.finish());
 
     let child = syntax.first_child().unwrap();
     let child_text_range = child.text_range();
     let child_kind = child.kind();
 
-    let mut errors = parser.errors;
+    let mut errors = noder.errors;
 
     let node = if let Some(expected) = N::inherent_kind() {
         let cast = N::cast(child);
 
         if cast.is_none() {
-            errors.push(ParseError::Unexpected {
+            errors.push(NodeError::Unexpected {
                 got: Some(child_kind),
                 expected: expected.into(),
                 at: child_text_range,
@@ -246,17 +246,17 @@ pub fn parse<N: Node>(input: &str) -> Parse<N> {
     }
 }
 
-struct Parser<'a, I: Iterator<Item = (Kind, &'a str)>> {
+struct Noder<'a, I: Iterator<Item = (Kind, &'a str)>> {
     builder: rowan::GreenNodeBuilder<'a>,
 
     tokens: PeekMore<I>,
-    errors: Vec<ParseError>,
+    errors: Vec<NodeError>,
 
     offset: rowan::TextSize,
     depth: u32,
 }
 
-impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
+impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
     fn new(tokens: I) -> Self {
         Self {
             builder: rowan::GreenNodeBuilder::new(),
@@ -283,7 +283,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
         result
     }
 
-    fn node_failable<K>(&mut self, kind: Kind, closure: impl FnOnce(&mut Self) -> ParseResult<K>) {
+    fn node_failable<K>(&mut self, kind: Kind, closure: impl FnOnce(&mut Self) -> NodeResult<K>) {
         let checkpoint = self.checkpoint();
 
         if let Err(error) = self.node(kind, closure) {
@@ -310,7 +310,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
         &mut self,
         checkpoint: rowan::Checkpoint,
         kind: Kind,
-        closure: impl FnOnce(&mut Self) -> ParseResult<K>,
+        closure: impl FnOnce(&mut Self) -> NodeResult<K>,
     ) {
         if let Err(error) = self.node_from(checkpoint, kind, closure) {
             self.node_from(checkpoint, NODE_ERROR, |_| {});
@@ -322,8 +322,8 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
         self.tokens.peek().map(|&(kind, _)| kind)
     }
 
-    fn peek_direct_expecting(&mut self, expected: EnumSet<Kind>) -> MustParseResult<Kind> {
-        self.peek_direct().ok_or(ParseError::Unexpected {
+    fn peek_direct_expecting(&mut self, expected: EnumSet<Kind>) -> MustNodeResult<Kind> {
+        self.peek_direct().ok_or(NodeError::Unexpected {
             got: None,
             expected,
             at: rowan::TextRange::empty(self.offset),
@@ -353,15 +353,15 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
         self.peek_nth(0)
     }
 
-    fn peek_expecting(&mut self, expected: EnumSet<Kind>) -> MustParseResult<Kind> {
-        self.peek().ok_or(ParseError::Unexpected {
+    fn peek_expecting(&mut self, expected: EnumSet<Kind>) -> MustNodeResult<Kind> {
+        self.peek().ok_or(NodeError::Unexpected {
             got: None,
             expected,
             at: rowan::TextRange::empty(self.offset),
         })
     }
 
-    fn next_direct(&mut self) -> MustParseResult<Kind> {
+    fn next_direct(&mut self) -> MustNodeResult<Kind> {
         self.tokens
             .next()
             .map(|(kind, slice)| {
@@ -369,7 +369,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
                 self.builder.token(kind.into(), slice);
                 kind
             })
-            .ok_or(ParseError::Unexpected {
+            .ok_or(NodeError::Unexpected {
                 got: None,
                 expected: EnumSet::empty(),
                 at: rowan::TextRange::empty(self.offset),
@@ -386,7 +386,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
         self.next_direct_while(Kind::is_trivia)
     }
 
-    fn next(&mut self) -> MustParseResult<Kind> {
+    fn next(&mut self) -> MustNodeResult<Kind> {
         self.next_while_trivia();
         self.next_direct()
     }
@@ -411,7 +411,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
         }
     }
 
-    fn expect(&mut self, expected: EnumSet<Kind>, until: EnumSet<Kind>) -> ParseResult<Kind> {
+    fn expect(&mut self, expected: EnumSet<Kind>, until: EnumSet<Kind>) -> NodeResult<Kind> {
         let checkpoint = self.checkpoint();
 
         match self.peek_expecting(expected)? {
@@ -424,7 +424,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
                     this.next_while(|kind| !(until | expected).contains(kind));
                 });
 
-                let error = ParseError::Unexpected {
+                let error = NodeError::Unexpected {
                     got: Some(unexpected),
                     expected,
                     at: rowan::TextRange::new(start, self.offset),
@@ -445,20 +445,20 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
         }
     }
 
-    fn parse_parenthesis(&mut self, until: EnumSet<Kind>) {
+    fn node_parenthesis(&mut self, until: EnumSet<Kind>) {
         self.node_failable(NODE_PARENTHESIS, |this| {
             this.expect(
                 TOKEN_LEFT_PARENTHESIS.into(),
                 until | EXPRESSION_TOKENS | TOKEN_RIGHT_PARENTHESIS,
             )?;
 
-            this.parse_expression(until | TOKEN_RIGHT_PARENTHESIS)?;
+            this.node_expression(until | TOKEN_RIGHT_PARENTHESIS)?;
 
             this.expect(TOKEN_RIGHT_PARENTHESIS.into(), until)
         });
     }
 
-    fn parse_list(&mut self, until: EnumSet<Kind>) {
+    fn node_list(&mut self, until: EnumSet<Kind>) {
         self.node_failable(NODE_LIST, |this| {
             this.expect(
                 TOKEN_LEFT_BRACKET.into(),
@@ -466,14 +466,14 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
             )?;
 
             if this.peek() != Some(TOKEN_RIGHT_BRACKET) {
-                this.parse_expression(until | TOKEN_RIGHT_BRACKET)?;
+                this.node_expression(until | TOKEN_RIGHT_BRACKET)?;
             }
 
             this.expect(TOKEN_RIGHT_BRACKET.into(), until)
         });
     }
 
-    fn parse_attribute_list(&mut self, until: EnumSet<Kind>) {
+    fn node_attribute_list(&mut self, until: EnumSet<Kind>) {
         self.node_failable(NODE_ATTRIBUTE_LIST, |this| {
             this.expect(
                 TOKEN_LEFT_CURLYBRACE.into(),
@@ -481,14 +481,14 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
             )?;
 
             if this.peek() != Some(TOKEN_RIGHT_CURLYBRACE) {
-                this.parse_expression(until | TOKEN_RIGHT_CURLYBRACE)?;
+                this.node_expression(until | TOKEN_RIGHT_CURLYBRACE)?;
             }
 
             this.expect(TOKEN_RIGHT_CURLYBRACE.into(), until)
         });
     }
 
-    fn parse_path(&mut self) {
+    fn node_path(&mut self) {
         self.node_failable(NODE_PATH, |this| {
             loop {
                 match this.peek_direct() {
@@ -497,7 +497,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
                     },
 
                     Some(TOKEN_INTERPOLATION_START) => {
-                        this.parse_interpolation()?;
+                        this.node_interpolation()?;
                     },
 
                     _ => break found(()),
@@ -506,9 +506,9 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
         });
     }
 
-    fn parse_identifier(&mut self, until: EnumSet<Kind>) {
+    fn node_identifier(&mut self, until: EnumSet<Kind>) {
         if self.peek() == Some(TOKEN_IDENTIFIER_START) {
-            self.parse_stringlike(TOKEN_IDENTIFIER_START, TOKEN_IDENTIFIER_END);
+            self.node_stringlike(TOKEN_IDENTIFIER_START, TOKEN_IDENTIFIER_END);
         } else {
             self.node_failable(NODE_IDENTIFIER, |this| {
                 this.expect(IDENTIFIER_TOKENS, until)
@@ -516,7 +516,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
         }
     }
 
-    fn parse_stringlike(&mut self, start: Kind, end: Kind) {
+    fn node_stringlike(&mut self, start: Kind, end: Kind) {
         let node = match start {
             TOKEN_IDENTIFIER_START => NODE_IDENTIFIER,
             TOKEN_STRING_START => NODE_STRING,
@@ -535,7 +535,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
                     },
 
                     TOKEN_INTERPOLATION_START => {
-                        this.parse_interpolation()?;
+                        this.node_interpolation()?;
                     },
 
                     other if other == end => {
@@ -544,9 +544,9 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
                     },
 
                     _ => {
-                        // Sometimes parsing interpolation leaves us unwanted tokens. It is not
-                        // worth it trying to parse it correctly without a big rewrite, so just
-                        // consume them.
+                        // Sometimes recoverably parsing interpolation leaves us unwanted tokens. It
+                        // is not worth it trying to node it correctly without a big rewrite, so
+                        // just consume them.
                         this.next_direct().unwrap();
                     },
                 }
@@ -554,11 +554,11 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
         });
     }
 
-    fn parse_interpolation(&mut self) -> ParseResult {
+    fn node_interpolation(&mut self) -> NodeResult {
         self.node(NODE_INTERPOLATION, |this| {
             this.expect(TOKEN_INTERPOLATION_START.into(), EnumSet::empty())?;
 
-            this.parse_expression(TOKEN_INTERPOLATION_END.into())?;
+            this.node_expression(TOKEN_INTERPOLATION_END.into())?;
 
             this.expect(TOKEN_INTERPOLATION_END.into(), EnumSet::empty())?;
 
@@ -566,13 +566,13 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
         })
     }
 
-    fn parse_number(&mut self, until: EnumSet<Kind>) {
+    fn node_number(&mut self, until: EnumSet<Kind>) {
         self.node_failable(NODE_NUMBER, |this| {
             this.expect(TOKEN_INTEGER | TOKEN_FLOAT, until)
         });
     }
 
-    fn parse_if(&mut self, until: EnumSet<Kind>) -> ParseResult {
+    fn node_if(&mut self, until: EnumSet<Kind>) -> NodeResult {
         let then_else_binding_power = node::InfixOperator::Sequence.binding_power().0 + 1;
 
         let checkpoint = self.checkpoint();
@@ -582,7 +582,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
             until | EXPRESSION_TOKENS | TOKEN_LITERAL_IS | TOKEN_LITERAL_THEN | TOKEN_LITERAL_ELSE,
         )?;
 
-        self.parse_expression_binding_power(
+        self.node_expression_binding_power(
             then_else_binding_power,
             until | TOKEN_LITERAL_IS | TOKEN_LITERAL_THEN | TOKEN_LITERAL_ELSE,
         )?;
@@ -592,17 +592,17 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
             until | TOKEN_LITERAL_ELSE,
         )? {
             Some(TOKEN_LITERAL_IS) => {
-                self.node_from(checkpoint, NODE_IF_IS, |this| this.parse_expression(until))
+                self.node_from(checkpoint, NODE_IF_IS, |this| this.node_expression(until))
             },
             Some(TOKEN_LITERAL_THEN) => {
                 self.node_failable_from(checkpoint, NODE_IF_ELSE, |this| {
-                    this.parse_expression_binding_power(
+                    this.node_expression_binding_power(
                         then_else_binding_power,
                         until | TOKEN_LITERAL_ELSE,
                     )?;
 
                     if this.next_if(TOKEN_LITERAL_ELSE) {
-                        this.parse_expression_binding_power(then_else_binding_power, until)?;
+                        this.node_expression_binding_power(then_else_binding_power, until)?;
                     }
 
                     found(())
@@ -615,9 +615,9 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
         }
     }
 
-    fn parse_expression_single(&mut self, until: EnumSet<Kind>) -> ParseResult {
+    fn node_expression_single(&mut self, until: EnumSet<Kind>) -> NodeResult {
         if self.depth >= 512 {
-            let error = ParseError::NestingLimitExceeded { at: self.offset };
+            let error = NodeError::NestingLimitExceeded { at: self.offset };
 
             self.node(NODE_ERROR, |this| {
                 this.next_direct_while(|_| true);
@@ -629,24 +629,24 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
         self.depth += 1;
 
         match self.peek_expecting(EXPRESSION_TOKENS)? {
-            TOKEN_LEFT_PARENTHESIS => self.parse_parenthesis(until),
+            TOKEN_LEFT_PARENTHESIS => self.node_parenthesis(until),
 
-            TOKEN_LEFT_BRACKET => self.parse_list(until),
+            TOKEN_LEFT_BRACKET => self.node_list(until),
 
-            TOKEN_LEFT_CURLYBRACE => self.parse_attribute_list(until),
+            TOKEN_LEFT_CURLYBRACE => self.node_attribute_list(until),
 
-            kind if IDENTIFIER_TOKENS.contains(kind) => self.parse_identifier(until),
+            kind if IDENTIFIER_TOKENS.contains(kind) => self.node_identifier(until),
 
-            TOKEN_PATH => self.parse_path(),
+            TOKEN_PATH => self.node_path(),
 
-            TOKEN_STRING_START => self.parse_stringlike(TOKEN_STRING_START, TOKEN_STRING_END),
+            TOKEN_STRING_START => self.node_stringlike(TOKEN_STRING_START, TOKEN_STRING_END),
 
-            TOKEN_ISLAND_START => self.parse_stringlike(TOKEN_ISLAND_START, TOKEN_ISLAND_END),
+            TOKEN_ISLAND_START => self.node_stringlike(TOKEN_ISLAND_START, TOKEN_ISLAND_END),
 
-            TOKEN_INTEGER | TOKEN_FLOAT => self.parse_number(until),
+            TOKEN_INTEGER | TOKEN_FLOAT => self.node_number(until),
 
             TOKEN_LITERAL_IF => {
-                self.parse_if(until)?;
+                self.node_if(until)?;
             },
 
             unexpected => {
@@ -658,7 +658,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
                     this.next_while(|kind| !(until | EXPRESSION_TOKENS).contains(kind));
                 });
 
-                let error = ParseError::Unexpected {
+                let error = NodeError::Unexpected {
                     got: Some(unexpected),
                     expected: EXPRESSION_TOKENS,
                     at: rowan::TextRange::new(start, self.offset),
@@ -668,7 +668,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
 
                 return if next.is_some_and(|kind| EXPRESSION_TOKENS.contains(kind)) {
                     self.errors.push(error);
-                    self.parse_expression_single(until)
+                    self.node_expression_single(until)
                 } else if next.is_some() {
                     self.errors.push(error);
                     recoverable()
@@ -682,11 +682,11 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
         found(())
     }
 
-    fn parse_expression_binding_power(
+    fn node_expression_binding_power(
         &mut self,
         minimum_power: u16,
         until: EnumSet<Kind>,
-    ) -> ParseResult {
+    ) -> NodeResult {
         let checkpoint = self.checkpoint();
 
         if let Some(operator) = self
@@ -697,10 +697,10 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
 
             self.node_failable(NODE_PREFIX_OPERATION, |this| {
                 this.next().unwrap();
-                this.parse_expression_binding_power(right_power, until)
+                this.node_expression_binding_power(right_power, until)
             });
         } else {
-            self.parse_expression_single(until)?;
+            self.node_expression_single(until)?;
         }
 
         while let Some(operator) = self
@@ -724,7 +724,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
                 self.node_from(checkpoint, NODE_SUFFIX_OPERATION, |_| {});
             } else {
                 self.node_failable_from(checkpoint, NODE_INFIX_OPERATION, |this| {
-                    this.parse_expression_binding_power(right_power, until)
+                    this.node_expression_binding_power(right_power, until)
                 });
             }
         }
@@ -732,7 +732,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
         found(())
     }
 
-    fn parse_expression(&mut self, until: EnumSet<Kind>) -> ParseResult {
-        self.parse_expression_binding_power(0, until)
+    fn node_expression(&mut self, until: EnumSet<Kind>) -> NodeResult {
+        self.node_expression_binding_power(0, until)
     }
 }
