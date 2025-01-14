@@ -272,7 +272,6 @@ node! {
         Parenthesis,
         List,
         AttributeSet,
-        Application,
         PrefixOperation,
         InfixOperation,
         SuffixOperation,
@@ -355,16 +354,6 @@ impl AttributeSet {
     get_token! { right_curlybrace -> ? TOKEN_RIGHT_CURLYBRACE }
 }
 
-// APPLICATION
-
-node! { #[from(NODE_APPLICATION)] struct Application; }
-
-impl Application {
-    get_node! { left_expression -> 0 @ Expression }
-
-    get_node! { right_expression -> 1 @ Expression }
-}
-
 // PREFIX OPERATION
 
 node! { #[from(NODE_PREFIX_OPERATION)] struct PrefixOperation; }
@@ -421,6 +410,7 @@ pub enum InfixOperator {
     Same,
     Sequence,
 
+    ImplicitApply,
     Apply,
     Pipe,
 
@@ -459,6 +449,7 @@ impl TryFrom<Kind> for InfixOperator {
             TOKEN_SEMICOLON => Ok(Self::Sequence),
             TOKEN_COMMA => Ok(Self::Same),
 
+            kind if kind.is_argument() => Ok(Self::ImplicitApply),
             TOKEN_LESS_PIPE => Ok(Self::Apply),
             TOKEN_PIPE_MORE => Ok(Self::Pipe),
 
@@ -496,7 +487,8 @@ impl TryFrom<Kind> for InfixOperator {
 impl InfixOperator {
     pub fn binding_power(self) -> (u16, u16) {
         match self {
-            Self::Select => (170, 175),
+            Self::Select => (180, 185),
+            Self::ImplicitApply => (170, 175),
             Self::Concat => (160, 165),
             Self::Multiplication | Self::Power | Self::Division => (150, 155),
             // PrefixOperator::Swallation | PrefixOperator::Negation
@@ -517,6 +509,10 @@ impl InfixOperator {
             Self::Sequence | Self::Same => (15, 10),
         }
     }
+
+    pub fn owns_token(self) -> bool {
+        self != Self::ImplicitApply
+    }
 }
 
 #[rustfmt::skip]
@@ -526,7 +522,7 @@ impl InfixOperation {
     pub fn operator(&self) -> InfixOperator {
         self.children_tokens_untyped()
             .find_map(|token| InfixOperator::try_from(token.kind()).ok())
-            .unwrap()
+            .unwrap_or(InfixOperator::ImplicitApply)
     }
 
     get_node! { right_expression -> 1 @ ? Expression }

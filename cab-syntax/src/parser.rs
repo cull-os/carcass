@@ -655,20 +655,6 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
         found(())
     }
 
-    fn parse_expression_application(&mut self, until: EnumSet<Kind>) -> ParseResult {
-        let checkpoint = self.checkpoint();
-
-        self.parse_expression_single(until)?;
-
-        while self.peek().is_some_and(Kind::is_argument) {
-            self.node_failable_from(checkpoint, NODE_APPLICATION, |this| {
-                this.parse_expression_single(until)
-            });
-        }
-
-        found(())
-    }
-
     fn parse_expression_binding_power(
         &mut self,
         minimum_power: u16,
@@ -687,22 +673,25 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
                 this.parse_expression_binding_power(right_power, until)
             });
         } else {
-            self.parse_expression_application(until)?;
+            self.parse_expression_single(until)?;
         }
 
         while let Some(operator) = self
             .peek()
-            .and_then(|next| node::InfixOperator::try_from(next).ok())
+            .and_then(|kind| node::InfixOperator::try_from(kind).ok())
         {
-            let (left_power, right_power) = operator.binding_power();
+            dbg!(operator);
 
+            let (left_power, right_power) = operator.binding_power();
             if left_power < minimum_power {
                 break;
             }
-            let operator_token = self.next().unwrap();
+
+            let operator_token = operator.owns_token().then(|| self.next().unwrap());
 
             // Handle suffix-able infix operators. Not for purely suffix operators.
-            if node::SuffixOperator::try_from(operator_token).is_ok()
+            if operator_token.is_some()
+                && node::SuffixOperator::try_from(operator_token.unwrap()).is_ok()
                 && self
                     .peek()
                     .is_none_or(|kind| !EXPRESSION_TOKENS.contains(kind))

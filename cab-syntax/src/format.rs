@@ -130,16 +130,6 @@ impl<'a, W: io::Write> Formatter<'a, W> {
                 self.bracket_end("}")
             },
 
-            Application as application => {
-                self.bracket_start("(")?;
-
-                self.parenthesize(&application.left_expression())?;
-                self.write(" ")?;
-                self.parenthesize(&application.right_expression())?;
-
-                self.bracket_end(")")
-            },
-
             PrefixOperation as operation => {
                 self.bracket_start("(")?;
 
@@ -165,7 +155,7 @@ impl<'a, W: io::Write> Formatter<'a, W> {
                     InfixOperator::Sequence => Some(";"),
                     InfixOperator::Same => Some(","),
 
-                    InfixOperator::Apply => None,
+                    InfixOperator::ImplicitApply | InfixOperator::Apply => None,
                     InfixOperator::Pipe => {
                         self.parenthesize(&operation.right_expression().unwrap())?;
                         self.write(" ")?;

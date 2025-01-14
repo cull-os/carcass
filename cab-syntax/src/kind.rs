@@ -182,9 +182,6 @@ pub enum Kind {
     #[display("an erroneous expression")]
     NODE_ERROR,
 
-    #[display("a lambda application")]
-    NODE_APPLICATION,
-
     #[display("a prefix operation")]
     NODE_PREFIX_OPERATION,
     #[display("an infix operation")]
