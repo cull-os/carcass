@@ -573,6 +573,8 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
     }
 
     fn parse_if(&mut self, until: EnumSet<Kind>) -> ParseResult {
+        let then_else_binding_power = node::InfixOperator::Sequence.binding_power().0 + 1;
+
         let checkpoint = self.checkpoint();
 
         self.expect(
@@ -580,7 +582,10 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
             until | EXPRESSION_TOKENS | TOKEN_LITERAL_IS | TOKEN_LITERAL_THEN | TOKEN_LITERAL_ELSE,
         )?;
 
-        self.parse_expression(until | TOKEN_LITERAL_IS | TOKEN_LITERAL_THEN | TOKEN_LITERAL_ELSE)?;
+        self.parse_expression_binding_power(
+            then_else_binding_power,
+            until | TOKEN_LITERAL_IS | TOKEN_LITERAL_THEN | TOKEN_LITERAL_ELSE,
+        )?;
 
         match self.expect(
             TOKEN_LITERAL_IS | TOKEN_LITERAL_THEN,
@@ -591,10 +596,13 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
             },
             Some(TOKEN_LITERAL_THEN) => {
                 self.node_failable_from(checkpoint, NODE_IF_ELSE, |this| {
-                    this.parse_expression(until | TOKEN_LITERAL_ELSE)?;
+                    this.parse_expression_binding_power(
+                        then_else_binding_power,
+                        until | TOKEN_LITERAL_ELSE,
+                    )?;
 
                     if this.next_if(TOKEN_LITERAL_ELSE) {
-                        this.parse_expression(until)?;
+                        this.parse_expression_binding_power(then_else_binding_power, until)?;
                     }
 
                     found(())
