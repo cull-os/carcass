@@ -48,29 +48,30 @@ impl<N: Node> Parse<N> {
             return Box::new([nesting_error].into_iter());
         }
 
-        let extra_error_count = self
-            .errors
-            .iter()
-            .rev()
-            .take_while(|error| matches!(error, NodeError::Unexpected { got: None, .. }))
-            .count() as isize
-            - 1;
+        let mut last_start = None;
 
-        Box::new(
-            self.errors
-                .iter()
-                .take(self.errors.len() - extra_error_count.max(0) as usize),
-        )
+        Box::new(self.errors.iter().filter(move |error| {
+            let NodeError::Unexpected { at, .. } = error else {
+                unreachable!()
+            };
+
+            if last_start != Some(at.start()) {
+                last_start = Some(at.start());
+                true
+            } else {
+                false
+            }
+        }))
     }
 
     /// Returns [`Ok`] with the [`Node`] node if there are no errors,
     /// returns [`Err`] with the list of errors obtained from
     /// [`Self::errors`] otherwise.
-    pub fn result(self) -> Result<N, Vec<NodeError>> {
+    pub fn result(&self) -> Result<&N, Box<dyn Iterator<Item = &NodeError> + '_>> {
         if self.errors.is_empty() {
-            Ok(self.node.unwrap())
+            Ok(self.node.as_ref().unwrap())
         } else {
-            Err(self.errors().cloned().collect())
+            Err(self.errors())
         }
     }
 }

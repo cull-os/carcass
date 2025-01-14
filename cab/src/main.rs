@@ -162,7 +162,7 @@ async fn main() {
                     if matches!(command, Dump::Syntax) {
                         write!(out, "{syntax:#?}", syntax = parse.syntax)
                     } else if let Ok(node) = parse.result() {
-                        syntax::format::parenthesize(&mut out, &node)
+                        syntax::format::parenthesize(&mut out, node)
                     } else {
                         Ok(())
                     }
