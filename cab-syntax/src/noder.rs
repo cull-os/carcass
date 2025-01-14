@@ -22,6 +22,115 @@ use crate::{
     tokenize,
 };
 
+/// A parse result that contains a [`rowan::SyntaxNode`],
+/// contains a [`Node`] if it was successfully created,
+/// and a list of [`NodeError`]s.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Parse<N: node::Node> {
+    /// The underlying [`rowan::SyntaxNode`].
+    pub syntax: RowanNode,
+
+    /// The [`Node`], if it was successfully created.
+    pub node: Option<N>,
+
+    errors: Vec<NodeError>,
+}
+
+impl<N: Node> Parse<N> {
+    /// Returns an iterator over the underlying [`ParseError`]s, removing
+    /// duplicates and only returning useful errors.
+    pub fn errors(&self) -> Box<dyn Iterator<Item = &NodeError> + '_> {
+        if let Some(nesting_error) = self
+            .errors
+            .iter()
+            .find(|error| matches!(error, NodeError::NestingLimitExceeded { .. }))
+        {
+            return Box::new([nesting_error].into_iter());
+        }
+
+        let extra_error_count = self
+            .errors
+            .iter()
+            .rev()
+            .take_while(|error| matches!(error, NodeError::Unexpected { got: None, .. }))
+            .count() as isize
+            - 1;
+
+        Box::new(
+            self.errors
+                .iter()
+                .take(self.errors.len() - extra_error_count.max(0) as usize),
+        )
+    }
+
+    /// Returns [`Ok`] with the [`Node`] node if there are no errors,
+    /// returns [`Err`] with the list of errors obtained from
+    /// [`Self::errors`] otherwise.
+    pub fn result(self) -> Result<N, Vec<NodeError>> {
+        if self.errors.is_empty() {
+            Ok(self.node.unwrap())
+        } else {
+            Err(self.errors().cloned().collect())
+        }
+    }
+}
+
+/// Parses a string reference and returns a [`Parse`].
+pub fn parse<N: Node>(input: &str) -> Parse<N> {
+    let mut noder = Noder::new(tokenize(input));
+
+    noder.node(NODE_ROOT, |this| {
+        let checkpoint = this.checkpoint();
+
+        // Reached an unrecoverable error.
+        if let Err(error) = this.node_expression(EnumSet::empty()) {
+            this.node_from(checkpoint, NODE_ERROR, |_| {});
+            this.errors.push(error);
+        }
+
+        if let Some(unexpected) = this.peek() {
+            let start = this.offset;
+
+            this.node(NODE_ERROR, |this| this.next_direct_while(|_| true));
+            this.errors.push(NodeError::Unexpected {
+                got: Some(unexpected),
+                expected: EnumSet::empty(),
+                at: rowan::TextRange::new(start, this.offset),
+            });
+        }
+    });
+
+    let syntax = RowanNode::new_root(noder.builder.finish());
+
+    let child = syntax.first_child().unwrap();
+    let child_text_range = child.text_range();
+    let child_kind = child.kind();
+
+    let mut errors = noder.errors;
+
+    let node = if let Some(expected) = N::inherent_kind() {
+        let cast = N::cast(child);
+
+        if cast.is_none() {
+            errors.push(NodeError::Unexpected {
+                got: Some(child_kind),
+                expected: expected.into(),
+                at: child_text_range,
+            })
+        }
+
+        cast
+    } else {
+        N::cast(child)
+    };
+
+    Parse {
+        syntax,
+        node,
+        errors,
+    }
+}
+
 type MustNodeResult<T = ()> = Result<T, NodeError>;
 
 type NodeResult<T = ()> = Result<Option<T>, NodeError>;
@@ -134,115 +243,6 @@ impl fmt::Display for NodeError {
                 }
             },
         }
-    }
-}
-
-/// A parse result that contains a [`rowan::SyntaxNode`],
-/// contains a [`Node`] if it was successfully created,
-/// and a list of [`NodeError`]s.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Parse<N: node::Node> {
-    /// The underlying [`rowan::SyntaxNode`].
-    pub syntax: RowanNode,
-
-    /// The [`Node`], if it was successfully created.
-    pub node: Option<N>,
-
-    errors: Vec<NodeError>,
-}
-
-impl<N: Node> Parse<N> {
-    /// Returns an iterator over the underlying [`ParseError`]s, removing
-    /// duplicates and only returning useful errors.
-    pub fn errors(&self) -> Box<dyn Iterator<Item = &NodeError> + '_> {
-        if let Some(nesting_error) = self
-            .errors
-            .iter()
-            .find(|error| matches!(error, NodeError::NestingLimitExceeded { .. }))
-        {
-            return Box::new([nesting_error].into_iter());
-        }
-
-        let extra_error_count = self
-            .errors
-            .iter()
-            .rev()
-            .take_while(|error| matches!(error, NodeError::Unexpected { got: None, .. }))
-            .count() as isize
-            - 1;
-
-        Box::new(
-            self.errors
-                .iter()
-                .take(self.errors.len() - extra_error_count.max(0) as usize),
-        )
-    }
-
-    /// Returns [`Ok`] with the [`Node`] node if there are no errors,
-    /// returns [`Err`] with the list of errors obtained from
-    /// [`Self::errors`] otherwise.
-    pub fn result(self) -> Result<N, Vec<NodeError>> {
-        if self.errors.is_empty() {
-            Ok(self.node.unwrap())
-        } else {
-            Err(self.errors().cloned().collect())
-        }
-    }
-}
-
-/// Parses a string reference and returns a [`Parse`].
-pub fn parse<N: Node>(input: &str) -> Parse<N> {
-    let mut noder = Noder::new(tokenize(input));
-
-    noder.node(NODE_ROOT, |this| {
-        let checkpoint = this.checkpoint();
-
-        // Reached an unrecoverable error.
-        if let Err(error) = this.node_expression(EnumSet::empty()) {
-            this.node_from(checkpoint, NODE_ERROR, |_| {});
-            this.errors.push(error);
-        }
-
-        if let Some(unexpected) = this.peek() {
-            let start = this.offset;
-
-            this.node(NODE_ERROR, |this| this.next_direct_while(|_| true));
-            this.errors.push(NodeError::Unexpected {
-                got: Some(unexpected),
-                expected: EnumSet::empty(),
-                at: rowan::TextRange::new(start, this.offset),
-            });
-        }
-    });
-
-    let syntax = RowanNode::new_root(noder.builder.finish());
-
-    let child = syntax.first_child().unwrap();
-    let child_text_range = child.text_range();
-    let child_kind = child.kind();
-
-    let mut errors = noder.errors;
-
-    let node = if let Some(expected) = N::inherent_kind() {
-        let cast = N::cast(child);
-
-        if cast.is_none() {
-            errors.push(NodeError::Unexpected {
-                got: Some(child_kind),
-                expected: expected.into(),
-                at: child_text_range,
-            })
-        }
-
-        cast
-    } else {
-        N::cast(child)
-    };
-
-    Parse {
-        syntax,
-        node,
-        errors,
     }
 }
 
