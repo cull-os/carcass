@@ -354,13 +354,16 @@ impl<'a> Tokenizer<'a> {
             initial_letter if is_valid_initial_identifier_character(initial_letter) => {
                 self.consume_while(is_valid_identifier_character);
 
-                match self.consumed_since(start_offset) {
+                const KEYWORDS: phf::Map<&'static str, Kind> = phf::phf_map! {
                     "if" => TOKEN_LITERAL_IF,
                     "then" => TOKEN_LITERAL_THEN,
                     "else" => TOKEN_LITERAL_ELSE,
+                };
 
-                    _ => TOKEN_IDENTIFIER,
-                }
+                KEYWORDS
+                    .get(self.consumed_since(start_offset))
+                    .copied()
+                    .unwrap_or(TOKEN_IDENTIFIER)
             },
 
             '.' if matches!(self.peek_character(), Some('.' | '/')) => {
