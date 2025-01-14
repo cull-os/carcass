@@ -3,6 +3,7 @@ use std::{
     collections::VecDeque,
     ops::{
         self,
+        Deref as _,
         Not as _,
     },
 };
@@ -84,7 +85,7 @@ pub trait Node: rowan::ast::AstNode<Language = Language> + ops::Deref<Target = R
     where
         Self: Sized,
     {
-        rowan::ast::support::children(self.syntax())
+        rowan::ast::support::children(self)
     }
 
     /// Returns the first immediate children token that can be cast to the given
@@ -194,7 +195,7 @@ macro_rules! node {
 
             fn syntax(&self) -> &RowanNode {
                 match self {
-                    $(Self::$variant(this) => &this.syntax(),)*
+                    $(Self::$variant(this) => this,)*
                 }
             }
         }
@@ -660,7 +661,7 @@ impl Identifier {
         }
 
         if self.token_untyped(TOKEN_IDENTIFIER_START).is_some() {
-            return IdentifierValue::Complex(IdentifierComplex(self.syntax().clone()));
+            return IdentifierValue::Complex(IdentifierComplex(self.deref().clone()));
         }
 
         unreachable!()

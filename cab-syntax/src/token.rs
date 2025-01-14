@@ -1,10 +1,14 @@
 //! [`Token`] definitions for the Cab language.
 use std::{
     fmt,
-    ops,
+    ops::{
+        self,
+        Deref as _,
+    },
 };
 
 use num::Num;
+use static_assertions::assert_obj_safe;
 
 use crate::{
     Kind::{
@@ -14,9 +18,12 @@ use crate::{
     RowanToken,
 };
 
+assert_obj_safe!(Token);
 pub trait Token: ops::Deref<Target = RowanToken> {
     /// Determines if this token can be created from this Kind.
-    fn can_cast(from: Kind) -> bool;
+    fn can_cast(from: Kind) -> bool
+    where
+        Self: Sized;
 
     /// Casts a RowanToken to this Token. Returns None if it can't.
     fn cast(from: RowanToken) -> Option<Self>
@@ -34,7 +41,7 @@ macro_rules! token {
 
         impl fmt::Display for $name {
             fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-                fmt::Display::fmt(self.syntax(), formatter)
+                fmt::Display::fmt(self.deref(), formatter)
             }
         }
 
