@@ -664,7 +664,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Parser<'a, I> {
 
         if let Some(operator) = self
             .peek()
-            .and_then(|next| node::PrefixOperator::try_from(next).ok())
+            .and_then(|kind| node::PrefixOperator::try_from(kind).ok())
         {
             let ((), right_power) = operator.binding_power();
 
