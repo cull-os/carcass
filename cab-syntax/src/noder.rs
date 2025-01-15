@@ -717,7 +717,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
                 break;
             }
 
-            let operator_token = operator.owns_token().then(|| self.next().unwrap());
+            let operator_token = operator.is_token_owning().then(|| self.next().unwrap());
 
             // Handle suffix-able infix operators. Not for purely suffix operators.
             if operator_token.is_some()

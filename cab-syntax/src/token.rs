@@ -93,15 +93,15 @@ impl Comment {
 
     /// Returns whether if this comment has the capability to span multiple
     /// lines.
-    pub fn multiline(&self) -> bool {
+    pub fn is_multiline(&self) -> bool {
         self.delimiter().len() >= 3
     }
 
     /// Returns whether if this multiline comment was closed off properly.
     ///
     /// Panics if this comment is not a multiline comment.
-    pub fn closed_off(&self) -> bool {
-        assert!(self.multiline());
+    pub fn is_closed_off(&self) -> bool {
+        assert!(self.is_multiline());
         self.text().ends_with(self.delimiter())
     }
 
@@ -111,7 +111,7 @@ impl Comment {
 
         let start_stripped = self.text().strip_prefix(delimiter).unwrap();
 
-        if self.multiline() {
+        if self.is_multiline() {
             start_stripped
                 .strip_suffix(delimiter)
                 // Not .unwrap(), because it's perfectly fine if you don't close off your multiline string.

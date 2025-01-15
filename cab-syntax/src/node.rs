@@ -519,7 +519,7 @@ impl InfixOperator {
         }
     }
 
-    pub fn owns_token(self) -> bool {
+    pub fn is_token_owning(self) -> bool {
         self != Self::ImplicitApply
     }
 }
