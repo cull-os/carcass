@@ -574,7 +574,8 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
     }
 
     fn node_if(&mut self, until: EnumSet<Kind>) -> NodeResult {
-        let then_else_binding_power = node::InfixOperator::Sequence.binding_power().0 + 1;
+        let is_binding_power = node::InfixOperator::Sequence.binding_power().0 + 1;
+        let then_else_binding_power = node::InfixOperator::Same.binding_power().0 + 1;
 
         let checkpoint = self.checkpoint();
 
@@ -593,8 +594,11 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
             until | TOKEN_LITERAL_ELSE,
         )? {
             Some(TOKEN_LITERAL_IS) => {
-                self.node_from(checkpoint, NODE_IF_IS, |this| this.node_expression(until))
+                self.node_from(checkpoint, NODE_IF_IS, |this| {
+                    this.node_expression_binding_power(is_binding_power, until)
+                })
             },
+
             Some(TOKEN_LITERAL_THEN) => {
                 self.node_failable_from(checkpoint, NODE_IF_ELSE, |this| {
                     this.node_expression_binding_power(
