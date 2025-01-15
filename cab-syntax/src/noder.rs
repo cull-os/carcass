@@ -175,6 +175,14 @@ pub enum NodeError {
         at: rowan::TextSize,
     },
 
+    /// An error that happens when the parsed expression is not a valid pattern.
+    InvalidPattern {
+        /// The node that was not a valid pattern.
+        got: Option<Kind>,
+        /// The range that contains the invalid node.
+        at: rowan::TextRange,
+    },
+
     /// An error that happens when the noder was not expecting a particular
     /// token or node.
     Unexpected {
@@ -193,6 +201,14 @@ impl fmt::Display for NodeError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::NestingLimitExceeded { .. } => write!(formatter, "nesting limit exceeded"),
+
+            Self::InvalidPattern { got, .. } => {
+                if let Some(got) = got {
+                    write!(formatter, "{got} is not a valid pattern")
+                } else {
+                    write!(formatter, "no pattern to be found")
+                }
+            },
 
             Self::Unexpected {
                 got: Some(got),

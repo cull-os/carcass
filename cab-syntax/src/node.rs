@@ -283,8 +283,7 @@ node! {
         Number,
         IfIs,
         IfElse,
-    )]
-    enum Expression;
+    )] enum Expression;
 }
 
 // ERROR

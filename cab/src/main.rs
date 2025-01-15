@@ -143,7 +143,8 @@ async fn main() {
                             .with_message("syntax error")
                             .with_labels(vec![
                                 Label::primary(file_id, match error {
-                                    NodeError::Unexpected { at, .. } => {
+                                    NodeError::InvalidPattern { at, .. }
+                                    | NodeError::Unexpected { at, .. } => {
                                         at.start().into()..at.end().into()
                                     },
 
