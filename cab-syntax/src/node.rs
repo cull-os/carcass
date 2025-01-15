@@ -391,6 +391,11 @@ impl PrefixOperator {
 
 #[rustfmt::skip]
 impl PrefixOperation {
+    pub fn operator_token(&self) -> Option<RowanToken> {
+        self.children_tokens_untyped()
+            .find(|token| PrefixOperator::try_from(token.kind()).is_ok())
+    }
+
     pub fn operator(&self) -> PrefixOperator {
         self.children_tokens_untyped()
             .find_map(|token| PrefixOperator::try_from(token.kind()).ok())
@@ -528,6 +533,11 @@ impl InfixOperator {
 impl InfixOperation {
     get_node! { left_expression -> 0 @ Expression }
 
+    pub fn operator_token(&self) -> Option<RowanToken> {
+        self.children_tokens_untyped()
+            .find(|token| InfixOperator::try_from(token.kind()).is_ok())
+    }
+
     pub fn operator(&self) -> InfixOperator {
         self.children_tokens_untyped()
             .find_map(|token| InfixOperator::try_from(token.kind()).ok())
@@ -562,6 +572,11 @@ impl TryFrom<Kind> for SuffixOperator {
 
 impl SuffixOperation {
     get_node! { expression -> 0 @ Expression }
+
+    pub fn operator_token(&self) -> Option<RowanToken> {
+        self.children_tokens_untyped()
+            .find(|token| SuffixOperator::try_from(token.kind()).is_ok())
+    }
 
     pub fn operator(&self) -> SuffixOperator {
         self.children_tokens_untyped()
