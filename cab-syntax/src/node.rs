@@ -315,6 +315,7 @@ impl List {
 
     get_node! { expression -> 0 @ ? Expression }
 
+    /// Returns all items of the list.
     pub fn items(&self) -> impl Iterator<Item = Expression> {
         gen {
             let mut expressions: VecDeque<_> = self.expression().into_iter().collect();
@@ -383,6 +384,7 @@ impl TryFrom<Kind> for PrefixOperator {
 }
 
 impl PrefixOperator {
+    /// Returns the binding power of this operator.
     pub fn binding_power(self) -> ((), u16) {
         match self {
             Self::Swwallation | Self::Negation => ((), 145),
@@ -393,11 +395,14 @@ impl PrefixOperator {
 
 #[rustfmt::skip]
 impl PrefixOperation {
-    pub fn operator_token(&self) -> Option<RowanToken> {
+    /// Returns the operator token of this operation.
+    pub fn operator_token(&self) -> RowanToken {
         self.children_tokens_untyped()
             .find(|token| PrefixOperator::try_from(token.kind()).is_ok())
+            .unwrap()
     }
 
+    /// Returns the operator of this operation.
     pub fn operator(&self) -> PrefixOperator {
         self.children_tokens_untyped()
             .find_map(|token| PrefixOperator::try_from(token.kind()).ok())
@@ -491,6 +496,7 @@ impl TryFrom<Kind> for InfixOperator {
 }
 
 impl InfixOperator {
+    /// Returns the binding power of this operator.
     pub fn binding_power(self) -> (u16, u16) {
         match self {
             Self::Select => (180, 185),
@@ -526,6 +532,8 @@ impl InfixOperator {
         }
     }
 
+    /// Whether if this operator actually owns a token. Not owning a token means
+    /// that the operator doesn't actually "exist".
     pub fn is_token_owning(self) -> bool {
         self != Self::ImplicitApply
     }
@@ -535,11 +543,13 @@ impl InfixOperator {
 impl InfixOperation {
     get_node! { left_expression -> 0 @ Expression }
 
+    /// Returns the operator token of this operation.
     pub fn operator_token(&self) -> Option<RowanToken> {
         self.children_tokens_untyped()
             .find(|token| InfixOperator::try_from(token.kind()).is_ok())
     }
 
+    /// Returns the operator of this operation.
     pub fn operator(&self) -> InfixOperator {
         self.children_tokens_untyped()
             .find_map(|token| InfixOperator::try_from(token.kind()).ok())
@@ -575,11 +585,14 @@ impl TryFrom<Kind> for SuffixOperator {
 impl SuffixOperation {
     get_node! { expression -> 0 @ Expression }
 
-    pub fn operator_token(&self) -> Option<RowanToken> {
+    /// Returns the operator token of this operation.
+    pub fn operator_token(&self) -> RowanToken {
         self.children_tokens_untyped()
             .find(|token| SuffixOperator::try_from(token.kind()).is_ok())
+            .unwrap()
     }
 
+    /// Returns the operator of this operation.
     pub fn operator(&self) -> SuffixOperator {
         self.children_tokens_untyped()
             .find_map(|token| SuffixOperator::try_from(token.kind()).ok())
@@ -654,12 +667,6 @@ parted! {
 
 node! { #[from(NODE_IDENTIFIER)] struct Identifier; }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum IdentifierValue {
-    Simple(token::Identifier),
-    Complex(IdentifierComplex),
-}
-
 node! { #[from(NODE_IDENTIFIER)] struct IdentifierComplex; }
 
 parted! {
@@ -669,7 +676,18 @@ parted! {
     }
 }
 
+/// An identifier value.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum IdentifierValue {
+    /// A simple identifier backed by a [`token::Identifier`].
+    Simple(token::Identifier),
+    /// A "complex" identifier backed by a stringlike [`IdentifierComplex`]
+    Complex(IdentifierComplex),
+}
+
 impl Identifier {
+    /// Returns the value of this identifier. A value may either be a
+    /// [`token::Identifier`] or a quoted stringlike.
     pub fn value(&self) -> IdentifierValue {
         if let Some(token) = self.token() {
             return IdentifierValue::Simple(token);
@@ -705,6 +723,7 @@ parted! {
 
 node! { #[from(NODE_NUMBER)] struct Number; }
 
+/// A Number value. May either be a [`token::Integer`] or a [`token::Float`].
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum NumberValue {
     Integer(token::Integer),
@@ -712,6 +731,7 @@ pub enum NumberValue {
 }
 
 impl Number {
+    /// Returns the underlying value of this number.
     pub fn value(&self) -> NumberValue {
         if let Some(token) = self.token() {
             return NumberValue::Integer(token);
