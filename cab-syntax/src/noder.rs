@@ -15,70 +15,71 @@ use crate::{
         *,
     },
     RowanNode,
-    node::{
-        self,
-        Node,
-    },
-    tokenize,
+    node,
 };
 
 /// A parse result that contains a [`rowan::SyntaxNode`],
-/// contains a [`Node`] if it was successfully created,
+/// contains a [`node::Node`] if it was successfully created,
 /// and a list of [`NodeError`]s.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Parse<N: node::Node> {
     /// The underlying [`rowan::SyntaxNode`].
     pub syntax: RowanNode,
 
-    /// The [`Node`], if it was successfully created.
+    /// The [`node::Node`], if it was successfully created.
     pub node: Option<N>,
 
-    errors: Vec<NodeError>,
+    /// Errors encountered during parsing.
+    pub errors: Vec<NodeError>,
 }
 
-impl<N: Node> Parse<N> {
-    /// Returns an iterator over the underlying [`ParseError`]s, removing
-    /// duplicates and only returning useful errors.
-    pub fn errors(&self) -> Box<dyn Iterator<Item = &NodeError> + '_> {
-        if let Some(nesting_error) = self
-            .errors
-            .iter()
-            .find(|error| matches!(error, NodeError::NestingLimitExceeded { .. }))
-        {
-            return Box::new([nesting_error].into_iter());
-        }
-
-        let mut last_start = None;
-
-        Box::new(self.errors.iter().filter(move |error| {
-            let NodeError::Unexpected { at, .. } = error else {
-                unreachable!()
-            };
-
-            if last_start != Some(at.start()) {
-                last_start = Some(at.start());
-                true
-            } else {
-                false
-            }
-        }))
-    }
-
-    /// Returns [`Ok`] with the [`Node`] node if there are no errors,
+impl<N: node::Node> Parse<N> {
+    /// Returns [`Ok`] with the [`node::Node`] node if there are no errors,
     /// returns [`Err`] with the list of errors obtained from
     /// [`Self::errors`] otherwise.
-    pub fn result(&self) -> Result<&N, Box<dyn Iterator<Item = &NodeError> + '_>> {
+    pub fn result(self) -> Result<N, Vec<NodeError>> {
         if self.errors.is_empty() {
-            Ok(self.node.as_ref().unwrap())
+            Ok(self.node.unwrap())
         } else {
-            Err(self.errors())
+            Err(self.errors)
         }
     }
 }
 
-/// Parses a string reference and returns a [`Parse`].
-pub fn parse<N: Node>(input: &str) -> Parse<N> {
-    let mut noder = Noder::new(tokenize(input));
+/// Options related to parsing.
+#[derive(Debug, Clone)]
+pub struct ParseOptions {
+    /// Whether to deduplicate errors. For every error with the same range, the
+    /// first one will be kept.
+    ///
+    /// This means that the following string will only produce a single error,
+    /// instead of two:
+    ///
+    /// ```txt
+    /// [{ a := (b]
+    ///           ^ expected ')', found ']'
+    ///           ^ expected '}', found ']' (omitted if option is set)
+    /// ```
+    pub deduplicate_errors: bool,
+}
+
+impl Default for ParseOptions {
+    fn default() -> Self {
+        ParseOptions {
+            deduplicate_errors: true,
+        }
+    }
+}
+
+/// Parses a token iterator and returns a [`Parse`].
+///
+/// Parsing will always fail if the given [`node::Node`] type is not an
+/// expression as we cannot parse sub expressions.
+pub fn parse<'a, I: Iterator<Item = (Kind, &'a str)>, N: node::Node>(
+    tokens: I,
+    options: ParseOptions,
+) -> Parse<N> {
+    let mut noder = Noder::new(tokens);
 
     noder.node(NODE_ROOT, |this| {
         let start_of_input = this.checkpoint();
@@ -102,28 +103,40 @@ pub fn parse<N: Node>(input: &str) -> Parse<N> {
     });
 
     let syntax = RowanNode::new_root(noder.builder.finish());
-
-    let child = syntax.first_child().unwrap();
-    let child_text_range = child.text_range();
-    let child_kind = child.kind();
-
+    let node = N::cast(syntax.first_child().unwrap());
     let mut errors = noder.errors;
 
-    let node = if let Some(expected) = N::inherent_kind() {
-        let cast = N::cast(child);
+    // Handle unexpected node type. Happens when you
+    // `parse::<node::Foo>(...)` and the input
+    // contains a non-Foo expression.
+    if node.is_none()
+        && let Some(expected) = N::inherent_kind()
+    {
+        let child = syntax.first_child().unwrap();
 
-        if cast.is_none() {
-            errors.push(NodeError::Unexpected {
-                got: Some(child_kind),
-                expected: expected.into(),
-                at: child_text_range,
-            })
-        }
+        errors.push(NodeError::Unexpected {
+            got: Some(child.kind()),
+            expected: expected.into(),
+            at: child.text_range(),
+        })
+    }
 
-        cast
-    } else {
-        N::cast(child)
-    };
+    if options.deduplicate_errors {
+        let mut last_text_range = None;
+
+        errors.retain(move |error| {
+            let NodeError::Unexpected { at, .. } = error else {
+                unreachable!()
+            };
+
+            if last_text_range != Some(*at) {
+                last_text_range = Some(*at);
+                true
+            } else {
+                false
+            }
+        })
+    }
 
     Parse {
         syntax,

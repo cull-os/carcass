@@ -134,11 +134,14 @@ async fn main() {
                 },
 
                 Dump::Syntax | Dump::Parenthesize => {
-                    let parse = syntax::parse::<syntax::node::Expression>(&contents);
+                    let parse = syntax::parse::<_, syntax::node::Expression>(
+                        syntax::tokenize(&contents),
+                        Default::default(),
+                    );
 
                     let error_config = term::Config::default();
 
-                    for error in parse.errors() {
+                    for error in &parse.errors {
                         let diagnostic = Diagnostic::error()
                             .with_message("syntax error")
                             .with_labels(vec![
@@ -163,7 +166,7 @@ async fn main() {
                     if matches!(command, Dump::Syntax) {
                         write!(out, "{syntax:#?}", syntax = parse.syntax)
                     } else if let Ok(node) = parse.result() {
-                        syntax::format::parenthesize(&mut out, node)
+                        syntax::format::parenthesize(&mut out, &node)
                     } else {
                         Ok(())
                     }

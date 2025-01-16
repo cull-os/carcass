@@ -23,10 +23,12 @@ use yansi::{
 };
 
 fuzz_target!(|data: &str| -> Corpus {
-    let parse = hint::black_box(syntax::parse::<syntax::node::Expression>(data));
+    let parse = hint::black_box(syntax::parse::<_, syntax::node::Expression>(
+        syntax::tokenize(data),
+        Default::default(),
+    ));
 
-    if !env::var("FUZZ_PARSER_SAVE_VALID")
-        .is_ok_and(|value| !matches!(value.as_ref(), "" | "0" | "false"))
+    if !env::var("FUZZ_PARSER_SAVE_VALID").is_ok_and(|value| !matches!(&*value, "" | "0" | "false"))
     {
         return Corpus::Keep;
     }
