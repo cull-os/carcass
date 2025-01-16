@@ -150,12 +150,6 @@ async fn main() {
                                     | NodeError::Unexpected { at, .. } => {
                                         at.start().into()..at.end().into()
                                     },
-
-                                    NodeError::NestingLimitExceeded { at } => {
-                                        let as_usize = Into::<u32>::into(*at) as usize;
-
-                                        as_usize..as_usize
-                                    },
                                 })
                                 .with_message(format!("{error}")),
                             ]);

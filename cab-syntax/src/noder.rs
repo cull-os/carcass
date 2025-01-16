@@ -180,14 +180,6 @@ const IDENTIFIER_TOKENS: EnumSet<Kind> = enum_set!(TOKEN_IDENTIFIER | TOKEN_IDEN
 /// A node error.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NodeError {
-    /// An error that happens when you nest expressions in too deep.
-    ///
-    /// No normal expression will ever hit this, but just in case.
-    NestingLimitExceeded {
-        /// The starting point of the expression that was too nested.
-        at: rowan::TextSize,
-    },
-
     /// An error that happens when the parsed expression is not a valid pattern.
     InvalidPattern {
         /// The node that was not a valid pattern.
@@ -213,8 +205,6 @@ pub enum NodeError {
 impl fmt::Display for NodeError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::NestingLimitExceeded { .. } => write!(formatter, "nesting limit exceeded"),
-
             Self::InvalidPattern { got, .. } => {
                 if let Some(got) = got {
                     write!(formatter, "{got} is not a valid pattern")
@@ -283,7 +273,6 @@ struct Noder<'a, I: Iterator<Item = (Kind, &'a str)>> {
     errors: Vec<NodeError>,
 
     offset: rowan::TextSize,
-    depth: u32,
 }
 
 impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
@@ -295,7 +284,6 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
             errors: Vec::new(),
 
             offset: 0.into(),
-            depth: 0,
         }
     }
 
@@ -650,18 +638,6 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
     }
 
     fn node_expression_single(&mut self, until: EnumSet<Kind>) -> NodeResult {
-        if self.depth >= 512 {
-            let error = NodeError::NestingLimitExceeded { at: self.offset };
-
-            self.node(NODE_ERROR, |this| {
-                this.next_direct_while(|_| true);
-            });
-
-            return deadly(error);
-        }
-
-        self.depth += 1;
-
         match self.peek_expecting(EXPRESSION_TOKENS)? {
             TOKEN_LEFT_PARENTHESIS => self.node_parenthesis(until),
 
@@ -712,7 +688,6 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
             },
         }
 
-        self.depth -= 1;
         found(())
     }
 
