@@ -81,11 +81,11 @@ pub fn parse<N: Node>(input: &str) -> Parse<N> {
     let mut noder = Noder::new(tokenize(input));
 
     noder.node(NODE_ROOT, |this| {
-        let checkpoint = this.checkpoint();
+        let start_of_input = this.checkpoint();
 
         // Reached an unrecoverable error.
         if let Err(error) = this.node_expression(EnumSet::empty()) {
-            this.node_from(checkpoint, NODE_ERROR, |_| {});
+            this.node_from(start_of_input, NODE_ERROR, |_| {});
             this.errors.push(error);
         }
 
@@ -301,10 +301,10 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
     }
 
     fn node_failable<K>(&mut self, kind: Kind, closure: impl FnOnce(&mut Self) -> NodeResult<K>) {
-        let checkpoint = self.checkpoint();
+        let start_of_node = self.checkpoint();
 
         if let Err(error) = self.node(kind, closure) {
-            self.node_from(checkpoint, NODE_ERROR, |_| {});
+            self.node_from(start_of_node, NODE_ERROR, |_| {});
             self.errors.push(error);
         }
     }
@@ -429,7 +429,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
     }
 
     fn expect(&mut self, expected: EnumSet<Kind>, until: EnumSet<Kind>) -> NodeResult<Kind> {
-        let checkpoint = self.checkpoint();
+        let expected_at = self.checkpoint();
 
         match self.peek_expecting(expected)? {
             next if expected.contains(next) => self.next().map(Some),
@@ -437,7 +437,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
             unexpected => {
                 let start = self.offset;
 
-                self.node_from(checkpoint, NODE_ERROR, |this| {
+                self.node_from(expected_at, NODE_ERROR, |this| {
                     this.next_while(|kind| !(until | expected).contains(kind));
                 });
 
@@ -593,7 +593,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
         let is_binding_power = node::InfixOperator::Sequence.binding_power().0 + 1;
         let then_else_binding_power = node::InfixOperator::Same.binding_power().0 + 1;
 
-        let checkpoint = self.checkpoint();
+        let start_of_if = self.checkpoint();
 
         self.expect(
             TOKEN_LITERAL_IF.into(),
@@ -610,13 +610,13 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
             until | TOKEN_LITERAL_ELSE,
         )? {
             Some(TOKEN_LITERAL_IS) => {
-                self.node_from(checkpoint, NODE_IF_IS, |this| {
+                self.node_from(start_of_if, NODE_IF_IS, |this| {
                     this.node_expression_binding_power(is_binding_power, until)
                 })
             },
 
             Some(TOKEN_LITERAL_THEN) => {
-                self.node_failable_from(checkpoint, NODE_IF_ELSE, |this| {
+                self.node_failable_from(start_of_if, NODE_IF_ELSE, |this| {
                     this.node_expression_binding_power(
                         then_else_binding_power,
                         until | TOKEN_LITERAL_ELSE,
@@ -708,7 +708,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
         minimum_power: u16,
         until: EnumSet<Kind>,
     ) -> NodeResult {
-        let checkpoint = self.checkpoint();
+        let start_of_expression = self.checkpoint();
 
         if let Some(operator) = self
             .peek()
@@ -742,9 +742,9 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
                     .peek()
                     .is_none_or(|kind| !EXPRESSION_TOKENS.contains(kind))
             {
-                self.node_from(checkpoint, NODE_SUFFIX_OPERATION, |_| {});
+                self.node_from(start_of_expression, NODE_SUFFIX_OPERATION, |_| {});
             } else {
-                self.node_failable_from(checkpoint, NODE_INFIX_OPERATION, |this| {
+                self.node_failable_from(start_of_expression, NODE_INFIX_OPERATION, |this| {
                     this.node_expression_binding_power(right_power, until)
                 });
             }
