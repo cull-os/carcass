@@ -1,5 +1,6 @@
 //! [`Token`] definitions for the Cab language.
 use std::{
+    borrow::Cow,
     fmt,
     ops::{
         self,
@@ -15,6 +16,7 @@ use crate::{
         self,
         *,
     },
+    NodeError,
     RowanToken,
 };
 
@@ -164,3 +166,13 @@ token! { #[from(TOKEN_PATH)] struct Path; }
 token! { #[from(TOKEN_IDENTIFIER)] struct Identifier; }
 
 token! { #[from(TOKEN_CONTENT)] struct Content; }
+
+impl Content {
+    // TODO
+    pub fn normalized(contents: &[Self]) -> Result<Vec<Cow<'_, str>>, Vec<NodeError>> {
+        Ok(contents
+            .iter()
+            .map(|content| Cow::Borrowed(content.text()))
+            .collect())
+    }
+}

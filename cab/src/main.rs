@@ -147,6 +147,7 @@ async fn main() {
                             .with_labels(vec![
                                 Label::primary(file_id, match error {
                                     NodeError::InvalidPattern { at, .. }
+                                    | NodeError::InvalidStringlike { at, .. }
                                     | NodeError::Unexpected { at, .. } => {
                                         at.start().into()..at.end().into()
                                     },

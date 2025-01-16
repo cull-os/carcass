@@ -138,6 +138,28 @@ pub fn parse<'a, I: Iterator<Item = (Kind, &'a str)>, N: node::Node>(
         })
     }
 
+    // TODO: Temporary hack to check the string validation.
+    if syntax.first_child().unwrap().first_token().unwrap().kind() == TOKEN_STRING_START {
+        use rowan::ast::AstNode as _;
+
+        let sstring = node::SString::cast(syntax.first_child().unwrap()).unwrap();
+
+        let contents: Vec<_> = sstring
+            .parts()
+            .filter_map(|part| {
+                if let node::InterpolationPart::Content(content) = part {
+                    Some(content)
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        if let Err(errors2) = crate::token::Content::normalized(&contents) {
+            errors.extend(errors2);
+        }
+    }
+
     Parse {
         syntax,
         node,
@@ -188,6 +210,12 @@ pub enum NodeError {
         at: rowan::TextRange,
     },
 
+    // An error that happens when a stringlike contains invalid escapes or is formatted wrongly.
+    InvalidStringlike {
+        reason: &'static str,
+        at: rowan::TextRange,
+    },
+
     /// An error that happens when the noder was not expecting a particular
     /// token or node.
     Unexpected {
@@ -212,6 +240,8 @@ impl fmt::Display for NodeError {
                     write!(formatter, "no pattern to be found")
                 }
             },
+
+            Self::InvalidStringlike { reason, .. } => write!(formatter, "{reason}"),
 
             Self::Unexpected {
                 got: Some(got),
