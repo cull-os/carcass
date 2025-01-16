@@ -60,9 +60,12 @@ macro_rules! __node_match {
 pub use crate::__node_match as r#match;
 
 assert_obj_safe!(Node);
+
+/// A typed AST node. Implementors will usually have methods to make accessing
+/// children elements and attributes related to the node simpler.
 pub trait Node: rowan::ast::AstNode<Language = Language> + ops::Deref<Target = RowanNode> {
-    /// Returns its inherent kind, returning None if it is a node that can have
-    /// multiple values.
+    /// Returns its inherent kind, returning None if it is a node that can be
+    /// created from multiple different kinds.
     fn inherent_kind() -> Option<Kind>
     where
         Self: Sized,
