@@ -349,8 +349,8 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
     }
 
     fn peek_nth(&mut self, n: usize) -> Option<Kind> {
-        let mut peek_index = 0;
-        let mut index = 0;
+        let mut peek_index: usize = 0;
+        let mut index: usize = 0;
 
         loop {
             let &(kind, _) = self.tokens.peek_nth(peek_index)?;
