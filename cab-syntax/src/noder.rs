@@ -126,7 +126,7 @@ pub fn parse<'a, I: Iterator<Item = (Kind, &'a str)>, N: node::Node>(
 
         errors.retain(move |error| {
             let NodeError::Unexpected { at, .. } = error else {
-                unreachable!()
+                return true;
             };
 
             if last_text_range != Some(*at) {
