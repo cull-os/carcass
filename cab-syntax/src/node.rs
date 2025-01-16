@@ -4,7 +4,6 @@ use std::{
     ops::{
         self,
         Deref as _,
-        Not as _,
     },
 };
 
@@ -626,26 +625,22 @@ macro_rules! parted {
     ) => {
         impl $name {
             pub fn parts(&self) -> impl Iterator<Item = InterpolationPart<$content_token>> {
-                self.children_with_tokens().filter_map(|child| {
+                self.children_with_tokens().map(|child| {
                     match child {
                         rowan::NodeOrToken::Token(token) => {
-                            token.kind().is_trivia().not().then(|| {
-                                if token.kind() == $content_kind {
-                                    InterpolationPart::Content(
-                                        <$content_token>::cast(token).unwrap(),
-                                    )
-                                } else {
-                                    InterpolationPart::Delimiter(token)
-                                }
-                            })
+                            if token.kind() == $content_kind {
+                                InterpolationPart::Content(<$content_token>::cast(token).unwrap())
+                            } else {
+                                InterpolationPart::Delimiter(token)
+                            }
                         },
 
                         rowan::NodeOrToken::Node(node) => {
                             assert_eq!(node.kind(), NODE_INTERPOLATION);
 
-                            Some(InterpolationPart::Interpolation(
+                            InterpolationPart::Interpolation(
                                 Interpolation::cast(node.clone()).unwrap(),
-                            ))
+                            )
                         },
                     }
                 })
