@@ -52,8 +52,8 @@ macro_rules! token {
                 kind == $kind
             }
 
-            fn cast(from: RowanToken) -> Option<Self> {
-                Self::can_cast(from.kind()).then_some(Self(from))
+            fn cast(token: RowanToken) -> Option<Self> {
+                Self::can_cast(token.kind()).then_some(Self(token))
             }
 
             fn syntax(&self) -> &RowanToken {

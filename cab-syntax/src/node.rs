@@ -7,6 +7,7 @@ use std::{
     },
 };
 
+use enumset::EnumSet;
 use rowan::ast::AstNode as _;
 use static_assertions::assert_obj_safe;
 
@@ -65,12 +66,9 @@ assert_obj_safe!(Node);
 pub trait Node: rowan::ast::AstNode<Language = Language> + ops::Deref<Target = RowanNode> {
     /// Returns its inherent kind, returning None if it is a node that can be
     /// created from multiple different kinds.
-    fn inherent_kind() -> Option<Kind>
+    fn kind() -> EnumSet<Kind>
     where
-        Self: Sized,
-    {
-        None
-    }
+        Self: Sized;
 
     /// Returns the Nth immediate child node that can be cast to the given
     /// typed node.
@@ -104,7 +102,8 @@ pub trait Node: rowan::ast::AstNode<Language = Language> + ops::Deref<Target = R
     where
         Self: Sized,
     {
-        self.children_tokens_untyped().find(|it| it.kind() == kind)
+        self.children_tokens_untyped()
+            .find(|token| token.kind() == kind)
     }
 
     /// Returns all immediate children tokens that can be cast to the given
@@ -143,8 +142,8 @@ macro_rules! node {
                 kind == Self::KIND
             }
 
-            fn cast(from: RowanNode) -> Option<Self> {
-                Self::can_cast(from.kind()).then_some(Self(from))
+            fn cast(token: RowanNode) -> Option<Self> {
+                Self::can_cast(token.kind()).then_some(Self(token))
             }
 
             fn syntax(&self) -> &RowanNode {
@@ -161,8 +160,8 @@ macro_rules! node {
         }
 
         impl Node for $name {
-            fn inherent_kind() -> Option<Kind> {
-                Some(Self::KIND)
+            fn kind() -> EnumSet<Kind> {
+                Self::KIND.into()
             }
         }
 
@@ -188,9 +187,9 @@ macro_rules! node {
                 matches!(kind, $($variant::KIND)|*)
             }
 
-            fn cast(from: RowanNode) -> Option<Self> {
-                match from.kind() {
-                    $($variant::KIND => Some(Self::$variant($variant(from))),)*
+            fn cast(token: RowanNode) -> Option<Self> {
+                match token.kind() {
+                    $($variant::KIND => Some(Self::$variant($variant(token))),)*
                     _ => None,
                 }
             }
@@ -210,7 +209,11 @@ macro_rules! node {
             }
         }
 
-        impl Node for $name {}
+        impl Node for $name {
+            fn kind() -> EnumSet<Kind> {
+                $($variant::KIND)|*
+            }
+        }
 
         $(
             impl From<$variant> for $name {

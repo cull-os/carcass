@@ -106,17 +106,13 @@ pub fn parse<'a, I: Iterator<Item = (Kind, &'a str)>, N: node::Node>(
     // Handle unexpected node type. Happens when you
     // `parse::<node::Foo>(...)` and the input
     // contains a non-Foo expression.
-    // TODO: Make inherent kind return an enumset all the time and always report
-    // this error.
-    if node.is_none()
-        && let Some(expected) = N::inherent_kind()
-    {
-        let child = syntax.first_child().unwrap();
+    if node.is_none() {
+        let node = syntax.first_child().unwrap();
 
         errors.push(NodeError::Unexpected {
-            got: Some(child.kind()),
-            expected: expected.into(),
-            at: child.text_range(),
+            got: Some(node.kind()),
+            expected: N::kind(),
+            at: node.text_range(),
         })
     }
 
