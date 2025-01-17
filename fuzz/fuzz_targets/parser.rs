@@ -5,8 +5,8 @@ use std::{
     fs,
     hash::{
         self,
-        Hash,
-        Hasher,
+        Hash as _,
+        Hasher as _,
     },
     hint,
     path,
