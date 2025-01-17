@@ -71,8 +71,6 @@ macro_rules! token {
     };
 }
 
-token! { #[from(TOKEN_ERROR)] struct Error; }
-
 token! { #[from(TOKEN_WHITESPACE)] struct Whitespace; }
 
 impl Whitespace {

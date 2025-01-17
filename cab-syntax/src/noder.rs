@@ -187,13 +187,13 @@ const EXPRESSION_TOKENS: EnumSet<Kind> = enum_set!(
     TOKEN_LEFT_PARENTHESIS
         | TOKEN_LEFT_BRACKET
         | TOKEN_LEFT_CURLYBRACE
+        | TOKEN_INTEGER
+        | TOKEN_FLOAT
         | TOKEN_PATH
         | TOKEN_IDENTIFIER
         | TOKEN_IDENTIFIER_START
         | TOKEN_STRING_START
         | TOKEN_ISLAND_START
-        | TOKEN_INTEGER
-        | TOKEN_FLOAT
         | TOKEN_LITERAL_IF
 );
 
@@ -690,31 +690,29 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
             },
 
             unexpected => {
-                // TODO: Find a way to merge this with expect?
                 self.next_while_trivia();
                 let start = self.offset;
 
                 self.node(NODE_ERROR, |this| {
-                    this.next_while(|kind| !(until | EXPRESSION_TOKENS).contains(kind));
+                    // Consume until the next token is either the limit, an expression token or
+                    // an operator.
+                    this.next_while(|kind| {
+                        !(until.contains(kind)
+                            || EXPRESSION_TOKENS.contains(kind)
+                            || node::PrefixOperator::try_from(kind).is_ok()
+                            || node::InfixOperator::try_from(kind)
+                                .is_ok_and(|operator| operator.is_token_owning())
+                            || node::SuffixOperator::try_from(kind).is_ok())
+                    });
                 });
 
-                let error = NodeError::Unexpected {
+                self.errors.push(NodeError::Unexpected {
                     got: Some(unexpected),
                     expected: EXPRESSION_TOKENS,
                     at: rowan::TextRange::new(start, self.offset),
-                };
+                });
 
-                let next = self.peek();
-
-                return if next.is_some_and(|kind| EXPRESSION_TOKENS.contains(kind)) {
-                    self.errors.push(error);
-                    self.node_expression_single(until)
-                } else if next.is_some() {
-                    self.errors.push(error);
-                    recoverable()
-                } else {
-                    deadly(error)
-                };
+                return recoverable();
             },
         }
 

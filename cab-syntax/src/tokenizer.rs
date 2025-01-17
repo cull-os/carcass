@@ -128,8 +128,10 @@ impl<'a> Tokenizer<'a> {
         if self.try_consume_character('e') || self.try_consume_character('E') {
             let _ = self.try_consume_character('+') || self.try_consume_character('-');
 
-            if self.consume_while(|c| c.is_ascii_digit() || c == '_') == 0 {
-                TOKEN_ERROR
+            let exponent_length = self.consume_while(|c| c.is_ascii_digit() || c == '_');
+            let exponent = self.consumed_since(self.offset - exponent_length);
+            if exponent.is_empty() || exponent.chars().all(|c| c == '_') {
+                TOKEN_ERROR_FLOAT_NO_EXPONENT
             } else {
                 TOKEN_FLOAT
             }
@@ -320,18 +322,19 @@ impl<'a> Tokenizer<'a> {
                     _ => unreachable!(),
                 };
 
-                if self.consume_while(is_valid_digit) == 0 {
-                    return Some(TOKEN_ERROR);
-                }
+                let digits_length = self.consume_while(is_valid_digit);
+                let digits = self.consumed_since(self.offset - digits_length);
+                let error_token = (digits.is_empty() || digits.chars().all(|c| c == '_'))
+                    .then_some(TOKEN_ERROR_NUMBER_NO_DIGIT);
 
                 if self.peek_character() == Some('.')
                     && self.peek_character_nth(1).is_some_and(is_valid_digit)
                 {
                     self.consume_character();
                     self.consume_while(is_valid_digit);
-                    self.consume_scientific()
+                    error_token.unwrap_or(self.consume_scientific())
                 } else {
-                    TOKEN_INTEGER
+                    error_token.unwrap_or(TOKEN_INTEGER)
                 }
             },
 
@@ -419,7 +422,7 @@ impl<'a> Tokenizer<'a> {
             '<' if self.try_consume_character('=') => TOKEN_LESS_EQUAL,
             '<' => TOKEN_LESS,
 
-            _ => TOKEN_ERROR,
+            _ => TOKEN_ERROR_UNKNOWN,
         })
     }
 }
@@ -467,9 +470,9 @@ mod tests {
     fn errors_are_individual() {
         assert_token_matches!(
             "~~~",
-            (TOKEN_ERROR, "~"),
-            (TOKEN_ERROR, "~"),
-            (TOKEN_ERROR, "~")
+            (TOKEN_ERROR_UNKNOWN, "~"),
+            (TOKEN_ERROR_UNKNOWN, "~"),
+            (TOKEN_ERROR_UNKNOWN, "~")
         );
     }
 }

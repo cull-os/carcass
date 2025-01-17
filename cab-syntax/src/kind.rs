@@ -29,7 +29,7 @@ fn reachable_unreachable() -> &'static str {
 pub enum Kind {
     /// Represents any sequence of tokens that was not recognized.
     #[display("an unknown token sequence")]
-    TOKEN_ERROR,
+    TOKEN_ERROR_UNKNOWN,
 
     /// Anything that matches [`char::is_whitespace`].
     #[display("whitespace")]
@@ -119,10 +119,14 @@ pub enum Kind {
     #[display("'/'")]
     TOKEN_SLASH,
 
+    #[display("a non-decimal number with no digits")]
+    TOKEN_ERROR_NUMBER_NO_DIGIT,
     #[display("an integer")]
     TOKEN_INTEGER,
     #[display("a float")]
     TOKEN_FLOAT,
+    #[display("a float with a missing exponent")]
+    TOKEN_ERROR_FLOAT_NO_EXPONENT,
 
     #[display("the keyword 'if'")]
     TOKEN_LITERAL_IF,
@@ -256,8 +260,7 @@ impl Kind {
     pub fn is_argument(self) -> bool {
         matches!(
             self,
-            TOKEN_ERROR
-                | TOKEN_LEFT_PARENTHESIS
+            TOKEN_LEFT_PARENTHESIS
                 | TOKEN_LEFT_BRACKET
                 | TOKEN_LEFT_CURLYBRACE
                 | TOKEN_INTEGER
@@ -267,11 +270,19 @@ impl Kind {
                 | TOKEN_IDENTIFIER_START
                 | TOKEN_STRING_START
                 | TOKEN_ISLAND_START
-        )
+        ) || self.is_error() // Error nodes are expressions.
     }
 
     /// Whether if the token should be ignored by the noder.
     pub fn is_trivia(self) -> bool {
         matches!(self, TOKEN_COMMENT | TOKEN_WHITESPACE)
+    }
+
+    /// Whether if this token is erroneous.
+    pub fn is_error(self) -> bool {
+        matches!(
+            self,
+            TOKEN_ERROR_UNKNOWN | TOKEN_ERROR_NUMBER_NO_DIGIT | TOKEN_ERROR_FLOAT_NO_EXPONENT
+        )
     }
 }
