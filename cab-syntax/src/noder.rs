@@ -129,8 +129,8 @@ pub fn parse<'a, I: Iterator<Item = (Kind, &'a str)>, N: node::Node>(
                 return true;
             };
 
-            if last_text_range != Some(*at) {
-                last_text_range = Some(*at);
+            if last_text_range != Some(at.start()) {
+                last_text_range = Some(at.start());
                 true
             } else {
                 false
