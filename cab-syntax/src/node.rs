@@ -523,11 +523,11 @@ impl InfixOperator {
             Self::Or => (75, 70),
             Self::Implication => (65, 60),
 
-            Self::Lambda => (55, 50),
-            Self::Bind => (45, 40),
+            Self::Pipe => (50, 55),
+            Self::Apply => (55, 50),
 
-            Self::Pipe => (30, 35),
-            Self::Apply => (35, 30),
+            Self::Lambda => (45, 40),
+            Self::Bind => (35, 30),
 
             Self::Same => (25, 20),
             Self::Sequence => (15, 10),
