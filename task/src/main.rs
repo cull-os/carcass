@@ -11,12 +11,8 @@ use clap_verbosity_flag::{
     InfoLevel,
     Verbosity,
 };
-use log::Level;
 use which::which;
-use yansi::{
-    Condition,
-    Paint,
-};
+use yansi::Paint as _;
 
 #[derive(clap::Parser)]
 struct Cli {
@@ -54,18 +50,18 @@ enum Check {
 fn actual_main() -> Result<(), Box<dyn error::Error>> {
     let cli = Cli::parse();
 
-    yansi::whenever(Condition::TTY_AND_COLOR);
+    yansi::whenever(yansi::Condition::TTY_AND_COLOR);
 
     // Trying to imitate clap to get a consistent experience.
     env_logger::Builder::new()
         .filter_level(cli.verbosity.log_level_filter())
         .format(|buffer, record| {
             let level = match record.level() {
-                Level::Error => "error:".red().bold(),
-                Level::Warn => "warn:".yellow().bold(),
-                Level::Info => "info:".green().bold(),
-                Level::Debug => "debug:".blue().bold(),
-                Level::Trace => "trace:".cyan().bold(),
+                log::Level::Error => "error:".red().bold(),
+                log::Level::Warn => "warn:".yellow().bold(),
+                log::Level::Info => "info:".green().bold(),
+                log::Level::Debug => "debug:".blue().bold(),
+                log::Level::Trace => "trace:".cyan().bold(),
             };
 
             writeln!(buffer, "{level} {arguments}", arguments = record.args())

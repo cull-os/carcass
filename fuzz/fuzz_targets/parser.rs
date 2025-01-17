@@ -17,10 +17,7 @@ use libfuzzer_sys::{
     Corpus,
     fuzz_target,
 };
-use yansi::{
-    Condition,
-    Paint as _,
-};
+use yansi::Paint as _;
 
 fuzz_target!(|data: &str| -> Corpus {
     let parse = hint::black_box(syntax::parse::<_, syntax::node::Expression>(
@@ -33,7 +30,7 @@ fuzz_target!(|data: &str| -> Corpus {
         return Corpus::Keep;
     }
 
-    yansi::whenever(Condition::TTY_AND_COLOR);
+    yansi::whenever(yansi::Condition::TTY_AND_COLOR);
 
     let Ok(node) = parse.result() else {
         return Corpus::Reject;

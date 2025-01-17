@@ -24,11 +24,7 @@ use codespan_reporting::{
         termcolor,
     },
 };
-use log::Level;
-use yansi::{
-    Condition,
-    Paint as _,
-};
+use yansi::Paint as _;
 
 #[derive(clap::Parser)]
 #[command(version, about)]
@@ -73,7 +69,7 @@ enum Dump {
 async fn main() {
     let cli = Cli::parse();
 
-    yansi::whenever(Condition::TTY_AND_COLOR);
+    yansi::whenever(yansi::Condition::TTY_AND_COLOR);
 
     let (mut out, err) = {
         let choice = if yansi::is_enabled() {
@@ -93,11 +89,11 @@ async fn main() {
         .filter_level(cli.verbosity.log_level_filter())
         .format(|buffer, record| {
             let level = match record.level() {
-                Level::Error => "error:".red().bold(),
-                Level::Warn => "warn:".yellow().bold(),
-                Level::Info => "info:".green().bold(),
-                Level::Debug => "debug:".blue().bold(),
-                Level::Trace => "trace:".cyan().bold(),
+                log::Level::Error => "error:".red().bold(),
+                log::Level::Warn => "warn:".yellow().bold(),
+                log::Level::Info => "info:".green().bold(),
+                log::Level::Debug => "debug:".blue().bold(),
+                log::Level::Trace => "trace:".cyan().bold(),
             };
 
             writeln!(buffer, "{level} {arguments}", arguments = record.args())
