@@ -134,11 +134,12 @@ pub fn parse<'a, I: Iterator<Item = (Kind, &'a str)>, N: node::Node>(
     }
 
     // TODO: Temporary hack to check the string validation.
-    if syntax
-        .first_child()
-        .and_then(|child| child.first_token())
-        .map(|token| token.kind())
-        == Some(TOKEN_STRING_START)
+    if errors.is_empty()
+        && syntax
+            .first_child()
+            .and_then(|child| child.first_token())
+            .map(|token| token.kind())
+            == Some(TOKEN_STRING_START)
     {
         use rowan::ast::AstNode as _;
 
