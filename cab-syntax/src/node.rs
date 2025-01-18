@@ -17,6 +17,7 @@ use crate::{
         *,
     },
     Language,
+    NodeError,
     RowanElement,
     RowanNode,
     RowanToken,
@@ -64,6 +65,8 @@ assert_obj_safe!(Node);
 /// A typed AST node. Implementors will usually have methods to make accessing
 /// children elements and attributes related to the node simpler.
 pub trait Node: rowan::ast::AstNode<Language = Language> + ops::Deref<Target = RowanNode> {
+    fn validate(&self, _to: &mut Vec<NodeError>) {}
+
     /// Returns its inherent kind, returning None if it is a node that can be
     /// created from multiple different kinds.
     fn kind() -> EnumSet<Kind>
