@@ -3,10 +3,7 @@ use std::{
     process,
 };
 
-use cab::syntax::{
-    self,
-    NodeError,
-};
+use cab::syntax;
 use clap::Parser as _;
 use clap_stdin::FileOrStdin;
 use clap_verbosity_flag::{
@@ -141,18 +138,11 @@ async fn main() {
                         let diagnostic = Diagnostic::error()
                             .with_message("syntax error")
                             .with_labels(vec![
-                                Label::primary(file_id, match error {
-                                    NodeError::InvalidPattern { at, .. }
-                                    | NodeError::InvalidStringlike { at, .. }
-                                    | NodeError::InvalidItem { at, .. }
-                                    | NodeError::InvalidAttribute { at, .. }
-                                    | NodeError::InvalidAssociate { at, .. }
-                                    | NodeError::InvalidBranch { at, .. }
-                                    | NodeError::Unexpected { at, .. } => {
-                                        at.start().into()..at.end().into()
-                                    },
-                                })
-                                .with_message(format!("{error}")),
+                                Label::primary(
+                                    file_id,
+                                    error.at.start().into()..error.at.end().into(),
+                                )
+                                .with_message(format!("{reason}", reason = error.reason)),
                             ]);
 
                         term::emit(&mut err.lock(), &error_config, &files, &diagnostic).ok();

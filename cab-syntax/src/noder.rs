@@ -1,5 +1,6 @@
 use std::{
-    fmt,
+    borrow,
+    fmt::Write as _,
     result,
 };
 
@@ -91,11 +92,11 @@ pub fn parse<'a, I: Iterator<Item = (Kind, &'a str)>, N: node::Node>(
             let start = this.offset;
 
             this.node(NODE_ERROR, |this| this.next_direct_while(|_| true));
-            this.errors.push(NodeError::Unexpected {
-                got: Some(unexpected),
-                expected: EnumSet::empty(),
-                at: rowan::TextRange::new(start, this.offset),
-            });
+            this.errors.push(NodeError::unexpected(
+                Some(unexpected),
+                EnumSet::empty(),
+                rowan::TextRange::new(start, this.offset),
+            ));
         }
     });
 
@@ -109,21 +110,17 @@ pub fn parse<'a, I: Iterator<Item = (Kind, &'a str)>, N: node::Node>(
     if node.is_none() {
         let node = syntax.first_child().unwrap();
 
-        errors.push(NodeError::Unexpected {
-            got: Some(node.kind()),
-            expected: N::kind(),
-            at: node.text_range(),
-        })
+        errors.push(NodeError::unexpected(
+            Some(node.kind()),
+            N::kind(),
+            node.text_range(),
+        ));
     }
 
     if options.deduplicate_errors {
         let mut last_text_range = None;
 
-        errors.retain(move |error| {
-            let NodeError::Unexpected { at, .. } = error else {
-                return true;
-            };
-
+        errors.retain(move |NodeError { at, .. }| {
             if last_text_range != Some(at.start()) {
                 last_text_range = Some(at.start());
                 true
@@ -133,6 +130,7 @@ pub fn parse<'a, I: Iterator<Item = (Kind, &'a str)>, N: node::Node>(
         })
     }
 
+    // Purposefully after error deduplication.
     if let Some(node) = &node {
         node.validate(&mut errors);
     }
@@ -162,124 +160,81 @@ const IDENTIFIER_TOKENS: EnumSet<Kind> = enum_set!(TOKEN_IDENTIFIER | TOKEN_IDEN
 
 /// A node error.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum NodeError {
-    /// An error that happens when the parsed expression is not a valid pattern.
-    InvalidPattern {
-        /// The node that was not a valid pattern.
-        got: Option<Kind>,
-        /// The range that contains the invalid node.
-        at: rowan::TextRange,
-    },
-
-    /// An error that happens when a stringlike contains invalid escapes or is
-    /// formatted wrongly.
-    InvalidStringlike {
-        reason: &'static str,
-        at: rowan::TextRange,
-    },
-
-    InvalidItem {
-        reason: &'static str,
-        at: rowan::TextRange,
-    },
-
-    InvalidAttribute {
-        reason: &'static str,
-        at: rowan::TextRange,
-    },
-
-    InvalidBranch {
-        reason: &'static str,
-        at: rowan::TextRange,
-    },
-
-    InvalidAssociate {
-        reason: &'static str,
-        at: rowan::TextRange,
-    },
-
-    /// An error that happens when the noder was not expecting a particular
-    /// token or node.
-    Unexpected {
-        /// The token that was not expected. This being [`None`] means that the
-        /// end of the file was reached.
-        got: Option<Kind>,
-        /// The expected token. This being [`EnumSet::empty()`] means that the
-        /// end of the file was expected, but there were leftovers.
-        expected: EnumSet<Kind>,
-        /// The range that contains the unexpected token sequence.
-        at: rowan::TextRange,
-    },
+pub struct NodeError {
+    /// The error's reason.
+    pub reason: borrow::Cow<'static, str>,
+    /// Where the error happened in the source.
+    pub at: rowan::TextRange,
 }
 
-impl fmt::Display for NodeError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::InvalidPattern { got, .. } => {
-                if let Some(got) = got {
-                    write!(formatter, "{got} is not a valid pattern")
-                } else {
-                    write!(formatter, "no pattern to be found")
-                }
-            },
+impl NodeError {
+    pub fn new(reason: &'static str, at: rowan::TextRange) -> Self {
+        Self {
+            reason: reason.into(),
+            at,
+        }
+    }
 
-            Self::InvalidStringlike { reason, .. }
-            | Self::InvalidItem { reason, .. }
-            | Self::InvalidAttribute { reason, .. }
-            | Self::InvalidAssociate { reason, .. }
-            | Self::InvalidBranch { reason, .. } => {
-                write!(formatter, "{reason}")
-            },
+    pub fn invalid_pattern(got: Kind, at: rowan::TextRange) -> Self {
+        Self {
+            reason: format!("{got} is not a valid pattern").into(),
+            at,
+        }
+    }
 
-            Self::Unexpected {
-                got: Some(got),
-                expected: const { EnumSet::empty() },
-                ..
-            } => {
-                write!(formatter, "expected end of file, got {got}")
-            },
+    pub fn unexpected(
+        got: Option<Kind>,
+        mut expected: EnumSet<Kind>,
+        at: rowan::TextRange,
+    ) -> NodeError {
+        let mut reason = String::from("expected ");
 
-            &Self::Unexpected {
-                got, mut expected, ..
-            } => {
-                write!(formatter, "expected ")?;
+        if expected == EnumSet::empty() {
+            write!(reason, "end of file, got {got}", got = got.unwrap()).ok();
 
-                if expected.is_superset(EXPRESSION_TOKENS) {
-                    expected.remove_all(EXPRESSION_TOKENS);
-                    write!(formatter, "an expression")?;
+            return Self {
+                reason: reason.into(),
+                at,
+            };
+        }
 
-                    match expected.iter().count() {
-                        0 => {},
-                        1 => write!(formatter, " or ")?,
-                        2.. => write!(formatter, ", ")?,
-                    }
-                }
+        if expected.is_superset(EXPRESSION_TOKENS) {
+            expected.remove_all(EXPRESSION_TOKENS);
 
-                if expected.is_superset(IDENTIFIER_TOKENS) {
-                    expected.remove(TOKEN_IDENTIFIER_START);
-                }
+            let separator = match expected.len() {
+                0 => "",
+                1 => " or ",
+                2.. => ", ",
+            };
 
-                let mut iterator = expected.iter().peekmore();
-                while let Some(item) = iterator.next() {
-                    write!(
-                        formatter,
-                        "{item}{separator}",
-                        separator =
-                            match (iterator.peek().is_some(), iterator.peek_nth(1).is_some()) {
-                                (false, false) => "",
-                                (true, false) => " or ",
-                                (true, true) => ", ",
-                                _ => unreachable!(),
-                            }
-                    )?;
-                }
+            write!(reason, "an expression{separator}").ok();
+        }
 
-                if let Some(got) = got {
-                    write!(formatter, ", got {got}")
-                } else {
-                    write!(formatter, ", reached end of file")
-                }
-            },
+        if expected.is_superset(IDENTIFIER_TOKENS) {
+            expected.remove(TOKEN_IDENTIFIER_START);
+        }
+
+        for (index, item) in expected.into_iter().enumerate() {
+            let position = index + 1;
+
+            let separator = match position {
+                position if expected.len() == position => "",
+                position if expected.len() == position + 1 => " or ",
+                _ => ", ",
+            };
+
+            write!(reason, "{item}{separator}").ok();
+        }
+
+        if let Some(got) = got {
+            write!(reason, ", got {got}").ok();
+        } else {
+            write!(reason, ", reached end of file").ok();
+        }
+
+        Self {
+            reason: reason.into(),
+            at,
         }
     }
 }
@@ -363,11 +318,11 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
     }
 
     fn peek_direct_expecting(&mut self, expected: EnumSet<Kind>) -> Result<Kind> {
-        self.peek_direct().ok_or(NodeError::Unexpected {
-            got: None,
+        self.peek_direct().ok_or(NodeError::unexpected(
+            None,
             expected,
-            at: rowan::TextRange::empty(self.offset),
-        })
+            rowan::TextRange::empty(self.offset),
+        ))
     }
 
     fn peek_nth(&mut self, n: usize) -> Option<Kind> {
@@ -394,11 +349,11 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
     }
 
     fn peek_expecting(&mut self, expected: EnumSet<Kind>) -> Result<Kind> {
-        self.peek().ok_or(NodeError::Unexpected {
-            got: None,
+        self.peek().ok_or(NodeError::unexpected(
+            None,
             expected,
-            at: rowan::TextRange::empty(self.offset),
-        })
+            rowan::TextRange::empty(self.offset),
+        ))
     }
 
     fn next_direct(&mut self) -> Result<Kind> {
@@ -411,11 +366,11 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
             },
 
             None => {
-                Err(NodeError::Unexpected {
-                    got: None,
-                    expected: EnumSet::empty(),
-                    at: rowan::TextRange::empty(self.offset),
-                })
+                Err(NodeError::unexpected(
+                    None,
+                    EnumSet::empty(),
+                    rowan::TextRange::empty(self.offset),
+                ))
             },
         }
     }
@@ -470,11 +425,11 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
                     this.next_while(|next| !boundary.contains(next));
                 });
 
-                let error = NodeError::Unexpected {
-                    got: Some(unexpected),
+                let error = NodeError::unexpected(
+                    Some(unexpected),
                     expected,
-                    at: rowan::TextRange::new(start, self.offset),
-                };
+                    rowan::TextRange::new(start, self.offset),
+                );
 
                 if let Some(next) = self.peek() {
                     self.errors.push(error);
@@ -708,11 +663,11 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
 
                 self.errors.push(match unexpected {
                     Ok(next) => {
-                        NodeError::Unexpected {
-                            got: Some(next),
-                            expected: EXPRESSION_TOKENS,
-                            at: rowan::TextRange::new(start, self.offset),
-                        }
+                        NodeError::unexpected(
+                            Some(next),
+                            EXPRESSION_TOKENS,
+                            rowan::TextRange::new(start, self.offset),
+                        )
                     },
 
                     Err(error) => error,

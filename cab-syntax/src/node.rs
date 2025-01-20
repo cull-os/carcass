@@ -326,9 +326,7 @@ node! {
 impl Expression {
     fn validate_pattern(&self, to: &mut Vec<NodeError>) {
         match self {
-            Self::Parenthesis(parenthesis) => {
-                parenthesis.expression().validate_pattern(to);
-            },
+            Self::Parenthesis(parenthesis) => parenthesis.expression().validate_pattern(to),
 
             Self::List(list) => {
                 for item in list.items() {
@@ -336,29 +334,16 @@ impl Expression {
                 }
             },
 
-            Self::AttributeList(attribute_list) => {
-                // All attribute lists are valid patterns.
-                // TODO: Add warnings for right-side expression that
-                // statically never use the attribute list made the scope.
-                attribute_list.validate(to);
-            },
+            // All attribute lists are valid patterns.
+            // TODO: Add warnings for right-side expression that
+            // statically never use the attribute list made the scope.
+            Self::AttributeList(attribute_list) => attribute_list.validate(to),
 
-            Self::Identifier(identifier) => {
-                identifier.validate(to);
-            },
-            Self::SString(string) => {
-                string.validate(to);
-            },
-            Self::Number(number) => {
-                number.validate(to);
-            },
+            Self::Identifier(identifier) => identifier.validate(to),
+            Self::SString(string) => string.validate(to),
+            Self::Number(number) => number.validate(to),
 
-            _ => {
-                to.push(NodeError::InvalidPattern {
-                    got: Some(self.kind()),
-                    at: self.text_range(),
-                })
-            },
+            _ => to.push(NodeError::invalid_pattern(self.kind(), self.text_range())),
         }
     }
 
@@ -418,10 +403,10 @@ node! {
     fn validate(&self, to: &mut Vec<NodeError>) {
         if let Some(Expression::InfixOperation(operation)) = self.expression()
             && operation.operator() == InfixOperator::Sequence {
-            to.push(NodeError::InvalidItem {
-                reason: "inner expression of list cannot be sequence, consider parenthesizing",
-                at: operation.text_range(),
-            });
+            to.push(NodeError::new(
+                 "inner expression of list cannot be sequence, consider parenthesizing",
+                 operation.text_range(),
+            ));
         }
 
         for item in self.items() {
@@ -452,10 +437,10 @@ node! {
     fn validate(&self, to: &mut Vec<NodeError>) {
         if let Some(Expression::InfixOperation(operation)) = self.expression()
             && operation.operator() == InfixOperator::Sequence {
-            to.push(NodeError::InvalidItem {
-                reason: "sequence operator has the lowest binding power, please parenthesize",
-                at: operation.text_range(),
-            });
+            to.push(NodeError::new(
+                "sequence operator has the lowest binding power, please parenthesize",
+                operation.text_range(),
+            ));
         }
 
         for entry in self.entries() {
@@ -469,10 +454,10 @@ node! {
                 },
 
                 invalid => {
-                    to.push(NodeError::InvalidAttribute {
-                        reason: "invalid attribute",
-                        at: invalid.text_range(),
-                    })
+                    to.push(NodeError::new(
+                        "invalid attribute",
+                        invalid.text_range(),
+                    ))
                 }
            }
         }
@@ -582,10 +567,10 @@ node! {
                 if let Expression::InfixOperation(operation) = expression
                     && let left_operator @ (InfixOperator::Apply | InfixOperator::Pipe) = operation.operator()
                     && left_operator != operator {
-                    to.push(NodeError::InvalidAssociate {
-                        reason: "application and piping operators do not associate, consider parentehsizing",
-                        at: operation.text_range(),
-                    })
+                    to.push(NodeError::new(
+                        "application and piping operators do not associate, consider parentehsizing",
+                        operation.text_range(),
+                    ))
                 }
             }
         }
@@ -883,10 +868,10 @@ node! {
 
                 InterpolationPart::Content(content) => {
                     if content.text().chars().any(char::is_control) {
-                        to.push(NodeError::InvalidStringlike {
-                            reason: "quoted identifiers cannot contain control characters (non-escaped newlines, tabs, ...)",
-                            at: self.text_range(),
-                        });
+                        to.push(NodeError::new(
+                            "quoted identifiers cannot contain control characters (non-escaped newlines, tabs, ...)",
+                            self.text_range(),
+                        ));
 
                         // One error for all contents within the identifier.
                         break;
@@ -1024,10 +1009,10 @@ node! {
                 },
 
                 invalid => {
-                    to.push(NodeError::InvalidBranch {
-                        reason: "all if-is branches must be lambdas",
-                        at: invalid.text_range(),
-                    });
+                    to.push(NodeError::new(
+                        "all if-is branches must be lambdas",
+                        invalid.text_range(),
+                    ));
                 },
             }
         }

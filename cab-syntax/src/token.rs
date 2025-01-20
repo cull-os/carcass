@@ -1,6 +1,6 @@
 //! [`Token`] definitions for the Cab language.
 use std::{
-    borrow::Cow,
+    borrow,
     fmt,
     ops::{
         self,
@@ -167,10 +167,10 @@ token! { #[from(TOKEN_CONTENT)] struct Content; }
 
 impl Content {
     // TODO
-    pub fn normalized(contents: &[Self]) -> Result<Vec<Cow<'_, str>>, Vec<NodeError>> {
+    pub fn normalized(contents: &[Self]) -> Result<Vec<borrow::Cow<'_, str>>, Vec<NodeError>> {
         Ok(contents
             .iter()
-            .map(|content| Cow::Borrowed(content.text()))
+            .map(|content| borrow::Cow::Borrowed(content.text()))
             .collect())
     }
 }
