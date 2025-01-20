@@ -314,7 +314,7 @@ impl<'a> Tokenizer<'a> {
             '*' => TOKEN_ASTERISK,
             '^' => TOKEN_CARET,
 
-            '0' if matches!(self.peek_character(), Some('b' | 'o' | 'x')) => {
+            '0' if let Some('b' | 'o' | 'x') = self.peek_character() => {
                 let is_valid_digit = match self.consume_character() {
                     Some('b') => |c: char| matches!(c, '0' | '1' | '_'),
                     Some('o') => |c: char| matches!(c, '0'..='7' | '_'),
@@ -370,7 +370,7 @@ impl<'a> Tokenizer<'a> {
                     .unwrap_or(TOKEN_IDENTIFIER)
             },
 
-            '.' if matches!(self.peek_character(), Some('.' | '/')) => {
+            '.' if let Some('.' | '/') = self.peek_character() => {
                 self.offset -= 1;
                 self.context_push(TokenizerContext::Path);
 

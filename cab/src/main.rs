@@ -154,7 +154,7 @@ async fn main() {
                         term::emit(&mut err.lock(), &error_config, &files, &diagnostic).ok();
                     }
 
-                    if matches!(command, Dump::Syntax) {
+                    if let Dump::Syntax = command {
                         write!(out, "{syntax:#?}", syntax = parse.syntax)
                     } else if let Ok(node) = parse.result() {
                         syntax::format::parenthesize(&mut out, &node)
