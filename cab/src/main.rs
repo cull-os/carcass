@@ -5,21 +5,10 @@ use std::{
 
 use cab::syntax;
 use clap::Parser as _;
-use clap_stdin::FileOrStdin;
-use clap_verbosity_flag::{
-    InfoLevel,
-    Verbosity,
-};
 use codespan_reporting::{
-    diagnostic::{
-        Diagnostic,
-        Label,
-    },
-    files::SimpleFiles,
-    term::{
-        self,
-        termcolor,
-    },
+    diagnostic,
+    files as diagnostic_files,
+    term,
 };
 use yansi::Paint as _;
 
@@ -27,7 +16,7 @@ use yansi::Paint as _;
 #[command(version, about)]
 struct Cli {
     #[command(flatten)]
-    verbosity: Verbosity<InfoLevel>,
+    verbosity: clap_verbosity_flag::Verbosity<clap_verbosity_flag::InfoLevel>,
 
     #[command(subcommand)]
     command: Command,
@@ -42,7 +31,7 @@ enum Command {
 
         /// The file to dump.
         #[clap(default_value = "-", global = true)]
-        file: FileOrStdin,
+        file: clap_stdin::FileOrStdin,
     },
 }
 
@@ -70,14 +59,14 @@ async fn main() {
 
     let (mut out, err) = {
         let choice = if yansi::is_enabled() {
-            termcolor::ColorChoice::Always
+            term::termcolor::ColorChoice::Always
         } else {
-            termcolor::ColorChoice::Never
+            term::termcolor::ColorChoice::Never
         };
 
         (
-            termcolor::StandardStream::stdout(choice),
-            termcolor::StandardStream::stderr(choice),
+            term::termcolor::StandardStream::stdout(choice),
+            term::termcolor::StandardStream::stderr(choice),
         )
     };
 
@@ -105,9 +94,6 @@ async fn main() {
                 process::exit(1);
             });
 
-            let mut files = SimpleFiles::new();
-            let file_id = files.add(name, &contents);
-
             match command {
                 Dump::Token { color } => {
                     for (kind, slice) in syntax::tokenize(&contents) {
@@ -132,21 +118,29 @@ async fn main() {
                         Default::default(),
                     );
 
-                    let error_config = term::Config::default();
+                    let mut files = diagnostic_files::SimpleFiles::new();
+                    let input_file = files.add(name, &contents);
 
-                    for error in &parse.errors {
-                        let diagnostic = Diagnostic::error()
-                            .with_message("syntax error")
-                            .with_labels(vec![
-                                Label::primary(
-                                    file_id,
-                                    error.at.start().into()..error.at.end().into(),
-                                )
-                                .with_message(format!("{reason}", reason = error.reason)),
-                            ]);
+                    let diagnostic = diagnostic::Diagnostic::error()
+                        .with_message("syntax error")
+                        .with_labels(
+                            parse
+                                .errors
+                                .into_iter()
+                                .map(|error| {
+                                    diagnostic::Label::primary(input_file, error.at)
+                                        .with_message(error.reason)
+                                })
+                                .collect(),
+                        );
 
-                        term::emit(&mut err.lock(), &error_config, &files, &diagnostic).ok();
-                    }
+                    term::emit(
+                        &mut err.lock(),
+                        &term::Config::default(),
+                        &files,
+                        &diagnostic,
+                    )
+                    .ok();
 
                     if let Dump::Syntax = command {
                         write!(out, "{syntax:#?}", syntax = parse.syntax)
