@@ -1,6 +1,6 @@
 [package]
 name        = "cab"
-description = "A reproducible derivation file composer"
+description = "A reproducible contextful expression language"
 version     = "0.0.1"
 edition     = "2024"
 

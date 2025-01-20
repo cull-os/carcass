@@ -1,5 +1,5 @@
 {
-  description = "Cab, the reproducible derivation composer and realizer-protocol client.";
+  description = "A reproducible contextful expression language";
 
   nixConfig = {
     extra-substituters = [
