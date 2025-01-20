@@ -65,13 +65,15 @@ assert_obj_safe!(Node);
 /// A typed AST node. Implementors will usually have methods to make accessing
 /// children elements and attributes related to the node simpler.
 pub trait Node: rowan::ast::AstNode<Language = Language> + ops::Deref<Target = RowanNode> {
-    fn validate(&self, _to: &mut Vec<NodeError>) {}
-
     /// Returns its inherent kind, returning None if it is a node that can be
     /// created from multiple different kinds.
     fn kind() -> EnumSet<Kind>
     where
         Self: Sized;
+
+    /// Validates the node appending errors to the provided [`Vec`]. If there
+    /// are no nodes appended the node is valid.
+    fn validate(&self, _to: &mut Vec<NodeError>) {}
 
     /// Returns the Nth immediate child node that can be cast to the given
     /// typed node.
@@ -134,6 +136,8 @@ macro_rules! node {
     (
         #[from($kind:ident)]
         struct $name:ident;
+
+        $($items:item)*
     ) => {
         #[derive(Debug, Clone, PartialEq, Eq, Hash)]
         pub struct $name(pub(crate) RowanNode);
@@ -166,6 +170,8 @@ macro_rules! node {
             fn kind() -> EnumSet<Kind> {
                 Self::KIND.into()
             }
+
+            $($items)*
         }
 
         impl $name {
@@ -177,6 +183,8 @@ macro_rules! node {
     (
         #[from($($variant:ident),* $(,)?)]
         enum $name:ident;
+
+        $($items:item)*
     ) => {
         #[derive(Debug, Clone, PartialEq, Eq, Hash)]
         pub enum $name {
@@ -216,6 +224,8 @@ macro_rules! node {
             fn kind() -> EnumSet<Kind> {
                 $($variant::KIND)|*
             }
+
+            $($items)*
         }
 
         $(
@@ -292,38 +302,50 @@ node! {
         IfIs,
         IfElse,
     )] enum Expression;
+
+    fn validate(&self, to: &mut Vec<NodeError>) {
+        match self {
+            Self::Error(error) => error.validate(to),
+            Self::Parenthesis(parenthesis) => parenthesis.validate(to),
+            Self::List(list) => list.validate(to),
+            Self::AttributeList(attribute_list) => attribute_list.validate(to),
+            Self::PrefixOperation(prefix_operation) => prefix_operation.validate(to),
+            Self::InfixOperation(infix_operation) => infix_operation.validate(to),
+            Self::SuffixOperation(suffix_operation) => suffix_operation.validate(to),
+            Self::Path(path) => path.validate(to),
+            Self::Identifier(identifier) => identifier.validate(to),
+            Self::SString(string) => string.validate(to),
+            Self::Island(island) => island.validate(to),
+            Self::Number(number) => number.validate(to),
+            Self::IfIs(if_is) => if_is.validate(to),
+            Self::IfElse(if_else) => if_else.validate(to),
+        }
+    }
 }
 
-// ERROR
+impl Expression {
+    fn validate_pattern(&self, _to: &mut Vec<NodeError>) {
+        match self {
+            Expression::Error(_error) => todo!(),
+            Expression::Parenthesis(_parenthesis) => todo!(),
+            Expression::List(_list) => todo!(),
+            Expression::AttributeList(_attribute_list) => todo!(),
+            Expression::PrefixOperation(_prefix_operation) => todo!(),
+            Expression::InfixOperation(_infix_operation) => todo!(),
+            Expression::SuffixOperation(_suffix_operation) => todo!(),
+            Expression::Path(_path) => todo!(),
+            Expression::Identifier(_identifier) => todo!(),
+            Expression::SString(_string) => todo!(),
+            Expression::Island(_island) => todo!(),
+            Expression::Number(_number) => todo!(),
+            Expression::IfIs(_if_is) => todo!(),
+            Expression::IfElse(_if_else) => todo!(),
+        }
+    }
 
-node! { #[from(NODE_ERROR)] struct Error; }
-
-// PARENTHESIS
-
-node! { #[from(NODE_PARENTHESIS)] struct Parenthesis; }
-
-impl Parenthesis {
-    get_token! { left_parenthesis -> TOKEN_LEFT_PARENTHESIS }
-
-    get_node! { expression -> 0 @ Expression }
-
-    get_token! { right_parenthesis -> ? TOKEN_RIGHT_PARENTHESIS }
-}
-
-// LIST
-
-node! { #[from(NODE_LIST)] struct List; }
-
-#[rustfmt::skip]
-impl List {
-    get_token! { left_bracket -> TOKEN_LEFT_BRACKET }
-
-    get_node! { expression -> 0 @ ? Expression }
-
-    /// Returns all items of the list.
-    pub fn items(&self) -> impl Iterator<Item = Expression> {
+    fn same_items(self) -> impl Iterator<Item = Expression> {
         gen {
-            let mut expressions: VecDeque<_> = self.expression().into_iter().collect();
+            let mut expressions = VecDeque::from([self]);
 
             while let Some(expression) = expressions.pop_back() {
                 match expression {
@@ -331,7 +353,7 @@ impl List {
                         if operation.operator() == InfixOperator::Same =>
                     {
                         expressions.push_front(operation.left_expression());
-                        expressions.push_front(operation.right_expression().unwrap());
+                        expressions.push_front(operation.right_expression());
                     },
 
                     Expression::SuffixOperation(operation)
@@ -345,25 +367,113 @@ impl List {
             }
         }
     }
+}
+
+// ERROR
+
+node! {
+    #[from(NODE_ERROR)] struct Error;
+
+    // Intentionally left empty because error nodes have their errors emitted at parse time.
+    fn validate(&self, _: &mut Vec<NodeError>) {}
+}
+
+// PARENTHESIS
+
+node! {
+    #[from(NODE_PARENTHESIS)] struct Parenthesis;
+
+    fn validate(&self, to: &mut Vec<NodeError>) {
+        self.expression().validate(to);
+    }
+}
+
+impl Parenthesis {
+    get_token! { left_parenthesis -> TOKEN_LEFT_PARENTHESIS }
+
+    get_node! { expression -> 0 @ Expression }
+
+    get_token! { right_parenthesis -> ? TOKEN_RIGHT_PARENTHESIS }
+}
+
+// LIST
+
+node! {
+   #[from(NODE_LIST)] struct List;
+
+    fn validate(&self, to: &mut Vec<NodeError>) {
+       if let Some(Expression::InfixOperation(operation)) = self.expression()
+           && operation.operator() == InfixOperator::Sequence {
+            to.push(NodeError::InvalidList {
+                reason: "inner expression of list cannot be sequence; consider parenthesizing",
+                at: operation.text_range(),
+            })
+       }
+
+       for item in self.items() {
+           item.validate(to);
+       }
+    }
+}
+
+#[rustfmt::skip]
+impl List {
+    get_token! { left_bracket -> TOKEN_LEFT_BRACKET }
+
+    get_node! { expression -> 0 @ ? Expression }
+
+    /// Returns all items of the list.
+    pub fn items(&self) -> impl Iterator<Item = Expression> {
+        self.expression().into_iter().flat_map(Expression::same_items)
+    }
 
     get_token! { right_bracket -> ? TOKEN_RIGHT_BRACKET }
 }
 
 // ATTRIBUTE LIST
 
-node! { #[from(NODE_ATTRIBUTE_LIST)] struct AttributeList; }
+node! {
+    #[from(NODE_ATTRIBUTE_LIST)] struct AttributeList;
 
+    fn validate(&self, to: &mut Vec<NodeError>) {
+       if let Some(Expression::InfixOperation(operation)) = self.expression()
+           && operation.operator() == InfixOperator::Sequence {
+            to.push(NodeError::InvalidList {
+                reason: "sequence operator has the lowest binding power, please parenthesize",
+                at: operation.text_range(),
+            })
+       }
+
+       for entry in self.entries() {
+           // Yeah, bind operators validate themselves to be patterns on the left.
+           entry.validate(to);
+       }
+    }
+}
+
+#[rustfmt::skip]
 impl AttributeList {
     get_token! { left_curlybrace -> TOKEN_LEFT_CURLYBRACE }
 
     get_node! { expression -> 0 @ ? Expression }
+
+    /// Returns all entries of the attribute list.
+    pub fn entries(&self) -> impl Iterator<Item = Expression> {
+        self.expression().into_iter().flat_map(Expression::same_items)
+    }
 
     get_token! { right_curlybrace -> ? TOKEN_RIGHT_CURLYBRACE }
 }
 
 // PREFIX OPERATION
 
-node! { #[from(NODE_PREFIX_OPERATION)] struct PrefixOperation; }
+node! {
+    #[from(NODE_PREFIX_OPERATION)] struct PrefixOperation;
+
+    fn validate(&self, to: &mut Vec<NodeError>) {
+        self.expression().validate(to);
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PrefixOperator {
@@ -419,7 +529,19 @@ impl PrefixOperation {
 
 // INFIX OPERATION
 
-node! { #[from(NODE_INFIX_OPERATION)] struct InfixOperation; }
+node! {
+    #[from(NODE_INFIX_OPERATION)] struct InfixOperation;
+
+    fn validate(&self, to: &mut Vec<NodeError>) {
+        if let InfixOperator::Lambda | InfixOperator::Bind = self.operator() {
+            self.left_expression().validate_pattern(to);
+        } else {
+            self.left_expression().validate(to);
+        }
+
+        self.right_expression().validate(to);
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum InfixOperator {
@@ -561,12 +683,18 @@ impl InfixOperation {
             .unwrap_or(InfixOperator::ImplicitApply)
     }
 
-    get_node! { right_expression -> 1 @ ? Expression }
+    get_node! { right_expression -> 1 @ Expression }
 }
 
 // SUFFIX OPERATION
 
-node! { #[from(NODE_SUFFIX_OPERATION)] struct SuffixOperation; }
+node! {
+    #[from(NODE_SUFFIX_OPERATION)] struct SuffixOperation;
+
+    fn validate(&self, to: &mut Vec<NodeError>) {
+        self.expression().validate(to);
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SuffixOperator {
@@ -607,14 +735,20 @@ impl SuffixOperation {
 
 // INTERPOLATION
 
-node! { #[from(NODE_INTERPOLATION)] struct Interpolation; }
+node! {
+    #[from(NODE_INTERPOLATION)] struct Interpolation;
+
+    fn validate(&self, to: &mut Vec<NodeError>) {
+        self.expression().validate(to);
+    }
+}
 
 impl Interpolation {
     get_token! { interpolation_start -> TOKEN_INTERPOLATION_START }
 
-    get_node! { expression -> 0 @ ? Expression }
+    get_node! { expression -> 0 @ Expression }
 
-    get_token! { interpolation_end -> ? TOKEN_INTERPOLATION_END }
+    get_token! { interpolation_end -> TOKEN_INTERPOLATION_END }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -655,9 +789,19 @@ macro_rules! parted {
     };
 }
 
-// PATH, IDENTIFIER, STRING, ISLAND
+// PATH
 
-node! { #[from(NODE_PATH)] struct Path; }
+node! {
+    #[from(NODE_PATH)] struct Path;
+
+    fn validate(&self, to: &mut Vec<NodeError>) {
+        for part in self.parts() {
+            if let InterpolationPart::Interpolation(interpolation) = part {
+                interpolation.validate(to);
+            }
+        }
+    }
+}
 
 parted! {
     impl Path {
@@ -666,12 +810,48 @@ parted! {
     }
 }
 
-node! { #[from(NODE_IDENTIFIER)] struct Identifier; }
+// IDENTIFIER
 
-node! { #[from(NODE_IDENTIFIER)] struct IdentifierComplex; }
+node! {
+    #[from(NODE_IDENTIFIER)] struct Identifier;
+
+    fn validate(&self, to: &mut Vec<NodeError>) {
+        if let IdentifierValue::Quoted(quoted) = self.value() {
+            quoted.validate(to);
+        }
+    }
+}
+
+node! {
+    #[from(NODE_IDENTIFIER)] struct IdentifierQuoted;
+
+    fn validate(&self, to: &mut Vec<NodeError>) {
+        for part in self.parts() {
+            match part {
+                InterpolationPart::Interpolation(interpolation) => {
+                    interpolation.validate(to);
+                },
+
+                InterpolationPart::Content(content) => {
+                    if content.text().chars().any(char::is_control) {
+                        to.push(NodeError::InvalidStringlike {
+                            reason: "quoted identifiers cannot contain control characters (non-escaped newlines, tabs, ...)",
+                            at: self.text_range(),
+                        });
+
+                        // One error for all contents within the identifier.
+                        break;
+                    }
+                },
+
+                _ => {},
+            }
+        }
+    }
+}
 
 parted! {
-    impl IdentifierComplex {
+    impl IdentifierQuoted {
         let content_kind = TOKEN_CONTENT;
         type ContentToken = token::Content;
     }
@@ -682,8 +862,8 @@ parted! {
 pub enum IdentifierValue {
     /// A simple identifier backed by a [`token::Identifier`].
     Simple(token::Identifier),
-    /// A "complex" identifier backed by a stringlike [`IdentifierComplex`]
-    Complex(IdentifierComplex),
+    /// A quoted identifier backed by a stringlike [`IdentifierQuoted`].
+    Quoted(IdentifierQuoted),
 }
 
 impl Identifier {
@@ -695,14 +875,31 @@ impl Identifier {
         }
 
         if self.token_untyped(TOKEN_IDENTIFIER_START).is_some() {
-            return IdentifierValue::Complex(IdentifierComplex(self.deref().clone()));
+            return IdentifierValue::Quoted(IdentifierQuoted(self.deref().clone()));
         }
 
         unreachable!()
     }
 }
 
-node! { #[from(NODE_STRING)] struct SString; }
+// STRING
+
+node! {
+    #[from(NODE_STRING)] struct SString;
+
+    fn validate(&self, to: &mut Vec<NodeError>) {
+        for part in self.parts() {
+            match part {
+                InterpolationPart::Interpolation(interpolation) => {
+                    interpolation.validate(to);
+                },
+
+                // TODO: Validate string contents.
+                _ => {},
+            }
+        }
+    }
+}
 
 parted! {
     impl SString {
@@ -711,7 +908,24 @@ parted! {
     }
 }
 
-node! { #[from(NODE_ISLAND)] struct Island; }
+// ISLAND
+
+node! {
+    #[from(NODE_ISLAND)] struct Island;
+
+    fn validate(&self, to: &mut Vec<NodeError>) {
+        for part in self.parts() {
+            match part {
+                InterpolationPart::Interpolation(interpolation) => {
+                    interpolation.validate(to);
+                },
+
+                // TODO: Validate island contents.
+                _ => {},
+            }
+        }
+    }
+}
 
 parted! {
     impl Island {
@@ -748,30 +962,49 @@ impl Number {
 
 // IF IS
 
-node! { #[from(NODE_IF_IS)] struct IfIs; }
+node! {
+    #[from(NODE_IF_IS)] struct IfIs;
+
+    fn validate(&self, to: &mut Vec<NodeError>) {
+        self.expression().validate(to);
+        // TODO: Validate match_expression.
+    }
+}
 
 impl IfIs {
     get_token! { r#if -> TOKEN_LITERAL_IF }
 
-    get_node! { expression -> 0 @ ? Expression }
+    get_node! { expression -> 0 @ Expression }
 
-    get_token! { is -> ? TOKEN_LITERAL_IS }
+    get_token! { is -> TOKEN_LITERAL_IS }
 
-    get_node! { match_expression -> 1 @ ? Expression }
+    get_node! { match_expression -> 1 @ Expression }
 }
 
 // IF ELSE
 
-node! { #[from(NODE_IF_ELSE)] struct IfElse; }
+node! {
+    #[from(NODE_IF_ELSE)] struct IfElse;
+
+    fn validate(&self, to: &mut Vec<NodeError>) {
+        self.condition().validate(to);
+
+        self.true_expression().validate(to);
+
+        if let Some(false_expression) = self.false_expression() {
+            false_expression.validate(to);
+        }
+    }
+}
 
 impl IfElse {
     get_token! { r#if -> TOKEN_LITERAL_IF }
 
-    get_node! { condition -> 0 @ ? Expression }
+    get_node! { condition -> 0 @ Expression }
 
-    get_token! { then -> ? TOKEN_LITERAL_THEN }
+    get_token! { then -> TOKEN_LITERAL_THEN }
 
-    get_node! { true_expression -> 1 @ ? Expression }
+    get_node! { true_expression -> 1 @ Expression }
 
     get_token! { r#else -> ? TOKEN_LITERAL_ELSE }
 

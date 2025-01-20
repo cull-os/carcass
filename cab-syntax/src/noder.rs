@@ -133,32 +133,8 @@ pub fn parse<'a, I: Iterator<Item = (Kind, &'a str)>, N: node::Node>(
         })
     }
 
-    // TODO: Temporary hack to check the string validation.
-    if errors.is_empty()
-        && syntax
-            .first_child()
-            .and_then(|child| child.first_token())
-            .map(|token| token.kind())
-            == Some(TOKEN_STRING_START)
-    {
-        use rowan::ast::AstNode as _;
-
-        let sstring = node::SString::cast(syntax.first_child().unwrap()).unwrap();
-
-        let contents: Vec<_> = sstring
-            .parts()
-            .filter_map(|part| {
-                if let node::InterpolationPart::Content(content) = part {
-                    Some(content)
-                } else {
-                    None
-                }
-            })
-            .collect();
-
-        if let Err(errors2) = crate::token::Content::normalized(&contents) {
-            errors.extend(errors2);
-        }
+    if let Some(node) = &node {
+        node.validate(&mut errors);
     }
 
     Parse {
@@ -201,6 +177,11 @@ pub enum NodeError {
         at: rowan::TextRange,
     },
 
+    InvalidList {
+        reason: &'static str,
+        at: rowan::TextRange,
+    },
+
     /// An error that happens when the noder was not expecting a particular
     /// token or node.
     Unexpected {
@@ -226,7 +207,9 @@ impl fmt::Display for NodeError {
                 }
             },
 
-            Self::InvalidStringlike { reason, .. } => write!(formatter, "{reason}"),
+            Self::InvalidStringlike { reason, .. } | Self::InvalidList { reason, .. } => {
+                write!(formatter, "{reason}")
+            },
 
             Self::Unexpected {
                 got: Some(got),
@@ -281,6 +264,8 @@ impl fmt::Display for NodeError {
     }
 }
 
+// TODO: Make this result::Result<T, ()> and always push the error in the place
+// of creation.
 type Result<T> = result::Result<T, NodeError>;
 
 struct Noder<'a, I: Iterator<Item = (Kind, &'a str)>> {

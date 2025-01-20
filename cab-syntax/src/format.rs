@@ -80,7 +80,7 @@ impl<'a, W: io::Write> Formatter<'a, W> {
 
                 node::InterpolationPart::Interpolation(interpolation) => {
                     self.write(r"\(".yellow())?;
-                    self.parenthesize(&interpolation.expression().unwrap())?;
+                    self.parenthesize(&interpolation.expression())?;
                     self.write(")".yellow())?;
                 },
             }
@@ -152,7 +152,7 @@ impl<'a, W: io::Write> Formatter<'a, W> {
 
                     node::InfixOperator::ImplicitApply | node::InfixOperator::Apply => None,
                     node::InfixOperator::Pipe => {
-                        self.parenthesize(&operation.right_expression().unwrap())?;
+                        self.parenthesize(&operation.right_expression())?;
                         self.write(" ")?;
                         self.parenthesize(&operation.left_expression())?;
 
@@ -192,7 +192,7 @@ impl<'a, W: io::Write> Formatter<'a, W> {
                     self.write(" ")?;
                 }
 
-                self.parenthesize(&operation.right_expression().unwrap())?;
+                self.parenthesize(&operation.right_expression())?;
 
                 self.bracket_end(")")
             },
@@ -221,11 +221,11 @@ impl<'a, W: io::Write> Formatter<'a, W> {
                         identifier => identifier.new(),
                     }),
 
-                    node::IdentifierValue::Complex(complex) => self.parenthesize_parted(complex.parts()),
+                    node::IdentifierValue::Quoted(quoted) => self.parenthesize_parted(quoted.parts()),
                 }
             },
 
-            node::SString as sstring => self.parenthesize_parted(sstring.parts()),
+            node::SString as string => self.parenthesize_parted(string.parts()),
 
             node::Island as island => self.parenthesize_parted(island.parts()),
 
@@ -240,9 +240,9 @@ impl<'a, W: io::Write> Formatter<'a, W> {
                 self.bracket_start("(")?;
 
                 self.write("if ".red().bold())?;
-                self.parenthesize(&if_is.expression().unwrap())?;
+                self.parenthesize(&if_is.expression())?;
                 self.write(" is ".red().bold())?;
-                self.parenthesize(&if_is.match_expression().unwrap())?;
+                self.parenthesize(&if_is.match_expression())?;
 
                 self.bracket_end(")")
             },
@@ -251,9 +251,9 @@ impl<'a, W: io::Write> Formatter<'a, W> {
                 self.bracket_start("(")?;
 
                 self.write("if ".red().bold())?;
-                self.parenthesize(&if_else.condition().unwrap())?;
+                self.parenthesize(&if_else.condition())?;
                 self.write(" then ".red().bold())?;
-                self.parenthesize(&if_else.true_expression().unwrap())?;
+                self.parenthesize(&if_else.true_expression())?;
 
                 if let Some(false_expression) = if_else.false_expression() {
                     self.write(" else ".red().bold())?;
