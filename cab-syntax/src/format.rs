@@ -120,10 +120,10 @@ impl<'a, W: io::Write> Formatter<'a, W> {
                 self.bracket_end("]")
             },
 
-            node::AttributeList as list => {
+            node::AttributeList as attribute_list => {
                 self.bracket_start("{")?;
 
-                let mut entries = list.entries().peekable();
+                let mut entries = attribute_list.entries().peekable();
                 if entries.peek().is_some() {
                     self.write(" ")?;
                 }

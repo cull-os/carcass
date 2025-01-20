@@ -171,13 +171,29 @@ pub enum NodeError {
         at: rowan::TextRange,
     },
 
-    // An error that happens when a stringlike contains invalid escapes or is formatted wrongly.
+    /// An error that happens when a stringlike contains invalid escapes or is
+    /// formatted wrongly.
     InvalidStringlike {
         reason: &'static str,
         at: rowan::TextRange,
     },
 
-    InvalidList {
+    InvalidItem {
+        reason: &'static str,
+        at: rowan::TextRange,
+    },
+
+    InvalidAttribute {
+        reason: &'static str,
+        at: rowan::TextRange,
+    },
+
+    InvalidBranch {
+        reason: &'static str,
+        at: rowan::TextRange,
+    },
+
+    InvalidAssociate {
         reason: &'static str,
         at: rowan::TextRange,
     },
@@ -207,7 +223,11 @@ impl fmt::Display for NodeError {
                 }
             },
 
-            Self::InvalidStringlike { reason, .. } | Self::InvalidList { reason, .. } => {
+            Self::InvalidStringlike { reason, .. }
+            | Self::InvalidItem { reason, .. }
+            | Self::InvalidAttribute { reason, .. }
+            | Self::InvalidAssociate { reason, .. }
+            | Self::InvalidBranch { reason, .. } => {
                 write!(formatter, "{reason}")
             },
 

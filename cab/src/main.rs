@@ -144,7 +144,10 @@ async fn main() {
                                 Label::primary(file_id, match error {
                                     NodeError::InvalidPattern { at, .. }
                                     | NodeError::InvalidStringlike { at, .. }
-                                    | NodeError::InvalidList { at, .. }
+                                    | NodeError::InvalidItem { at, .. }
+                                    | NodeError::InvalidAttribute { at, .. }
+                                    | NodeError::InvalidAssociate { at, .. }
+                                    | NodeError::InvalidBranch { at, .. }
                                     | NodeError::Unexpected { at, .. } => {
                                         at.start().into()..at.end().into()
                                     },

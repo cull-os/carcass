@@ -309,9 +309,9 @@ node! {
             Self::Parenthesis(parenthesis) => parenthesis.validate(to),
             Self::List(list) => list.validate(to),
             Self::AttributeList(attribute_list) => attribute_list.validate(to),
-            Self::PrefixOperation(prefix_operation) => prefix_operation.validate(to),
-            Self::InfixOperation(infix_operation) => infix_operation.validate(to),
-            Self::SuffixOperation(suffix_operation) => suffix_operation.validate(to),
+            Self::PrefixOperation(operation) => operation.validate(to),
+            Self::InfixOperation(operation) => operation.validate(to),
+            Self::SuffixOperation(operation) => operation.validate(to),
             Self::Path(path) => path.validate(to),
             Self::Identifier(identifier) => identifier.validate(to),
             Self::SString(string) => string.validate(to),
@@ -324,23 +324,41 @@ node! {
 }
 
 impl Expression {
-    // TODO: Implement pattern validity checking.
-    fn validate_pattern(&self, _to: &mut Vec<NodeError>) {
+    fn validate_pattern(&self, to: &mut Vec<NodeError>) {
         match self {
-            Expression::Error(_error) => {},
-            Expression::Parenthesis(_parenthesis) => {},
-            Expression::List(_list) => {},
-            Expression::AttributeList(_attribute_list) => {},
-            Expression::PrefixOperation(_prefix_operation) => {},
-            Expression::InfixOperation(_infix_operation) => {},
-            Expression::SuffixOperation(_suffix_operation) => {},
-            Expression::Path(_path) => {},
-            Expression::Identifier(_identifier) => {},
-            Expression::SString(_string) => {},
-            Expression::Island(_island) => {},
-            Expression::Number(_number) => {},
-            Expression::IfIs(_if_is) => {},
-            Expression::IfElse(_if_else) => {},
+            Self::Parenthesis(parenthesis) => {
+                parenthesis.expression().validate_pattern(to);
+            },
+
+            Self::List(list) => {
+                for item in list.items() {
+                    item.validate_pattern(to);
+                }
+            },
+
+            Self::AttributeList(attribute_list) => {
+                // All attribute lists are valid patterns.
+                // TODO: Add warnings for right-side expression that
+                // statically never use the attribute list made the scope.
+                attribute_list.validate(to);
+            },
+
+            Self::Identifier(identifier) => {
+                identifier.validate(to);
+            },
+            Self::SString(string) => {
+                string.validate(to);
+            },
+            Self::Number(number) => {
+                number.validate(to);
+            },
+
+            _ => {
+                to.push(NodeError::InvalidPattern {
+                    got: Some(self.kind()),
+                    at: self.text_range(),
+                })
+            },
         }
     }
 
@@ -372,12 +390,7 @@ impl Expression {
 
 // ERROR
 
-node! {
-    #[from(NODE_ERROR)] struct Error;
-
-    // Intentionally left empty because error nodes have their errors emitted at parse time.
-    fn validate(&self, _: &mut Vec<NodeError>) {}
-}
+node! { #[from(NODE_ERROR)] struct Error; }
 
 // PARENTHESIS
 
@@ -403,17 +416,17 @@ node! {
    #[from(NODE_LIST)] struct List;
 
     fn validate(&self, to: &mut Vec<NodeError>) {
-       if let Some(Expression::InfixOperation(operation)) = self.expression()
-           && operation.operator() == InfixOperator::Sequence {
-            to.push(NodeError::InvalidList {
-                reason: "inner expression of list cannot be sequence; consider parenthesizing",
+        if let Some(Expression::InfixOperation(operation)) = self.expression()
+            && operation.operator() == InfixOperator::Sequence {
+            to.push(NodeError::InvalidItem {
+                reason: "inner expression of list cannot be sequence, consider parenthesizing",
                 at: operation.text_range(),
-            })
-       }
+            });
+        }
 
-       for item in self.items() {
-           item.validate(to);
-       }
+        for item in self.items() {
+            item.validate(to);
+        }
     }
 }
 
@@ -437,18 +450,32 @@ node! {
     #[from(NODE_ATTRIBUTE_LIST)] struct AttributeList;
 
     fn validate(&self, to: &mut Vec<NodeError>) {
-       if let Some(Expression::InfixOperation(operation)) = self.expression()
-           && operation.operator() == InfixOperator::Sequence {
-            to.push(NodeError::InvalidList {
+        if let Some(Expression::InfixOperation(operation)) = self.expression()
+            && operation.operator() == InfixOperator::Sequence {
+            to.push(NodeError::InvalidItem {
                 reason: "sequence operator has the lowest binding power, please parenthesize",
                 at: operation.text_range(),
-            })
-       }
+            });
+        }
 
-       for entry in self.entries() {
-           // Yeah, bind operators validate themselves to be patterns on the left.
-           entry.validate(to);
-       }
+        for entry in self.entries() {
+            match entry {
+                Expression::InfixOperation(operation) if operation.operator() == InfixOperator::Bind => {
+                    operation.validate(to);
+                },
+
+                Expression::Identifier(identifier) => {
+                    identifier.validate(to);
+                },
+
+                invalid => {
+                    to.push(NodeError::InvalidAttribute {
+                        reason: "invalid attribute",
+                        at: invalid.text_range(),
+                    })
+                }
+           }
+        }
     }
 }
 
@@ -534,13 +561,34 @@ node! {
     #[from(NODE_INFIX_OPERATION)] struct InfixOperation;
 
     fn validate(&self, to: &mut Vec<NodeError>) {
-        if let InfixOperator::Lambda | InfixOperator::Bind = self.operator() {
+        let operator = self.operator();
+
+        if let InfixOperator::Lambda | InfixOperator::Bind = operator {
             self.left_expression().validate_pattern(to);
         } else {
             self.left_expression().validate(to);
         }
 
         self.right_expression().validate(to);
+
+        // No, I am not proud of this.
+        if let InfixOperator::Apply | InfixOperator::Pipe = operator {
+            let expressions = gen {
+                yield self.left_expression();
+                yield self.right_expression();
+            };
+
+            for expression in expressions {
+                if let Expression::InfixOperation(operation) = expression
+                    && let left_operator @ (InfixOperator::Apply | InfixOperator::Pipe) = operation.operator()
+                    && left_operator != operator {
+                    to.push(NodeError::InvalidAssociate {
+                        reason: "application and piping operators do not associate, consider parentehsizing",
+                        at: operation.text_range(),
+                    })
+                }
+            }
+        }
     }
 }
 
@@ -925,7 +973,7 @@ node! {
                 _ => {},
             }
         }
-    }
+   }
 }
 
 parted! {
@@ -968,7 +1016,21 @@ node! {
 
     fn validate(&self, to: &mut Vec<NodeError>) {
         self.expression().validate(to);
-        // TODO: Validate match_expression.
+
+        for item in self.match_expression().same_items() {
+            match item {
+                Expression::InfixOperation(operation) if operation.operator() == InfixOperator::Lambda => {
+                    operation.validate(to);
+                },
+
+                invalid => {
+                    to.push(NodeError::InvalidBranch {
+                        reason: "all if-is branches must be lambdas",
+                        at: invalid.text_range(),
+                    });
+                },
+            }
+        }
     }
 }
 
