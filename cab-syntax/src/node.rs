@@ -324,22 +324,23 @@ node! {
 }
 
 impl Expression {
+    // TODO: Implement pattern validity checking.
     fn validate_pattern(&self, _to: &mut Vec<NodeError>) {
         match self {
-            Expression::Error(_error) => todo!(),
-            Expression::Parenthesis(_parenthesis) => todo!(),
-            Expression::List(_list) => todo!(),
-            Expression::AttributeList(_attribute_list) => todo!(),
-            Expression::PrefixOperation(_prefix_operation) => todo!(),
-            Expression::InfixOperation(_infix_operation) => todo!(),
-            Expression::SuffixOperation(_suffix_operation) => todo!(),
-            Expression::Path(_path) => todo!(),
-            Expression::Identifier(_identifier) => todo!(),
-            Expression::SString(_string) => todo!(),
-            Expression::Island(_island) => todo!(),
-            Expression::Number(_number) => todo!(),
-            Expression::IfIs(_if_is) => todo!(),
-            Expression::IfElse(_if_else) => todo!(),
+            Expression::Error(_error) => {},
+            Expression::Parenthesis(_parenthesis) => {},
+            Expression::List(_list) => {},
+            Expression::AttributeList(_attribute_list) => {},
+            Expression::PrefixOperation(_prefix_operation) => {},
+            Expression::InfixOperation(_infix_operation) => {},
+            Expression::SuffixOperation(_suffix_operation) => {},
+            Expression::Path(_path) => {},
+            Expression::Identifier(_identifier) => {},
+            Expression::SString(_string) => {},
+            Expression::Island(_island) => {},
+            Expression::Number(_number) => {},
+            Expression::IfIs(_if_is) => {},
+            Expression::IfElse(_if_else) => {},
         }
     }
 
