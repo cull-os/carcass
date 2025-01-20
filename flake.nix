@@ -42,6 +42,9 @@
           # You will need a nightly Rust compiler.
           pkgs.fenix.complete.toolchain
 
+          # TOML formatting.
+          pkgs.taplo
+
           # Fuzzing.
           pkgs.cargo-fuzz
         ];

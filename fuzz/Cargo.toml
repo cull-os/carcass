@@ -8,20 +8,20 @@ publish = false
 cargo-fuzz = true
 
 [dependencies]
-libfuzzer-sys = "0.4"
 cab.path      = "../cab"
+libfuzzer-sys = "0.4"
 yansi         = { version = "1.0.1", features = [ "detect-env", "detect-tty" ] }
 
 [[bin]]
-name  = "tokenizer"
-path  = "fuzz_targets/tokenizer.rs"
 bench = false
 doc   = false
+name  = "tokenizer"
+path  = "fuzz_targets/tokenizer.rs"
 test  = false
 
 [[bin]]
-name  = "parser"
-path  = "fuzz_targets/parser.rs"
 bench = false
 doc   = false
+name  = "parser"
+path  = "fuzz_targets/parser.rs"
 test  = false
