@@ -626,7 +626,7 @@ impl InfixOperator {
     /// Returns the binding power of this operator.
     pub fn binding_power(self) -> (u16, u16) {
         match self {
-            Self::Select => (180, 185),
+            Self::Select => (185, 180),
             Self::ImplicitApply => (170, 175),
 
             Self::Concat => (160, 165),

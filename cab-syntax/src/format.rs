@@ -103,12 +103,18 @@ impl<'a, W: io::Write> Formatter<'a, W> {
                 self.bracket_start("[")?;
 
                 let mut items = list.items().peekable();
+                if items.peek().is_some() {
+                    self.write(" ")?;
+                }
+
                 while let Some(item) = items.next() {
                     self.parenthesize(&item)?;
 
                     if items.peek().is_some() {
-                        self.write(", ")?;
+                        self.write(",")?;
                     }
+
+                    self.write(" ")?;
                 }
 
                 self.bracket_end("]")
@@ -117,9 +123,19 @@ impl<'a, W: io::Write> Formatter<'a, W> {
             node::AttributeList as list => {
                 self.bracket_start("{")?;
 
-                // TODO: Pretty print.
-                if let Some(expression) = list.expression() {
-                    self.parenthesize(&expression)?;
+                let mut entries = list.entries().peekable();
+                if entries.peek().is_some() {
+                    self.write(" ")?;
+                }
+
+                while let Some(entry) = entries.next() {
+                    self.parenthesize(&entry)?;
+
+                    if entries.peek().is_some() {
+                        self.write(",")?;
+                    }
+
+                    self.write(" ")?;
                 }
 
                 self.bracket_end("}")
