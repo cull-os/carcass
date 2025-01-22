@@ -121,26 +121,22 @@ async fn main() {
                     let mut files = diagnostic_files::SimpleFiles::new();
                     let input_file = files.add(name, &contents);
 
-                    let diagnostic = diagnostic::Diagnostic::error()
-                        .with_message("syntax error")
-                        .with_labels(
-                            parse
-                                .errors
-                                .into_iter()
-                                .map(|error| {
-                                    diagnostic::Label::primary(input_file, error.at)
-                                        .with_message(error.reason)
-                                })
-                                .collect(),
-                        );
+                    for error in parse.errors {
+                        let diagnostic = diagnostic::Diagnostic::error()
+                            .with_message("syntax error")
+                            .with_labels(vec![
+                                diagnostic::Label::primary(input_file, error.at)
+                                    .with_message(error.reason),
+                            ]);
 
-                    term::emit(
-                        &mut err.lock(),
-                        &term::Config::default(),
-                        &files,
-                        &diagnostic,
-                    )
-                    .ok();
+                        term::emit(
+                            &mut err.lock(),
+                            &term::Config::default(),
+                            &files,
+                            &diagnostic,
+                        )
+                        .ok();
+                    }
 
                     if let Dump::Syntax = command {
                         write!(out, "{syntax:#?}", syntax = parse.syntax)
