@@ -552,6 +552,16 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
                 }
             }
         });
+
+        // Treat expressions such as <foo>/bar as applciations. The evaluator will
+        // special case on island<->path applications that contain literals to be path
+        // accesses as islands are just virtual path roots anyway. Normally you cannot
+        // use an island as a functor, I must say. That will be a hard error.
+        if node == NODE_ISLAND && self.peek_direct() == Some(TOKEN_PATH) {
+            self.node_from(start_of_stringlike, NODE_INFIX_OPERATION, |this| {
+                this.node_path();
+            });
+        }
     }
 
     fn node_interpolation(&mut self) -> Result<()> {
