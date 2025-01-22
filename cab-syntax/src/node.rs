@@ -806,7 +806,7 @@ impl Interpolation {
 
     get_node! { expression -> 0 @ Expression }
 
-    get_token! { interpolation_end -> TOKEN_INTERPOLATION_END }
+    get_token! { interpolation_end -> ? TOKEN_INTERPOLATION_END }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -1099,7 +1099,7 @@ impl IfElse {
 
     get_node! { condition -> 0 @ Expression }
 
-    get_token! { then -> TOKEN_LITERAL_THEN }
+    get_token! { then -> ? TOKEN_LITERAL_THEN }
 
     get_node! { true_expression -> 1 @ Expression }
 
