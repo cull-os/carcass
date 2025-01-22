@@ -459,7 +459,7 @@ node! {
                         invalid.text_range(),
                     ))
                 }
-           }
+            }
         }
     }
 }
@@ -1011,7 +1011,7 @@ node! {
                 _ => {},
             }
         }
-   }
+    }
 }
 
 parted! {
