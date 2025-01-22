@@ -568,12 +568,14 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
                 })
             },
 
-            Some(TOKEN_LITERAL_THEN) | None => {
+            then_token @ (Some(TOKEN_LITERAL_THEN) | None) => {
                 self.node_from(start_of_if, NODE_IF_ELSE, |this| {
-                    this.node_expression_binding_power(
-                        then_else_binding_power,
-                        until | TOKEN_LITERAL_ELSE,
-                    );
+                    if then_token.is_some() {
+                        this.node_expression_binding_power(
+                            then_else_binding_power,
+                            until | TOKEN_LITERAL_ELSE,
+                        );
+                    }
 
                     if this.next_if(TOKEN_LITERAL_ELSE) {
                         this.node_expression_binding_power(then_else_binding_power, until);
