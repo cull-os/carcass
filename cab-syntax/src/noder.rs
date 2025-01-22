@@ -239,9 +239,7 @@ impl NodeError {
     }
 }
 
-// TODO: Make this result::Result<T, ()> and always push the error in the place
-// of creation.
-type Result<T> = result::Result<T, NodeError>;
+type Result<T> = result::Result<T, ()>;
 
 struct Noder<'a, I: Iterator<Item = (Kind, &'a str)>> {
     builder: rowan::GreenNodeBuilder<'a>,
@@ -278,15 +276,6 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
         result
     }
 
-    fn node_failable<K>(&mut self, kind: Kind, closure: impl FnOnce(&mut Self) -> Result<K>) {
-        let start_of_node = self.checkpoint();
-
-        if let Err(error) = self.node(kind, closure) {
-            self.node_from(start_of_node, NODE_ERROR, |_| {});
-            self.errors.push(error);
-        }
-    }
-
     fn node_from<T>(
         &mut self,
         checkpoint: rowan::Checkpoint,
@@ -301,28 +290,8 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
         result
     }
 
-    fn node_failable_from<K>(
-        &mut self,
-        checkpoint: rowan::Checkpoint,
-        kind: Kind,
-        closure: impl FnOnce(&mut Self) -> Result<K>,
-    ) {
-        if let Err(error) = self.node_from(checkpoint, kind, closure) {
-            self.node_from(checkpoint, NODE_ERROR, |_| {});
-            self.errors.push(error);
-        }
-    }
-
     fn peek_direct(&mut self) -> Option<Kind> {
         self.tokens.peek().map(|&(kind, _)| kind)
-    }
-
-    fn peek_direct_expecting(&mut self, expected: EnumSet<Kind>) -> Result<Kind> {
-        self.peek_direct().ok_or(NodeError::unexpected(
-            None,
-            expected,
-            rowan::TextRange::empty(self.offset),
-        ))
     }
 
     fn peek_nth(&mut self, n: usize) -> Option<Kind> {
@@ -348,14 +317,6 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
         self.peek_nth(0)
     }
 
-    fn peek_expecting(&mut self, expected: EnumSet<Kind>) -> Result<Kind> {
-        self.peek().ok_or(NodeError::unexpected(
-            None,
-            expected,
-            rowan::TextRange::empty(self.offset),
-        ))
-    }
-
     fn next_direct(&mut self) -> Result<Kind> {
         match self.tokens.next() {
             Some((kind, slice)) => {
@@ -366,11 +327,13 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
             },
 
             None => {
-                Err(NodeError::unexpected(
+                self.errors.push(NodeError::unexpected(
                     None,
                     EnumSet::empty(),
                     rowan::TextRange::empty(self.offset),
-                ))
+                ));
+
+                Err(())
             },
         }
     }
@@ -406,91 +369,81 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
         }
     }
 
-    fn next_expect(
-        &mut self,
-        expected: EnumSet<Kind>,
-        until: EnumSet<Kind>,
-    ) -> Result<Option<Kind>> {
+    fn next_expect(&mut self, expected: EnumSet<Kind>, until: EnumSet<Kind>) -> Option<Kind> {
         let expected_at = self.checkpoint();
 
-        match self.peek_expecting(expected)? {
-            next if expected.contains(next) => self.next().map(Some),
+        match self.peek() {
+            Some(next) if expected.contains(next) => Some(self.next().unwrap()),
 
             unexpected => {
                 let start = self.offset;
 
                 self.node_from(expected_at, NODE_ERROR, |this| {
-                    let boundary = until | expected;
-
-                    this.next_while(|next| !boundary.contains(next));
+                    this.next_while(|next| !(until | expected).contains(next));
                 });
 
-                let error = NodeError::unexpected(
-                    Some(unexpected),
+                self.errors.push(NodeError::unexpected(
+                    unexpected,
                     expected,
                     rowan::TextRange::new(start, self.offset),
-                );
+                ));
 
-                if let Some(next) = self.peek() {
-                    self.errors.push(error);
+                let next = self.peek()?;
 
-                    if expected.contains(next) {
-                        self.next().map(Some)
-                    } else {
-                        Ok(None)
-                    }
+                if expected.contains(next) {
+                    Some(self.next().unwrap())
                 } else {
-                    Err(error)
+                    None
                 }
             },
         }
     }
 
     fn node_parenthesis(&mut self, until: EnumSet<Kind>) {
-        self.node_failable(NODE_PARENTHESIS, |this| {
+        self.node(NODE_PARENTHESIS, |this| {
             this.next_expect(
                 TOKEN_LEFT_PARENTHESIS.into(),
                 until | EXPRESSION_TOKENS | TOKEN_RIGHT_PARENTHESIS,
-            )?;
+            );
 
             this.node_expression(until | TOKEN_RIGHT_PARENTHESIS);
 
-            this.next_expect(TOKEN_RIGHT_PARENTHESIS.into(), until)
+            this.next_expect(TOKEN_RIGHT_PARENTHESIS.into(), until);
         });
     }
 
     fn node_list(&mut self, until: EnumSet<Kind>) {
-        self.node_failable(NODE_LIST, |this| {
+        self.node(NODE_LIST, |this| {
             this.next_expect(
                 TOKEN_LEFT_BRACKET.into(),
                 until | EXPRESSION_TOKENS | TOKEN_RIGHT_BRACKET,
-            )?;
+            );
 
             if this.peek() != Some(TOKEN_RIGHT_BRACKET) {
                 this.node_expression(until | TOKEN_RIGHT_BRACKET);
             }
 
-            this.next_expect(TOKEN_RIGHT_BRACKET.into(), until)
+            this.next_expect(TOKEN_RIGHT_BRACKET.into(), until);
         });
     }
 
     fn node_attribute_list(&mut self, until: EnumSet<Kind>) {
-        self.node_failable(NODE_ATTRIBUTE_LIST, |this| {
+        self.node(NODE_ATTRIBUTE_LIST, |this| {
             this.next_expect(
                 TOKEN_LEFT_CURLYBRACE.into(),
                 until | EXPRESSION_TOKENS | TOKEN_RIGHT_CURLYBRACE,
-            )?;
+            );
 
             if this.peek() != Some(TOKEN_RIGHT_CURLYBRACE) {
                 this.node_expression(until | TOKEN_RIGHT_CURLYBRACE);
             }
 
-            this.next_expect(TOKEN_RIGHT_CURLYBRACE.into(), until)
+            this.next_expect(TOKEN_RIGHT_CURLYBRACE.into(), until);
         });
     }
 
     fn node_path(&mut self) {
-        self.node_failable(NODE_PATH, |this| {
+        self.node(NODE_PATH, |this| {
             loop {
                 match this.peek_direct() {
                     Some(TOKEN_PATH) => {
@@ -498,10 +451,10 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
                     },
 
                     Some(TOKEN_INTERPOLATION_START) => {
-                        this.node_interpolation()?;
+                        this.node_interpolation();
                     },
 
-                    _ => break Ok(()),
+                    _ => break,
                 }
             }
         });
@@ -511,8 +464,8 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
         if self.peek() == Some(TOKEN_IDENTIFIER_START) {
             self.node_stringlike();
         } else {
-            self.node_failable(NODE_IDENTIFIER, |this| {
-                this.next_expect(IDENTIFIER_TOKENS, until)
+            self.node(NODE_IDENTIFIER, |this| {
+                this.next_expect(IDENTIFIER_TOKENS, until);
             });
         }
     }
@@ -520,34 +473,43 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
     fn node_stringlike(&mut self) {
         let start_of_stringlike = self.checkpoint();
 
-        let (node, end) = match self.next() {
-            Ok(TOKEN_IDENTIFIER_START) => (NODE_IDENTIFIER, TOKEN_IDENTIFIER_END),
-            Ok(TOKEN_STRING_START) => (NODE_STRING, TOKEN_STRING_END),
-            Ok(TOKEN_ISLAND_START) => (NODE_ISLAND, TOKEN_ISLAND_END),
+        let (node, end) = match self.next().ok() {
+            Some(TOKEN_IDENTIFIER_START) => (NODE_IDENTIFIER, TOKEN_IDENTIFIER_END),
+            Some(TOKEN_STRING_START) => (NODE_STRING, TOKEN_STRING_END),
+            Some(TOKEN_ISLAND_START) => (NODE_ISLAND, TOKEN_ISLAND_END),
             _ => unreachable!(),
         };
 
-        self.node_failable_from(start_of_stringlike, node, |this| {
+        self.node_from(start_of_stringlike, node, |this| {
             loop {
-                match this.peek_direct_expecting(TOKEN_CONTENT | end)? {
-                    TOKEN_CONTENT => {
+                match this.peek() {
+                    Some(TOKEN_CONTENT) => {
                         this.next_direct().unwrap();
                     },
 
-                    TOKEN_INTERPOLATION_START => {
-                        this.node_interpolation()?;
+                    Some(TOKEN_INTERPOLATION_START) => {
+                        this.node_interpolation();
                     },
 
-                    other if other == end => {
+                    Some(other) if other == end => {
                         this.next_direct().unwrap();
-                        break Ok(());
+                        break;
                     },
 
-                    _ => {
+                    Some(_) => {
                         // Sometimes recoverably parsing interpolation leaves us unwanted tokens. It
                         // is not worth it trying to node it correctly without a big rewrite, so
                         // just consume them.
                         this.next_direct().unwrap();
+                    },
+
+                    None => {
+                        this.errors.push(NodeError::unexpected(
+                            None,
+                            TOKEN_CONTENT | end,
+                            rowan::TextRange::empty(this.offset),
+                        ));
+                        break;
                     },
                 }
             }
@@ -564,21 +526,19 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
         }
     }
 
-    fn node_interpolation(&mut self) -> Result<()> {
+    fn node_interpolation(&mut self) {
         self.node(NODE_INTERPOLATION, |this| {
-            this.next_expect(TOKEN_INTERPOLATION_START.into(), EnumSet::empty())?;
+            this.next_expect(TOKEN_INTERPOLATION_START.into(), EnumSet::empty());
 
             this.node_expression(TOKEN_INTERPOLATION_END.into());
 
-            this.next_expect(TOKEN_INTERPOLATION_END.into(), EnumSet::empty())?;
-
-            Ok(())
-        })
+            this.next_expect(TOKEN_INTERPOLATION_END.into(), EnumSet::empty());
+        });
     }
 
     fn node_number(&mut self, until: EnumSet<Kind>) {
-        self.node_failable(NODE_NUMBER, |this| {
-            this.next_expect(TOKEN_INTEGER | TOKEN_FLOAT, until)
+        self.node(NODE_NUMBER, |this| {
+            this.next_expect(TOKEN_INTEGER | TOKEN_FLOAT, until);
         });
     }
 
@@ -588,36 +548,28 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
 
         let start_of_if = self.checkpoint();
 
-        let differentiator_token = try {
-            self.next_expect(
-                TOKEN_LITERAL_IF.into(),
-                until
-                    | EXPRESSION_TOKENS
-                    | TOKEN_LITERAL_IS
-                    | TOKEN_LITERAL_THEN
-                    | TOKEN_LITERAL_ELSE,
-            )?;
+        self.next_expect(
+            TOKEN_LITERAL_IF.into(),
+            until | EXPRESSION_TOKENS | TOKEN_LITERAL_IS | TOKEN_LITERAL_THEN | TOKEN_LITERAL_ELSE,
+        );
 
-            self.node_expression_binding_power(
-                then_else_binding_power,
-                until | TOKEN_LITERAL_IS | TOKEN_LITERAL_THEN | TOKEN_LITERAL_ELSE,
-            );
+        self.node_expression_binding_power(
+            then_else_binding_power,
+            until | TOKEN_LITERAL_IS | TOKEN_LITERAL_THEN | TOKEN_LITERAL_ELSE,
+        );
 
-            self.next_expect(
-                TOKEN_LITERAL_IS | TOKEN_LITERAL_THEN,
-                until | TOKEN_LITERAL_ELSE,
-            )?
-        };
-
-        match differentiator_token {
-            Ok(Some(TOKEN_LITERAL_IS)) => {
+        match self.next_expect(
+            TOKEN_LITERAL_IS | TOKEN_LITERAL_THEN,
+            until | TOKEN_LITERAL_ELSE,
+        ) {
+            Some(TOKEN_LITERAL_IS) => {
                 self.node_from(start_of_if, NODE_IF_IS, |this| {
                     this.node_expression_binding_power(is_binding_power, until)
                 })
             },
 
-            Ok(Some(TOKEN_LITERAL_THEN)) => {
-                self.node_failable_from(start_of_if, NODE_IF_ELSE, |this| {
+            Some(TOKEN_LITERAL_THEN) | None => {
+                self.node_from(start_of_if, NODE_IF_ELSE, |this| {
                     this.node_expression_binding_power(
                         then_else_binding_power,
                         until | TOKEN_LITERAL_ELSE,
@@ -626,33 +578,30 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
                     if this.next_if(TOKEN_LITERAL_ELSE) {
                         this.node_expression_binding_power(then_else_binding_power, until);
                     }
-
-                    Ok(())
                 });
             },
 
-            // Scummy? Probably. But let's just assume this is an if.
-            error => self.node_failable_from(start_of_if, NODE_IF_ELSE, |_| error),
+            _ => unreachable!(),
         }
     }
 
     fn node_expression_single(&mut self, until: EnumSet<Kind>) {
-        match self.peek_expecting(EXPRESSION_TOKENS) {
-            Ok(TOKEN_LEFT_PARENTHESIS) => self.node_parenthesis(until),
+        match self.peek() {
+            Some(TOKEN_LEFT_PARENTHESIS) => self.node_parenthesis(until),
 
-            Ok(TOKEN_LEFT_BRACKET) => self.node_list(until),
+            Some(TOKEN_LEFT_BRACKET) => self.node_list(until),
 
-            Ok(TOKEN_LEFT_CURLYBRACE) => self.node_attribute_list(until),
+            Some(TOKEN_LEFT_CURLYBRACE) => self.node_attribute_list(until),
 
-            Ok(TOKEN_PATH) => self.node_path(),
+            Some(TOKEN_PATH) => self.node_path(),
 
-            Ok(next) if IDENTIFIER_TOKENS.contains(next) => self.node_identifier(until),
+            Some(next) if IDENTIFIER_TOKENS.contains(next) => self.node_identifier(until),
 
-            Ok(TOKEN_STRING_START | TOKEN_ISLAND_START) => self.node_stringlike(),
+            Some(TOKEN_STRING_START | TOKEN_ISLAND_START) => self.node_stringlike(),
 
-            Ok(TOKEN_INTEGER | TOKEN_FLOAT) => self.node_number(until),
+            Some(TOKEN_INTEGER | TOKEN_FLOAT) => self.node_number(until),
 
-            Ok(TOKEN_LITERAL_IF) => self.node_if(until),
+            Some(TOKEN_LITERAL_IF) => self.node_if(until),
 
             unexpected => {
                 self.next_while_trivia();
@@ -662,8 +611,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
                     // Consume until the next token is either the limit, an expression token or
                     // an operator.
                     this.next_while(|kind| {
-                        !(until.contains(kind)
-                            || EXPRESSION_TOKENS.contains(kind)
+                        !((until | EXPRESSION_TOKENS).contains(kind)
                             || node::PrefixOperator::try_from(kind).is_ok()
                             || node::InfixOperator::try_from(kind)
                                 .is_ok_and(|operator| operator.is_token_owning())
@@ -671,17 +619,11 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
                     });
                 });
 
-                self.errors.push(match unexpected {
-                    Ok(next) => {
-                        NodeError::unexpected(
-                            Some(next),
-                            EXPRESSION_TOKENS,
-                            rowan::TextRange::new(start, self.offset),
-                        )
-                    },
-
-                    Err(error) => error,
-                });
+                self.errors.push(NodeError::unexpected(
+                    unexpected,
+                    EXPRESSION_TOKENS,
+                    rowan::TextRange::new(start, self.offset),
+                ));
             },
         }
     }
