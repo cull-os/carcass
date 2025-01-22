@@ -546,33 +546,57 @@ node! {
     #[from(NODE_INFIX_OPERATION)] struct InfixOperation;
 
     fn validate(&self, to: &mut Vec<NodeError>) {
-        let operator = self.operator();
+        match self.operator() {
+            InfixOperator::Same => {
+                let mut same_operator = None;
 
-        if let InfixOperator::Lambda | InfixOperator::Bind = operator {
-            self.left_expression().validate_pattern(to);
-        } else {
-            self.left_expression().validate(to);
-        }
+                for item in Expression::InfixOperation(self.clone()).same_items() {
+                    if let Expression::InfixOperation(operation) = &item
+                        && let operator @ (InfixOperator::Lambda | InfixOperator::Bind) = operation.operator()
+                    {
+                        let same_operator = same_operator.get_or_insert(operator);
 
-        self.right_expression().validate(to);
+                        if *same_operator != operator {
+                            to.push(NodeError::new(
+                                "all same-operands must be of matching type: either all lambdas or all binds",
+                                item.text_range(),
+                            ));
+                            continue;
+                        }
 
-        // No, I am not proud of this.
-        if let InfixOperator::Apply | InfixOperator::Pipe = operator {
-            let expressions = gen {
-                yield self.left_expression();
-                yield self.right_expression();
-            };
-
-            for expression in expressions {
-                if let Expression::InfixOperation(operation) = expression
-                    && let left_operator @ (InfixOperator::Apply | InfixOperator::Pipe) = operation.operator()
-                    && left_operator != operator {
-                    to.push(NodeError::new(
-                        "application and piping operators do not associate, consider parentehsizing",
-                        operation.text_range(),
-                    ))
+                        operation.validate(to);
+                    } else {
+                        to.push(NodeError::new(
+                            "all same-operands must either be lambdas or binds",
+                            item.text_range(),
+                        ));
+                    }
                 }
-            }
+            },
+
+            InfixOperator::Lambda | InfixOperator::Bind => {
+                self.left_expression().validate_pattern(to);
+                self.right_expression().validate(to);
+            },
+
+            operator => {
+                self.left_expression().validate(to);
+                self.right_expression().validate(to);
+
+                // No, I am not proud of this.
+                let (InfixOperator::Apply | InfixOperator::Pipe) = operator else { return; };
+
+                for expression in [self.left_expression(), self.right_expression()] {
+                    if let Expression::InfixOperation(operation) = expression
+                        && let child_operator @ (InfixOperator::Apply | InfixOperator::Pipe) = operation.operator()
+                        && child_operator != operator {
+                        to.push(NodeError::new(
+                            "application and piping operators do not associate, consider parentehsizing",
+                            operation.text_range(),
+                        ))
+                    }
+                }
+            },
         }
     }
 }

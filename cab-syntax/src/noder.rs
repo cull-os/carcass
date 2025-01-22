@@ -168,7 +168,7 @@ pub struct NodeError {
 }
 
 impl NodeError {
-    pub fn new(reason: &'static str, at: rowan::TextRange) -> Self {
+    pub fn new(reason: impl Into<borrow::Cow<'static, str>>, at: rowan::TextRange) -> Self {
         Self {
             reason: reason.into(),
             at,
