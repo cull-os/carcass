@@ -388,11 +388,11 @@ node! {
 }
 
 impl Parenthesis {
-    get_token! { left_parenthesis -> TOKEN_LEFT_PARENTHESIS }
+    get_token! { left_parenthesis_token -> TOKEN_LEFT_PARENTHESIS }
 
     get_node! { expression -> 0 @ Expression }
 
-    get_token! { right_parenthesis -> ? TOKEN_RIGHT_PARENTHESIS }
+    get_token! { right_parenthesis_token -> ? TOKEN_RIGHT_PARENTHESIS }
 }
 
 // LIST
@@ -417,7 +417,7 @@ node! {
 
 #[rustfmt::skip]
 impl List {
-    get_token! { left_bracket -> TOKEN_LEFT_BRACKET }
+    get_token! { left_bracket_token -> TOKEN_LEFT_BRACKET }
 
     get_node! { expression -> 0 @ ? Expression }
 
@@ -426,7 +426,7 @@ impl List {
         self.expression().into_iter().flat_map(Expression::same_items)
     }
 
-    get_token! { right_bracket -> ? TOKEN_RIGHT_BRACKET }
+    get_token! { right_bracket_token -> ? TOKEN_RIGHT_BRACKET }
 }
 
 // ATTRIBUTE LIST
@@ -466,7 +466,7 @@ node! {
 
 #[rustfmt::skip]
 impl AttributeList {
-    get_token! { left_curlybrace -> TOKEN_LEFT_CURLYBRACE }
+    get_token! { left_curlybrace_token -> TOKEN_LEFT_CURLYBRACE }
 
     get_node! { expression -> 0 @ ? Expression }
 
@@ -475,7 +475,7 @@ impl AttributeList {
         self.expression().into_iter().flat_map(Expression::same_items)
     }
 
-    get_token! { right_curlybrace -> ? TOKEN_RIGHT_CURLYBRACE }
+    get_token! { right_curlybrace_token -> ? TOKEN_RIGHT_CURLYBRACE }
 }
 
 // PREFIX OPERATION
@@ -802,11 +802,11 @@ node! {
 }
 
 impl Interpolation {
-    get_token! { interpolation_start -> TOKEN_INTERPOLATION_START }
+    get_token! { interpolation_start_token -> TOKEN_INTERPOLATION_START }
 
     get_node! { expression -> 0 @ Expression }
 
-    get_token! { interpolation_end -> ? TOKEN_INTERPOLATION_END }
+    get_token! { interpolation_end_token -> ? TOKEN_INTERPOLATION_END }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -1069,11 +1069,11 @@ node! {
 }
 
 impl IfIs {
-    get_token! { r#if -> TOKEN_LITERAL_IF }
+    get_token! { if_token -> TOKEN_LITERAL_IF }
 
     get_node! { expression -> 0 @ Expression }
 
-    get_token! { is -> TOKEN_LITERAL_IS }
+    get_token! { is_token -> TOKEN_LITERAL_IS }
 
     get_node! { match_expression -> 1 @ Expression }
 }
@@ -1095,15 +1095,15 @@ node! {
 }
 
 impl IfElse {
-    get_token! { r#if -> TOKEN_LITERAL_IF }
+    get_token! { if_token -> TOKEN_LITERAL_IF }
 
     get_node! { condition -> 0 @ Expression }
 
-    get_token! { then -> ? TOKEN_LITERAL_THEN }
+    get_token! { then_token -> ? TOKEN_LITERAL_THEN }
 
     get_node! { true_expression -> 1 @ Expression }
 
-    get_token! { r#else -> ? TOKEN_LITERAL_ELSE }
+    get_token! { else_token -> ? TOKEN_LITERAL_ELSE }
 
     get_node! { false_expression -> 2 @ ? Expression }
 }

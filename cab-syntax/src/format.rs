@@ -271,7 +271,7 @@ impl<'a, W: io::Write> Formatter<'a, W> {
                 self.write(" then ".red().bold())?;
                 self.parenthesize(&if_else.true_expression())?;
 
-                if if_else.r#else().is_some() {
+                if if_else.else_token().is_some() {
                     self.write(" else ".red().bold())?;
                     self.parenthesize(&if_else.false_expression().unwrap())?;
                 }
