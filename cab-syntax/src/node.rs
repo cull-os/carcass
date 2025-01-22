@@ -979,11 +979,15 @@ node! {
                 },
 
                 InterpolationPart::Content(content) => {
-                    let mut chars = content.text().chars().scan(0, |offset, next| {
-                        let start = *offset;
-                        *offset += next.len_utf8();
-                        Some((rowan::TextSize::new(start as u32), next))
-                    }).peekable();
+                    let mut chars = content
+                        .text()
+                        .chars()
+                        .scan(0, |offset, next| {
+                            let start = *offset;
+                            *offset += next.len_utf8();
+                            Some((rowan::TextSize::new(start as u32), next))
+                        })
+                        .peekable();
 
                     while let Some((offset, c)) = chars.next() {
                         if c.is_control() {
