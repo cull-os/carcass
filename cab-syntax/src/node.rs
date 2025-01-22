@@ -972,13 +972,38 @@ node! {
     #[from(NODE_ISLAND)] struct Island;
 
     fn validate(&self, to: &mut Vec<NodeError>) {
-        for part in self.parts() {
+        'parts: for part in self.parts() {
             match part {
                 InterpolationPart::Interpolation(interpolation) => {
                     interpolation.validate(to);
                 },
 
-                // TODO: Validate island contents.
+                InterpolationPart::Content(content) => {
+                    let mut chars = content.text().chars().scan(0, |offset, next| {
+                        let start = *offset;
+                        *offset += next.len_utf8();
+                        Some((rowan::TextSize::new(start as u32), next))
+                    }).peekable();
+
+                    while let Some((offset, c)) = chars.next() {
+                        if c.is_control() {
+                            to.push(NodeError::new(
+                                "islands cannot contain control characters",
+                                self.text_range(),
+                            ));
+                            break 'parts;
+                        }
+
+                        if c == '\\' && !matches!(chars.peek(), Some((_, '>'))) {
+                            to.push(NodeError::new(
+                                "islands cannot contain non-'>' escapes",
+                                rowan::TextRange::at(content.text_range().start() + offset, 2.into()),
+                            ));
+                            break 'parts;
+                        }
+                    }
+                },
+
                 _ => {},
             }
         }
