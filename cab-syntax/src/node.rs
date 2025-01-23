@@ -981,7 +981,7 @@ node! {
                 InterpolationPart::Content(content) => {
                     let text = content.text();
 
-                    for (offset, escape) in text
+                    text
                         .char_indices()
                         .map_windows(|&[(offset, escape), (_, escaped)]| (escape == '\\').then_some((offset, escaped)))
                         .flatten()
@@ -999,9 +999,9 @@ node! {
                             })
                         })
                         .flatten()
-                    {
-                        match escape {
+                        .for_each(|(offset, escape)| match escape {
                             '0' | 't' | 'n' | 'r' | '"' | '\'' | '\\' => {},
+
                             _ => {
                                 to.push(NodeError::new(
                                     r#"invalid escape, escapes must be one of: \0, \t, \n, \r, \", \', \\"#,
@@ -1011,8 +1011,7 @@ node! {
                                     ),
                                 ));
                             }
-                        }
-                    }
+                        });
 
                     let mut lines = text
                         .lines()
