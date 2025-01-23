@@ -589,7 +589,8 @@ node! {
                 for expression in [self.left_expression(), self.right_expression()] {
                     if let Expression::InfixOperation(operation) = expression
                         && let child_operator @ (InfixOperator::Apply | InfixOperator::Pipe) = operation.operator()
-                        && child_operator != operator {
+                        && child_operator != operator
+                    {
                         to.push(NodeError::new(
                             "application and piping operators do not associate, consider parentehsizing",
                             operation.text_range(),
@@ -946,14 +947,118 @@ node! {
     #[from(NODE_STRING)] struct SString;
 
     fn validate(&self, to: &mut Vec<NodeError>) {
-        for part in self.parts() {
+        let mut parts = self
+            .parts()
+            .scan(0, |index, part| {
+                let value = *index;
+
+                if let InterpolationPart::Content(_) = part {
+                    *index += 1;
+                }
+
+                Some((value, part))
+            })
+            .peekable();
+
+        let mut first_line_range = None;
+        let mut last_line_range = None;
+        let mut is_multiline = false;
+
+        while let Some((index, part)) = parts.next() {
             match part {
                 InterpolationPart::Interpolation(interpolation) => {
+                    if index == 0 {
+                        first_line_range = Some(interpolation.text_range());
+                    }
+
+                    if let Some((_, InterpolationPart::Delimiter(_))) | None = parts.peek() {
+                        last_line_range = Some(interpolation.text_range())
+                    }
+
                     interpolation.validate(to);
                 },
 
-                // TODO: Validate string contents.
+                InterpolationPart::Content(content) => {
+                    let text = content.text();
+
+                    for (offset, escape) in text
+                        .char_indices()
+                        .map_windows(|&[(offset, escape), (_, escaped)]| (escape == '\\').then_some((offset, escaped)))
+                        .flatten()
+                        // Not pretty, but filters out the escaped space in "\\ ", for example.
+                        .scan(None, |last_escape_escape_index, (index, escape)| {
+                            Some(if let Some(last_escape_escape_index) = last_escape_escape_index
+                              && *last_escape_escape_index + 1 == index {
+                                  None
+                            } else {
+                                if escape == '\\' {
+                                    *last_escape_escape_index = Some(index);
+                                }
+
+                                Some((index, escape))
+                            })
+                        })
+                        .flatten()
+                    {
+                        match escape {
+                            '0' | 't' | 'n' | 'r' | '"' | '\'' | '\\' => {},
+                            _ => {
+                                to.push(NodeError::new(
+                                    r#"invalid escape, escapes must be one of: \0, \t, \n, \r, \", \', \\"#,
+                                    rowan::TextRange::at(
+                                        content.text_range().start() + rowan::TextSize::new(offset as u32),
+                                        2.into()
+                                    ),
+                                ));
+                            }
+                        }
+                    }
+
+                    let mut lines = text
+                        .lines()
+                        .scan(0, |index, line| {
+                            is_multiline = *index != 0;
+                            *index += 1;
+                            Some(line)
+                        })
+                        .peekable();
+
+                    if index == 0
+                        // No empty Content, therefore we can unwrap.
+                        && let first_line = lines.peek().unwrap()
+                        && !first_line.trim().is_empty()
+                    {
+                        let first_line_length = rowan::TextSize::new(first_line.trim_end().len() as u32);
+
+                        first_line_range = Some(rowan::TextRange::at(
+                            content.text_range().start(),
+                            first_line_length,
+                        ));
+                    }
+
+                    if let Some((_, InterpolationPart::Delimiter(_))) | None = parts.peek()
+                        && let last_line = lines.last().unwrap()
+                        && !last_line.trim().is_empty()
+                    {
+                        let last_line_length = rowan::TextSize::new(last_line.trim_start().len() as u32);
+
+                        last_line_range = Some(rowan::TextRange::at(
+                            content.text_range().end().checked_sub(last_line_length).unwrap(),
+                            last_line_length,
+                        ));
+                    }
+                },
+
                 _ => {},
+            }
+        }
+
+        if is_multiline {
+            for range in first_line_range.into_iter().chain(last_line_range) {
+                to.push(NodeError::new(
+                    "multiline strings' first and last lines must be empty",
+                    range,
+                ));
             }
         }
     }
@@ -981,12 +1086,7 @@ node! {
                 InterpolationPart::Content(content) => {
                     let mut chars = content
                         .text()
-                        .chars()
-                        .scan(0, |offset, next| {
-                            let start = *offset;
-                            *offset += next.len_utf8();
-                            Some((rowan::TextSize::new(start as u32), next))
-                        })
+                        .char_indices()
                         .peekable();
 
                     while let Some((offset, c)) = chars.next() {
@@ -1001,7 +1101,10 @@ node! {
                         if c == '\\' && !matches!(chars.peek(), Some((_, '>'))) {
                             to.push(NodeError::new(
                                 "islands cannot contain non-'>' escapes",
-                                rowan::TextRange::at(content.text_range().start() + offset, 2.into()),
+                                rowan::TextRange::at(
+                                    content.text_range().start() + rowan::TextSize::new(offset as u32),
+                                    2.into()
+                                ),
                             ));
                             break 'parts;
                         }
