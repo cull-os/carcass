@@ -1,4 +1,4 @@
-#![feature(gen_blocks, if_let_guard, iter_map_windows, let_chains, try_blocks)]
+#![feature(gen_blocks, if_let_guard, iter_map_windows, let_chains)]
 
 mod color;
 pub use color::*;
