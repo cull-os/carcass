@@ -13,7 +13,7 @@ fn is_valid_initial_identifier_character(c: char) -> bool {
 }
 
 fn is_valid_identifier_character(c: char) -> bool {
-    c.is_alphanumeric() || matches!(c, '_' | '-')
+    c.is_alphanumeric() || matches!(c, '_' | '-' | '\'')
 }
 
 fn is_valid_path_character(c: char) -> bool {
