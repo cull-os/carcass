@@ -1,4 +1,4 @@
-//! Formatting utilities for [`Expression`]s.
+//! Formatting utilities for [`node::Expression`]s.
 use std::{
     fmt,
     io,
@@ -14,7 +14,7 @@ use crate::{
 };
 
 /// Formats the given node with parentheses to disambiguate.
-/// The node must be a valid [`Expression`] or this will panic.
+/// The node must be a valid [`node::Expression`] or this will panic.
 pub fn parenthesize(formatter: &mut impl io::Write, node: &RowanNode) -> io::Result<()> {
     Formatter::new(formatter).parenthesize(node)
 }
