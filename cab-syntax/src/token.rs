@@ -74,7 +74,7 @@ token! { #[from(TOKEN_WHITESPACE)] struct Whitespace; }
 impl Whitespace {
     /// The newline count of this whitespace.
     pub fn newline_count(&self) -> usize {
-        self.text().lines().count() - 1
+        self.text().bytes().filter(|&c| c == b'\n').count()
     }
 }
 

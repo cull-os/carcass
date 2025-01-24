@@ -1024,7 +1024,7 @@ node! {
 
                     let mut lines = content
                         .text()
-                        .lines()
+                        .split('\n') // No, not lines. Compare "\n" with lines and split. You'll understand.
                         .scan(0, |index, line| {
                             is_multiline = *index != 0;
                             *index += 1;
