@@ -1039,7 +1039,7 @@ node! {
         }
 
         if is_multiline {
-            for range in first_line_range.into_iter().chain(last_line_range) {
+            for range in [first_line_range, last_line_range].into_iter().flatten() {
                 to.push(NodeError::new(
                     "multiline strings' first and last lines must be empty",
                     range,
