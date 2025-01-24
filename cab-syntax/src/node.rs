@@ -985,6 +985,8 @@ node! {
         let mut last_line_range = None;
         let mut is_multiline = false;
 
+        // TODO: Mixed indentation character erroring.
+
         while let Some((index, part)) = parts.next() {
             match &part {
                 InterpolationPart::Interpolation(interpolation) => {
