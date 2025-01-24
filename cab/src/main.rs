@@ -130,13 +130,7 @@ async fn main() {
                                     .with_message(error.reason),
                             ]);
 
-                        term::emit(
-                            &mut err.lock(),
-                            &term::Config::default(),
-                            &files,
-                            &diagnostic,
-                        )
-                        .ok();
+                        term::emit(&mut err.lock(), &Default::default(), &files, &diagnostic).ok();
                     }
 
                     if let Dump::Syntax = command {
