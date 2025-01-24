@@ -288,9 +288,7 @@ impl Kind {
                 | TOKEN_IDENTIFIER_START
                 | TOKEN_STRING_START
                 | TOKEN_ISLAND_START
-        )
-        || self.is_error() // Error tokens get wrapped into expressions.
-        || self.is_closing_pair() // Same for this, it will be erroneous and will get wrapped into an error node.
+        ) || self.is_error() // Error nodes are expressions.
     }
 
     /// Whether if the token should be ignored by the noder.
@@ -303,14 +301,6 @@ impl Kind {
         matches!(
             self,
             TOKEN_ERROR_UNKNOWN | TOKEN_ERROR_NUMBER_NO_DIGIT | TOKEN_ERROR_FLOAT_NO_EXPONENT
-        )
-    }
-
-    /// Whether if this token is a closing parenthesis/bracket/curlybrace.
-    pub fn is_closing_pair(self) -> bool {
-        matches!(
-            self,
-            TOKEN_RIGHT_PARENTHESIS | TOKEN_RIGHT_BRACKET | TOKEN_RIGHT_CURLYBRACE
         )
     }
 }
