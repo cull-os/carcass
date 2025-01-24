@@ -93,6 +93,7 @@ async fn main() {
                 log::error!("failed to read file: {error}");
                 process::exit(1);
             });
+            // let contents = std::fs::read_to_string(&name).unwrap();
 
             match command {
                 Dump::Token { color } => {

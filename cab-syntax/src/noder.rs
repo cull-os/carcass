@@ -87,17 +87,8 @@ pub fn parse<'a, I: Iterator<Item = (Kind, &'a str)>, N: node::Node>(
 
     noder.node(NODE_ROOT, |this| {
         this.node_expression(EnumSet::empty());
-
-        if let Some(unexpected) = this.peek() {
-            let start = this.offset;
-
-            this.node(NODE_ERROR, |this| this.next_direct_while(|_| true));
-            this.errors.push(NodeError::unexpected(
-                Some(unexpected),
-                EnumSet::empty(),
-                rowan::TextRange::new(start, this.offset),
-            ));
-        }
+        this.next_while_trivia();
+        this.next_expect(EnumSet::empty(), EnumSet::empty());
     });
 
     let syntax = RowanNode::new_root(noder.builder.finish());
@@ -363,29 +354,34 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
         condition
     }
 
-    fn next_while(&mut self, mut predicate: impl FnMut(Kind) -> bool) {
+    fn next_while(&mut self, mut predicate: impl FnMut(Kind) -> bool) -> rowan::TextRange {
+        let start = self.offset;
+
         while self.peek().is_some_and(&mut predicate) {
             self.next().unwrap();
         }
+
+        rowan::TextRange::new(start, self.offset)
     }
 
     fn next_expect(&mut self, expected: EnumSet<Kind>, until: EnumSet<Kind>) -> Option<Kind> {
         let expected_at = self.checkpoint();
 
         match self.peek() {
+            None if expected.is_empty() => None,
             Some(next) if expected.contains(next) => Some(self.next().unwrap()),
 
             unexpected => {
-                let start = self.offset;
+                let unexpected_range = self.next_while(|next| !(until | expected).contains(next));
 
-                self.node_from(expected_at, NODE_ERROR, |this| {
-                    this.next_while(|next| !(until | expected).contains(next));
-                });
+                if !unexpected_range.is_empty() {
+                    self.node_from(expected_at, NODE_ERROR, |_| {});
+                }
 
                 self.errors.push(NodeError::unexpected(
                     unexpected,
                     expected,
-                    rowan::TextRange::new(start, self.offset),
+                    unexpected_range,
                 ));
 
                 let next = self.peek()?;
@@ -607,12 +603,12 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
 
             unexpected => {
                 self.next_while_trivia();
-                let start = self.offset;
 
+                let mut unexpected_range = Default::default();
                 self.node(NODE_ERROR, |this| {
                     // Consume until the next token is either the limit, an expression token or
                     // an operator.
-                    this.next_while(|kind| {
+                    unexpected_range = this.next_while(|kind| {
                         !((until | EXPRESSION_TOKENS).contains(kind)
                             || node::PrefixOperator::try_from(kind).is_ok()
                             || node::InfixOperator::try_from(kind)
@@ -624,7 +620,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
                 self.errors.push(NodeError::unexpected(
                     unexpected,
                     EXPRESSION_TOKENS,
-                    rowan::TextRange::new(start, self.offset),
+                    unexpected_range,
                 ));
             },
         }
