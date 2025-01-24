@@ -979,30 +979,14 @@ node! {
                 },
 
                 InterpolationPart::Content(content) => {
-                    let text = content.text();
+                    let mut text = content.text().bytes().enumerate();
+                    while let Some((offset, c)) = text.next() {
+                        if c != b'\\' { continue; }
 
-                    text
-                        .char_indices()
-                        .map_windows(|&[(offset, escape), (_, escaped)]| (escape == '\\').then_some((offset, escaped)))
-                        .flatten()
-                        // Not pretty, but filters out the escaped space in "\\ ", for example.
-                        .scan(None, |last_escape_escape_index, (index, escape)| {
-                            Some(if let Some(last_escape_escape_index) = last_escape_escape_index
-                              && *last_escape_escape_index + 1 == index {
-                                  None
-                            } else {
-                                if escape == '\\' {
-                                    *last_escape_escape_index = Some(index);
-                                }
+                        match text.next() {
+                            Some((_, b'0' | b't' | b'n' | b'r' | b'"' | b'\'' | b'\\')) | None => {},
 
-                                Some((index, escape))
-                            })
-                        })
-                        .flatten()
-                        .for_each(|(offset, escape)| match escape {
-                            '0' | 't' | 'n' | 'r' | '"' | '\'' | '\\' => {},
-
-                            _ => {
+                            Some(_) => {
                                 to.push(NodeError::new(
                                     r#"invalid escape, escapes must be one of: \0, \t, \n, \r, \", \', \\"#,
                                     rowan::TextRange::at(
@@ -1010,10 +994,12 @@ node! {
                                         2.into()
                                     ),
                                 ));
-                            }
-                        });
+                            },
+                        }
+                    }
 
-                    let mut lines = text
+                    let mut lines = content
+                        .text()
                         .lines()
                         .scan(0, |index, line| {
                             is_multiline = *index != 0;
