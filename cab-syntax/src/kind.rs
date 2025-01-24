@@ -162,7 +162,7 @@ pub enum Kind {
 
     /// A normal non-quoted identifier. The initial character must not match
     /// [`char::is_ascii_digit`], the other characters must be either
-    /// [`char::is_alphanumeric`], `_` or `-`.
+    /// [`char::is_alphanumeric`], `_`, `-` or `'`.
     #[display("an identifier")]
     TOKEN_IDENTIFIER,
 
