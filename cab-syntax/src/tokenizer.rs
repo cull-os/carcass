@@ -130,7 +130,7 @@ impl<'a> Tokenizer<'a> {
 
             let exponent_length = self.consume_while(|c| c.is_ascii_digit() || c == '_');
             let exponent = self.consumed_since(self.offset - exponent_length);
-            if exponent.is_empty() || exponent.chars().all(|c| c == '_') {
+            if exponent.is_empty() || exponent.bytes().all(|c| c == b'_') {
                 TOKEN_ERROR_FLOAT_NO_EXPONENT
             } else {
                 TOKEN_FLOAT
@@ -324,7 +324,7 @@ impl<'a> Tokenizer<'a> {
 
                 let digits_length = self.consume_while(is_valid_digit);
                 let digits = self.consumed_since(self.offset - digits_length);
-                let error_token = (digits.is_empty() || digits.chars().all(|c| c == '_'))
+                let error_token = (digits.is_empty() || digits.bytes().all(|c| c == b'_'))
                     .then_some(TOKEN_ERROR_NUMBER_NO_DIGIT);
 
                 if self.peek_character() == Some('.')

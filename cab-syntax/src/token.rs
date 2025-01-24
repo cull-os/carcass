@@ -132,10 +132,10 @@ impl Integer {
     pub fn value(&self) -> num::BigInt {
         let text = self.text();
 
-        match text.chars().nth(1) {
-            Some('b') => num::BigInt::from_str_radix(text.get(2..).unwrap(), 2),
-            Some('o') => num::BigInt::from_str_radix(text.get(2..).unwrap(), 8),
-            Some('x') => num::BigInt::from_str_radix(text.get(2..).unwrap(), 16),
+        match text.as_bytes().get(1).copied() {
+            Some(b'b') => num::BigInt::from_str_radix(text.get(2..).unwrap(), 2),
+            Some(b'o') => num::BigInt::from_str_radix(text.get(2..).unwrap(), 8),
+            Some(b'x') => num::BigInt::from_str_radix(text.get(2..).unwrap(), 16),
             _ => num::BigInt::from_str_radix(text, 10),
         }
         .unwrap()
@@ -149,10 +149,10 @@ impl Float {
     pub fn value(&self) -> f64 {
         let text = self.text();
 
-        match text.chars().nth(1) {
-            Some('b') => f64::from_str_radix(text.get(2..).unwrap(), 2),
-            Some('o') => f64::from_str_radix(text.get(2..).unwrap(), 8),
-            Some('x') => f64::from_str_radix(text.get(2..).unwrap(), 16),
+        match text.as_bytes().get(1).copied() {
+            Some(b'b') => f64::from_str_radix(text.get(2..).unwrap(), 2),
+            Some(b'o') => f64::from_str_radix(text.get(2..).unwrap(), 8),
+            Some(b'x') => f64::from_str_radix(text.get(2..).unwrap(), 16),
             _ => f64::from_str_radix(text, 10),
         }
         .unwrap()
