@@ -164,13 +164,3 @@ token! { #[from(TOKEN_PATH)] struct Path; }
 token! { #[from(TOKEN_IDENTIFIER)] struct Identifier; }
 
 token! { #[from(TOKEN_CONTENT)] struct Content; }
-
-impl Content {
-    // TODO
-    pub fn normalized(contents: &[Self]) -> Result<Vec<borrow::Cow<'_, str>>, Vec<NodeError>> {
-        Ok(contents
-            .iter()
-            .map(|content| borrow::Cow::Borrowed(content.text()))
-            .collect())
-    }
-}
