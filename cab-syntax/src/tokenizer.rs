@@ -86,7 +86,7 @@ impl<'a> Tokenizer<'a> {
         let length: usize = self
             .remaining()
             .chars()
-            .take_while(|c| predicate(*c))
+            .take_while(|&c| predicate(c))
             .map(char::len_utf8)
             .sum();
 
