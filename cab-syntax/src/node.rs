@@ -965,7 +965,9 @@ impl Identifier {
 node! {
     #[from(NODE_STRING)] struct SString;
 
+    // What a behemoth. And the sad part is I can't figure out a way to make this simpler.
     fn validate(&self, to: &mut Vec<NodeError>) {
+        let mut last_part = None;
         let mut parts = self
             .parts()
             .scan(0, |index, part| {
@@ -984,14 +986,14 @@ node! {
         let mut is_multiline = false;
 
         while let Some((index, part)) = parts.next() {
-            match part {
+            match &part {
                 InterpolationPart::Interpolation(interpolation) => {
                     if index == 0 {
                         first_line_range = Some(interpolation.text_range());
                     }
 
                     if let Some((_, InterpolationPart::Delimiter(_))) | None = parts.peek() {
-                        last_line_range = Some(interpolation.text_range())
+                        last_line_range = Some(interpolation.text_range());
                     }
 
                     interpolation.validate(to);
@@ -1025,43 +1027,56 @@ node! {
                         .text()
                         .split('\n') // No, not lines. Compare "\n" with lines and split. You'll understand.
                         .scan(0, |index, line| {
-                            is_multiline = *index != 0;
+                            if *index != 0 {
+                                is_multiline = true;
+                            }
+
                             *index += 1;
                             Some(line)
                         })
                         .peekable();
 
-                    if index == 0
-                        // No empty Content, therefore we can unwrap.
-                        && let first_line = lines.peek().unwrap()
-                        && !first_line.trim().is_empty()
-                    {
-                        let first_line_length = rowan::TextSize::new(first_line.trim_end().len() as u32);
+                    if index == 0 {
+                        let first_line = lines.peek().unwrap();
 
-                        first_line_range = Some(rowan::TextRange::at(
-                            content.text_range().start(),
-                            first_line_length,
-                        ));
+                        if !first_line.trim().is_empty() {
+                            let first_line_length = rowan::TextSize::new(first_line.trim_end().len() as u32);
+
+                            first_line_range = Some(rowan::TextRange::at(
+                                content.text_range().start(),
+                                first_line_length,
+                            ));
+                        } else if let Some((_, InterpolationPart::Interpolation(interpolation))) = parts.peek() {
+                            first_line_range = Some(interpolation.text_range());
+                        }
                     }
 
-                    if let Some((_, InterpolationPart::Delimiter(_))) | None = parts.peek()
-                        && let last_line = lines.last().unwrap()
-                        && !last_line.trim().is_empty()
-                    {
-                        let last_line_length = rowan::TextSize::new(last_line.trim_start().len() as u32);
+                    let last_line = lines.last().unwrap(); // Outside the if to force the scan.
+                    if let Some((_, InterpolationPart::Delimiter(_))) | None = parts.peek() {
+                        if !last_line.trim().is_empty() {
+                            let last_line_length = rowan::TextSize::new(last_line.trim_start().len() as u32);
 
-                        last_line_range = Some(rowan::TextRange::at(
-                            content.text_range().end().checked_sub(last_line_length).unwrap(),
-                            last_line_length,
-                        ));
+                            last_line_range = Some(rowan::TextRange::at(
+                                content.text_range().end().checked_sub(last_line_length).unwrap(),
+                                last_line_length,
+                            ));
+                        } else if let Some(InterpolationPart::Interpolation(interpolation)) = last_part {
+                            last_line_range = Some(interpolation.text_range());
+                        }
                     }
                 },
 
                 _ => {},
             }
+
+            last_part = Some(part.clone());
         }
 
         if is_multiline {
+            if first_line_range == last_line_range {
+                last_line_range = None;
+            }
+
             for range in [first_line_range, last_line_range].into_iter().flatten() {
                 to.push(NodeError::new(
                     "multiline strings' first and last lines must be empty",
