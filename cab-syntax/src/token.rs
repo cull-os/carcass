@@ -1,6 +1,5 @@
 //! [`Token`] definitions for the Cab language.
 use std::{
-    borrow,
     fmt,
     ops::{
         self,
@@ -16,7 +15,6 @@ use crate::{
         self,
         *,
     },
-    NodeError,
     RowanToken,
 };
 
