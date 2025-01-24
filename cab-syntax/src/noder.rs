@@ -4,10 +4,7 @@ use std::{
     result,
 };
 
-use enumset::{
-    EnumSet,
-    enum_set,
-};
+use enumset::EnumSet;
 use peekmore::{
     PeekMore as _,
     PeekMoreIterator as PeekMore,
@@ -132,22 +129,6 @@ pub fn parse<'a, I: Iterator<Item = (Kind, &'a str)>, N: node::Node>(
     }
 }
 
-const EXPRESSION_TOKENS: EnumSet<Kind> = enum_set!(
-    TOKEN_LEFT_PARENTHESIS
-        | TOKEN_LEFT_BRACKET
-        | TOKEN_LEFT_CURLYBRACE
-        | TOKEN_INTEGER
-        | TOKEN_FLOAT
-        | TOKEN_LITERAL_IF
-        | TOKEN_PATH
-        | TOKEN_IDENTIFIER
-        | TOKEN_IDENTIFIER_START
-        | TOKEN_STRING_START
-        | TOKEN_ISLAND_START
-);
-
-const IDENTIFIER_TOKENS: EnumSet<Kind> = enum_set!(TOKEN_IDENTIFIER | TOKEN_IDENTIFIER_START);
-
 /// A node error.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NodeError {
@@ -188,8 +169,8 @@ impl NodeError {
             };
         }
 
-        if expected.is_superset(EXPRESSION_TOKENS) {
-            expected.remove_all(EXPRESSION_TOKENS);
+        if expected.is_superset(Kind::EXPRESSION_SET) {
+            expected.remove_all(Kind::EXPRESSION_SET);
 
             let separator = match expected.len() {
                 0 => "",
@@ -200,7 +181,7 @@ impl NodeError {
             write!(reason, "an expression{separator}").ok();
         }
 
-        if expected.is_superset(IDENTIFIER_TOKENS) {
+        if expected.is_superset(Kind::IDENTIFIER_SET) {
             expected.remove(TOKEN_IDENTIFIER_START);
         }
 
@@ -398,7 +379,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
         self.node(NODE_PARENTHESIS, |this| {
             this.next_expect(
                 TOKEN_LEFT_PARENTHESIS.into(),
-                until | EXPRESSION_TOKENS | TOKEN_RIGHT_PARENTHESIS,
+                until | Kind::EXPRESSION_SET | TOKEN_RIGHT_PARENTHESIS,
             );
 
             this.node_expression(until | TOKEN_RIGHT_PARENTHESIS);
@@ -411,7 +392,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
         self.node(NODE_LIST, |this| {
             this.next_expect(
                 TOKEN_LEFT_BRACKET.into(),
-                until | EXPRESSION_TOKENS | TOKEN_RIGHT_BRACKET,
+                until | Kind::EXPRESSION_SET | TOKEN_RIGHT_BRACKET,
             );
 
             if this.peek() != Some(TOKEN_RIGHT_BRACKET) {
@@ -426,7 +407,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
         self.node(NODE_ATTRIBUTE_LIST, |this| {
             this.next_expect(
                 TOKEN_LEFT_CURLYBRACE.into(),
-                until | EXPRESSION_TOKENS | TOKEN_RIGHT_CURLYBRACE,
+                until | Kind::EXPRESSION_SET | TOKEN_RIGHT_CURLYBRACE,
             );
 
             if this.peek() != Some(TOKEN_RIGHT_CURLYBRACE) {
@@ -460,7 +441,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
             self.node_stringlike();
         } else {
             self.node(NODE_IDENTIFIER, |this| {
-                this.next_expect(IDENTIFIER_TOKENS, until);
+                this.next_expect(Kind::IDENTIFIER_SET, until);
             });
         }
     }
@@ -545,7 +526,11 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
 
         self.next_expect(
             TOKEN_LITERAL_IF.into(),
-            until | EXPRESSION_TOKENS | TOKEN_LITERAL_IS | TOKEN_LITERAL_THEN | TOKEN_LITERAL_ELSE,
+            until
+                | Kind::EXPRESSION_SET
+                | TOKEN_LITERAL_IS
+                | TOKEN_LITERAL_THEN
+                | TOKEN_LITERAL_ELSE,
         );
 
         self.node_expression_binding_power(
@@ -594,7 +579,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
 
             Some(TOKEN_PATH) => self.node_path(),
 
-            Some(next) if IDENTIFIER_TOKENS.contains(next) => self.node_identifier(until),
+            Some(next) if Kind::IDENTIFIER_SET.contains(next) => self.node_identifier(until),
 
             Some(TOKEN_STRING_START | TOKEN_ISLAND_START) => self.node_stringlike(),
 
@@ -606,7 +591,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
                 // Consume until the next token is either the limit, an
                 // expression token or an operator.
                 let unexpected_range = self.next_while(|kind| {
-                    !((until | EXPRESSION_TOKENS).contains(kind)
+                    !((until | Kind::EXPRESSION_SET).contains(kind)
                         || node::PrefixOperator::try_from(kind).is_ok()
                         || node::InfixOperator::try_from(kind)
                             .is_ok_and(|operator| operator.is_token_owning())
@@ -619,7 +604,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
 
                 self.errors.push(NodeError::unexpected(
                     unexpected,
-                    EXPRESSION_TOKENS,
+                    Kind::EXPRESSION_SET,
                     unexpected_range,
                 ));
             },
@@ -659,7 +644,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
                 && node::SuffixOperator::try_from(operator_token.unwrap()).is_ok()
                 && self
                     .peek()
-                    .is_none_or(|kind| !EXPRESSION_TOKENS.contains(kind))
+                    .is_none_or(|kind| !Kind::EXPRESSION_SET.contains(kind))
             {
                 self.node_from(start_of_expression, NODE_SUFFIX_OPERATION, |_| {});
             } else {

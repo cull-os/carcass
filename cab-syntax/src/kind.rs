@@ -1,5 +1,9 @@
 use Kind::*;
 use derive_more::Display;
+use enumset::{
+    EnumSet,
+    enum_set,
+};
 
 /// derive_more causes [`unreachable`] to warn too many times
 /// so we're just suppressing them like this. No, #[allow(unreachable_code)]
@@ -249,6 +253,21 @@ impl From<Kind> for rowan::SyntaxKind {
 }
 
 impl Kind {
+    pub const EXPRESSION_SET: EnumSet<Kind> = enum_set!(
+        TOKEN_LEFT_PARENTHESIS
+            | TOKEN_LEFT_BRACKET
+            | TOKEN_LEFT_CURLYBRACE
+            | TOKEN_INTEGER
+            | TOKEN_FLOAT
+            | TOKEN_LITERAL_IF
+            | TOKEN_PATH
+            | TOKEN_IDENTIFIER
+            | TOKEN_IDENTIFIER_START
+            | TOKEN_STRING_START
+            | TOKEN_ISLAND_START
+    );
+    pub const IDENTIFIER_SET: EnumSet<Kind> = enum_set!(TOKEN_IDENTIFIER | TOKEN_IDENTIFIER_START);
+
     /// Whether if this token can be used as a lambda argument.
     ///
     /// ```txt
@@ -263,6 +282,7 @@ impl Kind {
                 | TOKEN_LEFT_CURLYBRACE
                 | TOKEN_INTEGER
                 | TOKEN_FLOAT
+                // !! If's aren't arguments.
                 | TOKEN_PATH
                 | TOKEN_IDENTIFIER
                 | TOKEN_IDENTIFIER_START
