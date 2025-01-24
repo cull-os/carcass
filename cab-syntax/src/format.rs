@@ -80,7 +80,7 @@ impl<'a, W: io::Write> Formatter<'a, W> {
 
                 node::InterpolationPart::Interpolation(interpolation) => {
                     self.write(r"\(".yellow())?;
-                    self.parenthesize(&interpolation.expression())?;
+                    self.parenthesize(&interpolation.expression().unwrap())?;
                     self.write(")".yellow())?;
                 },
             }
@@ -96,7 +96,7 @@ impl<'a, W: io::Write> Formatter<'a, W> {
             },
 
             node::Parenthesis as parenthesis => {
-                self.parenthesize(&parenthesis.expression())
+                self.parenthesize(&parenthesis.expression().unwrap())
             },
 
             node::List as list => {
@@ -151,7 +151,7 @@ impl<'a, W: io::Write> Formatter<'a, W> {
                     node::PrefixOperator::Not => "!",
                 })?;
                 self.write(" ")?;
-                self.parenthesize(&operation.expression())?;
+                self.parenthesize(&operation.expression().unwrap())?;
 
                 self.bracket_end(")")
             },
@@ -168,9 +168,9 @@ impl<'a, W: io::Write> Formatter<'a, W> {
 
                     node::InfixOperator::ImplicitApply | node::InfixOperator::Apply => None,
                     node::InfixOperator::Pipe => {
-                        self.parenthesize(&operation.right_expression())?;
+                        self.parenthesize(&operation.right_expression().unwrap())?;
                         self.write(" ")?;
-                        self.parenthesize(&operation.left_expression())?;
+                        self.parenthesize(&operation.left_expression().unwrap())?;
 
                         return self.bracket_end(")");
                     },
@@ -200,7 +200,7 @@ impl<'a, W: io::Write> Formatter<'a, W> {
                     node::InfixOperator::Bind => Some(":="),
                 };
 
-                self.parenthesize(&operation.left_expression())?;
+                self.parenthesize(&operation.left_expression().unwrap())?;
                 self.write(" ")?;
 
                 if let Some(operator) = operator {
@@ -208,7 +208,7 @@ impl<'a, W: io::Write> Formatter<'a, W> {
                     self.write(" ")?;
                 }
 
-                self.parenthesize(&operation.right_expression())?;
+                self.parenthesize(&operation.right_expression().unwrap())?;
 
                 self.bracket_end(")")
             },
@@ -256,9 +256,9 @@ impl<'a, W: io::Write> Formatter<'a, W> {
                 self.bracket_start("(")?;
 
                 self.write("if ".red().bold())?;
-                self.parenthesize(&if_is.expression())?;
+                self.parenthesize(&if_is.expression().unwrap())?;
                 self.write(" is ".red().bold())?;
-                self.parenthesize(&if_is.match_expression())?;
+                self.parenthesize(&if_is.match_expression().unwrap())?;
 
                 self.bracket_end(")")
             },
@@ -267,26 +267,13 @@ impl<'a, W: io::Write> Formatter<'a, W> {
                 self.bracket_start("(")?;
 
                 self.write("if ".red().bold())?;
-
-                if let Some(condition) = if_else.condition() {
-                    self.parenthesize(&condition)?;
-                } else {
-                    self.write("error".red().bold())?;
-                }
-
+                self.parenthesize(&if_else.condition().unwrap())?;
                 self.write(" then ".red().bold())?;
-
-                if let Some(true_expression) = if_else.true_expression() {
-                    self.parenthesize(&true_expression)?;
-                } else {
-                    self.write("error".red().bold())?;
-                }
+                self.parenthesize(&if_else.true_expression().unwrap())?;
 
                 if let Some(false_expression) = if_else.false_expression() {
                     self.write(" else ".red().bold())?;
                     self.parenthesize(&false_expression)?;
-                } else {
-                    self.write("error".red().bold())?;
                 }
 
                 self.bracket_end(")")

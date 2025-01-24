@@ -122,12 +122,12 @@ async fn main() {
                     let mut files = diagnostic_files::SimpleFiles::new();
                     let input_file = files.add(name, &contents);
 
-                    for error in parse.errors {
+                    for error in &parse.errors {
                         let diagnostic = diagnostic::Diagnostic::error()
                             .with_message("syntax error")
                             .with_labels(vec![
                                 diagnostic::Label::primary(input_file, error.at)
-                                    .with_message(error.reason),
+                                    .with_message(&*error.reason),
                             ]);
 
                         term::emit(&mut err.lock(), &Default::default(), &files, &diagnostic).ok();
@@ -135,8 +135,10 @@ async fn main() {
 
                     if let Dump::Syntax = command {
                         write!(out, "{syntax:#?}", syntax = parse.syntax)
+                    } else if let Ok(node) = parse.result() {
+                        syntax::format::parenthesize(&mut out, &node)
                     } else {
-                        syntax::format::parenthesize(&mut out, &parse.syntax.first_child().unwrap())
+                        Ok(())
                     }
                     .unwrap_or_else(|error| {
                         log::error!("failed to write to stdout: {error}");

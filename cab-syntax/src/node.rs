@@ -326,7 +326,11 @@ node! {
 impl Expression {
     fn validate_pattern(&self, to: &mut Vec<NodeError>) {
         match self {
-            Self::Parenthesis(parenthesis) => parenthesis.expression().validate_pattern(to),
+            Self::Parenthesis(parenthesis) => {
+                if let Some(expression) = parenthesis.expression() {
+                    expression.validate_pattern(to);
+                }
+            },
 
             Self::List(list) => {
                 for item in list.items() {
@@ -356,8 +360,11 @@ impl Expression {
                     Expression::InfixOperation(operation)
                         if operation.operator() == InfixOperator::Same =>
                     {
-                        expressions.push_front(operation.left_expression());
-                        expressions.push_front(operation.right_expression());
+                        expressions.extend(
+                            [operation.left_expression(), operation.right_expression()]
+                                .into_iter()
+                                .flatten(),
+                        );
                     },
 
                     Expression::SuffixOperation(operation)
@@ -383,14 +390,16 @@ node! {
     #[from(NODE_PARENTHESIS)] struct Parenthesis;
 
     fn validate(&self, to: &mut Vec<NodeError>) {
-        self.expression().validate(to);
+        if let Some(expression) = self.expression() {
+            expression.validate(to);
+        }
     }
 }
 
 impl Parenthesis {
     get_token! { left_parenthesis_token -> TOKEN_LEFT_PARENTHESIS }
 
-    get_node! { expression -> 0 @ Expression }
+    get_node! { expression -> 0 @ ? Expression }
 
     get_token! { right_parenthesis_token -> ? TOKEN_RIGHT_PARENTHESIS }
 }
@@ -484,7 +493,9 @@ node! {
     #[from(NODE_PREFIX_OPERATION)] struct PrefixOperation;
 
     fn validate(&self, to: &mut Vec<NodeError>) {
-        self.expression().validate(to);
+        if let Some(expression) = self.expression() {
+            expression.validate(to);
+        }
     }
 }
 
@@ -537,7 +548,7 @@ impl PrefixOperation {
             .unwrap()
     }
 
-    get_node! { expression -> 0 @ Expression }
+    get_node! { expression -> 0 @ ? Expression }
 }
 
 // INFIX OPERATION
@@ -575,18 +586,25 @@ node! {
             },
 
             InfixOperator::Lambda | InfixOperator::Bind => {
-                self.left_expression().validate_pattern(to);
-                self.right_expression().validate(to);
+                if let Some(left_expression) = self.left_expression() {
+                    left_expression.validate_pattern(to);
+                }
+                if let Some(right_expression) = self.right_expression() {
+                    right_expression.validate(to);
+                }
             },
 
             operator => {
-                self.left_expression().validate(to);
-                self.right_expression().validate(to);
+                let expressions = [self.left_expression(), self.right_expression()];
+
+                for expression in expressions.iter().flatten() {
+                    expression.validate(to);
+                }
 
                 // No, I am not proud of this.
                 let (InfixOperator::Apply | InfixOperator::Pipe) = operator else { return; };
 
-                for expression in [self.left_expression(), self.right_expression()] {
+                for expression in expressions.iter().flatten() {
                     if let Expression::InfixOperation(operation) = expression
                         && let child_operator @ (InfixOperator::Apply | InfixOperator::Pipe) = operation.operator()
                         && child_operator != operator
@@ -727,7 +745,7 @@ impl InfixOperator {
 
 #[rustfmt::skip]
 impl InfixOperation {
-    get_node! { left_expression -> 0 @ Expression }
+    get_node! { left_expression -> 0 @ ? Expression }
 
     /// Returns the operator token of this operation.
     pub fn operator_token(&self) -> Option<RowanToken> {
@@ -742,7 +760,7 @@ impl InfixOperation {
             .unwrap_or(InfixOperator::ImplicitApply)
     }
 
-    get_node! { right_expression -> 1 @ Expression }
+    get_node! { right_expression -> 1 @ ? Expression }
 }
 
 // SUFFIX OPERATION
@@ -798,14 +816,16 @@ node! {
     #[from(NODE_INTERPOLATION)] struct Interpolation;
 
     fn validate(&self, to: &mut Vec<NodeError>) {
-        self.expression().validate(to);
+        if let Some(expression) = self.expression() {
+            expression.validate(to);
+        }
     }
 }
 
 impl Interpolation {
     get_token! { interpolation_start_token -> TOKEN_INTERPOLATION_START }
 
-    get_node! { expression -> 0 @ Expression }
+    get_node! { expression -> 0 @ ? Expression }
 
     get_token! { interpolation_end_token -> ? TOKEN_INTERPOLATION_END }
 }
@@ -1145,20 +1165,24 @@ node! {
     #[from(NODE_IF_IS)] struct IfIs;
 
     fn validate(&self, to: &mut Vec<NodeError>) {
-        self.expression().validate(to);
+        if let Some(expression) = self.expression() {
+            expression.validate(to);
+        }
 
-        for item in self.match_expression().same_items() {
-            match item {
-                Expression::InfixOperation(operation) if operation.operator() == InfixOperator::Lambda => {
-                    operation.validate(to);
-                },
+        if let Some(match_expression) = self.match_expression() {
+            for item in match_expression.same_items() {
+                match item {
+                    Expression::InfixOperation(operation) if operation.operator() == InfixOperator::Lambda => {
+                        operation.validate(to);
+                    },
 
-                invalid => {
-                    to.push(NodeError::new(
-                        "all if-is branches must be lambdas",
-                        invalid.text_range(),
-                    ));
-                },
+                    invalid => {
+                        to.push(NodeError::new(
+                            "all if-is branches must be lambdas",
+                            invalid.text_range(),
+                        ));
+                    },
+                }
             }
         }
     }
@@ -1167,11 +1191,11 @@ node! {
 impl IfIs {
     get_token! { if_token -> TOKEN_LITERAL_IF }
 
-    get_node! { expression -> 0 @ Expression }
+    get_node! { expression -> 0 @ ? Expression }
 
     get_token! { is_token -> TOKEN_LITERAL_IS }
 
-    get_node! { match_expression -> 1 @ Expression }
+    get_node! { match_expression -> 1 @ ? Expression }
 }
 
 // IF ELSE
