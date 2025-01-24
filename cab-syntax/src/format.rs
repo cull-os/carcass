@@ -216,7 +216,7 @@ impl<'a, W: io::Write> Formatter<'a, W> {
             node::SuffixOperation as operation => {
                 self.bracket_start("(")?;
 
-                self.parenthesize(&operation.expression())?;
+                self.parenthesize(&operation.expression().unwrap())?;
                 self.write(" ")?;
                 self.write(match operation.operator() {
                     node::SuffixOperator::Same => ",",

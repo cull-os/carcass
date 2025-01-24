@@ -360,17 +360,14 @@ impl Expression {
                     Expression::InfixOperation(operation)
                         if operation.operator() == InfixOperator::Same =>
                     {
-                        expressions.extend(
-                            [operation.left_expression(), operation.right_expression()]
-                                .into_iter()
-                                .flatten(),
-                        );
+                        expressions.extend(operation.left_expression());
+                        expressions.extend(operation.right_expression());
                     },
 
                     Expression::SuffixOperation(operation)
                         if operation.operator() == SuffixOperator::Same =>
                     {
-                        expressions.push_front(operation.expression());
+                        expressions.extend(operation.expression());
                     },
 
                     normal => yield normal,
@@ -769,7 +766,9 @@ node! {
     #[from(NODE_SUFFIX_OPERATION)] struct SuffixOperation;
 
     fn validate(&self, to: &mut Vec<NodeError>) {
-        self.expression().validate(to);
+        if let Some(expression) = self.expression() {
+            expression.validate(to);
+        }
     }
 }
 
@@ -793,7 +792,7 @@ impl TryFrom<Kind> for SuffixOperator {
 }
 
 impl SuffixOperation {
-    get_node! { expression -> 0 @ Expression }
+    get_node! { expression -> 0 @ ? Expression }
 
     /// Returns the operator token of this operation.
     pub fn operator_token(&self) -> RowanToken {

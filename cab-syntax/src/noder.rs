@@ -88,19 +88,21 @@ pub fn parse<'a, I: Iterator<Item = (Kind, &'a str)>, N: node::Node>(
     });
 
     let syntax = RowanNode::new_root(noder.builder.finish());
-    let node = N::cast(syntax.first_child().unwrap());
+    let node = syntax.first_child().and_then(|node| N::cast(node));
     let mut errors = noder.errors;
 
     // Handle unexpected node type. Happens when you
     // `parse::<node::Foo>(...)` and the input
     // contains a non-Foo expression.
     if node.is_none() {
-        let node = syntax.first_child().unwrap();
+        let node = syntax.first_child();
 
         errors.push(NodeError::unexpected(
-            Some(node.kind()),
+            node.as_ref().map(|node| node.kind()),
             N::kind(),
-            node.text_range(),
+            node.as_ref()
+                .map(|node| node.text_range())
+                .unwrap_or_else(|| rowan::TextRange::empty(0.into())),
         ));
     }
 
