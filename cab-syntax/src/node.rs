@@ -1180,9 +1180,13 @@ node! {
     #[from(NODE_IF_ELSE)] struct IfElse;
 
     fn validate(&self, to: &mut Vec<NodeError>) {
-        self.condition().validate(to);
+        if let Some(condition) = self.condition() {
+            condition.validate(to);
+        }
 
-        self.true_expression().validate(to);
+        if let Some(true_expression) = self.true_expression() {
+            true_expression.validate(to);
+        }
 
         if let Some(false_expression) = self.false_expression() {
             false_expression.validate(to);
@@ -1193,11 +1197,11 @@ node! {
 impl IfElse {
     get_token! { if_token -> TOKEN_LITERAL_IF }
 
-    get_node! { condition -> 0 @ Expression }
+    get_node! { condition -> 0 @ ? Expression }
 
     get_token! { then_token -> ? TOKEN_LITERAL_THEN }
 
-    get_node! { true_expression -> 1 @ Expression }
+    get_node! { true_expression -> 1 @ ? Expression }
 
     get_token! { else_token -> ? TOKEN_LITERAL_ELSE }
 

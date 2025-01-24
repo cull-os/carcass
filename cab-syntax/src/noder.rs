@@ -87,7 +87,6 @@ pub fn parse<'a, I: Iterator<Item = (Kind, &'a str)>, N: node::Node>(
 
     noder.node(NODE_ROOT, |this| {
         this.node_expression(EnumSet::empty());
-        this.next_while_trivia();
         this.next_expect(EnumSet::empty(), EnumSet::empty());
     });
 
@@ -584,6 +583,8 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
     }
 
     fn node_expression_single(&mut self, until: EnumSet<Kind>) {
+        let expected_at = self.checkpoint();
+
         match self.peek() {
             Some(TOKEN_LEFT_PARENTHESIS) => self.node_parenthesis(until),
 
@@ -602,20 +603,19 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
             Some(TOKEN_LITERAL_IF) => self.node_if(until),
 
             unexpected => {
-                self.next_while_trivia();
-
-                let mut unexpected_range = Default::default();
-                self.node(NODE_ERROR, |this| {
-                    // Consume until the next token is either the limit, an expression token or
-                    // an operator.
-                    unexpected_range = this.next_while(|kind| {
-                        !((until | EXPRESSION_TOKENS).contains(kind)
-                            || node::PrefixOperator::try_from(kind).is_ok()
-                            || node::InfixOperator::try_from(kind)
-                                .is_ok_and(|operator| operator.is_token_owning())
-                            || node::SuffixOperator::try_from(kind).is_ok())
-                    });
+                // Consume until the next token is either the limit, an
+                // expression token or an operator.
+                let unexpected_range = self.next_while(|kind| {
+                    !((until | EXPRESSION_TOKENS).contains(kind)
+                        || node::PrefixOperator::try_from(kind).is_ok()
+                        || node::InfixOperator::try_from(kind)
+                            .is_ok_and(|operator| operator.is_token_owning())
+                        || node::SuffixOperator::try_from(kind).is_ok())
                 });
+
+                if !unexpected_range.is_empty() {
+                    self.node_from(expected_at, NODE_ERROR, |_| {});
+                }
 
                 self.errors.push(NodeError::unexpected(
                     unexpected,

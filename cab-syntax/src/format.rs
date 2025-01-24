@@ -267,13 +267,26 @@ impl<'a, W: io::Write> Formatter<'a, W> {
                 self.bracket_start("(")?;
 
                 self.write("if ".red().bold())?;
-                self.parenthesize(&if_else.condition())?;
-                self.write(" then ".red().bold())?;
-                self.parenthesize(&if_else.true_expression())?;
 
-                if if_else.else_token().is_some() {
+                if let Some(condition) = if_else.condition() {
+                    self.parenthesize(&condition)?;
+                } else {
+                    self.write("error".red().bold())?;
+                }
+
+                self.write(" then ".red().bold())?;
+
+                if let Some(true_expression) = if_else.true_expression() {
+                    self.parenthesize(&true_expression)?;
+                } else {
+                    self.write("error".red().bold())?;
+                }
+
+                if let Some(false_expression) = if_else.false_expression() {
                     self.write(" else ".red().bold())?;
-                    self.parenthesize(&if_else.false_expression().unwrap())?;
+                    self.parenthesize(&false_expression)?;
+                } else {
+                    self.write("error".red().bold())?;
                 }
 
                 self.bracket_end(")")
