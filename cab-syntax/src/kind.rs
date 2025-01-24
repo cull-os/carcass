@@ -143,8 +143,6 @@ pub enum Kind {
     ///
     /// The `\` character can be used to escape characters that are normally
     /// not allowed in paths, like spaces and other weird characters.
-    /// It is also useful to escape `\(` literally, to not begin string
-    /// interpolation like so: `./\\\(foo`
     ///
     /// Every path part will be represented using this kind, so a path node with
     /// interpolation will be represented as the following:
