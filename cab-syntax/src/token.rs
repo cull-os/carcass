@@ -145,7 +145,7 @@ impl Integer {
 token! { #[from(TOKEN_FLOAT)] struct Float; }
 
 impl Float {
-    /// Returns the value of the float by parsing the underlying string.
+    /// Returns the value of the float by parsing the underlying slice.
     pub fn value(&self) -> f64 {
         let text = self.text();
 
