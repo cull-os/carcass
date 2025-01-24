@@ -979,19 +979,23 @@ node! {
                 },
 
                 InterpolationPart::Content(content) => {
-                    let mut text = content.text().bytes().enumerate();
+                    let mut text = content
+                        .text()
+                        .bytes()
+                        .enumerate();
+
                     while let Some((offset, c)) = text.next() {
                         if c != b'\\' { continue; }
 
                         match text.next() {
-                            Some((_, b'0' | b't' | b'n' | b'r' | b'"' | b'\'' | b'\\')) | None => {},
+                            Some((_, b'0' | b't' | b'n' | b'r' | b'"' | b'\'' | b'\\')) => {},
 
-                            Some(_) => {
+                            next @ (Some(_) | None) => {
                                 to.push(NodeError::new(
                                     r#"invalid escape, escapes must be one of: \0, \t, \n, \r, \", \', \\"#,
                                     rowan::TextRange::at(
                                         content.text_range().start() + rowan::TextSize::new(offset as u32),
-                                        2.into()
+                                        (1 + next.is_some() as u32).into()
                                     ),
                                 ));
                             },
