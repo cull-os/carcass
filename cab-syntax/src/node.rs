@@ -1038,6 +1038,12 @@ node! {
                         })
                         .peekable();
 
+                    let newline_count = content
+                        .text()
+                        .bytes()
+                        .filter(|&c| c == b'\n')
+                        .count();
+
                     if index == 0 {
                         let first_line = lines.peek().unwrap();
 
@@ -1048,7 +1054,9 @@ node! {
                                 content.text_range().start(),
                                 first_line_length,
                             ));
-                        } else if let Some((_, InterpolationPart::Interpolation(interpolation))) = parts.peek() {
+                        } else if newline_count == 0
+                            && let Some((_, InterpolationPart::Interpolation(interpolation))) = parts.peek()
+                        {
                             first_line_range = Some(interpolation.text_range());
                         }
                     }
@@ -1062,7 +1070,9 @@ node! {
                                 content.text_range().end().checked_sub(last_line_length).unwrap(),
                                 last_line_length,
                             ));
-                        } else if let Some(InterpolationPart::Interpolation(interpolation)) = last_part {
+                        } else if newline_count == 0
+                            && let Some(InterpolationPart::Interpolation(interpolation)) = last_part
+                        {
                             last_line_range = Some(interpolation.text_range());
                         }
                     }
