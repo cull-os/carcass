@@ -356,9 +356,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
             unexpected => {
                 let unexpected_range = self.next_while(|next| !(until | expected).contains(next));
 
-                if !unexpected_range.is_empty() {
-                    self.node_from(expected_at, NODE_ERROR, |_| {});
-                }
+                self.node_from(expected_at, NODE_ERROR, |_| {});
 
                 self.errors.push(NodeError::unexpected(
                     unexpected,
@@ -550,19 +548,21 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
                 })
             },
 
-            then_token @ (Some(TOKEN_LITERAL_THEN) | None) => {
+            Some(TOKEN_LITERAL_THEN) => {
                 self.node_from(start_of_if, NODE_IF_ELSE, |this| {
-                    if then_token.is_some() {
-                        this.node_expression_binding_power(
-                            then_else_binding_power,
-                            until | TOKEN_LITERAL_ELSE,
-                        );
-                    }
+                    this.node_expression_binding_power(
+                        then_else_binding_power,
+                        until | TOKEN_LITERAL_ELSE,
+                    );
 
                     if this.next_if(TOKEN_LITERAL_ELSE) {
                         this.node_expression_binding_power(then_else_binding_power, until);
                     }
                 });
+            },
+
+            None => {
+                self.node_from(start_of_if, NODE_ERROR, |_| {});
             },
 
             _ => unreachable!(),
@@ -600,9 +600,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
                         || node::SuffixOperator::try_from(kind).is_ok())
                 });
 
-                if !unexpected_range.is_empty() {
-                    self.node_from(expected_at, NODE_ERROR, |_| {});
-                }
+                self.node_from(expected_at, NODE_ERROR, |_| {});
 
                 self.errors.push(NodeError::unexpected(
                     unexpected,

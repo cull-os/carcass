@@ -93,7 +93,6 @@ async fn main() {
                 log::error!("failed to read file: {error}");
                 process::exit(1);
             });
-            // let contents = std::fs::read_to_string(&name).unwrap();
 
             match command {
                 Dump::Token { color } => {
@@ -135,10 +134,8 @@ async fn main() {
 
                     if let Dump::Syntax = command {
                         write!(out, "{syntax:#?}", syntax = parse.syntax)
-                    } else if let Ok(node) = parse.result() {
-                        syntax::format::parenthesize(&mut out, &node)
                     } else {
-                        Ok(())
+                        syntax::format::parenthesize(&mut out, &parse.syntax.first_child().unwrap())
                     }
                     .unwrap_or_else(|error| {
                         log::error!("failed to write to stdout: {error}");
