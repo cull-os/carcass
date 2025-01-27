@@ -257,6 +257,7 @@ impl<'a> Tokenizer<'a> {
             },
 
             ';' => TOKEN_SEMICOLON,
+            '?' => TOKEN_QUESTIONMARK,
 
             '<' if self.try_consume_character('|') => TOKEN_LESS_PIPE,
             '|' if self.try_consume_character('>') => TOKEN_PIPE_MORE,
@@ -298,7 +299,6 @@ impl<'a> Tokenizer<'a> {
             '/' if self.try_consume_character('/') => TOKEN_SLASH_SLASH,
             '{' => TOKEN_LEFT_CURLYBRACE,
             '}' => TOKEN_RIGHT_CURLYBRACE,
-            '?' => TOKEN_QUESTIONMARK,
 
             '!' if self.try_consume_character('=') => TOKEN_EXCLAMATION_EQUAL,
             '=' if self.try_consume_character('=') => TOKEN_EQUAL_EQUAL,

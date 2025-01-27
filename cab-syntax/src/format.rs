@@ -149,6 +149,8 @@ impl<'a, W: io::Write> Formatter<'a, W> {
                     node::PrefixOperator::Negation => "-",
 
                     node::PrefixOperator::Not => "!",
+
+                    node::PrefixOperator::Try => "?",
                 })?;
                 self.write(" ")?;
                 self.parenthesize(&operation.expression())?;
@@ -161,7 +163,6 @@ impl<'a, W: io::Write> Formatter<'a, W> {
 
                 let operator = match operation.operator() {
                     node::InfixOperator::Select => Some("."),
-                    node::InfixOperator::Check => Some("?"),
 
                     node::InfixOperator::Same => Some(","),
                     node::InfixOperator::Sequence => Some(";"),

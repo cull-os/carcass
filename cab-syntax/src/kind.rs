@@ -49,6 +49,8 @@ pub enum Kind {
 
     #[display("';'")]
     TOKEN_SEMICOLON,
+    #[display("'?'")]
+    TOKEN_QUESTIONMARK,
 
     #[display("'<|'")]
     TOKEN_LESS_PIPE,
@@ -89,8 +91,6 @@ pub enum Kind {
     TOKEN_LEFT_CURLYBRACE,
     #[display("'}}'")]
     TOKEN_RIGHT_CURLYBRACE,
-    #[display("'?'")]
-    TOKEN_QUESTIONMARK,
 
     #[display("'!='")]
     TOKEN_EXCLAMATION_EQUAL,

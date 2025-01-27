@@ -591,6 +591,8 @@ pub enum PrefixOperator {
     Negation,
 
     Not,
+
+    Try,
 }
 
 impl TryFrom<Kind> for PrefixOperator {
@@ -603,6 +605,8 @@ impl TryFrom<Kind> for PrefixOperator {
 
             TOKEN_EXCLAMATIONMARK => Self::Not,
 
+            TOKEN_QUESTIONMARK => Self::Try,
+
             _ => return Err(()),
         })
     }
@@ -614,6 +618,7 @@ impl PrefixOperator {
         match self {
             Self::Swwallation | Self::Negation => ((), 155),
             Self::Not => ((), 135),
+            Self::Try => ((), 115),
         }
     }
 }
@@ -716,7 +721,6 @@ pub enum InfixOperator {
     Construct,
 
     Select,
-    Check,
     Update,
 
     LessOrEqual,
@@ -757,7 +761,6 @@ impl TryFrom<Kind> for InfixOperator {
             TOKEN_COLON => Self::Construct,
 
             TOKEN_PERIOD => Self::Select,
-            TOKEN_QUESTIONMARK => Self::Check,
             TOKEN_SLASH_SLASH => Self::Update,
 
             TOKEN_LESS_EQUAL => Self::LessOrEqual,
@@ -803,7 +806,7 @@ impl InfixOperator {
             // PrefixOperator::Not
             Self::Update => (120, 125),
 
-            Self::LessOrEqual | Self::Less | Self::MoreOrEqual | Self::More | Self::Check => {
+            Self::LessOrEqual | Self::Less | Self::MoreOrEqual | Self::More /* | PrefixOperator::Try */ => {
                 (110, 115)
             },
 
