@@ -1,4 +1,4 @@
-//! [`Node`] definitions for the Cab language.
+//! [`Node`] definitions.
 use std::{
     collections::VecDeque,
     ops::{

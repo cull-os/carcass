@@ -20,7 +20,7 @@ pub(crate) type RowanNode = rowan::SyntaxNode<Language>;
 pub(crate) type RowanToken = rowan::SyntaxToken<Language>;
 pub(crate) type RowanElement = rowan::NodeOrToken<RowanNode, RowanToken>;
 
-/// The Cab language type.
+/// The language type.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Language {}
 

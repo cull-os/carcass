@@ -1,4 +1,4 @@
-//! [`Token`] definitions for the Cab language.
+//! [`Token`] definitions.
 use std::{
     fmt,
     ops::{

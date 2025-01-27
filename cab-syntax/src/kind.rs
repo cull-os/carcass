@@ -12,7 +12,7 @@ fn reachable_unreachable() -> &'static str {
     unreachable!()
 }
 
-/// The Cab syntax kind.
+/// The syntax kind.
 #[derive(
     Display,
     Debug,
