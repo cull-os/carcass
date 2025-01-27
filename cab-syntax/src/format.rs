@@ -163,8 +163,8 @@ impl<'a, W: io::Write> Formatter<'a, W> {
                     node::InfixOperator::Select => Some("."),
                     node::InfixOperator::Check => Some("?"),
 
-                    node::InfixOperator::Sequence => Some(";"),
                     node::InfixOperator::Same => Some(","),
+                    node::InfixOperator::Sequence => Some(";"),
 
                     node::InfixOperator::ImplicitApply | node::InfixOperator::Apply => None,
                     node::InfixOperator::Pipe => {
@@ -176,15 +176,17 @@ impl<'a, W: io::Write> Formatter<'a, W> {
                     },
 
                     node::InfixOperator::Concat => Some("++"),
+                    node::InfixOperator::Construct => Some(":"),
 
                     node::InfixOperator::Update => Some("//"),
 
-                    node::InfixOperator::Equal => Some("=="),
-                    node::InfixOperator::NotEqual => Some("!="),
                     node::InfixOperator::LessOrEqual => Some("<="),
                     node::InfixOperator::Less => Some("<"),
                     node::InfixOperator::MoreOrEqual => Some(">="),
                     node::InfixOperator::More => Some(">"),
+
+                    node::InfixOperator::Equal => Some("=="),
+                    node::InfixOperator::NotEqual => Some("!="),
 
                     node::InfixOperator::Addition => Some("+"),
                     node::InfixOperator::Subtraction => Some("-"),

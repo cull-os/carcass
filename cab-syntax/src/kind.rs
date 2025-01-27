@@ -65,6 +65,15 @@ pub enum Kind {
     #[display("')'")]
     TOKEN_INTERPOLATION_END,
 
+    #[display("':='")]
+    TOKEN_COLON_EQUAL,
+    #[display("'=>'")]
+    TOKEN_EQUAL_GREATER,
+    #[display("','")]
+    TOKEN_COMMA,
+
+    #[display("':'")]
+    TOKEN_COLON,
     #[display("'++'")]
     TOKEN_PLUS_PLUS,
     #[display("'['")]
@@ -82,13 +91,6 @@ pub enum Kind {
     TOKEN_RIGHT_CURLYBRACE,
     #[display("'?'")]
     TOKEN_QUESTIONMARK,
-
-    #[display("':='")]
-    TOKEN_COLON_EQUAL,
-    #[display("'=>'")]
-    TOKEN_EQUAL_GREATER,
-    #[display("','")]
-    TOKEN_COMMA,
 
     #[display("'!='")]
     TOKEN_EXCLAMATION_EQUAL,

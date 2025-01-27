@@ -286,6 +286,11 @@ impl<'a> Tokenizer<'a> {
                 TOKEN_RIGHT_PARENTHESIS
             },
 
+            ':' if self.try_consume_character('=') => TOKEN_COLON_EQUAL,
+            '=' if self.try_consume_character('>') => TOKEN_EQUAL_GREATER,
+            ',' => TOKEN_COMMA,
+
+            ':' => TOKEN_COLON,
             '+' if self.try_consume_character('+') => TOKEN_PLUS_PLUS,
             '[' => TOKEN_LEFT_BRACKET,
             ']' => TOKEN_RIGHT_BRACKET,
@@ -294,10 +299,6 @@ impl<'a> Tokenizer<'a> {
             '{' => TOKEN_LEFT_CURLYBRACE,
             '}' => TOKEN_RIGHT_CURLYBRACE,
             '?' => TOKEN_QUESTIONMARK,
-
-            ':' if self.try_consume_character('=') => TOKEN_COLON_EQUAL,
-            '=' if self.try_consume_character('>') => TOKEN_EQUAL_GREATER,
-            ',' => TOKEN_COMMA,
 
             '!' if self.try_consume_character('=') => TOKEN_EXCLAMATION_EQUAL,
             '=' if self.try_consume_character('=') => TOKEN_EQUAL_EQUAL,

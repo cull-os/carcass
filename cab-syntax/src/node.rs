@@ -517,8 +517,8 @@ impl PrefixOperator {
     /// Returns the binding power of this operator.
     pub fn binding_power(self) -> ((), u16) {
         match self {
-            Self::Swwallation | Self::Negation => ((), 145),
-            Self::Not => ((), 125),
+            Self::Swwallation | Self::Negation => ((), 155),
+            Self::Not => ((), 135),
         }
     }
 }
@@ -617,17 +617,19 @@ pub enum InfixOperator {
     Pipe,
 
     Concat,
+    Construct,
 
     Select,
     Check,
     Update,
 
-    Equal,
-    NotEqual,
     LessOrEqual,
     Less,
     MoreOrEqual,
     More,
+
+    Equal,
+    NotEqual,
 
     And,
     Or,
@@ -648,25 +650,27 @@ impl TryFrom<Kind> for InfixOperator {
 
     fn try_from(from: Kind) -> Result<Self, Self::Error> {
         Ok(match from {
-            TOKEN_SEMICOLON => Self::Sequence,
             TOKEN_COMMA => Self::Same,
+            TOKEN_SEMICOLON => Self::Sequence,
 
             kind if kind.is_argument() => Self::ImplicitApply,
             TOKEN_LESS_PIPE => Self::Apply,
             TOKEN_PIPE_MORE => Self::Pipe,
 
             TOKEN_PLUS_PLUS => Self::Concat,
+            TOKEN_COLON => Self::Construct,
 
             TOKEN_PERIOD => Self::Select,
             TOKEN_QUESTIONMARK => Self::Check,
             TOKEN_SLASH_SLASH => Self::Update,
 
-            TOKEN_EQUAL_EQUAL => Self::Equal,
-            TOKEN_EXCLAMATION_EQUAL => Self::NotEqual,
             TOKEN_LESS_EQUAL => Self::LessOrEqual,
             TOKEN_LESS => Self::Less,
             TOKEN_MORE_EQUAL => Self::MoreOrEqual,
             TOKEN_MORE => Self::More,
+
+            TOKEN_EQUAL_EQUAL => Self::Equal,
+            TOKEN_EXCLAMATION_EQUAL => Self::NotEqual,
 
             TOKEN_AMPERSAND_AMPERSAND => Self::And,
             TOKEN_PIPE_PIPE => Self::Or,
@@ -690,22 +694,25 @@ impl InfixOperator {
     /// Returns the binding power of this operator.
     pub fn binding_power(self) -> (u16, u16) {
         match self {
-            Self::Select => (185, 180),
-            Self::ImplicitApply => (170, 175),
+            Self::Select => (195, 190),
+            Self::ImplicitApply => (180, 185),
 
-            Self::Concat => (160, 165),
+            Self::Concat => (170, 175),
 
-            Self::Multiplication | Self::Division => (150, 155),
-            Self::Power => (155, 150),
+            Self::Multiplication | Self::Division => (160, 165),
+            Self::Power => (165, 160),
 
             // PrefixOperator::Swallation | PrefixOperator::Negation
-            Self::Addition | Self::Subtraction => (130, 135),
+            Self::Addition | Self::Subtraction => (140, 145),
             // PrefixOperator::Not
-            Self::Update => (110, 115),
+            Self::Update => (120, 125),
 
             Self::LessOrEqual | Self::Less | Self::MoreOrEqual | Self::More | Self::Check => {
-                (100, 105)
+                (110, 115)
             },
+
+            Self::Construct => (105, 100),
+
             Self::Equal | Self::NotEqual => (95, 90),
 
             Self::And => (85, 80),

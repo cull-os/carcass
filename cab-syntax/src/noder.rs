@@ -519,8 +519,8 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
     }
 
     fn node_if(&mut self, until: EnumSet<Kind>) {
-        let is_binding_power = node::InfixOperator::Sequence.binding_power().0 + 1;
         let then_else_binding_power = node::InfixOperator::Same.binding_power().0 + 1;
+        let is_binding_power = node::InfixOperator::Sequence.binding_power().0 + 1;
 
         let start_of_if = self.checkpoint();
 
