@@ -86,7 +86,7 @@ fn actual_main() -> Result<(), Box<dyn error::Error>> {
                 }))
             });
 
-            let mut fail_count: u32 = 0;
+            let mut fail_count: usize = 0;
 
             let diff_tool = which("difft").or_else(|_| which("diff"))?;
 

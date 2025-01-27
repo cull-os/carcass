@@ -26,7 +26,7 @@ enum TokenizerContext<'a> {
     Stringlike { end: &'a str },
     StringlikeEnd { end: &'a str },
     InterpolationStart,
-    Interpolation { parentheses: u32 },
+    Interpolation { parentheses: usize },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

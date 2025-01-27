@@ -23,7 +23,7 @@ pub fn parenthesize(formatter: &mut impl io::Write, node: &RowanNode) -> io::Res
 struct Formatter<'a, W: io::Write> {
     inner: &'a mut W,
 
-    bracket_count: u32,
+    bracket_count: usize,
 }
 
 impl<'a, W: io::Write> Formatter<'a, W> {
@@ -36,7 +36,7 @@ impl<'a, W: io::Write> Formatter<'a, W> {
     }
 
     fn paint_bracket<'b>(&self, bracket: &'b str) -> yansi::Painted<&'b str> {
-        let style = COLORS[self.bracket_count as usize % COLORS.len()];
+        let style = COLORS[self.bracket_count % COLORS.len()];
         bracket.paint(style)
     }
 
