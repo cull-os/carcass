@@ -136,10 +136,10 @@ pub enum Kind {
 
     #[display("the keyword 'if'")]
     TOKEN_LITERAL_IF,
-    #[display("the keyword 'is'")]
-    TOKEN_LITERAL_IS,
     #[display("the keyword 'then'")]
     TOKEN_LITERAL_THEN,
+    #[display("the keyword 'is'")]
+    TOKEN_LITERAL_IS,
     #[display("the keyword 'else'")]
     TOKEN_LITERAL_ELSE,
 

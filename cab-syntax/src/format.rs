@@ -66,19 +66,19 @@ impl<'a, W: io::Write> Formatter<'a, W> {
 
     fn parenthesize_parted<T: token::Token>(
         &mut self,
-        parts: impl Iterator<Item = node::InterpolationPart<T>>,
+        parts: impl Iterator<Item = node::InterpolatedPart<T>>,
     ) -> io::Result<()> {
         for part in parts {
             match part {
-                node::InterpolationPart::Delimiter(token) => {
+                node::InterpolatedPart::Delimiter(token) => {
                     self.write(token.text().green().bold())?;
                 },
 
-                node::InterpolationPart::Content(token) => {
+                node::InterpolatedPart::Content(token) => {
                     self.write(token.text().green())?;
                 },
 
-                node::InterpolationPart::Interpolation(interpolation) => {
+                node::InterpolatedPart::Interpolation(interpolation) => {
                     self.write(r"\(".yellow())?;
                     self.parenthesize(&interpolation.expression())?;
                     self.write(")".yellow())?;
@@ -254,17 +254,6 @@ impl<'a, W: io::Write> Formatter<'a, W> {
                 }
             },
 
-            node::IfIs as if_is => {
-                self.bracket_start("(")?;
-
-                self.write("if ".red().bold())?;
-                self.parenthesize(&if_is.expression())?;
-                self.write(" is ".red().bold())?;
-                self.parenthesize(&if_is.match_expression())?;
-
-                self.bracket_end(")")
-            },
-
             node::IfElse as if_else => {
                 self.bracket_start("(")?;
 
@@ -277,6 +266,17 @@ impl<'a, W: io::Write> Formatter<'a, W> {
                     self.write(" else ".red().bold())?;
                     self.parenthesize(&false_expression)?;
                 }
+
+                self.bracket_end(")")
+            },
+
+            node::IfIs as if_is => {
+                self.bracket_start("(")?;
+
+                self.write("if ".red().bold())?;
+                self.parenthesize(&if_is.expression())?;
+                self.write(" is ".red().bold())?;
+                self.parenthesize(&if_is.match_expression())?;
 
                 self.bracket_end(")")
             },

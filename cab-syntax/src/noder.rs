@@ -528,26 +528,20 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
             TOKEN_LITERAL_IF.into(),
             until
                 | Kind::EXPRESSION_SET
-                | TOKEN_LITERAL_IS
                 | TOKEN_LITERAL_THEN
+                | TOKEN_LITERAL_IS
                 | TOKEN_LITERAL_ELSE,
         );
 
         self.node_expression_binding_power(
             then_else_binding_power,
-            until | TOKEN_LITERAL_IS | TOKEN_LITERAL_THEN | TOKEN_LITERAL_ELSE,
+            until | TOKEN_LITERAL_THEN | TOKEN_LITERAL_IS | TOKEN_LITERAL_ELSE,
         );
 
         match self.next_expect(
-            TOKEN_LITERAL_IS | TOKEN_LITERAL_THEN,
+            TOKEN_LITERAL_THEN | TOKEN_LITERAL_IS,
             until | TOKEN_LITERAL_ELSE,
         ) {
-            Some(TOKEN_LITERAL_IS) => {
-                self.node_from(start_of_if, NODE_IF_IS, |this| {
-                    this.node_expression_binding_power(is_binding_power, until)
-                })
-            },
-
             Some(TOKEN_LITERAL_THEN) => {
                 self.node_from(start_of_if, NODE_IF_ELSE, |this| {
                     this.node_expression_binding_power(
@@ -559,6 +553,12 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
                         this.node_expression_binding_power(then_else_binding_power, until);
                     }
                 });
+            },
+
+            Some(TOKEN_LITERAL_IS) => {
+                self.node_from(start_of_if, NODE_IF_IS, |this| {
+                    this.node_expression_binding_power(is_binding_power, until)
+                })
             },
 
             None => {

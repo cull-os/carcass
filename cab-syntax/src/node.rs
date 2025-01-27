@@ -299,8 +299,8 @@ node! {
         SString,
         Island,
         Number,
-        IfIs,
         IfElse,
+        IfIs,
     )] enum Expression;
 
     fn validate(&self, to: &mut Vec<NodeError>) {
@@ -490,6 +490,25 @@ node! {
     }
 }
 
+#[rustfmt::skip]
+impl PrefixOperation {
+    /// Returns the operator token of this operation.
+    pub fn operator_token(&self) -> RowanToken {
+        self.children_tokens_untyped()
+            .find(|token| PrefixOperator::try_from(token.kind()).is_ok())
+            .unwrap()
+    }
+
+    /// Returns the operator of this operation.
+    pub fn operator(&self) -> PrefixOperator {
+        self.children_tokens_untyped()
+            .find_map(|token| PrefixOperator::try_from(token.kind()).ok())
+            .unwrap()
+    }
+
+    get_node! { expression -> 0 @ Expression }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PrefixOperator {
     Swwallation, // Get it?
@@ -521,25 +540,6 @@ impl PrefixOperator {
             Self::Not => ((), 135),
         }
     }
-}
-
-#[rustfmt::skip]
-impl PrefixOperation {
-    /// Returns the operator token of this operation.
-    pub fn operator_token(&self) -> RowanToken {
-        self.children_tokens_untyped()
-            .find(|token| PrefixOperator::try_from(token.kind()).is_ok())
-            .unwrap()
-    }
-
-    /// Returns the operator of this operation.
-    pub fn operator(&self) -> PrefixOperator {
-        self.children_tokens_untyped()
-            .find_map(|token| PrefixOperator::try_from(token.kind()).ok())
-            .unwrap()
-    }
-
-    get_node! { expression -> 0 @ Expression }
 }
 
 // INFIX OPERATION
@@ -605,6 +605,26 @@ node! {
             },
         }
     }
+}
+
+#[rustfmt::skip]
+impl InfixOperation {
+    get_node! { left_expression -> 0 @ Expression }
+
+    /// Returns the operator token of this operation.
+    pub fn operator_token(&self) -> Option<RowanToken> {
+        self.children_tokens_untyped()
+            .find(|token| InfixOperator::try_from(token.kind()).is_ok())
+    }
+
+    /// Returns the operator of this operation.
+    pub fn operator(&self) -> InfixOperator {
+        self.children_tokens_untyped()
+            .find_map(|token| InfixOperator::try_from(token.kind()).ok())
+            .unwrap_or(InfixOperator::ImplicitApply)
+    }
+
+    get_node! { right_expression -> 1 @ Expression }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -737,26 +757,6 @@ impl InfixOperator {
     }
 }
 
-#[rustfmt::skip]
-impl InfixOperation {
-    get_node! { left_expression -> 0 @ Expression }
-
-    /// Returns the operator token of this operation.
-    pub fn operator_token(&self) -> Option<RowanToken> {
-        self.children_tokens_untyped()
-            .find(|token| InfixOperator::try_from(token.kind()).is_ok())
-    }
-
-    /// Returns the operator of this operation.
-    pub fn operator(&self) -> InfixOperator {
-        self.children_tokens_untyped()
-            .find_map(|token| InfixOperator::try_from(token.kind()).ok())
-            .unwrap_or(InfixOperator::ImplicitApply)
-    }
-
-    get_node! { right_expression -> 1 @ Expression }
-}
-
 // SUFFIX OPERATION
 
 node! {
@@ -764,6 +764,24 @@ node! {
 
     fn validate(&self, to: &mut Vec<NodeError>) {
         self.expression().validate(to);
+    }
+}
+
+impl SuffixOperation {
+    get_node! { expression -> 0 @ Expression }
+
+    /// Returns the operator token of this operation.
+    pub fn operator_token(&self) -> RowanToken {
+        self.children_tokens_untyped()
+            .find(|token| SuffixOperator::try_from(token.kind()).is_ok())
+            .unwrap()
+    }
+
+    /// Returns the operator of this operation.
+    pub fn operator(&self) -> SuffixOperator {
+        self.children_tokens_untyped()
+            .find_map(|token| SuffixOperator::try_from(token.kind()).ok())
+            .unwrap()
     }
 }
 
@@ -786,24 +804,6 @@ impl TryFrom<Kind> for SuffixOperator {
     }
 }
 
-impl SuffixOperation {
-    get_node! { expression -> 0 @ Expression }
-
-    /// Returns the operator token of this operation.
-    pub fn operator_token(&self) -> RowanToken {
-        self.children_tokens_untyped()
-            .find(|token| SuffixOperator::try_from(token.kind()).is_ok())
-            .unwrap()
-    }
-
-    /// Returns the operator of this operation.
-    pub fn operator(&self) -> SuffixOperator {
-        self.children_tokens_untyped()
-            .find_map(|token| SuffixOperator::try_from(token.kind()).ok())
-            .unwrap()
-    }
-}
-
 // INTERPOLATION
 
 node! {
@@ -823,33 +823,33 @@ impl Interpolation {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum InterpolationPart<T> {
+pub enum InterpolatedPart<T> {
     Delimiter(RowanToken),
     Content(T),
     Interpolation(Interpolation),
 }
 
-macro_rules! parted {
+macro_rules! interpolated {
     (
         impl
         $name:ident { let content_kind = $content_kind:expr; type ContentToken = $content_token:ty; }
     ) => {
         impl $name {
-            pub fn parts(&self) -> impl Iterator<Item = InterpolationPart<$content_token>> {
+            pub fn parts(&self) -> impl Iterator<Item = InterpolatedPart<$content_token>> {
                 self.children_with_tokens().map(|child| {
                     match child {
                         rowan::NodeOrToken::Token(token) => {
                             if token.kind() == $content_kind {
-                                InterpolationPart::Content(<$content_token>::cast(token).unwrap())
+                                InterpolatedPart::Content(<$content_token>::cast(token).unwrap())
                             } else {
-                                InterpolationPart::Delimiter(token)
+                                InterpolatedPart::Delimiter(token)
                             }
                         },
 
                         rowan::NodeOrToken::Node(node) => {
                             assert_eq!(node.kind(), NODE_INTERPOLATION);
 
-                            InterpolationPart::Interpolation(
+                            InterpolatedPart::Interpolation(
                                 Interpolation::cast(node.clone()).unwrap(),
                             )
                         },
@@ -867,14 +867,14 @@ node! {
 
     fn validate(&self, to: &mut Vec<NodeError>) {
         for part in self.parts() {
-            if let InterpolationPart::Interpolation(interpolation) = part {
+            if let InterpolatedPart::Interpolation(interpolation) = part {
                 interpolation.validate(to);
             }
         }
     }
 }
 
-parted! {
+interpolated! {
     impl Path {
         let content_kind = TOKEN_PATH;
         type ContentToken = token::Path;
@@ -893,17 +893,42 @@ node! {
     }
 }
 
+impl Identifier {
+    /// Returns the value of this identifier. A value may either be a
+    /// [`token::Identifier`] or a quoted stringlike.
+    pub fn value(&self) -> IdentifierValue {
+        if let Some(token) = self.token() {
+            return IdentifierValue::Simple(token);
+        }
+
+        if self.token_untyped(TOKEN_IDENTIFIER_START).is_some() {
+            return IdentifierValue::Quoted(IdentifierQuoted(self.deref().clone()));
+        }
+
+        unreachable!()
+    }
+}
+
+/// An identifier value.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum IdentifierValue {
+    /// A simple identifier backed by a [`token::Identifier`].
+    Simple(token::Identifier),
+    /// A quoted identifier backed by a stringlike [`IdentifierQuoted`].
+    Quoted(IdentifierQuoted),
+}
+
 node! {
     #[from(NODE_IDENTIFIER)] struct IdentifierQuoted;
 
     fn validate(&self, to: &mut Vec<NodeError>) {
         for part in self.parts() {
             match part {
-                InterpolationPart::Interpolation(interpolation) => {
+                InterpolatedPart::Interpolation(interpolation) => {
                     interpolation.validate(to);
                 },
 
-                InterpolationPart::Content(content) => {
+                InterpolatedPart::Content(content) => {
                     if content.text().chars().any(char::is_control) {
                         to.push(NodeError::new(
                             "quoted identifiers cannot contain control characters (non-escaped newlines, tabs, ...)",
@@ -921,35 +946,10 @@ node! {
     }
 }
 
-parted! {
+interpolated! {
     impl IdentifierQuoted {
         let content_kind = TOKEN_CONTENT;
         type ContentToken = token::Content;
-    }
-}
-
-/// An identifier value.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum IdentifierValue {
-    /// A simple identifier backed by a [`token::Identifier`].
-    Simple(token::Identifier),
-    /// A quoted identifier backed by a stringlike [`IdentifierQuoted`].
-    Quoted(IdentifierQuoted),
-}
-
-impl Identifier {
-    /// Returns the value of this identifier. A value may either be a
-    /// [`token::Identifier`] or a quoted stringlike.
-    pub fn value(&self) -> IdentifierValue {
-        if let Some(token) = self.token() {
-            return IdentifierValue::Simple(token);
-        }
-
-        if self.token_untyped(TOKEN_IDENTIFIER_START).is_some() {
-            return IdentifierValue::Quoted(IdentifierQuoted(self.deref().clone()));
-        }
-
-        unreachable!()
     }
 }
 
@@ -966,7 +966,7 @@ node! {
             .scan(0, |index, part| {
                 let value = *index;
 
-                if let InterpolationPart::Content(_) = part {
+                if let InterpolatedPart::Content(_) = part {
                     *index += 1;
                 }
 
@@ -982,19 +982,19 @@ node! {
 
         while let Some((index, part)) = parts.next() {
             match &part {
-                InterpolationPart::Interpolation(interpolation) => {
+                InterpolatedPart::Interpolation(interpolation) => {
                     if index == 0 {
                         first_line_range = Some(interpolation.text_range());
                     }
 
-                    if let Some((_, InterpolationPart::Delimiter(_))) | None = parts.peek() {
+                    if let Some((_, InterpolatedPart::Delimiter(_))) | None = parts.peek() {
                         last_line_range = Some(interpolation.text_range());
                     }
 
                     interpolation.validate(to);
                 },
 
-                InterpolationPart::Content(content) => {
+                InterpolatedPart::Content(content) => {
                     let mut text = content
                         .text()
                         .bytes()
@@ -1048,14 +1048,14 @@ node! {
                                 first_line_length,
                             ));
                         } else if newline_count == 0
-                            && let Some((_, InterpolationPart::Interpolation(interpolation))) = parts.peek()
+                            && let Some((_, InterpolatedPart::Interpolation(interpolation))) = parts.peek()
                         {
                             first_line_range = Some(interpolation.text_range());
                         }
                     }
 
                     let last_line = lines.last().unwrap(); // Outside the if to force the scan.
-                    if let Some((_, InterpolationPart::Delimiter(_))) | None = parts.peek() {
+                    if let Some((_, InterpolatedPart::Delimiter(_))) | None = parts.peek() {
                         if !last_line.trim().is_empty() {
                             let last_line_length = rowan::TextSize::new(last_line.trim_start().len() as u32);
 
@@ -1064,7 +1064,7 @@ node! {
                                 last_line_length,
                             ));
                         } else if newline_count == 0
-                            && let Some(InterpolationPart::Interpolation(interpolation)) = last_part
+                            && let Some(InterpolatedPart::Interpolation(interpolation)) = last_part
                         {
                             last_line_range = Some(interpolation.text_range());
                         }
@@ -1092,7 +1092,7 @@ node! {
     }
 }
 
-parted! {
+interpolated! {
     impl SString {
         let content_kind = TOKEN_CONTENT;
         type ContentToken = token::Content;
@@ -1107,11 +1107,11 @@ node! {
     fn validate(&self, to: &mut Vec<NodeError>) {
         'parts: for part in self.parts() {
             match part {
-                InterpolationPart::Interpolation(interpolation) => {
+                InterpolatedPart::Interpolation(interpolation) => {
                     interpolation.validate(to);
                 },
 
-                InterpolationPart::Content(content) => {
+                InterpolatedPart::Content(content) => {
                     let mut chars = content
                         .text()
                         .char_indices()
@@ -1145,7 +1145,7 @@ node! {
     }
 }
 
-parted! {
+interpolated! {
     impl Island {
         let content_kind = TOKEN_CONTENT;
         type ContentToken = token::Content;
@@ -1155,13 +1155,6 @@ parted! {
 // NUMBER
 
 node! { #[from(NODE_NUMBER)] struct Number; }
-
-/// A Number value. May either be a [`token::Integer`] or a [`token::Float`].
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum NumberValue {
-    Integer(token::Integer),
-    Float(token::Float),
-}
 
 impl Number {
     /// Returns the underlying value of this number.
@@ -1176,6 +1169,42 @@ impl Number {
 
         unreachable!()
     }
+}
+
+/// A Number value. May either be a [`token::Integer`] or a [`token::Float`].
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum NumberValue {
+    Integer(token::Integer),
+    Float(token::Float),
+}
+
+// IF ELSE
+
+node! {
+    #[from(NODE_IF_ELSE)] struct IfElse;
+
+    fn validate(&self, to: &mut Vec<NodeError>) {
+        self.condition().validate(to);
+        self.true_expression().validate(to);
+
+        if let Some(false_expression) = self.false_expression() {
+            false_expression.validate(to);
+        }
+    }
+}
+
+impl IfElse {
+    get_token! { if_token -> TOKEN_LITERAL_IF }
+
+    get_node! { condition -> 0 @ Expression }
+
+    get_token! { then_token -> TOKEN_LITERAL_THEN }
+
+    get_node! { true_expression -> 1 @ Expression }
+
+    get_token! { else_token -> ? TOKEN_LITERAL_ELSE }
+
+    get_node! { false_expression -> 2 @ ? Expression }
 }
 
 // IF IS
@@ -1211,33 +1240,4 @@ impl IfIs {
     get_token! { is_token -> TOKEN_LITERAL_IS }
 
     get_node! { match_expression -> 1 @ Expression }
-}
-
-// IF ELSE
-
-node! {
-    #[from(NODE_IF_ELSE)] struct IfElse;
-
-    fn validate(&self, to: &mut Vec<NodeError>) {
-        self.condition().validate(to);
-        self.true_expression().validate(to);
-
-        if let Some(false_expression) = self.false_expression() {
-            false_expression.validate(to);
-        }
-    }
-}
-
-impl IfElse {
-    get_token! { if_token -> TOKEN_LITERAL_IF }
-
-    get_node! { condition -> 0 @ Expression }
-
-    get_token! { then_token -> TOKEN_LITERAL_THEN }
-
-    get_node! { true_expression -> 1 @ Expression }
-
-    get_token! { else_token -> ? TOKEN_LITERAL_ELSE }
-
-    get_node! { false_expression -> 2 @ ? Expression }
 }
