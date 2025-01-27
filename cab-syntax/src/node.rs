@@ -332,7 +332,7 @@ impl Expression {
 
             Self::List(list) => {
                 for item in list.items() {
-                    item.validate_pattern(to);
+                    item.validate_pattern_arithmetic(to);
                 }
             },
 
@@ -341,11 +341,87 @@ impl Expression {
             // statically never use the attribute list made the scope.
             Self::AttributeList(attribute_list) => attribute_list.validate(to),
 
-            Self::Identifier(identifier) => identifier.validate(to),
-            Self::SString(string) => string.validate(to),
-            Self::Number(number) => number.validate(to),
+            Self::InfixOperation(operation)
+                if let InfixOperator::ImplicitApply | InfixOperator::Apply =
+                    operation.operator() =>
+            {
+                operation.left_expression().validate(to);
+                operation.right_expression().validate_pattern(to);
+            },
 
-            _ => to.push(NodeError::invalid_pattern(self.kind(), self.text_range())),
+            Self::InfixOperation(operation) if operation.operator() == InfixOperator::Pipe => {
+                operation.left_expression().validate_pattern(to);
+                operation.right_expression().validate(to);
+            },
+
+            Self::InfixOperation(operation) if operation.operator() == InfixOperator::Construct => {
+                operation.left_expression().validate_pattern(to);
+                operation.right_expression().validate_pattern(to);
+            },
+
+            _ => {
+                self.validate_pattern_arithmetic(to);
+            },
+        }
+    }
+
+    fn validate_pattern_arithmetic(&self, to: &mut Vec<NodeError>) -> bool {
+        match self {
+            Self::Parenthesis(parenthesis) => {
+                parenthesis.expression().validate_pattern_arithmetic(to)
+            },
+
+            Self::InfixOperation(operation)
+                if let InfixOperator::Addition
+                | InfixOperator::Subtraction
+                | InfixOperator::Multiplication
+                | InfixOperator::Power
+                | InfixOperator::Division = operation.operator() =>
+            {
+                let left_bound = operation.left_expression().validate_pattern_arithmetic(to);
+                let right_bound = operation.right_expression().validate_pattern_arithmetic(to);
+
+                if left_bound && right_bound {
+                    to.push(NodeError::new(
+                        "arithmetic patterns must only have a single bind for determinism",
+                        operation.text_range(),
+                    ));
+                    false
+                } else {
+                    left_bound || right_bound
+                }
+            },
+
+            Self::InfixOperation(_) => {
+                to.push(NodeError::new(
+                    "non-arithmetic infix operators are not valid patterns",
+                    self.text_range(),
+                ));
+                false
+            },
+
+            Self::Identifier(identifier) => {
+                identifier.validate(to);
+                true
+            },
+
+            Self::SString(string) => {
+                string.validate(to);
+                false
+            },
+
+            Self::Number(number) => {
+                number.validate(to);
+                false
+            },
+
+            _ => {
+                to.push(NodeError::new(
+                    format!("{kind} is not a valid constant pattern", kind = self.kind()),
+                    self.text_range(),
+                ));
+                false
+            },
         }
     }
 

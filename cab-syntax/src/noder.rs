@@ -148,13 +148,6 @@ impl NodeError {
         }
     }
 
-    pub fn invalid_pattern(got: Kind, at: rowan::TextRange) -> Self {
-        Self {
-            reason: format!("{got} is not a valid pattern").into(),
-            at,
-        }
-    }
-
     pub fn unexpected(
         got: Option<Kind>,
         mut expected: EnumSet<Kind>,
