@@ -255,15 +255,15 @@ impl<'a, W: io::Write> Formatter<'a, W> {
                 }
             },
 
-            node::IfElse as if_else => {
+            node::IfThen as if_then => {
                 self.bracket_start("(")?;
 
                 self.write("if ".red().bold())?;
-                self.parenthesize(&if_else.condition())?;
+                self.parenthesize(&if_then.condition())?;
                 self.write(" then ".red().bold())?;
-                self.parenthesize(&if_else.true_expression())?;
+                self.parenthesize(&if_then.true_expression())?;
 
-                if let Some(false_expression) = if_else.false_expression() {
+                if let Some(false_expression) = if_then.false_expression() {
                     self.write(" else ".red().bold())?;
                     self.parenthesize(&false_expression)?;
                 }

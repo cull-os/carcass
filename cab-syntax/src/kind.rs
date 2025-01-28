@@ -242,10 +242,10 @@ pub enum Kind {
     #[display("a number")]
     NODE_NUMBER,
 
+    #[display("an if then")]
+    NODE_IF_THEN,
     #[display("an if is")]
     NODE_IF_IS,
-    #[display("an if else")]
-    NODE_IF_ELSE,
 }
 
 impl From<Kind> for rowan::SyntaxKind {

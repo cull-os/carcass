@@ -52,7 +52,7 @@ macro_rules! __node_match {
 ///
 /// ```ignore
 /// node::r#match! { rowan_node =>
-///    IfElse as if_else => { unimplemented!() },
+///    IfThen as if_then => { unimplemented!() },
 ///    Identifier as identifier => { unimplemented!() },
 ///    else => unimplemented!(),
 /// }
@@ -299,7 +299,7 @@ node! {
         SString,
         Island,
         Number,
-        IfElse,
+        IfThen,
         IfIs,
     )] enum Expression;
 
@@ -317,8 +317,8 @@ node! {
             Self::SString(string) => string.validate(to),
             Self::Island(island) => island.validate(to),
             Self::Number(number) => number.validate(to),
+            Self::IfThen(if_else) => if_else.validate(to),
             Self::IfIs(if_is) => if_is.validate(to),
-            Self::IfElse(if_else) => if_else.validate(to),
         }
     }
 }
@@ -1257,10 +1257,10 @@ pub enum NumberValue {
     Float(token::Float),
 }
 
-// IF ELSE
+// IF THEN
 
 node! {
-    #[from(NODE_IF_ELSE)] struct IfElse;
+    #[from(NODE_IF_THEN)] struct IfThen;
 
     fn validate(&self, to: &mut Vec<NodeError>) {
         self.condition().validate(to);
@@ -1272,7 +1272,7 @@ node! {
     }
 }
 
-impl IfElse {
+impl IfThen {
     get_token! { if_token -> TOKEN_LITERAL_IF }
 
     get_node! { condition -> 0 @ Expression }

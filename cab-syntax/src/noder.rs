@@ -536,7 +536,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
             until | TOKEN_LITERAL_ELSE,
         ) {
             Some(TOKEN_LITERAL_THEN) => {
-                self.node_from(start_of_if, NODE_IF_ELSE, |this| {
+                self.node_from(start_of_if, NODE_IF_THEN, |this| {
                     this.node_expression_binding_power(
                         then_else_binding_power,
                         until | TOKEN_LITERAL_ELSE,
