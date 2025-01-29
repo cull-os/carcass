@@ -9,7 +9,9 @@ pub fn tokenize(input: &str) -> impl Iterator<Item = (Kind, &str)> {
 }
 
 fn is_valid_initial_identifier_character(c: char) -> bool {
-    !c.is_ascii_digit() && c != '\'' && is_valid_identifier_character(c)
+    let invalid = c.is_ascii_digit() || c == '-' || c == '\'';
+
+    !invalid && is_valid_identifier_character(c)
 }
 
 fn is_valid_identifier_character(c: char) -> bool {
