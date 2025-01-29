@@ -233,7 +233,7 @@ impl<'a, W: io::Write> Formatter<'a, W> {
 
             node::Identifier as identifier => {
                 match identifier.value() {
-                    node::IdentifierValue::Simple(token) => self.write(match token.text() {
+                    node::IdentifierValue::Plain(token) => self.write(match token.text() {
                         boolean @ ("true" | "false") => boolean.magenta().bold(),
                         inexistent @ ("null" | "undefined") => inexistent.cyan().bold(),
                         import @ "import" => import.yellow().bold(),

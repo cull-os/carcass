@@ -977,7 +977,7 @@ impl Identifier {
     /// [`token::Identifier`] or a quoted stringlike.
     pub fn value(&self) -> IdentifierValue {
         if let Some(token) = self.token() {
-            return IdentifierValue::Simple(token);
+            return IdentifierValue::Plain(token);
         }
 
         if self.token_untyped(TOKEN_IDENTIFIER_START).is_some() {
@@ -991,8 +991,8 @@ impl Identifier {
 /// An identifier value.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum IdentifierValue {
-    /// A simple identifier backed by a [`token::Identifier`].
-    Simple(token::Identifier),
+    /// A plain identifier backed by a [`token::Identifier`].
+    Plain(token::Identifier),
     /// A quoted identifier backed by a stringlike [`IdentifierQuoted`].
     Quoted(IdentifierQuoted),
 }
