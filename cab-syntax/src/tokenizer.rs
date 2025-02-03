@@ -312,6 +312,9 @@ impl<'a> Tokenizer<'a> {
             '!' => TOKEN_EXCLAMATIONMARK,
             '-' if self.try_consume_character('>') => TOKEN_MINUS_MORE,
 
+            '&' => TOKEN_AMPERSAND,
+            '|' => TOKEN_PIPE,
+
             '+' => TOKEN_PLUS,
             '-' => TOKEN_MINUS,
             '*' => TOKEN_ASTERISK,

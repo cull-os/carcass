@@ -359,6 +359,13 @@ impl Expression {
                 operation.right_expression().validate_pattern(to);
             },
 
+            Self::InfixOperation(operation)
+                if let InfixOperator::All | InfixOperator::Any = operation.operator() =>
+            {
+                operation.left_expression().validate_pattern(to);
+                operation.right_expression().validate_pattern(to);
+            },
+
             _ => {
                 self.validate_pattern_arithmetic(to);
             },
@@ -735,6 +742,9 @@ pub enum InfixOperator {
     Or,
     Implication,
 
+    All,
+    Any,
+
     Addition,
     Subtraction,
     Multiplication,
@@ -775,6 +785,9 @@ impl TryFrom<Kind> for InfixOperator {
             TOKEN_PIPE_PIPE => Self::Or,
             TOKEN_MINUS_MORE => Self::Implication,
 
+            TOKEN_AMPERSAND => Self::All,
+            TOKEN_PIPE => Self::Any,
+
             TOKEN_PLUS => Self::Addition,
             TOKEN_MINUS => Self::Subtraction,
             TOKEN_ASTERISK => Self::Multiplication,
@@ -814,8 +827,8 @@ impl InfixOperator {
 
             Self::Equal | Self::NotEqual => (95, 90),
 
-            Self::And => (85, 80),
-            Self::Or => (75, 70),
+            Self::And | Self::All => (85, 80),
+            Self::Or | Self::Any => (75, 70),
             Self::Implication => (65, 60),
 
             Self::Pipe => (50, 55),

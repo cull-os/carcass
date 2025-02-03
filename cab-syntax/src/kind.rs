@@ -114,6 +114,11 @@ pub enum Kind {
     #[display("'->'")]
     TOKEN_MINUS_MORE,
 
+    #[display("'&'")]
+    TOKEN_AMPERSAND,
+    #[display("'|'")]
+    TOKEN_PIPE,
+
     #[display("'+'")]
     TOKEN_PLUS,
     #[display("'-'")]
