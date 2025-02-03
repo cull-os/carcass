@@ -349,12 +349,14 @@ impl Expression {
                 operation.right_expression().validate_pattern(to);
             },
 
-            Self::InfixOperation(operation) if operation.operator() == InfixOperator::Pipe => {
+            Self::InfixOperation(operation) if let InfixOperator::Pipe = operation.operator() => {
                 operation.left_expression().validate_pattern(to);
                 operation.right_expression().validate(to);
             },
 
-            Self::InfixOperation(operation) if operation.operator() == InfixOperator::Construct => {
+            Self::InfixOperation(operation)
+                if let InfixOperator::Construct = operation.operator() =>
+            {
                 operation.left_expression().validate_pattern(to);
                 operation.right_expression().validate_pattern(to);
             },
@@ -439,14 +441,14 @@ impl Expression {
             while let Some(expression) = expressions.pop_back() {
                 match expression {
                     Expression::InfixOperation(operation)
-                        if operation.operator() == InfixOperator::Same =>
+                        if let InfixOperator::Same = operation.operator() =>
                     {
                         expressions.push_front(operation.left_expression());
                         expressions.push_front(operation.right_expression());
                     },
 
                     Expression::SuffixOperation(operation)
-                        if operation.operator() == SuffixOperator::Same =>
+                        if let SuffixOperator::Same = operation.operator() =>
                     {
                         expressions.push_front(operation.expression());
                     },
@@ -530,7 +532,7 @@ node! {
 
         for entry in self.entries() {
             match entry {
-                Expression::InfixOperation(operation) if operation.operator() == InfixOperator::Bind => {
+                Expression::InfixOperation(operation) if let InfixOperator::Bind = operation.operator() => {
                     operation.validate(to);
                 },
 
@@ -1309,7 +1311,7 @@ node! {
 
         for item in self.match_expression().same_items() {
             match item {
-                Expression::InfixOperation(operation) if operation.operator() == InfixOperator::Lambda => {
+                Expression::InfixOperation(operation) if let InfixOperator::Lambda = operation.operator() => {
                     operation.validate(to);
                 },
 

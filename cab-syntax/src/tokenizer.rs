@@ -158,10 +158,13 @@ impl<'a> Tokenizer<'a> {
                     return Some(TOKEN_CONTENT);
                 },
 
+                Some('\\') => {
+                    self.consume_character();
+                    self.consume_character();
+                },
+
                 Some(_) => {
-                    if let Some('\\') = self.consume_character() {
-                        self.consume_character();
-                    };
+                    self.consume_character();
                 },
 
                 None => {
@@ -190,10 +193,13 @@ impl<'a> Tokenizer<'a> {
                     return Some(TOKEN_PATH);
                 },
 
+                '\\' => {
+                    self.consume_character();
+                    self.consume_character();
+                },
+
                 _ => {
-                    if let Some('\\') = self.consume_character() {
-                        self.consume_character();
-                    };
+                    self.consume_character();
                 },
             }
         }
