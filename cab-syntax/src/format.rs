@@ -202,6 +202,7 @@ impl<'a, W: io::Write> Formatter<'a, W> {
                     node::InfixOperator::All => Some("&"),
                     node::InfixOperator::Any => Some("|"),
 
+                    node::InfixOperator::This => Some("@"),
                     node::InfixOperator::Lambda => Some("=>"),
                     node::InfixOperator::Bind => Some(":="),
                 };

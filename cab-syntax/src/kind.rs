@@ -67,10 +67,12 @@ pub enum Kind {
     #[display("')'")]
     TOKEN_INTERPOLATION_END,
 
-    #[display("':='")]
-    TOKEN_COLON_EQUAL,
+    #[display("'@'")]
+    TOKEN_AT,
     #[display("'=>'")]
     TOKEN_EQUAL_GREATER,
+    #[display("':='")]
+    TOKEN_COLON_EQUAL,
     #[display("','")]
     TOKEN_COMMA,
 

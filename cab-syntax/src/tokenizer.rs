@@ -295,8 +295,9 @@ impl<'a> Tokenizer<'a> {
                 TOKEN_RIGHT_PARENTHESIS
             },
 
-            ':' if self.try_consume_character('=') => TOKEN_COLON_EQUAL,
+            '@' => TOKEN_AT,
             '=' if self.try_consume_character('>') => TOKEN_EQUAL_GREATER,
+            ':' if self.try_consume_character('=') => TOKEN_COLON_EQUAL,
             ',' => TOKEN_COMMA,
 
             ':' => TOKEN_COLON,

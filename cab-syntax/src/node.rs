@@ -368,6 +368,11 @@ impl Expression {
                 operation.right_expression().validate_pattern(to);
             },
 
+            Self::InfixOperation(operation) if let InfixOperator::This = operation.operator() => {
+                operation.validate_left_expression(to);
+                operation.right_expression().validate_pattern(to);
+            },
+
             _ => {
                 self.validate_pattern_arithmetic(to);
             },
@@ -625,9 +630,9 @@ impl PrefixOperator {
     /// Returns the binding power of this operator.
     pub fn binding_power(self) -> ((), u16) {
         match self {
-            Self::Swwallation | Self::Negation => ((), 155),
-            Self::Not => ((), 135),
-            Self::Try => ((), 115),
+            Self::Swwallation | Self::Negation => ((), 165),
+            Self::Not => ((), 145),
+            Self::Try => ((), 125),
         }
     }
 }
@@ -665,6 +670,11 @@ node! {
                     }
                 }
             },
+
+            InfixOperator::This => {
+                self.validate_left_expression(to);
+                self.right_expression().validate(to);
+            }
 
             InfixOperator::Lambda | InfixOperator::Bind => {
                 self.left_expression().validate_pattern(to);
@@ -715,6 +725,23 @@ impl InfixOperation {
     }
 
     get_node! { right_expression -> 1 @ Expression }
+
+    /// Asserts that this node is a this-expression and validates the left
+    /// expression.
+    pub fn validate_left_expression(&self, to: &mut Vec<NodeError>) {
+        assert_eq!(self.operator(), InfixOperator::This);
+
+        let left_expression = self.left_expression();
+
+        if let Expression::Identifier(_) = left_expression {
+            return;
+        };
+
+        to.push(NodeError::new(
+            "the left operand of a this-expression must be an identifier",
+            left_expression.text_range(),
+        ));
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -753,6 +780,7 @@ pub enum InfixOperator {
     Power,
     Division,
 
+    This,
     Lambda,
     Bind,
 }
@@ -796,6 +824,7 @@ impl TryFrom<Kind> for InfixOperator {
             TOKEN_CARET => Self::Power,
             TOKEN_SLASH => Self::Division,
 
+            TOKEN_AT => Self::This,
             TOKEN_EQUAL_GREATER => Self::Lambda,
             TOKEN_COLON_EQUAL => Self::Bind,
 
@@ -808,34 +837,35 @@ impl InfixOperator {
     /// Returns the binding power of this operator.
     pub fn binding_power(self) -> (u16, u16) {
         match self {
-            Self::Select => (195, 190),
-            Self::ImplicitApply => (180, 185),
+            Self::Select => (205, 200),
+            Self::ImplicitApply => (190, 195),
 
-            Self::Concat => (170, 175),
+            Self::Concat => (180, 185),
 
-            Self::Multiplication | Self::Division => (160, 165),
-            Self::Power => (165, 160),
+            Self::Multiplication | Self::Division => (170, 175),
+            Self::Power => (175, 170),
 
             // PrefixOperator::Swallation | PrefixOperator::Negation
-            Self::Addition | Self::Subtraction => (140, 145),
+            Self::Addition | Self::Subtraction => (150, 155),
             // PrefixOperator::Not
-            Self::Update => (120, 125),
+            Self::Update => (130, 135),
 
             Self::LessOrEqual | Self::Less | Self::MoreOrEqual | Self::More /* | PrefixOperator::Try */ => {
-                (110, 115)
+                (120, 125)
             },
 
-            Self::Construct => (105, 100),
+            Self::Construct => (115, 110),
 
-            Self::Equal | Self::NotEqual => (95, 90),
+            Self::Equal | Self::NotEqual => (105, 100),
 
-            Self::And | Self::All => (85, 80),
-            Self::Or | Self::Any => (75, 70),
-            Self::Implication => (65, 60),
+            Self::And | Self::All => (95, 90),
+            Self::Or | Self::Any => (85, 80),
+            Self::Implication => (75, 70),
 
-            Self::Pipe => (50, 55),
-            Self::Apply => (55, 50),
+            Self::Pipe => (60, 65),
+            Self::Apply => (65, 60),
 
+            Self::This => (55, 50),
             Self::Lambda => (45, 40),
             Self::Bind => (35, 30),
 
