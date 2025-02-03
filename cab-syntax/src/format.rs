@@ -153,7 +153,7 @@ impl<'a, W: io::Write> Formatter<'a, W> {
                     node::PrefixOperator::Try => "?",
                 })?;
                 self.write(" ")?;
-                self.parenthesize(&operation.expression())?;
+                self.parenthesize(&operation.right())?;
 
                 self.bracket_end(")")
             },
@@ -169,9 +169,9 @@ impl<'a, W: io::Write> Formatter<'a, W> {
 
                     node::InfixOperator::ImplicitApply | node::InfixOperator::Apply => None,
                     node::InfixOperator::Pipe => {
-                        self.parenthesize(&operation.right_expression())?;
+                        self.parenthesize(&operation.right())?;
                         self.write(" ")?;
-                        self.parenthesize(&operation.left_expression())?;
+                        self.parenthesize(&operation.left())?;
 
                         return self.bracket_end(")");
                     },
@@ -207,7 +207,7 @@ impl<'a, W: io::Write> Formatter<'a, W> {
                     node::InfixOperator::Bind => Some(":="),
                 };
 
-                self.parenthesize(&operation.left_expression())?;
+                self.parenthesize(&operation.left())?;
                 self.write(" ")?;
 
                 if let Some(operator) = operator {
@@ -215,7 +215,7 @@ impl<'a, W: io::Write> Formatter<'a, W> {
                     self.write(" ")?;
                 }
 
-                self.parenthesize(&operation.right_expression())?;
+                self.parenthesize(&operation.right())?;
 
                 self.bracket_end(")")
             },
@@ -223,7 +223,7 @@ impl<'a, W: io::Write> Formatter<'a, W> {
             node::SuffixOperation as operation => {
                 self.bracket_start("(")?;
 
-                self.parenthesize(&operation.expression())?;
+                self.parenthesize(&operation.left())?;
                 self.write(" ")?;
                 self.write(match operation.operator() {
                     node::SuffixOperator::Same => ",",
@@ -265,11 +265,11 @@ impl<'a, W: io::Write> Formatter<'a, W> {
                 self.write("if ".red().bold())?;
                 self.parenthesize(&if_then.condition())?;
                 self.write(" then ".red().bold())?;
-                self.parenthesize(&if_then.true_expression())?;
+                self.parenthesize(&if_then.consequence())?;
 
-                if let Some(false_expression) = if_then.false_expression() {
+                if let Some(alternative) = if_then.alternative() {
                     self.write(" else ".red().bold())?;
-                    self.parenthesize(&false_expression)?;
+                    self.parenthesize(&alternative)?;
                 }
 
                 self.bracket_end(")")
@@ -281,7 +281,7 @@ impl<'a, W: io::Write> Formatter<'a, W> {
                 self.write("if ".red().bold())?;
                 self.parenthesize(&if_is.expression())?;
                 self.write(" is ".red().bold())?;
-                self.parenthesize(&if_is.match_expression())?;
+                self.parenthesize(&if_is.patterns())?;
 
                 self.bracket_end(")")
             },

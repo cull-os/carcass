@@ -345,32 +345,32 @@ impl Expression {
                 if let InfixOperator::ImplicitApply | InfixOperator::Apply =
                     operation.operator() =>
             {
-                operation.left_expression().validate(to);
-                operation.right_expression().validate_pattern(to);
+                operation.left().validate(to);
+                operation.right().validate_pattern(to);
             },
 
             Self::InfixOperation(operation) if let InfixOperator::Pipe = operation.operator() => {
-                operation.left_expression().validate_pattern(to);
-                operation.right_expression().validate(to);
+                operation.left().validate_pattern(to);
+                operation.right().validate(to);
             },
 
             Self::InfixOperation(operation)
                 if let InfixOperator::Construct = operation.operator() =>
             {
-                operation.left_expression().validate_pattern(to);
-                operation.right_expression().validate_pattern(to);
+                operation.left().validate_pattern(to);
+                operation.right().validate_pattern(to);
             },
 
             Self::InfixOperation(operation)
                 if let InfixOperator::All | InfixOperator::Any = operation.operator() =>
             {
-                operation.left_expression().validate_pattern(to);
-                operation.right_expression().validate_pattern(to);
+                operation.left().validate_pattern(to);
+                operation.right().validate_pattern(to);
             },
 
             Self::InfixOperation(operation) if let InfixOperator::This = operation.operator() => {
-                operation.validate_left_expression(to);
-                operation.right_expression().validate_pattern(to);
+                operation.validate_left(to);
+                operation.right().validate_pattern(to);
             },
 
             _ => {
@@ -392,8 +392,8 @@ impl Expression {
                 | InfixOperator::Power
                 | InfixOperator::Division = operation.operator() =>
             {
-                let left_bound = operation.left_expression().validate_pattern_arithmetic(to);
-                let right_bound = operation.right_expression().validate_pattern_arithmetic(to);
+                let left_bound = operation.left().validate_pattern_arithmetic(to);
+                let right_bound = operation.right().validate_pattern_arithmetic(to);
 
                 if left_bound && right_bound {
                     to.push(NodeError::new(
@@ -448,14 +448,14 @@ impl Expression {
                     Expression::InfixOperation(operation)
                         if let InfixOperator::Same = operation.operator() =>
                     {
-                        expressions.push_front(operation.left_expression());
-                        expressions.push_front(operation.right_expression());
+                        expressions.push_front(operation.left());
+                        expressions.push_front(operation.right());
                     },
 
                     Expression::SuffixOperation(operation)
                         if let SuffixOperator::Same = operation.operator() =>
                     {
-                        expressions.push_front(operation.expression());
+                        expressions.push_front(operation.left());
                     },
 
                     normal => yield normal,
@@ -576,7 +576,7 @@ node! {
     #[from(NODE_PREFIX_OPERATION)] struct PrefixOperation;
 
     fn validate(&self, to: &mut Vec<NodeError>) {
-        self.expression().validate(to);
+        self.right().validate(to);
     }
 }
 
@@ -596,7 +596,7 @@ impl PrefixOperation {
             .unwrap()
     }
 
-    get_node! { expression -> 0 @ Expression }
+    get_node! { right -> 0 @ Expression }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -672,17 +672,17 @@ node! {
             },
 
             InfixOperator::This => {
-                self.validate_left_expression(to);
-                self.right_expression().validate(to);
+                self.validate_left(to);
+                self.right().validate(to);
             }
 
             InfixOperator::Lambda | InfixOperator::Bind => {
-                self.left_expression().validate_pattern(to);
-                self.right_expression().validate(to);
+                self.left().validate_pattern(to);
+                self.right().validate(to);
             },
 
             operator => {
-                let expressions = [self.left_expression(), self.right_expression()];
+                let expressions = [self.left(), self.right()];
 
                 for expression in expressions.iter() {
                     expression.validate(to);
@@ -709,7 +709,7 @@ node! {
 
 #[rustfmt::skip]
 impl InfixOperation {
-    get_node! { left_expression -> 0 @ Expression }
+    get_node! { left -> 0 @ Expression }
 
     /// Returns the operator token of this operation.
     pub fn operator_token(&self) -> Option<RowanToken> {
@@ -724,22 +724,22 @@ impl InfixOperation {
             .unwrap_or(InfixOperator::ImplicitApply)
     }
 
-    get_node! { right_expression -> 1 @ Expression }
+    get_node! { right -> 1 @ Expression }
 
     /// Asserts that this node is a this-expression and validates the left
     /// expression.
-    pub fn validate_left_expression(&self, to: &mut Vec<NodeError>) {
+    pub fn validate_left(&self, to: &mut Vec<NodeError>) {
         assert_eq!(self.operator(), InfixOperator::This);
 
-        let left_expression = self.left_expression();
+        let left = self.left();
 
-        if let Expression::Identifier(_) = left_expression {
+        if let Expression::Identifier(_) = left {
             return;
         };
 
         to.push(NodeError::new(
             "the left operand of a this-expression must be an identifier",
-            left_expression.text_range(),
+            left.text_range(),
         ));
     }
 }
@@ -887,12 +887,12 @@ node! {
     #[from(NODE_SUFFIX_OPERATION)] struct SuffixOperation;
 
     fn validate(&self, to: &mut Vec<NodeError>) {
-        self.expression().validate(to);
+        self.left().validate(to);
     }
 }
 
 impl SuffixOperation {
-    get_node! { expression -> 0 @ Expression }
+    get_node! { left -> 0 @ Expression }
 
     /// Returns the operator token of this operation.
     pub fn operator_token(&self) -> RowanToken {
@@ -1309,10 +1309,10 @@ node! {
 
     fn validate(&self, to: &mut Vec<NodeError>) {
         self.condition().validate(to);
-        self.true_expression().validate(to);
+        self.consequence().validate(to);
 
-        if let Some(false_expression) = self.false_expression() {
-            false_expression.validate(to);
+        if let Some(alternative) = self.alternative() {
+            alternative.validate(to);
         }
     }
 }
@@ -1324,11 +1324,11 @@ impl IfThen {
 
     get_token! { then_token -> TOKEN_LITERAL_THEN }
 
-    get_node! { true_expression -> 1 @ Expression }
+    get_node! { consequence -> 1 @ Expression }
 
     get_token! { else_token -> ? TOKEN_LITERAL_ELSE }
 
-    get_node! { false_expression -> 2 @ ? Expression }
+    get_node! { alternative -> 2 @ ? Expression }
 }
 
 // IF IS
@@ -1339,7 +1339,7 @@ node! {
     fn validate(&self, to: &mut Vec<NodeError>) {
         self.expression().validate(to);
 
-        for item in self.match_expression().same_items() {
+        for item in self.patterns().same_items() {
             match item {
                 Expression::InfixOperation(operation) if let InfixOperator::Lambda = operation.operator() => {
                     operation.validate(to);
@@ -1363,5 +1363,5 @@ impl IfIs {
 
     get_token! { is_token -> TOKEN_LITERAL_IS }
 
-    get_node! { match_expression -> 1 @ Expression }
+    get_node! { patterns -> 1 @ Expression }
 }
