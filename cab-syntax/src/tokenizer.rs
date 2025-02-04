@@ -403,13 +403,13 @@ impl<'a> Tokenizer<'a> {
             },
 
             '.' if let Some('.' | '/') = self.peek_character() => {
-                self.offset -= 1;
+                self.offset -= '.'.len_utf8();
                 self.context_push(TokenizerContext::Path);
 
                 return self.consume_kind();
             },
             '/' if self.peek_character().is_some_and(is_valid_path_character) => {
-                self.offset -= 1;
+                self.offset -= '/'.len_utf8();
                 self.context_push(TokenizerContext::Path);
 
                 return self.consume_kind();
