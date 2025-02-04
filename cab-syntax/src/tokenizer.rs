@@ -25,8 +25,8 @@ fn is_valid_path_character(c: char) -> bool {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum TokenizerContext<'a> {
     Path,
-    Stringlike { end: &'a str },
-    StringlikeEnd { end: &'a str },
+    Stringlike { before: Option<&'a str>, end: u8 },
+    StringlikeEnd { before: Option<&'a str>, end: u8 },
     InterpolationStart,
     Interpolation { parentheses: usize },
 }
@@ -142,11 +142,19 @@ impl<'a> Tokenizer<'a> {
         }
     }
 
-    fn consume_stringlike(&mut self, end: &'a str) -> Option<Kind> {
+    fn consume_stringlike(&mut self, before: Option<&'a str>, end: u8) -> Option<Kind> {
         loop {
-            if self.remaining().starts_with(end) {
-                self.context_pop(TokenizerContext::Stringlike { end });
-                self.context_push(TokenizerContext::StringlikeEnd { end });
+            let remaining = self.remaining();
+
+            if before.is_none_or(|before| remaining.starts_with(before))
+                && remaining
+                    .as_bytes()
+                    .get(before.map(str::len).unwrap_or(0))
+                    .copied()
+                    == Some(end)
+            {
+                self.context_pop(TokenizerContext::Stringlike { before, end });
+                self.context_push(TokenizerContext::StringlikeEnd { before, end });
 
                 return Some(TOKEN_CONTENT);
             }
@@ -168,7 +176,7 @@ impl<'a> Tokenizer<'a> {
                 },
 
                 None => {
-                    self.context_pop(TokenizerContext::Stringlike { end });
+                    self.context_pop(TokenizerContext::Stringlike { before, end });
                     return Some(TOKEN_CONTENT);
                 },
             }
@@ -213,18 +221,22 @@ impl<'a> Tokenizer<'a> {
                 return self.consume_path();
             },
 
-            Some(TokenizerContext::Stringlike { end }) => {
-                return self.consume_stringlike(end);
+            Some(TokenizerContext::Stringlike { before, end }) => {
+                return self.consume_stringlike(before, end);
             },
-            Some(TokenizerContext::StringlikeEnd { end }) => {
-                assert!(self.try_consume_string(end));
+            Some(TokenizerContext::StringlikeEnd { before, end }) => {
+                if let Some(before) = before {
+                    assert!(self.try_consume_string(before));
+                }
+                assert_eq!(self.consume_character(), Some(end as char));
 
-                self.context_pop(TokenizerContext::StringlikeEnd { end });
+                self.context_pop(TokenizerContext::StringlikeEnd { before, end });
 
                 return Some(match end {
-                    "`" => TOKEN_IDENTIFIER_END,
-                    ">" => TOKEN_ISLAND_END,
-                    _ => TOKEN_STRING_END,
+                    b'`' => TOKEN_IDENTIFIER_END,
+                    b'>' => TOKEN_ISLAND_END,
+                    b'"' => TOKEN_STRING_END,
+                    _ => unreachable!(),
                 });
             },
 
@@ -421,25 +433,22 @@ impl<'a> Tokenizer<'a> {
                 return self.consume_kind();
             },
 
-            start @ ('`' | '"') => {
+            start @ '`' => {
                 self.context_push(TokenizerContext::Stringlike {
-                    end: match start {
-                        '`' => "`",
-                        _ => "\"",
-                    },
+                    before: None,
+                    end: start as u8,
                 });
 
-                match start {
-                    '`' => TOKEN_IDENTIFIER_START,
-                    _ => TOKEN_STRING_START,
-                }
+                TOKEN_IDENTIFIER_START
             },
 
-            '\'' => {
-                self.consume_while(|c| c == '\'');
+            start @ '"' => {
+                let equals_length = self.consume_while(|c| c == '=');
+                let equals = self.consumed_since(self.offset - equals_length);
 
                 self.context_push(TokenizerContext::Stringlike {
-                    end: self.consumed_since(start_offset),
+                    before: Some(equals),
+                    end: start as u8,
                 });
 
                 TOKEN_STRING_START
@@ -452,7 +461,10 @@ impl<'a> Tokenizer<'a> {
                 .peek_character()
                 .is_some_and(|c| is_valid_initial_identifier_character(c) || c == '\\') =>
             {
-                self.context_push(TokenizerContext::Stringlike { end: ">" });
+                self.context_push(TokenizerContext::Stringlike {
+                    before: None,
+                    end: b'>',
+                });
 
                 TOKEN_ISLAND_START
             },
