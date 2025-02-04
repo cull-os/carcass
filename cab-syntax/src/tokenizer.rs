@@ -263,6 +263,11 @@ impl<'a> Tokenizer<'a> {
                             break TOKEN_COMMENT;
                         },
 
+                        // #= ==# is not a closed comment.
+                        Some('=') => {
+                            self.consume_while(|c| c == '=');
+                        },
+
                         Some('#') if self.peek_character_nth(1) == Some('=') => {
                             self.consume_kind();
                         },
