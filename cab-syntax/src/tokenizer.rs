@@ -257,7 +257,8 @@ impl<'a> Tokenizer<'a> {
                                 && remaining.as_bytes().get(equals_length).copied()
                                     == Some(b'#') =>
                         {
-                            self.offset += equals_length + '#'.len_utf8();
+                            // Hard code a 1 here because that comparision up top is a byte.
+                            self.offset += equals_length + 1;
 
                             break TOKEN_COMMENT;
                         },
@@ -402,14 +403,14 @@ impl<'a> Tokenizer<'a> {
                     .unwrap_or(TOKEN_IDENTIFIER)
             },
 
-            '.' if let Some('.' | '/') = self.peek_character() => {
-                self.offset -= '.'.len_utf8();
+            start @ '.' if let Some('.' | '/') = self.peek_character() => {
+                self.offset -= start.len_utf8();
                 self.context_push(TokenizerContext::Path);
 
                 return self.consume_kind();
             },
-            '/' if self.peek_character().is_some_and(is_valid_path_character) => {
-                self.offset -= '/'.len_utf8();
+            start @ '/' if self.peek_character().is_some_and(is_valid_path_character) => {
+                self.offset -= start.len_utf8();
                 self.context_push(TokenizerContext::Path);
 
                 return self.consume_kind();
