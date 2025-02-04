@@ -245,21 +245,40 @@ impl<'a> Tokenizer<'a> {
                 TOKEN_WHITESPACE
             },
 
-            '#' => {
-                // ### or more is multiline.
-                if self.consume_while(|c| c == '#') < 2 {
-                    self.consume_while(|c| !matches!(c, '\r' | '\n'));
-                } else {
-                    let end = self.consumed_since(start_offset);
+            '#' if self.peek_character() == Some('=') => {
+                let equals_length = self.consume_while(|c| c == '=');
+                let equals = self.consumed_since(self.offset - equals_length);
 
-                    let Some(end_after) = self.remaining().find(end) else {
-                        // Don't have to close it, it just eats the whole file up.
-                        self.offset = self.input.len();
-                        return Some(TOKEN_COMMENT);
-                    };
+                loop {
+                    match self.peek_character() {
+                        Some('=')
+                            if let remaining = self.remaining()
+                                && remaining.starts_with(equals)
+                                && remaining.as_bytes().get(equals_length).copied()
+                                    == Some(b'#') =>
+                        {
+                            self.offset += equals_length + '#'.len_utf8();
 
-                    self.offset += end_after + end.len();
+                            break TOKEN_COMMENT;
+                        },
+
+                        Some('#') if self.peek_character_nth(1) == Some('=') => {
+                            self.consume_kind();
+                        },
+
+                        Some(_) => {
+                            self.consume_character();
+                        },
+
+                        None => {
+                            break TOKEN_COMMENT;
+                        },
+                    }
                 }
+            },
+
+            '#' => {
+                self.consume_while(|c| !matches!(c, '\n'));
 
                 TOKEN_COMMENT
             },
