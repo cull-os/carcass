@@ -332,7 +332,7 @@ impl Expression {
 
             Self::List(list) => {
                 for item in list.items() {
-                    item.validate_pattern_arithmetic(to);
+                    item.validate_pattern(to);
                 }
             },
 
