@@ -716,7 +716,7 @@ node! {
                         to.push(NodeError::new(
                             "application and piping operators do not associate, consider parentehsizing",
                             operation.text_range(),
-                        ))
+                        ));
                     }
                 }
             },
