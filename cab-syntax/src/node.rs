@@ -1070,6 +1070,8 @@ node! {
         for part in self.parts() {
             match part {
                 InterpolatedPart::Content(content) => {
+                    content.validate_escapes(to);
+
                     let text = content.text();
 
                     if text.chars().any(char::is_control) {
@@ -1079,8 +1081,6 @@ node! {
                         ));
                         break;
                     }
-
-                    content.validate_escapes(to);
                 },
 
                 InterpolatedPart::Interpolation(interpolation) => {
@@ -1107,7 +1107,6 @@ node! {
 
     // What a behemoth. And the sad part is I can't figure out a way to make this simpler.
     fn validate(&self, to: &mut Vec<NodeError>) {
-        let mut last_part = None;
         let mut parts = self
             .parts()
             .scan(0, |index, part| {
@@ -1121,89 +1120,89 @@ node! {
             })
             .peekable();
 
+        let mut string_is_multiline = false;
         let mut first_line_range = None;
         let mut last_line_range = None;
-        let mut is_multiline = false;
 
-        // TODO: Mixed indentation character erroring.
+        let mut indentation: Option<char> = None;
 
-        while let Some((index, part)) = parts.next() {
+        let mut previous_part_is_interpolation_range = None;
+        while let Some((content_index, part)) = parts.next() {
             match &part {
                 InterpolatedPart::Interpolation(interpolation) => {
-                    if index == 0 {
-                        first_line_range = Some(interpolation.text_range());
+                    let range = interpolation.text_range();
+
+                    if content_index == 0 {
+                        first_line_range = Some(range);
                     }
 
                     if let Some((_, InterpolatedPart::Delimiter(_))) | None = parts.peek() {
-                        last_line_range = Some(interpolation.text_range());
+                        last_line_range = Some(range);
                     }
 
                     interpolation.validate(to);
+
+                    previous_part_is_interpolation_range = Some(range);
                 },
 
                 InterpolatedPart::Content(content) => {
                     content.validate_escapes(to);
 
-                    let mut lines = content
-                        .text()
-                        .split('\n') // No, not lines. Compare "\n" with lines and split. You'll understand.
-                        .scan(0, |index, line| {
-                            if *index != 0 {
-                                is_multiline = true;
-                            }
+                    let text = content.text();
 
-                            *index += 1;
-                            Some(line)
-                        })
-                        .peekable();
+                    let mut lines = text.split('\n').enumerate().peekable();
 
-                    let newline_count = content
-                        .text()
-                        .bytes()
-                        .filter(|&c| c == b'\n')
-                        .count();
+                    let mut part_is_singleline = false;
+                    let part_is_last = matches!(parts.peek(), Some((_, InterpolatedPart::Delimiter(_))) | None);
 
-                    if index == 0 {
-                        let first_line = lines.peek().unwrap();
+                    if content_index == 0 {
+                        let first_line = lines.peek().unwrap().1;
 
+                        // First line isn't empty, just use it.
                         if !first_line.trim().is_empty() {
-                            let first_line_length = rowan::TextSize::new(first_line.trim_end().len() as u32);
-
                             first_line_range = Some(rowan::TextRange::at(
                                 content.text_range().start(),
-                                first_line_length,
+                                rowan::TextSize::new(first_line.trim_end().len() as u32),
                             ));
-                        } else if newline_count == 0
-                            && let Some((_, InterpolatedPart::Interpolation(interpolation))) = parts.peek()
-                        {
+
+                        // First line and the whole content is empty, but there is an interpolation. Use it.
+                        } else if text.trim().is_empty()
+                            && let Some((_, InterpolatedPart::Interpolation(interpolation))) = parts.peek() {
                             first_line_range = Some(interpolation.text_range());
                         }
                     }
 
-                    let last_line = lines.last().unwrap(); // Outside the if to force the scan.
-                    if let Some((_, InterpolatedPart::Delimiter(_))) | None = parts.peek() {
-                        if !last_line.trim().is_empty() {
-                            let last_line_length = rowan::TextSize::new(last_line.trim_start().len() as u32);
+                    while let Some((line_index, line)) = lines.next()  {
+                        match line_index {
+                            0 if lines.peek().is_none() => part_is_singleline = true,
+                            _ => string_is_multiline = true,
+                        }
 
-                            last_line_range = Some(rowan::TextRange::at(
-                                content.text_range().end().checked_sub(last_line_length).unwrap(),
-                                last_line_length,
-                            ));
-                        } else if newline_count == 0
-                            && let Some(InterpolatedPart::Interpolation(interpolation)) = last_part
-                        {
-                            last_line_range = Some(interpolation.text_range());
+                        if part_is_last && lines.peek().is_none() {
+                            let last_line = line;
+
+                            if !last_line.trim().is_empty() {
+                                let last_line_length = rowan::TextSize::new(last_line.trim_start().len() as u32);
+
+                                last_line_range = Some(rowan::TextRange::at(
+                                    content.text_range().end().checked_sub(last_line_length).unwrap(),
+                                    last_line_length,
+                                ));
+                            } else if part_is_singleline
+                                && let Some(range) = previous_part_is_interpolation_range {
+                                last_line_range = Some(range);
+                            }
                         }
                     }
+
+                    previous_part_is_interpolation_range = None;
                 },
 
                 _ => {},
             }
-
-            last_part = Some(part.clone());
         }
 
-        if is_multiline {
+        if string_is_multiline {
             if first_line_range == last_line_range {
                 last_line_range = None;
             }
@@ -1240,14 +1239,6 @@ node! {
 
                     let text = content.text();
 
-                    if text.chars().any(char::is_control) {
-                        to.push(NodeError::new(
-                            "runes cannot contain control characters (non-escaped newlines, tabs, ...)",
-                            content.text_range(),
-                        ));
-                        break;
-                    }
-
                     match content.validate_escapes(to) {
                         0 if text.chars().count() == 1 => {},
                         1 => {},
@@ -1258,6 +1249,14 @@ node! {
                                 content.text_range(),
                             ));
                         },
+                    }
+
+                    if text.chars().any(char::is_control) {
+                        to.push(NodeError::new(
+                            "runes cannot contain control characters (non-escaped newlines, tabs, ...)",
+                            content.text_range(),
+                        ));
+                        break;
                     }
                 },
 
@@ -1299,6 +1298,8 @@ node! {
         for part in self.parts() {
             match part {
                 InterpolatedPart::Content(content) => {
+                    content.validate_escapes(to);
+
                     let text = content.text();
 
                     if text.chars().any(char::is_control) {
@@ -1308,8 +1309,6 @@ node! {
                         ));
                         break;
                     }
-
-                    content.validate_escapes(to);
                 },
 
                 InterpolatedPart::Interpolation(interpolation) => {
