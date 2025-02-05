@@ -1141,6 +1141,7 @@ node! {
         let mut string_last_line_range = None;
 
         let mut indentation: Option<char> = None;
+        let mut indentation_errorred = false;
 
         let mut previous_part_is_not_delimiter_range = None;
         while let Some((part_index, part)) = parts.next() {
@@ -1171,11 +1172,14 @@ node! {
                         let line_is_first = line_index == 0;
                         let line_is_last = lines.peek().is_none();
 
+                        let line_is_firstest = part_is_first && line_is_first;
+                        let line_is_lastest = part_is_last && line_is_last;
+
                         if line_is_first && line_is_last {
                             part_is_multiline = false;
                         }
 
-                        if part_is_first && line_is_first {
+                        if line_is_firstest {
                             if !line.trim().is_empty() {
                                 string_first_line_range = Some(rowan::TextRange::at(
                                     content.text_range().start(),
@@ -1186,7 +1190,7 @@ node! {
                                 && !part.is_delimiter() {
                                 string_first_line_range = Some(part.text_range());
                             }
-                        } else if part_is_last && line_is_last {
+                        } else if line_is_lastest {
                             if !line.trim().is_empty() {
                                 let last_line_length = rowan::TextSize::new(line.trim_start().len() as u32);
 
@@ -1197,6 +1201,32 @@ node! {
                             } else if !part_is_multiline
                                 && let Some(range) = previous_part_is_not_delimiter_range {
                                 string_last_line_range = Some(range);
+                            }
+                        }
+
+                        #[allow(clippy::nonminimal_bool)] if
+                            // Ignore firstest and lastest lines.
+                            !(line_is_firstest || line_is_lastest)
+                            // Ignore lines right after an interpolation end.
+                            && !(previous_part_is_not_delimiter_range.is_some() && line_is_first)
+                        {
+                            for c in line.chars() {
+                                if !c.is_whitespace() {
+                                    break;
+                                }
+
+                                let Some(indentation) = indentation else {
+                                    indentation = Some(c);
+                                    continue;
+                                };
+
+                                if !indentation_errorred && indentation != c {
+                                    indentation_errorred = true;
+                                    to.push(NodeError::new(
+                                        "strings cannot mix different kinds of whitespace in indentation",
+                                        content.text_range(),
+                                    ));
+                                }
                             }
                         }
                     }
