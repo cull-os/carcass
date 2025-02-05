@@ -361,6 +361,23 @@ impl Expression {
                 operation.right().validate_pattern(to);
             },
 
+            Self::InfixOperation(operation) if let InfixOperator::Select = operation.operator() => {
+                match operation.left() {
+                    Expression::Identifier(identifier) => {
+                        identifier.validate(to);
+                    },
+
+                    invalid => {
+                        to.push(NodeError::new(
+                            "left operand of a select pattern must be an identifier",
+                            invalid.text_range(),
+                        ))
+                    },
+                }
+
+                operation.right().validate_pattern(to);
+            },
+
             Self::InfixOperation(operation)
                 if let InfixOperator::All | InfixOperator::Any = operation.operator() =>
             {
