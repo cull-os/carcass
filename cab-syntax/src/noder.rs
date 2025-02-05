@@ -442,12 +442,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
     fn node_stringlike(&mut self) {
         let start_of_stringlike = self.checkpoint();
 
-        let (node, end) = match self.next().ok() {
-            Some(TOKEN_IDENTIFIER_START) => (NODE_IDENTIFIER, TOKEN_IDENTIFIER_END),
-            Some(TOKEN_STRING_START) => (NODE_STRING, TOKEN_STRING_END),
-            Some(TOKEN_ISLAND_START) => (NODE_ISLAND, TOKEN_ISLAND_END),
-            _ => unreachable!(),
-        };
+        let (node, end) = self.next().unwrap().as_node_and_closing().unwrap();
 
         self.node_from(start_of_stringlike, node, |this| {
             loop {
@@ -576,7 +571,9 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
 
             Some(next) if Kind::IDENTIFIER_SET.contains(next) => self.node_identifier(until),
 
-            Some(TOKEN_STRING_START | TOKEN_ISLAND_START) => self.node_stringlike(),
+            Some(TOKEN_STRING_START | TOKEN_RUNE_START | TOKEN_ISLAND_START) => {
+                self.node_stringlike()
+            },
 
             Some(TOKEN_INTEGER | TOKEN_FLOAT) => self.node_number(until),
 

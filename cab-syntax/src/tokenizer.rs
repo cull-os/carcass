@@ -236,6 +236,7 @@ impl<'a> Tokenizer<'a> {
                     b'`' => TOKEN_IDENTIFIER_END,
                     b'>' => TOKEN_ISLAND_END,
                     b'"' => TOKEN_STRING_END,
+                    b'\'' => TOKEN_RUNE_END,
                     _ => unreachable!(),
                 });
             },
@@ -452,6 +453,15 @@ impl<'a> Tokenizer<'a> {
                 });
 
                 TOKEN_STRING_START
+            },
+
+            start @ '\'' => {
+                self.context_push(TokenizerContext::Stringlike {
+                    before: None,
+                    end: start as u8,
+                });
+
+                TOKEN_RUNE_START
             },
 
             '.' => TOKEN_PERIOD,

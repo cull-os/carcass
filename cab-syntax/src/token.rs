@@ -15,6 +15,7 @@ use crate::{
         self,
         *,
     },
+    NodeError,
     RowanToken,
 };
 
@@ -81,10 +82,10 @@ impl Whitespace {
 token! { #[from(TOKEN_COMMENT)] struct Comment; }
 
 impl Comment {
-    /// Returns the delimiter of this comment.
-    pub fn delimiter(&self) -> &str {
+    /// Returns the starting delimiter of this comment.
+    pub fn start_delimiter(&self) -> &str {
         let text = self.text();
-        let content_start_index = text.find(|c| c != '#').unwrap_or(text.len());
+        let content_start_index = text.bytes().skip(1).take_while(|&c| c == b'=').count() + 1;
 
         &text[..content_start_index]
     }
@@ -92,31 +93,11 @@ impl Comment {
     /// Returns whether if this comment has the capability to span multiple
     /// lines.
     pub fn is_multiline(&self) -> bool {
-        self.delimiter().len() >= 3
-    }
-
-    /// Returns whether if this multiline comment was closed off properly.
-    ///
-    /// Panics if this comment is not a multiline comment.
-    pub fn is_closed_off(&self) -> bool {
-        assert!(self.is_multiline());
-        self.text().ends_with(self.delimiter())
-    }
-
-    /// Returns the contents of this comment by removing delimiters.
-    pub fn contents(&self) -> &str {
-        let delimiter = self.delimiter();
-
-        let start_stripped = self.text().strip_prefix(delimiter).unwrap();
-
-        if self.is_multiline() {
-            start_stripped
-                .strip_suffix(delimiter)
-                // Not .unwrap(), because it's perfectly fine if you don't close off your multiline string.
-                .unwrap_or(start_stripped)
-        } else {
-            start_stripped
-        }
+        self.text()
+            .as_bytes()
+            .get(1)
+            .copied()
+            .is_some_and(|c| c == b'=')
     }
 }
 
@@ -162,3 +143,34 @@ token! { #[from(TOKEN_PATH)] struct Path; }
 token! { #[from(TOKEN_IDENTIFIER)] struct Identifier; }
 
 token! { #[from(TOKEN_CONTENT)] struct Content; }
+
+impl Content {
+    pub fn validate_escapes(&self, to: &mut Vec<NodeError>) -> usize {
+        let mut text = self.text().bytes().enumerate();
+        let mut count: usize = 0;
+
+        while let Some((offset, c)) = text.next() {
+            if c != b'\\' {
+                continue;
+            }
+
+            count += 1;
+
+            match text.next() {
+                Some((_, b'0' | b't' | b'n' | b'r' | b'`' | b'"' | b'\'' | b'>' | b'\\')) => {},
+
+                next @ (Some(_) | None) => {
+                    to.push(NodeError::new(
+                        r#"invalid escape, escapes must be one of: \0, \t, \n, \r, \`, \", \', \>, \\"#,
+                        rowan::TextRange::at(
+                            self.text_range().start() + rowan::TextSize::new(offset as u32),
+                            (1 + next.is_some() as u32).into(),
+                        ),
+                    ));
+                },
+            }
+        }
+
+        count
+    }
+}

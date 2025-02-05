@@ -297,6 +297,7 @@ node! {
         Path,
         Identifier,
         SString,
+        Rune,
         Island,
         Number,
         IfThen,
@@ -315,6 +316,7 @@ node! {
             Self::Path(path) => path.validate(to),
             Self::Identifier(identifier) => identifier.validate(to),
             Self::SString(string) => string.validate(to),
+            Self::Rune(rune) => rune.validate(to),
             Self::Island(island) => island.validate(to),
             Self::Number(number) => number.validate(to),
             Self::IfThen(if_else) => if_else.validate(to),
@@ -1067,20 +1069,22 @@ node! {
     fn validate(&self, to: &mut Vec<NodeError>) {
         for part in self.parts() {
             match part {
-                InterpolatedPart::Interpolation(interpolation) => {
-                    interpolation.validate(to);
-                },
-
                 InterpolatedPart::Content(content) => {
-                    if content.text().chars().any(char::is_control) {
+                    let text = content.text();
+
+                    if text.chars().any(char::is_control) {
                         to.push(NodeError::new(
                             "quoted identifiers cannot contain control characters (non-escaped newlines, tabs, ...)",
                             self.text_range(),
                         ));
-
-                        // One error for all contents within the identifier.
                         break;
                     }
+
+                    content.validate_escapes(to);
+                },
+
+                InterpolatedPart::Interpolation(interpolation) => {
+                    interpolation.validate(to);
                 },
 
                 _ => {},
@@ -1138,28 +1142,7 @@ node! {
                 },
 
                 InterpolatedPart::Content(content) => {
-                    let mut text = content
-                        .text()
-                        .bytes()
-                        .enumerate();
-
-                    while let Some((offset, c)) = text.next() {
-                        if c != b'\\' { continue; }
-
-                        match text.next() {
-                            Some((_, b'0' | b't' | b'n' | b'r' | b'"' | b'\'' | b'\\')) => {},
-
-                            next @ (Some(_) | None) => {
-                                to.push(NodeError::new(
-                                    r#"invalid escape, escapes must be one of: \0, \t, \n, \r, \", \', \\"#,
-                                    rowan::TextRange::at(
-                                        content.text_range().start() + rowan::TextSize::new(offset as u32),
-                                        (1 + next.is_some() as u32).into()
-                                    ),
-                                ));
-                            },
-                        }
-                    }
+                    content.validate_escapes(to);
 
                     let mut lines = content
                         .text()
@@ -1242,44 +1225,95 @@ interpolated! {
     }
 }
 
+// RUNE
+
+node! {
+    #[from(NODE_RUNE)] struct Rune;
+
+    fn validate(&self, to: &mut Vec<NodeError>) {
+        let mut got_content = false;
+
+        for part in self.parts() {
+            match part {
+                InterpolatedPart::Content(content) => {
+                    got_content = true;
+
+                    let text = content.text();
+
+                    if text.chars().any(char::is_control) {
+                        to.push(NodeError::new(
+                            "runes cannot contain control characters (non-escaped newlines, tabs, ...)",
+                            content.text_range(),
+                        ));
+                        break;
+                    }
+
+                    match content.validate_escapes(to) {
+                        0 if text.chars().count() == 1 => {},
+                        1 => {},
+
+                        _ => {
+                            to.push(NodeError::new(
+                                "invalid rune literal length",
+                                content.text_range(),
+                            ));
+                        },
+                    }
+                },
+
+                InterpolatedPart::Interpolation(interpolation) => {
+                    got_content = true;
+
+                    to.push(NodeError::new(
+                        "runes cannot contain interpolation",
+                        interpolation.text_range(),
+                    ));
+                }
+
+                _ => {},
+            }
+        }
+
+        if !got_content {
+            to.push(NodeError::new(
+                "runes cannot be empty",
+                self.text_range(),
+            ));
+        }
+    }
+}
+
+interpolated! {
+    impl Rune {
+        let content_kind = TOKEN_CONTENT;
+        type ContentToken = token::Content;
+    }
+}
+
 // ISLAND
 
 node! {
     #[from(NODE_ISLAND)] struct Island;
 
     fn validate(&self, to: &mut Vec<NodeError>) {
-        'parts: for part in self.parts() {
+        for part in self.parts() {
             match part {
-                InterpolatedPart::Interpolation(interpolation) => {
-                    interpolation.validate(to);
+                InterpolatedPart::Content(content) => {
+                    let text = content.text();
+
+                    if text.chars().any(char::is_control) {
+                        to.push(NodeError::new(
+                            "islands cannot contain control characters (non-escaped newlines, tabs, ...)",
+                            self.text_range(),
+                        ));
+                        break;
+                    }
+
+                    content.validate_escapes(to);
                 },
 
-                InterpolatedPart::Content(content) => {
-                    let mut chars = content
-                        .text()
-                        .char_indices()
-                        .peekable();
-
-                    while let Some((offset, c)) = chars.next() {
-                        if c.is_control() {
-                            to.push(NodeError::new(
-                                "islands cannot contain control characters",
-                                self.text_range(),
-                            ));
-                            break 'parts;
-                        }
-
-                        if c == '\\' && !matches!(chars.peek(), Some((_, '>'))) {
-                            to.push(NodeError::new(
-                                "islands cannot contain non-'>' escapes",
-                                rowan::TextRange::at(
-                                    content.text_range().start() + rowan::TextSize::new(offset as u32),
-                                    2.into()
-                                ),
-                            ));
-                            break 'parts;
-                        }
-                    }
+                InterpolatedPart::Interpolation(interpolation) => {
+                    interpolation.validate(to);
                 },
 
                 _ => {},

@@ -41,11 +41,11 @@ pub enum Kind {
 
     /// Anything that starts with a `#`.
     ///
-    /// When the comment starts with more than 3 `#` characters, it will be
-    /// multiline. Multiline comments can be closed with the initial delimiter,
-    /// but they don't have to be.
+    /// When the comment starts with `#` and a nonzer number of `=`, it will be
+    /// multiline. Multiline comments can be closed with the initial amount of
+    /// `=` and then a `#`, but they don't have to be.
     #[display("a comment")]
-    TOKEN_COMMENT, // #[^\r\n]* and (#{3,}).*\1
+    TOKEN_COMMENT,
 
     #[display("';'")]
     TOKEN_SEMICOLON,
@@ -181,17 +181,22 @@ pub enum Kind {
 
     #[display("an identifier")]
     TOKEN_IDENTIFIER_START,
-    #[display("the end of an identifier")]
+    #[display("the closing delimiter of an identifier")]
     TOKEN_IDENTIFIER_END,
 
     #[display("a string")]
     TOKEN_STRING_START,
-    #[display("the end of a string")]
+    #[display("the closing delimiter of a string")]
     TOKEN_STRING_END,
+
+    #[display("a rune")]
+    TOKEN_RUNE_START,
+    #[display("the closing delimiter of a rune")]
+    TOKEN_RUNE_END,
 
     #[display("an island")]
     TOKEN_ISLAND_START,
-    #[display("the end of an island")]
+    #[display("the closing delimiter of an island")]
     TOKEN_ISLAND_END,
 
     #[display("{}", reachable_unreachable())]
@@ -231,13 +236,20 @@ pub enum Kind {
     #[display("an identifier")]
     NODE_IDENTIFIER,
 
-    /// A stringlike that is delimited by a single `"` or any number of `'`.
+    /// A stringlike that is delimited by a single `"` and any number of `=`:
+    ///
+    /// ```text
+    /// "== foo =="
+    /// ```
     ///
     /// A stringlike is a sequence of nodes and tokens, where all the immediate
     /// children tokens are [`TOKEN_CONTENT`]s, while all the immediate children
     /// nodes are all [`NODE_INTERPOLATION`]s.
     #[display("a string")]
     NODE_STRING,
+
+    #[display("a rune")]
+    NODE_RUNE,
 
     /// A stringlike that is delimited by `<` and `>`. See [`NODE_STRING`] for
     /// the definition of stringlike.
@@ -273,6 +285,7 @@ impl Kind {
             | TOKEN_IDENTIFIER
             | TOKEN_IDENTIFIER_START
             | TOKEN_STRING_START
+            | TOKEN_RUNE_START
             | TOKEN_ISLAND_START
     );
     pub const IDENTIFIER_SET: EnumSet<Kind> = enum_set!(TOKEN_IDENTIFIER | TOKEN_IDENTIFIER_START);
@@ -284,20 +297,10 @@ impl Kind {
     ///     t  t    f
     /// ```
     pub fn is_argument(self) -> bool {
-        matches!(
-            self,
-            TOKEN_LEFT_PARENTHESIS
-                | TOKEN_LEFT_BRACKET
-                | TOKEN_LEFT_CURLYBRACE
-                | TOKEN_INTEGER
-                | TOKEN_FLOAT
-                // !! If's aren't arguments.
-                | TOKEN_PATH
-                | TOKEN_IDENTIFIER
-                | TOKEN_IDENTIFIER_START
-                | TOKEN_STRING_START
-                | TOKEN_ISLAND_START
-        ) || self.is_error() // Error nodes are expressions.
+        Self::EXPRESSION_SET
+            .difference(TOKEN_LITERAL_IF.into())
+            .contains(self)
+            || self.is_error() // Error nodes are expressions.
     }
 
     /// Whether if the token should be ignored by the noder.
@@ -311,5 +314,16 @@ impl Kind {
             self,
             TOKEN_ERROR_UNKNOWN | TOKEN_ERROR_NUMBER_NO_DIGIT | TOKEN_ERROR_FLOAT_NO_EXPONENT
         )
+    }
+
+    /// Returns the node and closing kinds of this kind.
+    pub fn as_node_and_closing(self) -> Option<(Kind, Kind)> {
+        Some(match self {
+            TOKEN_IDENTIFIER_START => (NODE_IDENTIFIER, TOKEN_IDENTIFIER_END),
+            TOKEN_STRING_START => (NODE_STRING, TOKEN_STRING_END),
+            TOKEN_RUNE_START => (NODE_RUNE, TOKEN_RUNE_END),
+            TOKEN_ISLAND_START => (NODE_ISLAND, TOKEN_ISLAND_END),
+            _ => return None,
+        })
     }
 }

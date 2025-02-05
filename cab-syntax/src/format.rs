@@ -250,6 +250,8 @@ impl<'a, W: io::Write> Formatter<'a, W> {
 
             node::SString as string => self.parenthesize_parted(string.parts()),
 
+            node::Rune as rune => self.parenthesize_parted(rune.parts()),
+
             node::Island as island => self.parenthesize_parted(island.parts()),
 
             node::Number as number => {
