@@ -1,8 +1,10 @@
 [package]
-name    = "task"
-version = "0.1.0"
-edition = "2024"
-publish = false
+name                 = "task"
+edition.workspace    = true
+license.workspace    = true
+publish.workspace    = true
+repository.workspace = true
+version.workspace    = true
 
 [dependencies]
 cab.path            = "../cab"

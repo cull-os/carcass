@@ -1,3 +1,11 @@
 [workspace]
 members  = [ "cab", "cab-syntax", "fuzz", "task" ]
-resolver = "2"
+resolver = "3"
+
+[workspace.package]
+description = "A reproducible contextful-expression language"
+edition     = "2024"
+license     = "MIT"
+publish     = false
+repository  = "https://github.com/cull-os/cab"
+version     = "0.0.1"

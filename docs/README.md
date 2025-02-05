@@ -1,6 +1,6 @@
 # Cab
 
-Cab is a pure, reproducible contextful expression language.
+Cab is a pure, reproducible contextful-expression language.
 
 Contributors are expected to follow the [code of conduct](CODE_OF_CONDUCT.md).
 

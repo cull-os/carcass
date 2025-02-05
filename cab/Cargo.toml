@@ -1,8 +1,11 @@
 [package]
-name        = "cab"
-description = "A reproducible contextful expression language"
-version     = "0.0.1"
-edition     = "2024"
+name                  = "cab"
+description.workspace = true
+edition.workspace     = true
+license.workspace     = true
+publish.workspace     = true
+repository.workspace  = true
+version.workspace     = true
 
 [dependencies]
 cab-syntax.path     = "../cab-syntax"

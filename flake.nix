@@ -1,5 +1,5 @@
 {
-  description = "A reproducible contextful expression language";
+  description = "A reproducible contextful-expression language";
 
   nixConfig = {
     extra-substituters = [
