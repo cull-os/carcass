@@ -109,9 +109,9 @@ pub fn parse<'a, I: Iterator<Item = (Kind, &'a str)>, N: node::Node>(
     if options.deduplicate_errors {
         let mut last_text_range = None;
 
-        errors.retain(move |NodeError { at, .. }| {
-            if last_text_range != Some(at.start()) {
-                last_text_range = Some(at.start());
+        errors.retain(move |NodeError { range, .. }| {
+            if last_text_range != Some(range.start()) {
+                last_text_range = Some(range.start());
                 true
             } else {
                 false
@@ -137,21 +137,21 @@ pub struct NodeError {
     /// The error's reason.
     pub reason: borrow::Cow<'static, str>,
     /// Where the error happened in the source.
-    pub at: rowan::TextRange,
+    pub range: rowan::TextRange,
 }
 
 impl NodeError {
-    pub fn new(reason: impl Into<borrow::Cow<'static, str>>, at: rowan::TextRange) -> Self {
+    pub fn new(reason: impl Into<borrow::Cow<'static, str>>, range: rowan::TextRange) -> Self {
         Self {
             reason: reason.into(),
-            at,
+            range,
         }
     }
 
     pub fn unexpected(
         got: Option<Kind>,
         mut expected: EnumSet<Kind>,
-        at: rowan::TextRange,
+        range: rowan::TextRange,
     ) -> NodeError {
         let mut reason = String::from("expected ");
 
@@ -160,7 +160,7 @@ impl NodeError {
 
             return Self {
                 reason: reason.into(),
-                at,
+                range,
             };
         }
 
@@ -200,7 +200,7 @@ impl NodeError {
 
         Self {
             reason: reason.into(),
-            at,
+            range,
         }
     }
 }

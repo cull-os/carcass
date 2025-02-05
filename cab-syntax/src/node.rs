@@ -339,7 +339,7 @@ impl Expression {
             },
 
             // All attribute lists are valid patterns.
-            // TODO: Add warnings for right-side expression that
+            // TODO: Add warns for right-side expression that
             // statically never use the attribute list made the scope.
             Self::AttributeList(attribute_list) => attribute_list.validate(to),
 
@@ -701,16 +701,16 @@ node! {
             },
 
             operator => {
-                let expressions = [self.left(), self.right()];
+                let expressions = &[self.left(), self.right()];
 
-                for expression in expressions.iter() {
+                for expression in expressions {
                     expression.validate(to);
                 }
 
                 // No, I am not proud of this.
                 let (InfixOperator::Apply | InfixOperator::Pipe) = operator else { return; };
 
-                for expression in expressions.iter() {
+                for expression in expressions {
                     if let Expression::InfixOperation(operation) = expression
                         && let child_operator @ (InfixOperator::Apply | InfixOperator::Pipe) = operation.operator()
                         && child_operator != operator

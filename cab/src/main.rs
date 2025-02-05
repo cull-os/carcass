@@ -125,7 +125,7 @@ async fn main() {
                         let diagnostic = diagnostic::Diagnostic::error()
                             .with_message("syntax error")
                             .with_labels(vec![
-                                diagnostic::Label::primary(input_file, error.at)
+                                diagnostic::Label::primary(input_file, error.range)
                                     .with_message(&*error.reason),
                             ]);
 
