@@ -748,16 +748,18 @@ impl InfixOperation {
     pub fn validate_left(&self, to: &mut Vec<NodeError>) {
         assert_eq!(self.operator(), InfixOperator::This);
 
-        let left = self.left();
+        match self.left() {
+            Expression::Identifier(identifier) => {
+                   identifier.validate(to);
+            },
 
-        if let Expression::Identifier(_) = left {
-            return;
-        };
-
-        to.push(NodeError::new(
-            "the left operand of a this-expression must be an identifier",
-            left.text_range(),
-        ));
+            invalid => {
+                to.push(NodeError::new(
+                    "left operand of a this-expression must be an identifier",
+                    invalid.text_range(),
+                ));
+            }
+        }
     }
 }
 
