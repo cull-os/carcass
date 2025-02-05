@@ -968,10 +968,24 @@ impl Interpolation {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum InterpolatedPart<T> {
+pub enum InterpolatedPart<T: Token> {
     Delimiter(RowanToken),
     Content(T),
     Interpolation(Interpolation),
+}
+
+impl<T: Token> InterpolatedPart<T> {
+    pub fn is_delimiter(&self) -> bool {
+        matches!(self, Self::Delimiter(_))
+    }
+
+    pub fn text_range(&self) -> rowan::TextRange {
+        match self {
+            InterpolatedPart::Delimiter(delimiter) => delimiter.text_range(),
+            InterpolatedPart::Content(content) => content.text_range(),
+            InterpolatedPart::Interpolation(interpolation) => interpolation.text_range(),
+        }
+    }
 }
 
 macro_rules! interpolated {
@@ -1112,8 +1126,10 @@ node! {
             .scan(0, |index, part| {
                 let value = *index;
 
-                if let InterpolatedPart::Content(_) = part {
-                    *index += 1;
+                match part {
+                    InterpolatedPart::Delimiter(_) => {},
+
+                    _ => *index += 1,
                 }
 
                 Some((value, part))
@@ -1121,28 +1137,28 @@ node! {
             .peekable();
 
         let mut string_is_multiline = false;
-        let mut first_line_range = None;
-        let mut last_line_range = None;
+        let mut string_first_line_range = None;
+        let mut string_last_line_range = None;
 
         let mut indentation: Option<char> = None;
 
-        let mut previous_part_is_interpolation_range = None;
-        while let Some((content_index, part)) = parts.next() {
+        let mut previous_part_is_not_delimiter_range = None;
+        while let Some((part_index, part)) = parts.next() {
+            let mut part_is_multiline = true;
+            let part_is_first = part_index == 0;
+            let part_is_last = parts.peek().is_none_or(|(_, part)| part.is_delimiter());
+
             match &part {
                 InterpolatedPart::Interpolation(interpolation) => {
-                    let range = interpolation.text_range();
-
-                    if content_index == 0 {
-                        first_line_range = Some(range);
-                    }
-
-                    if let Some((_, InterpolatedPart::Delimiter(_))) | None = parts.peek() {
-                        last_line_range = Some(range);
-                    }
-
                     interpolation.validate(to);
 
-                    previous_part_is_interpolation_range = Some(range);
+                    let range = interpolation.text_range();
+
+                    if part_is_first {
+                        string_first_line_range = Some(range);
+                    } else if part_is_last {
+                        string_last_line_range = Some(range);
+                    }
                 },
 
                 InterpolatedPart::Content(content) => {
@@ -1151,63 +1167,55 @@ node! {
                     let text = content.text();
 
                     let mut lines = text.split('\n').enumerate().peekable();
-
-                    let mut part_is_singleline = false;
-                    let part_is_last = matches!(parts.peek(), Some((_, InterpolatedPart::Delimiter(_))) | None);
-
-                    if content_index == 0 {
-                        let first_line = lines.peek().unwrap().1;
-
-                        // First line isn't empty, just use it.
-                        if !first_line.trim().is_empty() {
-                            first_line_range = Some(rowan::TextRange::at(
-                                content.text_range().start(),
-                                rowan::TextSize::new(first_line.trim_end().len() as u32),
-                            ));
-
-                        // First line and the whole content is empty, but there is an interpolation. Use it.
-                        } else if text.trim().is_empty()
-                            && let Some((_, InterpolatedPart::Interpolation(interpolation))) = parts.peek() {
-                            first_line_range = Some(interpolation.text_range());
-                        }
-                    }
-
                     while let Some((line_index, line)) = lines.next()  {
-                        match line_index {
-                            0 if lines.peek().is_none() => part_is_singleline = true,
-                            _ => string_is_multiline = true,
+                        let line_is_first = line_index == 0;
+                        let line_is_last = lines.peek().is_none();
+
+                        if line_is_first && line_is_last {
+                            part_is_multiline = false;
                         }
 
-                        if part_is_last && lines.peek().is_none() {
-                            let last_line = line;
+                        if part_is_first && line_is_first {
+                            if !line.trim().is_empty() {
+                                string_first_line_range = Some(rowan::TextRange::at(
+                                    content.text_range().start(),
+                                    rowan::TextSize::new(line.trim_end().len() as u32),
+                                ));
+                            } else if text.trim().is_empty()
+                                && let Some((_, part)) = parts.peek()
+                                && !part.is_delimiter() {
+                                string_first_line_range = Some(part.text_range());
+                            }
+                        } else if part_is_last && line_is_last {
+                            if !line.trim().is_empty() {
+                                let last_line_length = rowan::TextSize::new(line.trim_start().len() as u32);
 
-                            if !last_line.trim().is_empty() {
-                                let last_line_length = rowan::TextSize::new(last_line.trim_start().len() as u32);
-
-                                last_line_range = Some(rowan::TextRange::at(
+                                string_last_line_range = Some(rowan::TextRange::at(
                                     content.text_range().end().checked_sub(last_line_length).unwrap(),
                                     last_line_length,
                                 ));
-                            } else if part_is_singleline
-                                && let Some(range) = previous_part_is_interpolation_range {
-                                last_line_range = Some(range);
+                            } else if !part_is_multiline
+                                && let Some(range) = previous_part_is_not_delimiter_range {
+                                string_last_line_range = Some(range);
                             }
                         }
                     }
-
-                    previous_part_is_interpolation_range = None;
                 },
 
                 _ => {},
             }
+
+            if !part.is_delimiter() {
+                previous_part_is_not_delimiter_range = Some(part.text_range());
+            }
+
+            if part_is_multiline {
+                string_is_multiline = true;
+            }
         }
 
         if string_is_multiline {
-            if first_line_range == last_line_range {
-                last_line_range = None;
-            }
-
-            for range in [first_line_range, last_line_range].into_iter().flatten() {
+            for range in [string_first_line_range, string_last_line_range].into_iter().flatten() {
                 to.push(NodeError::new(
                     "multiline strings' first and last lines must be empty",
                     range,
