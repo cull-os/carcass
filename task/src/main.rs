@@ -5,7 +5,10 @@ use std::{
     process,
 };
 
-use cab::syntax;
+use cab::{
+    report,
+    syntax,
+};
 use clap::Parser as _;
 use clap_verbosity_flag::{
     InfoLevel,
@@ -50,23 +53,7 @@ enum Check {
 fn actual_main() -> Result<(), Box<dyn error::Error>> {
     let cli = Cli::parse();
 
-    yansi::whenever(yansi::Condition::TTY_AND_COLOR);
-
-    // Trying to imitate clap to get a consistent experience.
-    env_logger::Builder::new()
-        .filter_level(cli.verbosity.log_level_filter())
-        .format(|buffer, record| {
-            let level = match record.level() {
-                log::Level::Error => "error:".red().bold(),
-                log::Level::Warn => "warn:".yellow().bold(),
-                log::Level::Info => "info:".green().bold(),
-                log::Level::Debug => "debug:".blue().bold(),
-                log::Level::Trace => "trace:".cyan().bold(),
-            };
-
-            writeln!(buffer, "{level} {arguments}", arguments = record.args())
-        })
-        .init();
+    report::init(cli.verbosity.log_level_filter());
 
     match cli.command {
         Command::Check {

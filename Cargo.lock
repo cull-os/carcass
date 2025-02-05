@@ -119,14 +119,24 @@ checksum = "f61dac84819c6588b558454b194026eb1f09c293b9036ae9b159e74e73ab6cf9"
 name = "cab"
 version = "0.0.1"
 dependencies = [
+ "cab-report",
  "cab-syntax",
  "clap",
  "clap-stdin",
  "clap-verbosity-flag",
  "codespan-reporting",
- "env_logger",
  "log",
  "tokio",
+ "yansi",
+]
+
+[[package]]
+name = "cab-report"
+version = "0.0.1"
+dependencies = [
+ "env_logger",
+ "log",
+ "unicode-width 0.2.0",
  "yansi",
 ]
 
@@ -229,7 +239,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3538270d33cc669650c4b093848450d380def10c331d38c768e34cac80576e6e"
 dependencies = [
  "termcolor",
- "unicode-width",
+ "unicode-width 0.1.14",
 ]
 
 [[package]]
@@ -914,7 +924,6 @@ dependencies = [
  "cab",
  "clap",
  "clap-verbosity-flag",
- "env_logger",
  "log",
  "tokio",
  "which",
@@ -1019,6 +1028,12 @@ name = "unicode-width"
 version = "0.1.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7dd6e30e90baa6f72411720665d41d89b9a3d039dc45b8faea1ddd07f617f6af"
+
+[[package]]
+name = "unicode-width"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1fc81956842c57dac11422a97c3b8195a1ff727f06e85c84ed2e8aa277c9a0fd"
 
 [[package]]
 name = "unicode-xid"

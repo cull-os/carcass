@@ -9,7 +9,6 @@ version.workspace    = true
 [dependencies]
 cab.path            = "../cab"
 clap-verbosity-flag = "3.0.2"
-env_logger          = "0.11.3"
 log.workspace       = true
 which               = "7.0.1"
 

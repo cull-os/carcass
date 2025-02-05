@@ -8,11 +8,11 @@ repository.workspace  = true
 version.workspace     = true
 
 [dependencies]
+cab-report.path     = "../cab-report"
 cab-syntax.path     = "../cab-syntax"
 clap-stdin          = "0.6.0"
 clap-verbosity-flag = "3.0.2"
 codespan-reporting  = "0.11.1"
-env_logger          = "0.11.3"
 log.workspace       = true
 yansi.workspace     = true
 
