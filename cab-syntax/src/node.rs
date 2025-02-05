@@ -1224,7 +1224,7 @@ node! {
                                     indentation_errorred = true;
                                     to.push(NodeError::new(
                                         "strings cannot mix different kinds of whitespace in indentation",
-                                        content.text_range(),
+                                        self.text_range(),
                                     ));
                                 }
                             }
