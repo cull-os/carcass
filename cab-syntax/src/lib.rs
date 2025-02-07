@@ -1,20 +1,19 @@
 #![feature(gen_blocks, if_let_guard, iter_map_windows, let_chains)]
 
 mod color;
-pub use color::*;
-
 pub mod format;
-
 mod kind;
-pub use kind::*;
-
 pub mod node;
 mod noder;
-pub use noder::*;
-
 pub mod token;
 mod tokenizer;
-pub use tokenizer::*;
+
+pub use crate::{
+    color::*,
+    kind::*,
+    noder::*,
+    tokenizer::*,
+};
 
 pub(crate) type RowanNode = rowan::SyntaxNode<Language>;
 pub(crate) type RowanToken = rowan::SyntaxToken<Language>;
