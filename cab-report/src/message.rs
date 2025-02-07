@@ -208,18 +208,15 @@ impl<'a> Message<'a> {
                 let mut labels: Vec<_> = labels
                     .clone()
                     .into_iter()
-                    .map(|label| {
-                        let positions = Position::from(&label.range, file);
-                        (label, positions)
-                    })
+                    .map(|label| (Position::from(&label.range, file), label))
                     .collect();
 
-                labels.sort_by_key(|(label, _)| label.range.start);
+                labels.sort_by_key(|(_, label)| label.range.start);
 
                 let line_number_width: usize = labels
                     .iter()
-                    .max_by_key(|(_, (_, end))| end.line)
-                    .map(|(_, (_, end))| {
+                    .max_by_key(|((_, end), _)| end.line)
+                    .map(|((_, end), _)| {
                         if end.line == 0 {
                             1
                         } else {
@@ -231,7 +228,7 @@ impl<'a> Message<'a> {
                 // +1 for the space between the number and +
                 indent!(formatter, line_number_width + 1);
 
-                if let Some((_, (start, _))) = labels.first() {
+                if let Some(((start, _), _)) = labels.first() {
                     indent!(formatter, header: "+-->".blue());
 
                     {
@@ -266,7 +263,7 @@ impl<'a> Message<'a> {
                     let mut verticals: Vec<(ops::RangeInclusive<usize>, LabelLevel)> = Vec::new();
                     let mut horizontals: Vec<(usize, &Label<'_>)> = Vec::new();
 
-                    for (label, (start, end)) in &labels {
+                    for ((start, end), label) in &labels {
                         if start.line == end.line {
                             horizontals.push((start.line, label));
                         } else {
