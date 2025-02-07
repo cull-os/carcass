@@ -209,7 +209,7 @@ impl<'a> Message<'a> {
                     .clone()
                     .into_iter()
                     .map(|label| {
-                        let positions = Position::of(&label.range, &file.source);
+                        let positions = Position::from(&label.range, file);
                         (label, positions)
                     })
                     .collect();
