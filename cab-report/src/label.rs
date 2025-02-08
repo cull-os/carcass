@@ -57,9 +57,9 @@ impl<'a> Label<'a> {
 }
 
 impl fmt::Display for Label<'_> {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, writer: &mut fmt::Formatter<'_>) -> fmt::Result {
         write_wrapped(
-            formatter,
+            writer,
             [self.text.as_ref().paint(self.level.style())].into_iter(),
         )
     }

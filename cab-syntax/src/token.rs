@@ -41,8 +41,8 @@ macro_rules! token {
         pub struct $name(pub(crate) RowanToken);
 
         impl fmt::Display for $name {
-            fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-                fmt::Display::fmt(self.deref(), formatter)
+            fn fmt(&self, writer: &mut fmt::Formatter<'_>) -> fmt::Result {
+                fmt::Display::fmt(self.deref(), writer)
             }
         }
 

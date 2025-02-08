@@ -107,11 +107,11 @@ pub fn parse<'a, I: Iterator<Item = (Kind, &'a str)>, N: node::Node>(
     }
 
     if options.deduplicate_errors {
-        let mut last_text_range = None;
+        let mut previous_text_range = None;
 
         errors.retain(move |NodeError { range, .. }| {
-            if last_text_range != Some(range.start()) {
-                last_text_range = Some(range.start());
+            if previous_text_range != Some(range.start()) {
+                previous_text_range = Some(range.start());
                 true
             } else {
                 false

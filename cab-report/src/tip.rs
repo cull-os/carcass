@@ -37,11 +37,11 @@ impl<'a> Tip<'a> {
 }
 
 impl fmt::Display for Tip<'_> {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, writer: &mut fmt::Formatter<'_>) -> fmt::Result {
         let Self { title, text } = &self;
 
-        indent!(formatter, header: title);
+        indent!(writer, header: title);
 
-        write_wrapped(formatter, [text.as_ref().new()].into_iter())
+        write_wrapped(writer, [text.as_ref().new()].into_iter())
     }
 }

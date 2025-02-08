@@ -15,8 +15,8 @@ use crate::{
 
 /// Formats the given node with parentheses to disambiguate.
 /// The node must be a valid [`node::Expression`] or this will panic.
-pub fn parenthesize(formatter: &mut impl io::Write, node: &RowanNode) -> io::Result<()> {
-    Formatter::new(formatter).parenthesize(node)
+pub fn parenthesize(writer: &mut impl io::Write, node: &RowanNode) -> io::Result<()> {
+    Formatter::new(writer).parenthesize(node)
 }
 
 #[derive(Debug)]

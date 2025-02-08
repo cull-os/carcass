@@ -18,8 +18,8 @@ pub struct Position {
 
 impl Position {
     pub fn from(range: &ops::Range<usize>, file: &File) -> (Self, Self) {
-        let mut start = Self { line: 1, column: 1 };
-        let mut end = Self { line: 1, column: 1 };
+        let mut start = Self { line: 1, column: 0 };
+        let mut end = Self { line: 1, column: 0 };
 
         for (index, c) in file.source.char_indices() {
             if index > range.end {
@@ -29,7 +29,7 @@ impl Position {
             if index <= range.start {
                 if c == '\n' {
                     start.line += 1;
-                    start.column = 1;
+                    start.column = 0;
                 } else {
                     start.column += 1;
                 }
@@ -38,7 +38,7 @@ impl Position {
             if index <= range.end {
                 if c == '\n' {
                     end.line += 1;
-                    end.column = 1;
+                    end.column = 0;
                 } else {
                     end.column += 1;
                 }

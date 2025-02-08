@@ -11,7 +11,6 @@ use std::{
     borrow,
     cmp,
     fmt,
-    io::Write as _,
     ops,
 };
 
@@ -34,6 +33,8 @@ pub fn init(level_filter: log::LevelFilter) {
     env_logger::Builder::new()
         .filter_level(level_filter)
         .format(|buffer, record| {
+            use std::io::Write as _;
+
             let level = match record.level() {
                 log::Level::Error => "error:".red().bold(),
                 log::Level::Warn => "warn:".yellow().bold(),
