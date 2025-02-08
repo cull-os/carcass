@@ -28,13 +28,13 @@
   outputs = { self, systems, nixpkgs, fenix }: let
     inherit (nixpkgs.lib) genAttrs makeLibraryPath optionals;
 
-    eachPkgs = callback: genAttrs (import systems) (system: callback (import nixpkgs {
+    eachPkgs = callback: genAttrs (import systems) (system: callback <| import nixpkgs {
       inherit system;
 
       overlays = [
         fenix.overlays.default
       ];
-    }));
+    });
   in {
     devShells = eachPkgs (pkgs: let
       cab = pkgs.mkShell {
@@ -49,9 +49,10 @@
           pkgs.cargo-fuzz
         ];
 
-        env.${if pkgs.stdenv.hostPlatform.isLinux then "LD_LIBRARY_PATH" else "DYLD_FALLBACK_LIBRARY_PATH"} = makeLibraryPath (optionals pkgs.stdenv.targetPlatform.isLinux [
+        env.${if pkgs.stdenv.hostPlatform.isLinux then "LD_LIBRARY_PATH" else "DYLD_FALLBACK_LIBRARY_PATH"} =
+          makeLibraryPath <| optionals pkgs.stdenv.targetPlatform.isLinux [
           pkgs.stdenv.cc.cc.lib
-        ]);
+        ];
 
         shellHook = ''
           # So we can do `{bin}` instead of `./target/{optimization}/{bin}`
