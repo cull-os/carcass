@@ -49,8 +49,7 @@
           pkgs.cargo-fuzz
         ];
 
-        env.${if pkgs.stdenv.hostPlatform.isLinux then "LD_LIBRARY_PATH" else "DYLD_FALLBACK_LIBRARY_PATH"} =
-          makeLibraryPath <| optionals pkgs.stdenv.targetPlatform.isLinux [
+        env.LD_LIBRARY_PATH = makeLibraryPath <| optionals pkgs.stdenv.targetPlatform.isLinux [
           pkgs.stdenv.cc.cc.lib
         ];
 
