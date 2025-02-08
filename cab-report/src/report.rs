@@ -254,7 +254,6 @@ impl fmt::Display for ReportDisplay<'_> {
                 let normal = label.range();
                 let full = extend_to_line_boundaries(&file.source, label.range());
 
-                // TODO: .saturating_sub isn't the right thing to do...
                 let start_colored = {
                     let base = full.start;
                     normal.start - base..(shrinked.start - base).saturating_sub(1)
@@ -306,7 +305,7 @@ impl fmt::Display for ReportDisplay<'_> {
                     } else if line_number == end.line {
                         item.styles.push((end_colored.clone(), label.level));
                     } else {
-                        item.styles.push((0..line.width(), label.level));
+                        item.styles.push((0..line.len(), label.level));
                     }
                 }
             }
@@ -321,7 +320,10 @@ impl fmt::Display for ReportDisplay<'_> {
             indent!(writer, prefix_width + 1, with: |writer: &mut dyn fmt::Write| {
                 let line = current_line.borrow_mut();
 
-                for (.., prefix) in &line.prefix {
+                let space_width = prefix_width - line.prefix.len();
+                write!(writer, "{:>space_width$}", "")?;
+
+                for (.., prefix) in line.prefix.iter().rev() {
                     write!(writer, "{prefix}")?;
                 }
 
