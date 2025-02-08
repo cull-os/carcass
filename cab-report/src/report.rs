@@ -13,19 +13,31 @@ use yansi::Paint;
 
 use crate::*;
 
-pub struct Report<'a> {
-    severity: ReportSeverity,
-    title: CowStr<'a>,
-    labels: SmallVec<Label<'a>, 2>,
-    points: SmallVec<Point<'a>, 2>,
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ReportSeverity {
     Note,
     Warn,
     Error,
     Bug,
+}
+
+impl ReportSeverity {
+    pub fn styled(self) -> yansi::Painted<&'static str> {
+        match self {
+            ReportSeverity::Note => "note:",
+            ReportSeverity::Warn => "warn:",
+            ReportSeverity::Error => "error:",
+            ReportSeverity::Bug => "bug:",
+        }
+        .paint(LabelSeverity::Primary.style_in(self))
+    }
+}
+
+pub struct Report<'a> {
+    severity: ReportSeverity,
+    title: CowStr<'a>,
+    labels: SmallVec<Label<'a>, 2>,
+    points: SmallVec<Point<'a>, 2>,
 }
 
 impl<'a> Report<'a> {
@@ -116,172 +128,6 @@ struct ReportDisplay<'a> {
     file: &'a File<'a>,
 }
 
-fn number_width(number: usize) -> usize {
-    if number == 0 {
-        1
-    } else {
-        (number as f64).log10() as usize + 1
-    }
-}
-
-fn shrink_to_line_boundaries(source: &str, mut range: ops::Range<usize>) -> ops::Range<usize> {
-    while range.start < range.end {
-        if source[range.start..].starts_with('\n') {
-            range.start += 1;
-            break;
-        }
-        range.start += 1;
-    }
-
-    while range.end > range.start {
-        if source[..range.end].ends_with('\n') {
-            range.end -= 1;
-            break;
-        }
-        range.end -= 1;
-    }
-
-    range
-}
-
-fn extend_to_line_boundaries(source: &str, mut range: ops::Range<usize>) -> ops::Range<usize> {
-    while range.start > 0 && !source[range.start - 1..].starts_with('\n') {
-        range.start -= 1;
-    }
-
-    while range.end < source.len() && !source[range.end..].starts_with('\n') {
-        range.end += 1;
-    }
-
-    range
-}
-
-/// Given a list of ranges which refer to the given content and their associated
-/// levels (primary and secondary), resolves the colors for every part, giving
-/// the primary color precedence over the secondary color in an overlap.
-pub(crate) fn resolve_style<'a>(
-    content: &'a str,
-    styles: &'a mut [(ops::Range<usize>, LabelSeverity)],
-    severity: ReportSeverity,
-) -> impl Iterator<Item = yansi::Painted<&'a str>> + 'a {
-    styles.sort_by(|(a_range, a_level), (b_range, b_level)| {
-        match (a_range.start.cmp(&b_range.start), a_level, b_level) {
-            (cmp::Ordering::Equal, LabelSeverity::Primary, LabelSeverity::Secondary) => {
-                cmp::Ordering::Less
-            },
-            (cmp::Ordering::Equal, LabelSeverity::Secondary, LabelSeverity::Primary) => {
-                cmp::Ordering::Greater
-            },
-            (ordering, ..) => ordering,
-        }
-    });
-
-    gen move {
-        let mut offset: usize = 0;
-        let mut style_offset: usize = 0;
-
-        while offset < content.len() {
-            let current_style = styles[style_offset..]
-                .iter()
-                .enumerate()
-                .find(|(_, (range, _))| range.start <= offset && offset < range.end);
-
-            match current_style {
-                Some((relative_offset, (range, level))) => {
-                    style_offset += relative_offset;
-
-                    let next_primary = (*level == LabelSeverity::Secondary)
-                        .then(|| {
-                            styles[style_offset..]
-                                .iter()
-                                .enumerate()
-                                .take_while(|(_, (r, _))| r.start <= range.end)
-                                .find(|(_, (r, label))| {
-                                    *label == LabelSeverity::Primary && r.start > offset
-                                })
-                        })
-                        .flatten();
-
-                    match next_primary {
-                        Some((relative_offset, (range, ..))) => {
-                            style_offset += relative_offset;
-
-                            yield content[offset..range.start].paint(level.style_in(severity));
-                            offset = range.start;
-                        },
-
-                        None => {
-                            yield content[offset..range.end].paint(level.style_in(severity));
-                            offset = range.end;
-                        },
-                    }
-                },
-
-                None => {
-                    let (relative_offset, next_offset) = styles[style_offset..]
-                        .iter()
-                        .enumerate()
-                        .filter(|(_, (range, _))| range.start > offset)
-                        .map(|(relative_offset, (range, ..))| (relative_offset, range.start))
-                        .next()
-                        .unwrap_or((styles.len() - style_offset, content.len()));
-
-                    style_offset += relative_offset;
-
-                    yield (&content[offset..next_offset]).new();
-                    offset = next_offset;
-                },
-            }
-        }
-    }
-}
-
-pub(crate) fn write_wrapped<'a>(
-    writer: &'a mut dyn fmt::Write,
-    parts: impl Iterator<Item = yansi::Painted<&'a str>>,
-) -> fmt::Result {
-    const LINE_WIDTH_MAX: usize = 120;
-
-    let mut line_width: usize = 0;
-
-    use None as Space;
-    use Some as Word;
-
-    parts
-        .flat_map(|part| {
-            part.value
-                .split_whitespace()
-                .map(move |word| Word(word.paint(part.style)))
-                .intersperse(Space)
-        })
-        .try_for_each(|part| {
-            match part {
-                Word(word) => {
-                    let word_width = word.value.width();
-
-                    if line_width != 0 && line_width + 1 + word_width > LINE_WIDTH_MAX {
-                        writeln!(writer)?;
-                        line_width = 0;
-                    }
-
-                    write!(writer, "{word}")?;
-                    line_width += word_width;
-                },
-
-                Space => {
-                    if line_width != 0 {
-                        write!(writer, " ")?;
-                        line_width += 1;
-                    }
-                },
-            }
-
-            Ok(())
-        })?;
-
-    Ok(())
-}
-
 impl fmt::Display for ReportDisplay<'_> {
     fn fmt(&self, writer: &mut fmt::Formatter<'_>) -> fmt::Result {
         const BOTTOM_TO_RIGHT: char = '┏';
@@ -346,7 +192,7 @@ impl fmt::Display for ReportDisplay<'_> {
             }
         }
 
-        type Label2<'a> = (LabelRange, &'a CowStr<'a>, LabelSeverity);
+        type LabelDynamic<'a> = (LabelRange, &'a CowStr<'a>, LabelSeverity);
 
         #[derive(Debug, Clone)]
         struct Line<'a> {
@@ -356,7 +202,7 @@ impl fmt::Display for ReportDisplay<'_> {
             styles: SmallVec<(ops::Range<usize>, LabelSeverity), 4>,
 
             strikes: SmallVec<Strike, 3>,
-            labels: SmallVec<Label2<'a>, 2>,
+            labels: SmallVec<LabelDynamic<'a>, 2>,
         }
 
         let mut labels = report.labels.clone();
@@ -476,17 +322,7 @@ impl fmt::Display for ReportDisplay<'_> {
 
         {
             // INDENT: "note: "
-            indent!(
-                writer,
-                header: match report.severity {
-                    ReportSeverity::Note => "note:",
-                    ReportSeverity::Warn => "warn:",
-                    ReportSeverity::Error => "error:",
-                    ReportSeverity::Bug => "bug:",
-                }
-                .paint(LabelSeverity::Primary.style_in(report.severity))
-                .bold()
-            );
+            indent!(writer, header: report.severity.styled());
 
             writeln!(
                 writer,
@@ -746,4 +582,170 @@ impl fmt::Display for ReportDisplay<'_> {
 
         Ok(())
     }
+}
+
+fn number_width(number: usize) -> usize {
+    if number == 0 {
+        1
+    } else {
+        (number as f64).log10() as usize + 1
+    }
+}
+
+fn shrink_to_line_boundaries(source: &str, mut range: ops::Range<usize>) -> ops::Range<usize> {
+    while range.start < range.end {
+        if source[range.start..].starts_with('\n') {
+            range.start += 1;
+            break;
+        }
+        range.start += 1;
+    }
+
+    while range.end > range.start {
+        if source[..range.end].ends_with('\n') {
+            range.end -= 1;
+            break;
+        }
+        range.end -= 1;
+    }
+
+    range
+}
+
+fn extend_to_line_boundaries(source: &str, mut range: ops::Range<usize>) -> ops::Range<usize> {
+    while range.start > 0 && !source[range.start - 1..].starts_with('\n') {
+        range.start -= 1;
+    }
+
+    while range.end < source.len() && !source[range.end..].starts_with('\n') {
+        range.end += 1;
+    }
+
+    range
+}
+
+/// Given a list of ranges which refer to the given content and their associated
+/// levels (primary and secondary), resolves the colors for every part, giving
+/// the primary color precedence over the secondary color in an overlap.
+pub(crate) fn resolve_style<'a>(
+    content: &'a str,
+    styles: &'a mut [(ops::Range<usize>, LabelSeverity)],
+    severity: ReportSeverity,
+) -> impl Iterator<Item = yansi::Painted<&'a str>> + 'a {
+    styles.sort_by(|(a_range, a_level), (b_range, b_level)| {
+        match (a_range.start.cmp(&b_range.start), a_level, b_level) {
+            (cmp::Ordering::Equal, LabelSeverity::Primary, LabelSeverity::Secondary) => {
+                cmp::Ordering::Less
+            },
+            (cmp::Ordering::Equal, LabelSeverity::Secondary, LabelSeverity::Primary) => {
+                cmp::Ordering::Greater
+            },
+            (ordering, ..) => ordering,
+        }
+    });
+
+    gen move {
+        let mut offset: usize = 0;
+        let mut style_offset: usize = 0;
+
+        while offset < content.len() {
+            let current_style = styles[style_offset..]
+                .iter()
+                .enumerate()
+                .find(|(_, (range, _))| range.start <= offset && offset < range.end);
+
+            match current_style {
+                Some((relative_offset, (range, level))) => {
+                    style_offset += relative_offset;
+
+                    let next_primary = (*level == LabelSeverity::Secondary)
+                        .then(|| {
+                            styles[style_offset..]
+                                .iter()
+                                .enumerate()
+                                .take_while(|(_, (r, _))| r.start <= range.end)
+                                .find(|(_, (r, label))| {
+                                    *label == LabelSeverity::Primary && r.start > offset
+                                })
+                        })
+                        .flatten();
+
+                    match next_primary {
+                        Some((relative_offset, (range, ..))) => {
+                            style_offset += relative_offset;
+
+                            yield content[offset..range.start].paint(level.style_in(severity));
+                            offset = range.start;
+                        },
+
+                        None => {
+                            yield content[offset..range.end].paint(level.style_in(severity));
+                            offset = range.end;
+                        },
+                    }
+                },
+
+                None => {
+                    let (relative_offset, next_offset) = styles[style_offset..]
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, (range, _))| range.start > offset)
+                        .map(|(relative_offset, (range, ..))| (relative_offset, range.start))
+                        .next()
+                        .unwrap_or((styles.len() - style_offset, content.len()));
+
+                    style_offset += relative_offset;
+
+                    yield (&content[offset..next_offset]).new();
+                    offset = next_offset;
+                },
+            }
+        }
+    }
+}
+
+pub(crate) fn write_wrapped<'a>(
+    writer: &'a mut dyn fmt::Write,
+    parts: impl Iterator<Item = yansi::Painted<&'a str>>,
+) -> fmt::Result {
+    const LINE_WIDTH_MAX: usize = 120;
+
+    let mut line_width: usize = 0;
+
+    use None as Space;
+    use Some as Word;
+
+    parts
+        .flat_map(|part| {
+            part.value
+                .split_whitespace()
+                .map(move |word| Word(word.paint(part.style)))
+                .intersperse(Space)
+        })
+        .try_for_each(|part| {
+            match part {
+                Word(word) => {
+                    let word_width = word.value.width();
+
+                    if line_width != 0 && line_width + 1 + word_width > LINE_WIDTH_MAX {
+                        writeln!(writer)?;
+                        line_width = 0;
+                    }
+
+                    write!(writer, "{word}")?;
+                    line_width += word_width;
+                },
+
+                Space => {
+                    if line_width != 0 {
+                        write!(writer, " ")?;
+                        line_width += 1;
+                    }
+                },
+            }
+
+            Ok(())
+        })?;
+
+    Ok(())
 }

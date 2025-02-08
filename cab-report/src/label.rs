@@ -2,13 +2,6 @@ use std::ops;
 
 use crate::*;
 
-#[derive(Debug, Clone)]
-pub struct Label<'a> {
-    pub(crate) range: ops::Range<usize>,
-    pub(crate) level: LabelSeverity,
-    pub(crate) text: CowStr<'a>,
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LabelSeverity {
     Secondary,
@@ -34,6 +27,13 @@ impl LabelSeverity {
         }
         .foreground()
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct Label<'a> {
+    pub(crate) range: ops::Range<usize>,
+    pub(crate) level: LabelSeverity,
+    pub(crate) text: CowStr<'a>,
 }
 
 impl<'a> Label<'a> {
