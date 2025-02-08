@@ -42,6 +42,6 @@ impl fmt::Display for Tip<'_> {
 
         indent!(formatter, header: title);
 
-        write_wrapped(formatter, text.as_ref().new())
+        write_wrapped(formatter, [text.as_ref().new()].into_iter())
     }
 }

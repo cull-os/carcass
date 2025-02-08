@@ -1,121 +1,16 @@
 use std::{
+    cell::RefCell,
+    collections::VecDeque,
     fmt::{
         self,
         Write as _,
     },
-    iter,
     ops,
 };
 
-use yansi::Paint as _;
+use yansi::Paint;
 
 use crate::*;
-
-#[derive(Debug)]
-struct RangeEvent<'a> {
-    label: &'a Label<'a>,
-    position: Position,
-    is_start: bool,
-}
-
-impl<'a> RangeEvent<'a> {
-    fn start(label: &'a Label, position: Position) -> Self {
-        Self {
-            label,
-            position,
-            is_start: true,
-        }
-    }
-
-    fn end(label: &'a Label, position: Position) -> Self {
-        Self {
-            label,
-            position,
-            is_start: false,
-        }
-    }
-}
-
-impl PartialEq for RangeEvent<'_> {
-    fn eq(&self, other: &Self) -> bool {
-        self.position == other.position && self.is_start == other.is_start
-    }
-}
-
-impl Eq for RangeEvent<'_> {}
-
-impl PartialOrd for RangeEvent<'_> {
-    fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
-        Some((self.position.clone(), self.is_start).cmp(&(other.position.clone(), other.is_start)))
-    }
-}
-
-impl Ord for RangeEvent<'_> {
-    fn cmp(&self, other: &Self) -> cmp::Ordering {
-        if self.is_start == other.is_start {
-            self.position.line.cmp(&other.position.line)
-        } else if self.is_start {
-            cmp::Ordering::Less
-        } else {
-            cmp::Ordering::Greater
-        }
-    }
-}
-
-fn max_offset_and_events<'a>(
-    ranges: &'a [(ops::RangeInclusive<usize>, &'a Label)],
-) -> (usize, Vec<RangeEvent<'a>>) {
-    let mut events = Vec::with_capacity(ranges.len());
-
-    for (discrim, (range, level)) in ranges.iter().enumerate() {
-        events.push(RangeEvent::start(level, Position {
-            column: discrim + 1,
-            line: *range.start(),
-        }));
-
-        events.push(RangeEvent::end(level, Position {
-            column: discrim + 1,
-            line: *range.end(),
-        }));
-    }
-
-    events.sort();
-
-    let mut max_offset: usize = 0;
-    let mut offset = 0;
-
-    let mut starts = [0].repeat(ranges.len());
-
-    for event in &mut events {
-        let discrim = &mut event.position.column;
-
-        if event.is_start {
-            starts[offset] = *discrim;
-
-            offset += 1;
-            *discrim = offset;
-        } else {
-            offset -= 1;
-            *discrim = starts[*discrim - 1];
-        }
-
-        max_offset = max_offset.max(offset);
-    }
-
-    (max_offset, events)
-}
-
-fn extend_to_line_boundaries(source: &str, mut range: ops::Range<usize>) -> ops::Range<usize> {
-    while range.start > 0 && !source[range.start - 1..].starts_with('\n') {
-        range.start -= 1;
-    }
-
-    while range.end < source.len() && !source[range.end..].starts_with('\n') {
-        range.end += 1;
-    }
-
-    range
-}
 
 pub struct Report<'a> {
     title: CowStr<'a>,
@@ -198,218 +93,276 @@ impl<'a> Report<'a> {
         self.tip(Tip::help(text))
     }
 
-    pub fn log_with(&'a self, file: &'a File<'a>) -> impl fmt::Display {
-        struct WithFile<'a>(&'a Report<'a>, &'a File<'a>);
+    pub fn log_with(&'a self, file: &'a File<'a>) {
+        let with_file = ReportDisplay { report: self, file };
+        log::log!(self.level, "{with_file}");
+    }
+}
 
-        impl fmt::Display for WithFile<'_> {
-            fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-                let Report {
-                    title,
-                    labels,
-                    tips,
-                    ..
-                } = self.0;
+struct ReportDisplay<'a> {
+    report: &'a Report<'a>,
+    file: &'a File<'a>,
+}
 
-                let file = self.1;
+fn number_width(number: usize) -> usize {
+    if number == 0 {
+        1
+    } else {
+        (number as f64).log10() as usize + 1
+    }
+}
 
-                writeln!(formatter, "{title}", title = title.bright_white().bold())?;
+fn shrink_to_line_boundaries(source: &str, mut range: ops::Range<usize>) -> ops::Range<usize> {
+    while range.start < range.end {
+        if source[range.start..].starts_with('\n') {
+            range.start += 1;
+            break;
+        }
+        range.start += 1;
+    }
 
-                let mut labels: Vec<_> = labels
-                    .clone()
-                    .into_iter()
-                    .map(|label| (Position::from(&label.range, file), label))
-                    .collect();
+    while range.end > range.start {
+        if source[..range.end].ends_with('\n') {
+            range.end -= 1;
+            break;
+        }
+        range.end -= 1;
+    }
 
-                labels.sort_by_key(|(_, label)| label.range.start);
+    range
+}
+fn extend_to_line_boundaries(source: &str, mut range: ops::Range<usize>) -> ops::Range<usize> {
+    while range.start > 0 && !source[range.start - 1..].starts_with('\n') {
+        range.start -= 1;
+    }
 
-                let line_number_width: usize = labels
-                    .iter()
-                    .max_by_key(|((_, end), _)| end.line)
-                    .map(|((_, end), _)| {
-                        if end.line == 0 {
-                            1
-                        } else {
-                            (end.line as f64).log10() as usize + 1
-                        }
-                    })
-                    .unwrap_or(0);
+    while range.end < source.len() && !source[range.end..].starts_with('\n') {
+        range.end += 1;
+    }
 
-                // +1 for the space between the number and +
-                indent!(formatter, line_number_width + 1);
+    range
+}
 
-                if let Some(((start, _), _)) = labels.first() {
-                    indent!(formatter, header: "┣━━━".blue());
+impl fmt::Display for ReportDisplay<'_> {
+    fn fmt(&self, writer: &mut fmt::Formatter<'_>) -> fmt::Result {
+        const LEFT_TO_RIGHT: char = '━';
+        const BOTTOM_TO_RIGHT: char = '┏';
+        const TOP_TO_RIGHT: char = '┗';
+        const TOP_TO_RIGHT_AND_BOTTOM: char = '┣';
+        const TOP_TO_BOTTOM: char = '┃';
+        const DOT: char = '·';
 
-                    {
-                        let File { island, path, .. } = file;
-                        let style = yansi::Color::Green.foreground();
+        let gutter_style_number = yansi::Style::new().blue().bold();
+        let gutter_style_line = yansi::Style::new().blue();
 
-                        style.fmt_prefix(formatter)?;
-                        write!(formatter, "{island}{path}")?;
-                        style.fmt_suffix(formatter)?;
-                    }
+        let gutter_style_header_path = yansi::Style::new().green();
+        let gutter_style_header_position = yansi::Style::new().blue();
 
-                    {
-                        let Position { line, column } = start;
+        let Report {
+            title,
+            labels,
+            tips,
+            ..
+        } = self.report;
 
-                        writeln!(
-                            formatter,
-                            ":{line}:{column}",
-                            line = line.blue(),
-                            column = column.blue()
-                        )?;
-                    }
+        let file = self.file;
+
+        // TITLE
+        writeln!(writer, "{title}", title = title.bright_white().bold())?;
+
+        let mut labels: Vec<_> = labels
+            .clone()
+            .into_iter()
+            .map(|label| (Position::from(&label.range, file), label))
+            .collect();
+
+        labels.sort_by_key(|(.., label)| label.range.start);
+
+        let line_number_max_width = labels
+            .iter()
+            .map(|((.., end), ..)| end.line)
+            .max()
+            .map(number_width)
+            .unwrap_or(0);
+
+        let line_number = RefCell::new(None::<usize>);
+
+        let mut _line_number_last = None;
+        indent!(writer, line_number_max_width + 3, with: |writer: &mut dyn fmt::Write| {
+            let Some(line_number) = *line_number.borrow() else { return Ok(0) };
+
+            if _line_number_last == Some(line_number) {
+                let dot_width = number_width(line_number);
+                write!(writer, "{:>space_width$}", "", space_width = line_number_max_width - dot_width)?;
+
+                gutter_style_number.fmt_prefix(writer)?;
+                for _ in 0..dot_width {
+                    write!(writer, "{DOT}")?;
                 }
+                gutter_style_number.fmt_suffix(writer)?;
+            } else {
+                write!(writer, "{line_number:>line_number_max_width$}", line_number = line_number.paint(gutter_style_number))?;
+            }
 
-                {
-                    dedent!(formatter);
+            write!(writer, " {separator} ", separator = TOP_TO_BOTTOM.paint(gutter_style_line))?;
 
-                    let source = &*file.source;
+            _line_number_last = Some(line_number);
+            Ok(line_number_max_width + 3)
+        });
 
-                    let mut lines: Vec<(usize, &str)> = Vec::new();
+        // ┏━━━ <island>/path:{line}:{column}
+        {
+            // Dedent that separator and space as we are going to align.
+            dedent!(writer, 2);
 
-                    let mut verticals: Vec<(ops::RangeInclusive<usize>, &Label)> = Vec::new();
-                    let mut horizontals: Vec<(usize, &Label<'_>)> = Vec::new();
+            if let Some(((start, ..), ..)) = labels.first() {
+                indent!(writer, header: const_str::concat!(BOTTOM_TO_RIGHT, LEFT_TO_RIGHT, LEFT_TO_RIGHT, LEFT_TO_RIGHT).paint(gutter_style_line));
 
-                    for ((start, end), label) in &labels {
-                        if start.line == end.line {
-                            horizontals.push((start.line, label));
-                        } else {
-                            verticals.push((start.line..=end.line, label));
-                        }
+                let File { island, path, .. } = file;
+                gutter_style_header_path.fmt_prefix(writer)?;
+                write!(writer, "{island}{path}")?;
+                gutter_style_header_path.fmt_suffix(writer)?;
 
-                        let line_range = extend_to_line_boundaries(source, label.range.clone());
-                        let line_slice = &source[line_range];
-
-                        for (line_number, line) in (start.line..).zip(line_slice.split('\n')) {
-                            if lines.iter().any(|(number, _)| *number == line_number) {
-                                continue;
-                            }
-
-                            lines.push((line_number, line));
-                        }
-                    }
-
-                    let (prefix_indent_width, mut events) = max_offset_and_events(&verticals);
-
-                    events.reverse();
-
-                    let mut prefix_indent = [(&' ').new()].repeat(prefix_indent_width);
-                    let mut prefix_indent_patch = prefix_indent.clone();
-
-                    let mut line_labels: Vec<_> =
-                        iter::repeat(None).take(prefix_indent_width).collect();
-
-                    for (line_number, line) in lines {
-                        macro_rules! write_indent {
-                            ($writer:ident,number: $write_number:literal) => {
-                                indent!($writer, line_number_width + 3, with: move |writer: &mut dyn fmt::Write| {
-                                    if $write_number {
-                                        write!(writer, "{line_number:>line_number_width$}", line_number = line_number.blue().bold())?;
-                                    } else {
-                                        write!(writer, "{:>line_number_width$}", "")?;
-                                    }
-
-                                    write!(writer, " {separator} ", separator = '┃'.blue())?;
-
-                                    Ok(line_number_width + 3)
-                                });
-                            };
-                        }
-
-                        for (patch, real) in
-                            prefix_indent_patch.iter_mut().zip(prefix_indent.iter_mut())
-                        {
-                            *real = *patch;
-                        }
-
-                        while events
-                            .last()
-                            .is_some_and(|event| event.position.line == line_number)
-                        {
-                            let event = events.pop().unwrap();
-                            let index = event.position.column - 1;
-                            let style = event.label.level.style();
-
-                            (prefix_indent[index], prefix_indent_patch[index]) = if event.is_start {
-                                for indent in &mut prefix_indent[..index] {
-                                    if *indent.value != '┣' {
-                                        *indent = '━'.paint(style);
-                                    }
-                                }
-
-                                ('┣'.paint(style), '┃'.paint(style))
-                            } else {
-                                ('┃'.paint(style), (&' ').new())
-                            };
-
-                            if !event.is_start {
-                                line_labels[index] = Some(event.label);
-                            }
-                        }
-
-                        {
-                            let mut wrote = false;
-
-                            indent!(formatter, line_number_width + 3 + prefix_indent_width, with: |writer: &mut dyn fmt::Write| {
-                                if wrote {
-                                    let dot_width = (line_number as f64).log10() as usize + 1;
-                                    write!(writer, "{:>space_width$}", "", space_width = line_number_width - dot_width)?;
-
-                                    for _ in 0..dot_width {
-                                        write!(writer, "{dot}", dot = '·'.blue())?;
-                                    }
-                                } else {
-                                    write!(writer, "{line_number:>line_number_width$}", line_number = line_number.blue().bold())?;
-                                    wrote = true;
-                                }
-
-                                write!(writer, " {separator} ", separator = '┃'.blue())?;
-
-                                // Reverse for right-alignment.
-                                for (index, c) in prefix_indent.iter().enumerate().rev() {
-                                    write!(writer, "{c}")?;
-                                }
-
-                                Ok(line_number_width + 3 + prefix_indent_width)
-                            });
-
-                            write_wrapped(formatter, line.new())?;
-                            writeln!(formatter)?;
-                        }
-
-                        for (index, line_label) in line_labels.iter_mut().enumerate().rev() {
-                            let Some(label) = line_label else { continue };
-
-                            write_indent!(formatter, number: false);
-
-                            indent!(formatter, prefix_indent_width, with: |writer: &mut dyn fmt::Write| {
-                                for c in prefix_indent.iter().rev() {
-                                    write!(writer, "{c}")?;
-                                }
-
-                                Ok(prefix_indent_width)
-                            });
-
-                            writeln!(formatter, "{label}")?;
-
-                            prefix_indent[index] = (&' ').new();
-                            *line_label = None;
-                        }
-                    }
-                }
-
-                for tip in tips {
-                    indent!(formatter, header: "=".blue());
-                    writeln!(formatter, "{tip}")?;
-                }
-
-                Ok(())
+                let line = start.line.paint(gutter_style_header_position);
+                let column = start.column.paint(gutter_style_header_position);
+                writeln!(writer, ":{line}:{column}")?;
             }
         }
 
-        log::log!(self.level, "{with_file}", with_file = WithFile(self, file));
+        'code: {
+            #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+            struct LabelId(usize);
 
-        WithFile(self, file)
+            #[derive(Debug, Clone)]
+            struct LineData<'a> {
+                number: usize,
+                content: &'a str,
+                styles: Vec<(ops::Range<usize>, LabelLevel)>,
+                prefix: VecDeque<(LabelId, yansi::Painted<char>)>,
+                finish: Vec<(LabelId, &'a Label<'a>)>,
+            }
+
+            let mut lines: Vec<LineData> = Vec::new();
+
+            for (id, ((start, end), label)) in labels
+                .iter()
+                .enumerate()
+                .map(|(index, item)| (LabelId(index), item))
+            {
+                let shrinked = shrink_to_line_boundaries(&file.source, label.range());
+                let normal = label.range();
+                let full = extend_to_line_boundaries(&file.source, label.range());
+
+                // TODO: .saturating_sub isn't the right thing to do...
+                let start_colored = {
+                    let base = full.start;
+                    normal.start - base..(shrinked.start - base).saturating_sub(1)
+                };
+
+                let end_colored = {
+                    let base = shrinked.end;
+                    shrinked.end - base..(normal.end - base).saturating_sub(1)
+                };
+
+                for (line_number, line) in (start.line..).zip(file.source[full].split('\n')) {
+                    let item = match lines.iter_mut().find(|line| line.number == line_number) {
+                        Some(item) => item,
+                        None => {
+                            lines.push(LineData {
+                                number: line_number,
+                                content: line,
+                                styles: Vec::new(),
+                                prefix: VecDeque::new(),
+                                finish: Vec::new(),
+                            });
+
+                            lines.last_mut().unwrap()
+                        },
+                    };
+
+                    if start.line != end.line {
+                        let mut prefix = if line_number == start.line {
+                            BOTTOM_TO_RIGHT
+                        } else {
+                            TOP_TO_BOTTOM
+                        }
+                        .new();
+
+                        prefix.style = label.style();
+
+                        item.prefix.push_front((id, prefix));
+                    }
+
+                    if line_number == end.line {
+                        item.finish.push((id, label));
+                    }
+
+                    if start.line == end.line {
+                        assert_eq!(start_colored, end_colored);
+                        item.styles.push((start_colored.clone(), label.level));
+                    } else if line_number == start.line {
+                        item.styles.push((start_colored.clone(), label.level));
+                    } else if line_number == end.line {
+                        item.styles.push((end_colored.clone(), label.level));
+                    } else {
+                        item.styles.push((0..line.width(), label.level));
+                    }
+                }
+            }
+
+            let Some(prefix_width) = lines.iter().map(|line| line.prefix.len()).max() else {
+                break 'code;
+            };
+
+            let current_line = RefCell::new(lines.first().unwrap());
+
+            // +1 for a space at the start.
+            indent!(writer, prefix_width + 1, with: |writer: &mut dyn fmt::Write| {
+                let line = current_line.borrow_mut();
+
+                let space_width = prefix_width - line.prefix.len();
+                write!(writer, "{:>space_width$}", "")?;
+
+                for (.., prefix) in line.prefix.iter().rev() {
+                    write!(writer, "{prefix}")?;
+                }
+                Ok(prefix_width)
+            });
+
+            for line in &lines {
+                *line_number.borrow_mut() = Some(line.number);
+                *current_line.borrow_mut() = line;
+
+                let mut styles = line.styles.clone();
+                write_wrapped(writer, resolve_style(line.content, styles.as_mut_slice()))?;
+                writeln!(writer)?;
+
+                // for (id, label) in &line.finish {
+                // TODO
+                // }
+            }
+        }
+
+        // = help: foo bar
+        {
+            *line_number.borrow_mut() = None;
+
+            // Dedent that separator as we are going to align.
+            dedent!(
+                writer,
+                if line_number_max_width == 0 {
+                    line_number_max_width + 3
+                } else {
+                    line_number_max_width + 1
+                }
+            );
+
+            for tip in tips {
+                indent!(writer, header: "=".paint(gutter_style_line));
+                write!(writer, "{tip}")?;
+            }
+        }
+
+        Ok(())
     }
 }
