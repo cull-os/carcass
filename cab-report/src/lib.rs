@@ -4,8 +4,8 @@
 mod file;
 mod indent;
 mod label;
+mod point;
 mod report;
-mod tip;
 
 use std::{
     borrow,
@@ -19,8 +19,8 @@ pub use crate::{
     file::*,
     indent::*,
     label::*,
+    point::*,
     report::*,
-    tip::*,
 };
 
 pub(crate) type CowStr<'a> = borrow::Cow<'a, str>;

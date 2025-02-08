@@ -14,32 +14,44 @@ use yansi::Paint;
 use crate::*;
 
 pub struct Report<'a> {
+    severity: ReportSeverity,
     title: CowStr<'a>,
-    level: log::Level,
     labels: SmallVec<Label<'a>, 2>,
-    tips: SmallVec<Tip<'a>, 2>,
+    points: SmallVec<Point<'a>, 2>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum ReportSeverity {
+    Note,
+    Warning,
+    Error,
+    Bug,
 }
 
 impl<'a> Report<'a> {
-    pub fn new(title: impl Into<CowStr<'a>>, level: log::Level) -> Self {
+    pub fn new(severity: ReportSeverity, title: impl Into<CowStr<'a>>) -> Self {
         Self {
             title: title.into(),
-            level,
+            severity,
             labels: SmallVec::new(),
-            tips: SmallVec::new(),
+            points: SmallVec::new(),
         }
     }
 
+    pub fn note(title: impl Into<CowStr<'a>>) -> Self {
+        Self::new(ReportSeverity::Note, title)
+    }
+
+    pub fn warning(title: impl Into<CowStr<'a>>) -> Self {
+        Self::new(ReportSeverity::Warning, title)
+    }
+
     pub fn error(title: impl Into<CowStr<'a>>) -> Self {
-        Self::new(title, log::Level::Error)
+        Self::new(ReportSeverity::Error, title)
     }
 
-    pub fn warn(title: impl Into<CowStr<'a>>) -> Self {
-        Self::new(title, log::Level::Warn)
-    }
-
-    pub fn info(title: impl Into<CowStr<'a>>) -> Self {
-        Self::new(title, log::Level::Info)
+    pub fn bug(title: impl Into<CowStr<'a>>) -> Self {
+        Self::new(ReportSeverity::Bug, title)
     }
 
     pub fn push_label(&mut self, label: Label<'a>) {
@@ -69,39 +81,38 @@ impl<'a> Report<'a> {
         self
     }
 
-    pub fn push_tip(&mut self, tip: Tip<'a>) {
-        self.tips.push(tip)
+    pub fn push_point(&mut self, point: Point<'a>) {
+        self.points.push(point)
     }
 
-    pub fn tip(mut self, tip: Tip<'a>) -> Self {
-        self.push_tip(tip);
+    pub fn point(mut self, point: Point<'a>) -> Self {
+        self.push_point(point);
         self
     }
 
-    pub fn push_note(&mut self, text: impl Into<CowStr<'a>>) {
-        self.push_tip(Tip::note(text));
+    pub fn push_tip(&mut self, text: impl Into<CowStr<'a>>) {
+        self.push_point(Point::tip(text));
     }
 
-    pub fn note(self, text: impl Into<CowStr<'a>>) -> Self {
-        self.tip(Tip::note(text))
+    pub fn tip(self, text: impl Into<CowStr<'a>>) -> Self {
+        self.point(Point::tip(text))
     }
 
     pub fn push_help(&mut self, text: impl Into<CowStr<'a>>) {
-        self.push_tip(Tip::help(text));
+        self.push_point(Point::help(text));
     }
 
     pub fn help(self, text: impl Into<CowStr<'a>>) -> Self {
-        self.tip(Tip::help(text))
+        self.point(Point::help(text))
     }
 
-    pub fn log_with(&'a self, file: &'a File<'a>) {
-        let with_file = ReportDisplay { report: self, file };
-        log::log!(self.level, "{with_file}");
+    pub fn with(self, file: &'a File<'a>) -> impl fmt::Display + 'a {
+        ReportDisplay { report: self, file }
     }
 }
 
 struct ReportDisplay<'a> {
-    report: &'a Report<'a>,
+    report: Report<'a>,
     file: &'a File<'a>,
 }
 
@@ -150,21 +161,22 @@ fn extend_to_line_boundaries(source: &str, mut range: ops::Range<usize>) -> ops:
 /// the primary color precedence over the secondary color in an overlap.
 pub(crate) fn resolve_style<'a>(
     content: &'a str,
-    styles: &'a mut [(ops::Range<usize>, LabelLevel)],
+    styles: &'a mut [(ops::Range<usize>, LabelSeverity)],
+    severity: ReportSeverity,
 ) -> impl Iterator<Item = yansi::Painted<&'a str>> + 'a {
     styles.sort_by(|(a_range, a_level), (b_range, b_level)| {
         match (a_range.start.cmp(&b_range.start), a_level, b_level) {
-            (cmp::Ordering::Equal, LabelLevel::Primary, LabelLevel::Secondary) => {
+            (cmp::Ordering::Equal, LabelSeverity::Primary, LabelSeverity::Secondary) => {
                 cmp::Ordering::Less
             },
-            (cmp::Ordering::Equal, LabelLevel::Secondary, LabelLevel::Primary) => {
+            (cmp::Ordering::Equal, LabelSeverity::Secondary, LabelSeverity::Primary) => {
                 cmp::Ordering::Greater
             },
             (ordering, ..) => ordering,
         }
     });
 
-    gen {
+    gen move {
         let mut offset: usize = 0;
         let mut style_offset: usize = 0;
 
@@ -178,14 +190,14 @@ pub(crate) fn resolve_style<'a>(
                 Some((relative_offset, (range, level))) => {
                     style_offset += relative_offset;
 
-                    let next_primary = (*level == LabelLevel::Secondary)
+                    let next_primary = (*level == LabelSeverity::Secondary)
                         .then(|| {
                             styles[style_offset..]
                                 .iter()
                                 .enumerate()
                                 .take_while(|(_, (r, _))| r.start <= range.end)
                                 .find(|(_, (r, label))| {
-                                    *label == LabelLevel::Primary && r.start > offset
+                                    *label == LabelSeverity::Primary && r.start > offset
                                 })
                         })
                         .flatten();
@@ -194,12 +206,12 @@ pub(crate) fn resolve_style<'a>(
                         Some((relative_offset, (range, ..))) => {
                             style_offset += relative_offset;
 
-                            yield content[offset..range.start].paint(level.style());
+                            yield content[offset..range.start].paint(level.style_in(severity));
                             offset = range.start;
                         },
 
                         None => {
-                            yield content[offset..range.end].paint(level.style());
+                            yield content[offset..range.end].paint(level.style_in(severity));
                             offset = range.end;
                         },
                     }
@@ -283,6 +295,8 @@ impl fmt::Display for ReportDisplay<'_> {
         const STYLE_HEADER_PATH: yansi::Style = yansi::Style::new().green();
         const STYLE_HEADER_POSITION: yansi::Style = yansi::Style::new().blue();
 
+        let Self { report, file } = self;
+
         #[derive(Debug, Clone, Copy, PartialEq, Eq)]
         struct StrikeId(usize);
 
@@ -303,14 +317,14 @@ impl fmt::Display for ReportDisplay<'_> {
             }
         }
 
-        type Strike = (StrikeId, StrikeStatus, LabelLevel);
+        type Strike = (StrikeId, StrikeStatus, LabelSeverity);
 
         let write_strike = |writer: &mut dyn fmt::Write, strike: &Option<Strike>| {
             if let Some((_, status, level)) = strike {
                 write!(
                     writer,
                     "{strike}",
-                    strike = status.symbol().paint(level.style())
+                    strike = status.symbol().paint(level.style_in(report.severity))
                 )
             } else {
                 write!(writer, " ")
@@ -332,26 +346,23 @@ impl fmt::Display for ReportDisplay<'_> {
             }
         }
 
-        type Label2<'a> = (LabelRange, &'a CowStr<'a>, LabelLevel);
+        type Label2<'a> = (LabelRange, &'a CowStr<'a>, LabelSeverity);
 
         #[derive(Debug, Clone)]
         struct Line<'a> {
             number: usize,
 
             content: &'a str,
-            styles: SmallVec<(ops::Range<usize>, LabelLevel), 4>,
+            styles: SmallVec<(ops::Range<usize>, LabelSeverity), 4>,
 
             strikes: SmallVec<Strike, 3>,
             labels: SmallVec<Label2<'a>, 2>,
         }
 
-        let Self { report, file } = self;
         let mut labels = report.labels.clone();
-
         labels.sort_by_key(|label| label.range.start);
 
         let mut lines: SmallVec<Line, 2> = SmallVec::new();
-
         let line_current = RefCell::new(None::<Line>);
 
         for (label_index, label) in labels.iter().enumerate() {
@@ -548,7 +559,7 @@ impl fmt::Display for ReportDisplay<'_> {
                         StrikeStatus::Start => {
                             write_strike(writer, &Some(strike))?;
 
-                            strike_override = Some(LEFT_TO_RIGHT.paint(strike_level.style()));
+                            strike_override = Some(LEFT_TO_RIGHT.paint(strike_level.style_in(report.severity)));
                         },
 
                         StrikeStatus::Continue | StrikeStatus::End if let Some(strike) = strike_override => {
@@ -602,7 +613,10 @@ impl fmt::Display for ReportDisplay<'_> {
                 }
 
                 {
-                    write_wrapped(writer, resolve_style(line.content, &mut line.styles))?;
+                    write_wrapped(
+                        writer,
+                        resolve_style(line.content, &mut line.styles, report.severity),
+                    )?;
                     writeln!(writer)?;
 
                     // DEDENT: "<strike-prefix> "
@@ -641,7 +655,7 @@ impl fmt::Display for ReportDisplay<'_> {
                                                 write!(
                                                     writer,
                                                     "{symbol}",
-                                                    symbol = TOP_TO_BOTTOM.paint(label.style())
+                                                    symbol = TOP_TO_BOTTOM.paint(label.style_in(report.severity))
                                                 )?;
                                             },
 
@@ -658,14 +672,14 @@ impl fmt::Display for ReportDisplay<'_> {
                                         write!(
                                             writer,
                                             "{symbol}",
-                                            symbol = LEFT_TO_RIGHT.paint(strike_level.style())
+                                            symbol = LEFT_TO_RIGHT.paint(strike_level.style_in(report.severity))
                                         )?;
                                     }
 
                                     write!(
                                         writer,
                                         "{symbol}",
-                                        symbol = LEFT_TO_BOTTOM.paint(strike_level.style())
+                                        symbol = LEFT_TO_BOTTOM.paint(strike_level.style_in(report.severity))
                                     )?;
 
                                     Ok(strike_prefix_width + 1 + label_range.end)
@@ -673,7 +687,10 @@ impl fmt::Display for ReportDisplay<'_> {
 
                                 write_wrapped(
                                     writer,
-                                    [label_text.as_ref().paint(strike_level.style())].into_iter(),
+                                    [label_text
+                                        .as_ref()
+                                        .paint(strike_level.style_in(report.severity))]
+                                    .into_iter(),
                                 )?;
 
                                 writeln!(writer)?;
@@ -702,14 +719,14 @@ impl fmt::Display for ReportDisplay<'_> {
                 }
             );
 
-            for tip in &report.tips {
+            for point in &report.points {
                 // INDENT: "= "
                 indent!(writer, header: "=".paint(STYLE_GUTTER));
 
                 // INDENT: "note: "
-                indent!(writer, header: &tip.title);
+                indent!(writer, header: &point.title);
 
-                write_wrapped(writer, [tip.text.as_ref().new()].into_iter())?;
+                write_wrapped(writer, [point.text.as_ref().new()].into_iter())?;
             }
         }
 

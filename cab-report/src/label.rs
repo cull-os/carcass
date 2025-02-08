@@ -5,28 +5,43 @@ use crate::*;
 #[derive(Debug, Clone)]
 pub struct Label<'a> {
     pub(crate) range: ops::Range<usize>,
-    pub(crate) level: LabelLevel,
+    pub(crate) level: LabelSeverity,
     pub(crate) text: CowStr<'a>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum LabelLevel {
-    Primary,
+pub enum LabelSeverity {
     Secondary,
+    Primary,
 }
 
-impl LabelLevel {
-    pub fn style(&self) -> yansi::Style {
-        match self {
-            LabelLevel::Primary => yansi::Color::Red,
-            LabelLevel::Secondary => yansi::Color::Cyan,
+impl LabelSeverity {
+    pub fn style_in(self, severity: ReportSeverity) -> yansi::Style {
+        use yansi::Color::*;
+
+        match (severity, self) {
+            (ReportSeverity::Note, LabelSeverity::Secondary) => Blue,
+            (ReportSeverity::Note, LabelSeverity::Primary) => Magenta,
+
+            (ReportSeverity::Warning, LabelSeverity::Secondary) => Blue,
+            (ReportSeverity::Warning, LabelSeverity::Primary) => Yellow,
+
+            (ReportSeverity::Error, LabelSeverity::Secondary) => Yellow,
+            (ReportSeverity::Error, LabelSeverity::Primary) => Red,
+
+            (ReportSeverity::Bug, LabelSeverity::Primary) => Yellow,
+            (ReportSeverity::Bug, LabelSeverity::Secondary) => Red,
         }
         .foreground()
     }
 }
 
 impl<'a> Label<'a> {
-    pub fn new(range: ops::Range<usize>, text: impl Into<CowStr<'a>>, level: LabelLevel) -> Self {
+    pub fn new(
+        range: ops::Range<usize>,
+        text: impl Into<CowStr<'a>>,
+        level: LabelSeverity,
+    ) -> Self {
         Self {
             range,
             text: text.into(),
@@ -35,11 +50,11 @@ impl<'a> Label<'a> {
     }
 
     pub fn primary(range: ops::Range<usize>, text: impl Into<CowStr<'a>>) -> Self {
-        Self::new(range, text, LabelLevel::Primary)
+        Self::new(range, text, LabelSeverity::Primary)
     }
 
     pub fn secondary(range: ops::Range<usize>, text: impl Into<CowStr<'a>>) -> Self {
-        Self::new(range, text, LabelLevel::Secondary)
+        Self::new(range, text, LabelSeverity::Secondary)
     }
 
     pub fn range(&self) -> ops::Range<usize> {
