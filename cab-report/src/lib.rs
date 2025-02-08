@@ -26,6 +26,8 @@ pub use crate::{
     tip::*,
 };
 
+pub(crate) type CowStr<'a> = borrow::Cow<'a, str>;
+
 pub fn init(level_filter: log::LevelFilter) {
     yansi::whenever(yansi::Condition::TTY_AND_COLOR);
 
@@ -46,8 +48,9 @@ pub fn init(level_filter: log::LevelFilter) {
         .init();
 }
 
-pub(crate) type CowStr<'a> = borrow::Cow<'a, str>;
-
+/// Given a list of ranges which refer to the given content and their associated
+/// levels (primary and secondary), resolves the colors for every part, giving
+/// the primary color precedence over the secondary color in an overlap.
 pub(crate) fn resolve_style<'a>(
     content: &'a str,
     styles: &'a mut [(ops::Range<usize>, LabelLevel)],
