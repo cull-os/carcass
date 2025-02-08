@@ -1,5 +1,5 @@
 //! Diagnostic reporting utilities.
-#![feature(if_let_guard, iter_intersperse, let_chains)]
+#![feature(if_let_guard, iter_intersperse, let_chains, try_blocks)]
 
 mod file;
 mod indent;
@@ -48,7 +48,7 @@ pub fn init(level_filter: log::LevelFilter) {
 pub(crate) type CowStr<'a> = borrow::Cow<'a, str>;
 
 pub(crate) fn write_wrapped(writer: &mut dyn fmt::Write, s: yansi::Painted<&str>) -> fmt::Result {
-    const LINE_WIDTH_MAX: usize = 80;
+    const LINE_WIDTH_MAX: usize = 120;
 
     let mut line_width = 0;
 
@@ -58,7 +58,9 @@ pub(crate) fn write_wrapped(writer: &mut dyn fmt::Write, s: yansi::Painted<&str>
         let word_width = word.width();
 
         if line_width != 0 && line_width + 1 + word_width > LINE_WIDTH_MAX {
+            s.style.fmt_suffix(writer)?;
             writeln!(writer)?;
+            s.style.fmt_prefix(writer)?;
             line_width = 0;
         }
 

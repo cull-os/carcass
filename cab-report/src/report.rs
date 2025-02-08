@@ -3,6 +3,7 @@ use std::{
         self,
         Write as _,
     },
+    iter,
     ops,
 };
 
@@ -10,38 +11,46 @@ use yansi::Paint as _;
 
 use crate::*;
 
-#[derive(Debug, PartialEq, Eq)]
-struct RangeEvent {
-    level: LabelLevel,
+#[derive(Debug)]
+struct RangeEvent<'a> {
+    label: &'a Label<'a>,
     position: Position,
     is_start: bool,
 }
 
-impl RangeEvent {
-    fn start(level: LabelLevel, position: Position) -> Self {
+impl<'a> RangeEvent<'a> {
+    fn start(label: &'a Label, position: Position) -> Self {
         Self {
-            level,
+            label,
             position,
             is_start: true,
         }
     }
 
-    fn end(level: LabelLevel, position: Position) -> Self {
+    fn end(label: &'a Label, position: Position) -> Self {
         Self {
-            level,
+            label,
             position,
             is_start: false,
         }
     }
 }
 
-impl PartialOrd for RangeEvent {
-    fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
-        Some(self.cmp(other))
+impl PartialEq for RangeEvent<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.position == other.position && self.is_start == other.is_start
     }
 }
 
-impl Ord for RangeEvent {
+impl Eq for RangeEvent<'_> {}
+
+impl PartialOrd for RangeEvent<'_> {
+    fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
+        Some((self.position.clone(), self.is_start).cmp(&(other.position.clone(), other.is_start)))
+    }
+}
+
+impl Ord for RangeEvent<'_> {
     fn cmp(&self, other: &Self) -> cmp::Ordering {
         if self.is_start == other.is_start {
             self.position.line.cmp(&other.position.line)
@@ -53,18 +62,18 @@ impl Ord for RangeEvent {
     }
 }
 
-fn max_offset_and_events(
-    ranges: &[(ops::RangeInclusive<usize>, LabelLevel)],
-) -> (usize, Vec<RangeEvent>) {
+fn max_offset_and_events<'a>(
+    ranges: &'a [(ops::RangeInclusive<usize>, &'a Label)],
+) -> (usize, Vec<RangeEvent<'a>>) {
     let mut events = Vec::with_capacity(ranges.len());
 
     for (discrim, (range, level)) in ranges.iter().enumerate() {
-        events.push(RangeEvent::start(*level, Position {
+        events.push(RangeEvent::start(level, Position {
             column: discrim + 1,
             line: *range.start(),
         }));
 
-        events.push(RangeEvent::end(*level, Position {
+        events.push(RangeEvent::end(level, Position {
             column: discrim + 1,
             line: *range.end(),
         }));
@@ -229,7 +238,7 @@ impl<'a> Report<'a> {
                 indent!(formatter, line_number_width + 1);
 
                 if let Some(((start, _), _)) = labels.first() {
-                    indent!(formatter, header: "+-->".blue());
+                    indent!(formatter, header: "┣━━━".blue());
 
                     {
                         let File { island, path, .. } = file;
@@ -259,15 +268,14 @@ impl<'a> Report<'a> {
 
                     let mut lines: Vec<(usize, &str)> = Vec::new();
 
-                    let mut verticals: Vec<(ops::RangeInclusive<usize>, LabelLevel)> = Vec::new();
+                    let mut verticals: Vec<(ops::RangeInclusive<usize>, &Label)> = Vec::new();
                     let mut horizontals: Vec<(usize, &Label<'_>)> = Vec::new();
 
                     for ((start, end), label) in &labels {
                         if start.line == end.line {
                             horizontals.push((start.line, label));
                         } else {
-                            verticals.push((start.line..=end.line, label.level));
-                            horizontals.push((end.line, label));
+                            verticals.push((start.line..=end.line, label));
                         }
 
                         let line_range = extend_to_line_boundaries(source, label.range.clone());
@@ -289,19 +297,30 @@ impl<'a> Report<'a> {
                     let mut prefix_indent = [(&' ').new()].repeat(prefix_indent_width);
                     let mut prefix_indent_patch = prefix_indent.clone();
 
+                    let mut line_labels: Vec<_> =
+                        iter::repeat(None).take(prefix_indent_width).collect();
+
                     for (line_number, line) in lines {
-                        write!(
-                            formatter,
-                            "{line_number:>line_number_width$} {separator} ",
-                            line_number = line_number.blue().bold(),
-                            separator = "|".blue(),
-                        )?;
+                        macro_rules! write_indent {
+                            ($writer:ident,number: $write_number:literal) => {
+                                indent!($writer, line_number_width + 3, with: move |writer: &mut dyn fmt::Write| {
+                                    if $write_number {
+                                        write!(writer, "{line_number:>line_number_width$}", line_number = line_number.blue().bold())?;
+                                    } else {
+                                        write!(writer, "{:>line_number_width$}", "")?;
+                                    }
+
+                                    write!(writer, " {separator} ", separator = '┃'.blue())?;
+
+                                    Ok(line_number_width + 3)
+                                });
+                            };
+                        }
 
                         for (patch, real) in
                             prefix_indent_patch.iter_mut().zip(prefix_indent.iter_mut())
                         {
                             *real = *patch;
-                            *patch = (&' ').new();
                         }
 
                         while events
@@ -310,22 +329,73 @@ impl<'a> Report<'a> {
                         {
                             let event = events.pop().unwrap();
                             let index = event.position.column - 1;
-                            let style = event.level.style();
+                            let style = event.label.level.style();
 
                             (prefix_indent[index], prefix_indent_patch[index]) = if event.is_start {
-                                ('/'.paint(style), '|'.paint(style))
+                                for indent in &mut prefix_indent[..index] {
+                                    if *indent.value != '┣' {
+                                        *indent = '━'.paint(style);
+                                    }
+                                }
+
+                                ('┣'.paint(style), '┃'.paint(style))
                             } else {
-                                ('\\'.paint(style), (&' ').new())
+                                ('┃'.paint(style), (&' ').new())
+                            };
+
+                            if !event.is_start {
+                                line_labels[index] = Some(event.label);
                             }
                         }
 
-                        // Reverse for right-alignment.
-                        for c in prefix_indent.iter().rev() {
-                            write!(formatter, "{c}")?;
+                        {
+                            let mut wrote = false;
+
+                            indent!(formatter, line_number_width + 3 + prefix_indent_width, with: |writer: &mut dyn fmt::Write| {
+                                if wrote {
+                                    let dot_width = (line_number as f64).log10() as usize + 1;
+                                    write!(writer, "{:>space_width$}", "", space_width = line_number_width - dot_width)?;
+
+                                    for _ in 0..dot_width {
+                                        write!(writer, "{dot}", dot = '·'.blue())?;
+                                    }
+                                } else {
+                                    write!(writer, "{line_number:>line_number_width$}", line_number = line_number.blue().bold())?;
+                                    wrote = true;
+                                }
+
+                                write!(writer, " {separator} ", separator = '┃'.blue())?;
+
+                                // Reverse for right-alignment.
+                                for (index, c) in prefix_indent.iter().enumerate().rev() {
+                                    write!(writer, "{c}")?;
+                                }
+
+                                Ok(line_number_width + 3 + prefix_indent_width)
+                            });
+
+                            write_wrapped(formatter, line.new())?;
+                            writeln!(formatter)?;
                         }
 
-                        writeln!(formatter, "{line}")?;
-                        // TODO: print labels
+                        for (index, line_label) in line_labels.iter_mut().enumerate().rev() {
+                            let Some(label) = line_label else { continue };
+
+                            write_indent!(formatter, number: false);
+
+                            indent!(formatter, prefix_indent_width, with: |writer: &mut dyn fmt::Write| {
+                                for c in prefix_indent.iter().rev() {
+                                    write!(writer, "{c}")?;
+                                }
+
+                                Ok(prefix_indent_width)
+                            });
+
+                            writeln!(formatter, "{label}")?;
+
+                            prefix_indent[index] = (&' ').new();
+                            *line_label = None;
+                        }
                     }
                 }
 

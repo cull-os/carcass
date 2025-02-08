@@ -42,7 +42,10 @@ impl fmt::Write for Writer<'_> {
                     let wrote = (self.with)(self.writer)?;
 
                     if wrote > self.count {
-                        panic!("indent writer wrote more than the indent");
+                        panic!(
+                            "indent writer wrote ({wrote}) more than the indent ({count})",
+                            count = self.count
+                        );
                     }
 
                     write!(self.writer, "{:>count$}", "", count = self.count - wrote)?;

@@ -24,7 +24,7 @@ impl LabelLevel {
     pub fn style(&self) -> yansi::Style {
         match self {
             LabelLevel::Primary => yansi::Color::Red,
-            LabelLevel::Secondary => yansi::Color::Green,
+            LabelLevel::Secondary => yansi::Color::Cyan,
         }
         .foreground()
     }
