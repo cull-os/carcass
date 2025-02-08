@@ -11,7 +11,7 @@ use crate::*;
 pub struct Label<'a> {
     pub(crate) range: ops::Range<usize>,
     pub(crate) level: LabelLevel,
-    text: CowStr<'a>,
+    pub(crate) text: CowStr<'a>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

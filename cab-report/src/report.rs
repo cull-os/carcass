@@ -5,7 +5,6 @@ use std::{
         Write as _,
     },
     iter,
-    num::NonZeroUsize,
     ops,
 };
 
@@ -133,6 +132,7 @@ fn shrink_to_line_boundaries(source: &str, mut range: ops::Range<usize>) -> ops:
 
     range
 }
+
 fn extend_to_line_boundaries(source: &str, mut range: ops::Range<usize>) -> ops::Range<usize> {
     while range.start > 0 && !source[range.start - 1..].starts_with('\n') {
         range.start -= 1;
@@ -145,367 +145,566 @@ fn extend_to_line_boundaries(source: &str, mut range: ops::Range<usize>) -> ops:
     range
 }
 
+/// Given a list of ranges which refer to the given content and their associated
+/// levels (primary and secondary), resolves the colors for every part, giving
+/// the primary color precedence over the secondary color in an overlap.
+pub(crate) fn resolve_style<'a>(
+    content: &'a str,
+    styles: &'a mut [(ops::Range<usize>, LabelLevel)],
+) -> impl Iterator<Item = yansi::Painted<&'a str>> + 'a {
+    styles.sort_by(|(a_range, a_level), (b_range, b_level)| {
+        match (a_range.start.cmp(&b_range.start), a_level, b_level) {
+            (cmp::Ordering::Equal, LabelLevel::Primary, LabelLevel::Secondary) => {
+                cmp::Ordering::Less
+            },
+            (cmp::Ordering::Equal, LabelLevel::Secondary, LabelLevel::Primary) => {
+                cmp::Ordering::Greater
+            },
+            (ordering, ..) => ordering,
+        }
+    });
+
+    gen {
+        let mut offset: usize = 0;
+        let mut style_offset: usize = 0;
+
+        while offset < content.len() {
+            let current_style = styles[style_offset..]
+                .iter()
+                .enumerate()
+                .find(|(_, (range, _))| range.start <= offset && offset < range.end);
+
+            match current_style {
+                Some((relative_offset, (range, level))) => {
+                    style_offset += relative_offset;
+
+                    let next_primary = (*level == LabelLevel::Secondary)
+                        .then(|| {
+                            styles[style_offset..]
+                                .iter()
+                                .enumerate()
+                                .take_while(|(_, (r, _))| r.start <= range.end)
+                                .find(|(_, (r, label))| {
+                                    *label == LabelLevel::Primary && r.start > offset
+                                })
+                        })
+                        .flatten();
+
+                    match next_primary {
+                        Some((relative_offset, (range, ..))) => {
+                            style_offset += relative_offset;
+
+                            yield content[offset..range.start].paint(level.style());
+                            offset = range.start;
+                        },
+
+                        None => {
+                            yield content[offset..range.end].paint(level.style());
+                            offset = range.end;
+                        },
+                    }
+                },
+
+                None => {
+                    let (relative_offset, next_offset) = styles[style_offset..]
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, (range, _))| range.start > offset)
+                        .map(|(relative_offset, (range, ..))| (relative_offset, range.start))
+                        .next()
+                        .unwrap_or((styles.len() - style_offset, content.len()));
+
+                    style_offset += relative_offset;
+
+                    yield (&content[offset..next_offset]).new();
+                    offset = next_offset;
+                },
+            }
+        }
+    }
+}
+
+pub(crate) fn write_wrapped<'a>(
+    writer: &'a mut dyn fmt::Write,
+    parts: impl Iterator<Item = yansi::Painted<&'a str>>,
+) -> fmt::Result {
+    const LINE_WIDTH_MAX: usize = 120;
+
+    let mut line_width: usize = 0;
+
+    use None as Space;
+    use Some as Word;
+
+    parts
+        .flat_map(|part| {
+            part.value
+                .split_whitespace()
+                .map(move |word| Word(word.paint(part.style)))
+                .intersperse(Space)
+        })
+        .try_for_each(|part| {
+            match part {
+                Word(word) => {
+                    let word_width = word.value.width();
+
+                    if line_width != 0 && line_width + 1 + word_width > LINE_WIDTH_MAX {
+                        writeln!(writer)?;
+                        line_width = 0;
+                    }
+
+                    write!(writer, "{word}")?;
+                    line_width += word_width;
+                },
+
+                Space => {
+                    if line_width != 0 {
+                        write!(writer, " ")?;
+                        line_width += 1;
+                    }
+                },
+            }
+
+            Ok(())
+        })?;
+
+    Ok(())
+}
+
 impl fmt::Display for ReportDisplay<'_> {
     fn fmt(&self, writer: &mut fmt::Formatter<'_>) -> fmt::Result {
-        const HORIZONTAL: char = '━';
-        const LEFT_TO_BOTTOM: char = '┓';
         const BOTTOM_TO_RIGHT: char = '┏';
+        const TOP_TO_BOTTOM: char = '┃';
         const TOP_TO_RIGHT: char = '┗';
-        const VERTICAL: char = '┃';
+        const LEFT_TO_RIGHT: char = '━';
+        const LEFT_TO_BOTTOM: char = '┓';
         const DOT: char = '·';
 
-        const GUTTER_STYLE_NUMBER: yansi::Style = yansi::Style::new().blue().bold();
-        const GUTTER_STYLE_LINE: yansi::Style = yansi::Style::new().blue();
+        const STYLE_GUTTER: yansi::Style = yansi::Style::new().blue();
+        const STYLE_HEADER_PATH: yansi::Style = yansi::Style::new().green();
+        const STYLE_HEADER_POSITION: yansi::Style = yansi::Style::new().blue();
 
-        const GUTTER_STYLE_HEADER_PATH: yansi::Style = yansi::Style::new().green();
-        const GUTTER_STYLE_HEADER_POSITION: yansi::Style = yansi::Style::new().blue();
+        #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+        struct StrikeId(usize);
 
-        let Report {
-            title,
-            labels,
-            tips,
-            ..
-        } = self.report;
+        #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+        enum StrikeStatus {
+            Start,
+            Continue,
+            End,
+        }
 
-        let file = self.file;
+        impl StrikeStatus {
+            fn symbol(self) -> char {
+                match self {
+                    Self::Start => BOTTOM_TO_RIGHT,
+                    Self::Continue => TOP_TO_BOTTOM,
+                    Self::End => TOP_TO_RIGHT,
+                }
+            }
+        }
 
-        // TITLE
-        writeln!(writer, "{title}", title = title.bright_white().bold())?;
+        type Strike = (StrikeId, StrikeStatus, LabelLevel);
 
-        let mut labels: SmallVec<_, 2> = labels
-            .clone()
-            .into_iter()
-            .map(|label| (Position::from(&label.range, file), label))
-            .collect();
+        let write_strike = |writer: &mut dyn fmt::Write, strike: &Option<Strike>| {
+            if let Some((_, status, level)) = strike {
+                write!(
+                    writer,
+                    "{strike}",
+                    strike = status.symbol().paint(level.style())
+                )
+            } else {
+                write!(writer, " ")
+            }
+        };
 
-        labels.sort_by_key(|(_, label)| label.range.start);
+        #[derive(Debug, Clone, PartialEq, Eq)]
+        enum LabelRange {
+            FromStart(ops::RangeTo<usize>),
+            Inline(ops::Range<usize>),
+        }
 
-        let line_number_max_width = labels
+        impl LabelRange {
+            fn end(&self) -> usize {
+                match self {
+                    LabelRange::FromStart(range) => range.end,
+                    LabelRange::Inline(range) => range.end,
+                }
+            }
+        }
+
+        type Label2<'a> = (LabelRange, &'a CowStr<'a>, LabelLevel);
+
+        #[derive(Debug, Clone)]
+        struct Line<'a> {
+            number: usize,
+
+            content: &'a str,
+            styles: SmallVec<(ops::Range<usize>, LabelLevel), 4>,
+
+            strikes: SmallVec<Strike, 3>,
+            labels: SmallVec<Label2<'a>, 2>,
+        }
+
+        let Self { report, file } = self;
+        let mut labels = report.labels.clone();
+
+        labels.sort_by_key(|label| label.range.start);
+
+        let mut lines: SmallVec<Line, 2> = SmallVec::new();
+
+        let line_current = RefCell::new(None::<Line>);
+
+        for (label_index, label) in labels.iter().enumerate() {
+            let (label_start, label_end) = Position::from(&label.range, file);
+
+            let label_is_multiline = label_start.line != label_end.line;
+
+            let shrinked = shrink_to_line_boundaries(&file.source, label.range());
+            let normal = label.range();
+            let extended = extend_to_line_boundaries(&file.source, label.range());
+
+            //       /--------->normal.start
+            // &&&&&&#######*
+            // \---------------> extended.start
+            // /---------------> shrinked.start
+            // #############*
+            //              \--> shrinked.end
+            // ######&&&&&&&*
+            //       \      \--> extended.end
+            //        \--------> normal.end
+            //
+            // & = uncolored
+            // # =   colored
+            // * =   newline
+            let (start_colored, end_colored) = (
+                normal.start - extended.start..(shrinked.start - extended.start).saturating_sub(1),
+                0..normal.end - shrinked.end,
+            );
+
+            for (line_number, line) in (label_start.line..).zip(file.source[extended].split('\n')) {
+                let line = match lines.iter_mut().find(|line| line.number == line_number) {
+                    Some(item) => item,
+
+                    None => {
+                        lines.push(Line {
+                            number: line_number,
+
+                            content: line,
+                            styles: SmallVec::new(),
+
+                            strikes: SmallVec::new(),
+                            labels: SmallVec::new(),
+                        });
+
+                        lines.last_mut().expect("we just pushed a line")
+                    },
+                };
+
+                if !label_is_multiline {
+                    line.styles.push((start_colored.clone(), label.level));
+                    line.labels.push((
+                        LabelRange::Inline(start_colored.clone()),
+                        &label.text,
+                        label.level,
+                    ));
+                }
+
+                let strike_status = match line_number {
+                    n if n == label_start.line => StrikeStatus::Start,
+                    n if n == label_end.line => StrikeStatus::End,
+                    _ => StrikeStatus::Continue,
+                };
+
+                line.strikes
+                    .push((StrikeId(label_index), strike_status, label.level));
+
+                let line_is_first = line_number == label_start.line;
+                let line_is_last = line_number == label_end.line;
+
+                match (line_is_first, line_is_last) {
+                    (true, false) => {
+                        line.styles.push((start_colored.clone(), label.level));
+                    },
+
+                    (false, false) => {
+                        line.styles.push((0..line.content.len(), label.level));
+                    },
+
+                    (false, true) => {
+                        line.styles.push((end_colored.clone(), label.level));
+
+                        line.labels.push((
+                            LabelRange::FromStart(..end_colored.clone().end),
+                            &label.text,
+                            label.level,
+                        ))
+                    },
+
+                    _ => unreachable!(),
+                }
+            }
+        }
+
+        let line_number_width = lines
             .iter()
-            .map(|((_, end), _)| end.line)
+            .map(|line| line.number)
             .max()
             .map(number_width)
             .unwrap_or(0);
 
-        let line_number = RefCell::new(None::<usize>);
+        let strike_prefix_width = lines
+            .iter()
+            .map(|line| line.strikes.len())
+            .max()
+            .unwrap_or(0);
 
-        // INDENT: Line numbers and gutter "123 | ".
-        let mut line_number_last = None;
-        indent!(writer, line_number_max_width + 3, with: |writer: &mut dyn fmt::Write| {
-            let Some(line_number) = *line_number.borrow() else { return Ok(0) };
+        let strike_prefix = RefCell::new(SmallVec::<_, 3>::from_iter(iter::repeat_n(
+            None::<Strike>,
+            strike_prefix_width,
+        )));
 
-            if line_number_last == Some(line_number) {
-                let dot_width = number_width(line_number);
-                write!(writer, "{:>space_width$}", "", space_width = line_number_max_width - dot_width)?;
+        // TITLE
+        writeln!(
+            writer,
+            "{title}",
+            title = report.title.bright_white().bold()
+        )?;
 
-                GUTTER_STYLE_NUMBER.fmt_prefix(writer)?;
+        // INDENT: "123 | "
+        let mut line_number_previous = None;
+        indent!(writer, line_number_width + 3, with: |writer: &mut dyn fmt::Write| {
+            let line_current = line_current.borrow();
+            let Some(line) = line_current.as_ref() else { return Ok(0) };
+
+            STYLE_GUTTER.fmt_prefix(writer)?;
+
+            if line_number_previous == Some(line.number) {
+                let dot_width = number_width(line.number);
+
+                write!(writer, "{:>space_width$}", "", space_width = line_number_width - dot_width)?;
+
                 for _ in 0..dot_width {
                     write!(writer, "{DOT}")?;
                 }
-                GUTTER_STYLE_NUMBER.fmt_suffix(writer)?;
             } else {
-                write!(writer, "{line_number:>line_number_max_width$}", line_number = line_number.paint(GUTTER_STYLE_NUMBER))?;
+                write!(writer, "{line_number:>line_number_width$}", line_number = line.number)?;
             }
 
-            write!(writer, " {separator} ", separator = VERTICAL.paint(GUTTER_STYLE_LINE))?;
+            write!(writer, " {TOP_TO_BOTTOM} ")?;
+            STYLE_GUTTER.fmt_suffix(writer)?;
 
-            line_number_last = Some(line_number);
-            Ok(line_number_max_width + 3)
+            line_number_previous = Some(line.number);
+            Ok(line_number_width + 3)
         });
 
-        {
-            // Dedent that separator and space as we are going to align.
+        if let Some(line) = lines.first() {
+            // DEDENT: "| "
             dedent!(writer, 2);
 
-            if let Some(((start, _), _)) = labels.first() {
-                // INDENT: "┏━━━ ".
-                indent!(writer, header: const_str::concat!(BOTTOM_TO_RIGHT, HORIZONTAL, HORIZONTAL, HORIZONTAL).paint(GUTTER_STYLE_LINE));
+            // INDENT: "┏━━━ ".
+            indent!(writer, header: const_str::concat!(BOTTOM_TO_RIGHT, LEFT_TO_RIGHT, LEFT_TO_RIGHT, LEFT_TO_RIGHT).paint(STYLE_GUTTER));
 
-                let File { island, path, .. } = file;
-                GUTTER_STYLE_HEADER_PATH.fmt_prefix(writer)?;
-                write!(writer, "{island}{path}")?;
-                GUTTER_STYLE_HEADER_PATH.fmt_suffix(writer)?;
+            STYLE_HEADER_PATH.fmt_prefix(writer)?;
+            write!(
+                writer,
+                "{island}{path}",
+                island = file.island,
+                path = file.path
+            )?;
+            STYLE_HEADER_PATH.fmt_suffix(writer)?;
 
-                let line = start.line.paint(GUTTER_STYLE_HEADER_POSITION);
-                let column = start.column.paint(GUTTER_STYLE_HEADER_POSITION);
-                writeln!(writer, ":{line}:{column}")?;
-            }
+            let line_number = line.number.paint(STYLE_HEADER_POSITION);
+
+            let column_number = line
+                .styles
+                .first()
+                .expect("every line must have a non empty style")
+                .0
+                .start
+                .paint(STYLE_HEADER_POSITION);
+
+            writeln!(writer, ":{line_number}:{column_number}")?;
         }
 
-        // TODO:
-        // - Right facing corners pierce though verticals.
-        // - Single line error labels.
-        // - Primary/secondary label colors depend on report level.
         'display_lines: {
-            #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-            struct StrikeId(NonZeroUsize);
-
-            #[derive(Debug, Clone)]
-            enum Strike<'a> {
-                Start(yansi::Style),
-                Continue(yansi::Style),
-                End(ops::Range<usize>, &'a Label<'a>),
-            }
-
-            impl Strike<'_> {
-                fn symbol(&self) -> yansi::Painted<&'static char> {
-                    match self {
-                        Self::Start(style) => BOTTOM_TO_RIGHT.paint(*style),
-                        Self::Continue(style) => VERTICAL.paint(*style),
-                        Self::End(_, label) => TOP_TO_RIGHT.paint(label.style()),
-                    }
-                }
-
-                fn right_symbol(&self) -> Option<yansi::Painted<&'static char>> {
-                    match self {
-                        Strike::Start(style) => Some(HORIZONTAL.paint(*style)),
-                        Strike::Continue(_) | Strike::End(..) => None,
-                    }
-                }
-            }
-
-            #[derive(Debug, Clone)]
-            struct Line<'a> {
-                number: usize,
-                content: &'a str,
-                styles: SmallVec<(ops::Range<usize>, LabelLevel), 4>,
-                strikes: SmallVec<(StrikeId, Strike<'a>), 3>,
-            }
-
-            let mut lines: SmallVec<Line, 2> = SmallVec::new();
-
-            for (id, ((start, end), label)) in labels
-                .iter()
-                .enumerate()
-                .map(|(index, item)| (StrikeId(NonZeroUsize::MIN.saturating_add(index)), item))
-            {
-                let multiline = start.line != end.line;
-
-                let shrinked = shrink_to_line_boundaries(&file.source, label.range());
-                let normal = label.range();
-                let extended = extend_to_line_boundaries(&file.source, label.range());
-
-                let start_colored = {
-                    let base = extended.start;
-                    normal.start - base..(shrinked.start - base).saturating_sub(1)
-                };
-
-                let end_colored = {
-                    let base = shrinked.end;
-                    shrinked.end - base..(normal.end - base)
-                };
-
-                for (line_number, line) in (start.line..).zip(file.source[extended].split('\n')) {
-                    let item = match lines.iter_mut().find(|line| line.number == line_number) {
-                        Some(item) => item,
-
-                        None => {
-                            lines.push(Line {
-                                number: line_number,
-                                content: line,
-                                styles: SmallVec::new(),
-                                strikes: SmallVec::new(),
-                            });
-
-                            lines.last_mut().unwrap()
-                        },
-                    };
-
-                    if multiline && line_number == start.line {
-                        item.strikes.push((id, Strike::Start(label.style())));
-                    }
-
-                    if multiline
-                        && (line_number == end.line
-                            || (end.column == 0 && line_number == end.line - 1))
-                    {
-                        item.strikes
-                            .push((id, Strike::End(end_colored.clone(), label)));
-                    }
-
-                    #[allow(clippy::if_same_then_else)]
-                    if !multiline {
-                        item.styles.push((start_colored.clone(), label.level));
-                    } else if line_number == start.line {
-                        item.styles.push((start_colored.clone(), label.level));
-                    } else if line_number == end.line {
-                        item.styles.push((end_colored.clone(), label.level));
-                    } else {
-                        item.styles.push((0..line.len(), label.level));
-                    }
-                }
-            }
-
-            let Some(strike_prefix_width) = lines.iter().map(|line| line.strikes.len()).max()
-            else {
+            if strike_prefix_width == 0 {
                 break 'display_lines;
-            };
+            }
 
-            let mut strikes = SmallVec::<Option<(StrikeId, Strike)>, 3>::from_iter(iter::repeat_n(
-                None,
-                strike_prefix_width,
-            ));
-            let strikes_patch = RefCell::new(SmallVec::<(StrikeId, Strike), 3>::new());
-
-            // INDENT: "<strikes-prefix> ".
+            // INDENT: "<strikes-prefix> "
             indent!(writer, strike_prefix_width + 1, with: |writer: &mut dyn fmt::Write| {
-                dbg!(&strikes);
-                // We are at the line after the line where the ends with labels were.
-                // We haven't patched the strikes yet so they point to the last line.
-                //
-                // No .rev() as we want to display labels closest to the right first
-                // to not overlap anything.
-                for index in 0..strikes.len() {
-                    let Some((_, strike @ Strike::End(range, label))) = &strikes[index].clone() else { continue };
+                let mut strike_override = None::<yansi::Painted<&char>>;
 
-                    // INDENT: "<prefix-symbols><top-to-right><horizontal><left-to-bottom> " then
-                    // INDENT: "<prefix-symbols>                          <top--to-bottom> "
-                    let top_to_right_width = 1;
-                    let prefix_symbols_width = (strike_prefix_width - index).saturating_sub(top_to_right_width);
-                    let horizontal_width = range.end.min(20);
-                    let left_to_bottom_width = 1;
-
-                    let mut wrote_first = false;
-                    indent!(writer, prefix_symbols_width + top_to_right_width + horizontal_width + left_to_bottom_width + 1, with: |writer: &mut dyn fmt::Write| {
-                        if !wrote_first {
-                            // Part before the top-to-right.
-                            for strike in strikes.iter().rev().take(prefix_symbols_width) {
-                                let symbol = match strike {
-                                    Some((_, Strike::End(_, label))) => Strike::Continue(label.style()).symbol(),
-
-                                    Some((_, strike)) => strike.symbol(),
-
-                                    None => (&' ').new(),
-                                };
-
-                                write!(writer, "{symbol}")?;
-                            }
-
-                            // Top-to-right.
-                            write!(writer, "{symbol}", symbol = strike.symbol())?;
-
-                            // Horizontal.
-                            for _ in (0..).take(horizontal_width) {
-                                write!(writer, "{symbol}", symbol = HORIZONTAL.paint(label.style()))?;
-                            }
-
-                            // Left-to-bottom.
-                            write!(writer, "{symbol}", symbol = LEFT_TO_BOTTOM.paint(label.style()))?;
-
-                            strikes[index] = None;
-                            wrote_first = true;
-                        } else {
-                            for strike in strikes.iter().rev().take(prefix_symbols_width + top_to_right_width) {
-                                let symbol = match strike {
-                                    Some((_, Strike::End(_, label))) => Strike::Continue(label.style()).symbol(),
-
-                                    Some((_, strike)) => strike.symbol(),
-
-                                    None => (&' ').new(),
-                                };
-
-                                write!(writer, "{symbol}")?;
-                            }
-
-                            for _ in (0..).take(horizontal_width) {
-                                write!(writer, " ")?;
-                            }
-
-                            write!(writer, "{symbol}", symbol = VERTICAL.paint(label.style()))?;
-                        }
-
-                        Ok(prefix_symbols_width + top_to_right_width + horizontal_width + left_to_bottom_width)
-                    });
-
-                    writeln!(writer, "{label}")?;
-                }
-
-                for (strike_id, strike) in strikes_patch.borrow_mut().drain(..) {
-                    match strike {
-                        Strike::Start(_) => {
-                            let slot = strikes.iter_mut().find(|slot| slot.is_none()).unwrap();
-
-                            *slot = Some((strike_id, strike));
-                        }
-
-                        Strike::End(..) => {
-                            let slot = strikes.iter_mut().flatten().find(|(id, _)| *id == strike_id).unwrap();
-
-                            slot.1 = strike;
-                        }
-
-                        _ => unreachable!(),
-                    }
-                }
-
-                let mut previous_strike = None::<&Strike<'_>>;
-                for strike_slot in strikes.iter_mut().rev() {
-                    let Some((_, strike)) = strike_slot else {
-                        if let Some(right_symbol) = previous_strike.as_ref().and_then(|s| s.right_symbol()) {
-                            write!(writer, "{right_symbol}")?;
-                        } else {
-                            write!(writer, " ")?;
+                for strike_slot in &*strike_prefix.borrow() {
+                    let Some(mut strike @ (_, strike_status, strike_level)) = *strike_slot else {
+                        match strike_override {
+                            Some(strike) => write!(writer, "{strike}")?,
+                            None => write!(writer, " ")?,
                         }
                         continue;
                     };
 
-                    match strike {
-                        Strike::Start(style) => {
-                            let next = Strike::Continue(*style);
-                            write!(writer, "{symbol}", symbol = strike.symbol())?;
-                            *strike = next;
+                    match strike_status {
+                        StrikeStatus::Start => {
+                            write_strike(writer, &Some(strike))?;
+
+                            strike_override = Some(LEFT_TO_RIGHT.paint(strike_level.style()));
                         },
 
-                        Strike::Continue(_) => {
-                            if let Some(right_symbol) = previous_strike.and_then(|s| s.right_symbol()) {
-                                write!(writer, "{right_symbol}")?;
-                            } else {
-                                write!(writer, "{symbol}", symbol = strike.symbol())?;
-                            }
-                        },
+                        StrikeStatus::Continue | StrikeStatus::End if let Some(strike) = strike_override => {
+                            write!(writer, "{strike}")?;
+                        }
 
-                        Strike::End(_, label) => {
-                            let symbol = Strike::Continue(label.style()).symbol();
-                            write!(writer, "{symbol}")?;
+                        StrikeStatus::Continue => {
+                            write_strike(writer, &Some(strike))?;
+                        }
+
+                        StrikeStatus::End => {
+                            strike.1 = StrikeStatus::Continue;
+                            write_strike(writer, &Some(strike))?;
                         }
                     }
-
-                    previous_strike = Some(strike);
                 }
 
-                Ok(strike_prefix_width)
+                if let Some(strike) = strike_override {
+                    write!(writer, "{strike}")?;
+
+                    Ok(strike_prefix_width + 1)
+                } else {
+                    Ok(strike_prefix_width)
+                }
             });
 
-            for line in lines {
-                *line_number.borrow_mut() = Some(line.number);
-                *strikes_patch.borrow_mut() = line.strikes;
+            for line in &mut lines {
+                line.labels.sort_by_key(|(range, ..)| range.end());
+                *line_current.borrow_mut() = Some(line.clone());
 
                 {
-                    let mut styles = line.styles.clone();
-                    write_wrapped(writer, resolve_style(line.content, styles.as_mut_slice()))?;
+                    let mut strike_prefix = strike_prefix.borrow_mut();
+
+                    for strike_new @ (strike_id, ..) in &line.strikes {
+                        match strike_prefix
+                            .iter_mut()
+                            .flatten()
+                            .find(|(id, ..)| id == strike_id)
+                        {
+                            Some(strike) => *strike = *strike_new,
+
+                            None => {
+                                *strike_prefix
+                                    .iter_mut()
+                                    .rev()
+                                    .find(|slot| slot.is_none())
+                                    .unwrap() = Some(*strike_new);
+                            },
+                        }
+                    }
+                }
+
+                {
+                    write_wrapped(writer, resolve_style(line.content, &mut line.styles))?;
                     writeln!(writer)?;
+
+                    // DEDENT: "<strike-prefix> "
+                    dedent!(writer);
+
+                    for (label_range, label_text, _) in line.labels.iter().rev() {
+                        let &strike @ (strike_id, _, strike_level) = strike_prefix
+                            .borrow()
+                            .iter()
+                            .flatten()
+                            .rev()
+                            .find(|(_, status, _)| *status == StrikeStatus::End)
+                            .unwrap();
+
+                        let strike_index = strike_prefix
+                            .borrow()
+                            .iter()
+                            .enumerate()
+                            .find_map(|(index, strike)| {
+                                strike
+                                    .is_some_and(|(id, ..)| id == strike_id)
+                                    .then_some(index)
+                            })
+                            .unwrap();
+
+                        match label_range {
+                            LabelRange::FromStart(label_range) => {
+                                indent!(writer, strike_prefix_width + 1 + label_range.end, with: |writer: &mut dyn fmt::Write| {
+                                    for strike in strike_prefix.borrow().iter().take(strike_index) {
+                                        match strike {
+                                            Some((
+                                                _,
+                                                StrikeStatus::Start | StrikeStatus::End,
+                                                label,
+                                            )) => {
+                                                write!(
+                                                    writer,
+                                                    "{symbol}",
+                                                    symbol = TOP_TO_BOTTOM.paint(label.style())
+                                                )?;
+                                            },
+
+                                            _ => {
+                                                write_strike(writer, strike)?;
+                                            },
+                                        }
+                                    }
+
+                                    write_strike(writer, &Some(strike))?;
+
+                                    for _ in 0..strike_prefix_width - strike_index + label_range.end - 1
+                                    {
+                                        write!(
+                                            writer,
+                                            "{symbol}",
+                                            symbol = LEFT_TO_RIGHT.paint(strike_level.style())
+                                        )?;
+                                    }
+
+                                    write!(
+                                        writer,
+                                        "{symbol}",
+                                        symbol = LEFT_TO_BOTTOM.paint(strike_level.style())
+                                    )?;
+
+                                    Ok(strike_prefix_width + 1 + label_range.end)
+                                });
+
+                                write_wrapped(
+                                    writer,
+                                    [label_text.as_ref().paint(strike_level.style())].into_iter(),
+                                )?;
+
+                                writeln!(writer)?;
+                            },
+
+                            LabelRange::Inline(_range) => todo!(),
+                        }
+
+                        strike_prefix.borrow_mut()[strike_index] = None;
+                    }
                 }
             }
-            writeln!(writer, " ")?; // HACK
         }
 
         // = help: foo bar
         {
-            *line_number.borrow_mut() = None;
+            *line_current.borrow_mut() = None;
 
             // Dedent that separator as we are going to align.
             dedent!(
                 writer,
-                if line_number_max_width == 0 {
-                    line_number_max_width + 3
+                if line_number_width == 0 {
+                    line_number_width + 3
                 } else {
-                    line_number_max_width + 1
+                    line_number_width + 1
                 }
             );
 
-            for tip in tips {
-                // INDENT: "= ".
-                indent!(writer, header: "=".paint(GUTTER_STYLE_LINE));
+            for tip in &report.tips {
+                // INDENT: "= "
+                indent!(writer, header: "=".paint(STYLE_GUTTER));
                 write!(writer, "{tip}")?;
             }
         }
