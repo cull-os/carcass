@@ -1,9 +1,4 @@
-use std::{
-    fmt,
-    ops,
-};
-
-use yansi::Paint as _;
+use std::ops;
 
 use crate::*;
 
@@ -49,18 +44,5 @@ impl<'a> Label<'a> {
 
     pub fn range(&self) -> ops::Range<usize> {
         self.range.clone()
-    }
-
-    pub fn style(&self) -> yansi::Style {
-        self.level.style()
-    }
-}
-
-impl fmt::Display for Label<'_> {
-    fn fmt(&self, writer: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write_wrapped(
-            writer,
-            [self.text.as_ref().paint(self.level.style())].into_iter(),
-        )
     }
 }

@@ -1,7 +1,4 @@
-use std::{
-    borrow,
-    fmt,
-};
+use std::borrow;
 
 use yansi::Paint as _;
 
@@ -9,8 +6,8 @@ use crate::*;
 
 #[derive(Debug, Clone)]
 pub struct Tip<'a> {
-    title: yansi::Painted<CowStr<'a>>,
-    text: CowStr<'a>,
+    pub(crate) title: yansi::Painted<CowStr<'a>>,
+    pub(crate) text: CowStr<'a>,
 }
 
 impl<'a> Tip<'a> {
@@ -33,15 +30,5 @@ impl<'a> Tip<'a> {
             title: borrow::Cow::Borrowed("help:").new().cyan().bold(),
             text: text.into(),
         }
-    }
-}
-
-impl fmt::Display for Tip<'_> {
-    fn fmt(&self, writer: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let Self { title, text } = &self;
-
-        indent!(writer, header: title);
-
-        write_wrapped(writer, [text.as_ref().new()].into_iter())
     }
 }

@@ -705,7 +705,11 @@ impl fmt::Display for ReportDisplay<'_> {
             for tip in &report.tips {
                 // INDENT: "= "
                 indent!(writer, header: "=".paint(STYLE_GUTTER));
-                write!(writer, "{tip}")?;
+
+                // INDENT: "note: "
+                indent!(writer, header: &tip.title);
+
+                write_wrapped(writer, [tip.text.as_ref().new()].into_iter())?;
             }
         }
 

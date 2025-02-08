@@ -94,36 +94,38 @@ macro_rules! __indent {
     };
 
     ($writer:ident, header: $header:expr) => {
-        trait ToStr {
-            fn to_str(&self) -> &str;
-        }
-
-        impl ToStr for &'_ str {
-            fn to_str(&self) -> &str {
-                self
+        let header_width = {
+            trait ToStr {
+                fn to_str(&self) -> &str;
             }
-        }
 
-        impl ToStr for ::std::borrow::Cow<'_, str> {
-            fn to_str(&self) -> &str {
-                self.as_ref()
+            impl ToStr for &'_ str {
+                fn to_str(&self) -> &str {
+                    self
+                }
             }
-        }
 
-        impl ToStr for ::yansi::Painted<&'_ str> {
-            fn to_str(&self) -> &str {
-                self.value
+            impl ToStr for ::std::borrow::Cow<'_, str> {
+                fn to_str(&self) -> &str {
+                    self.as_ref()
+                }
             }
-        }
 
-        impl ToStr for ::yansi::Painted<::std::borrow::Cow<'_, str>> {
-            fn to_str(&self) -> &str {
-                self.value.as_ref()
+            impl ToStr for ::yansi::Painted<&'_ str> {
+                fn to_str(&self) -> &str {
+                    self.value
+                }
             }
-        }
 
-        let header = $header;
-        let header_width = ::unicode_width::UnicodeWidthStr::width(header.to_str()) + 1;
+            impl ToStr for ::yansi::Painted<::std::borrow::Cow<'_, str>> {
+                fn to_str(&self) -> &str {
+                    self.value.as_ref()
+                }
+            }
+
+            let header = $header;
+            ::unicode_width::UnicodeWidthStr::width(header.to_str()) + 1
+        };
 
         let mut wrote = false;
         $crate::indent::indent!($writer, header_width, with: move |writer: &mut dyn fmt::Write| {
