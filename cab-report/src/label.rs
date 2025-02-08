@@ -11,7 +11,7 @@ use crate::*;
 pub struct Label<'a> {
     pub(crate) range: ops::Range<usize>,
     pub(crate) level: LabelLevel,
-    message: CowStr<'a>,
+    text: CowStr<'a>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -31,29 +31,25 @@ impl LabelLevel {
 }
 
 impl<'a> Label<'a> {
-    pub fn new(
-        range: ops::Range<usize>,
-        message: impl Into<CowStr<'a>>,
-        level: LabelLevel,
-    ) -> Self {
+    pub fn new(range: ops::Range<usize>, text: impl Into<CowStr<'a>>, level: LabelLevel) -> Self {
         Self {
             range,
-            message: message.into(),
+            text: text.into(),
             level,
         }
     }
 
-    pub fn primary(range: ops::Range<usize>, message: impl Into<CowStr<'a>>) -> Self {
-        Self::new(range, message, LabelLevel::Primary)
+    pub fn primary(range: ops::Range<usize>, text: impl Into<CowStr<'a>>) -> Self {
+        Self::new(range, text, LabelLevel::Primary)
     }
 
-    pub fn secondary(range: ops::Range<usize>, message: impl Into<CowStr<'a>>) -> Self {
-        Self::new(range, message, LabelLevel::Secondary)
+    pub fn secondary(range: ops::Range<usize>, text: impl Into<CowStr<'a>>) -> Self {
+        Self::new(range, text, LabelLevel::Secondary)
     }
 }
 
 impl fmt::Display for Label<'_> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write_wrapped(formatter, self.message.as_ref().paint(self.level.style()))
+        write_wrapped(formatter, self.text.as_ref().paint(self.level.style()))
     }
 }

@@ -4,7 +4,7 @@
 mod file;
 mod indent;
 mod label;
-mod message;
+mod report;
 mod tip;
 
 use std::{
@@ -21,7 +21,7 @@ pub use crate::{
     file::*,
     indent::*,
     label::*,
-    message::*,
+    report::*,
     tip::*,
 };
 

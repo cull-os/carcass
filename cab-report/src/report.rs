@@ -108,14 +108,14 @@ fn extend_to_line_boundaries(source: &str, mut range: ops::Range<usize>) -> ops:
     range
 }
 
-pub struct Message<'a> {
+pub struct Report<'a> {
     title: CowStr<'a>,
     level: log::Level,
     labels: Vec<Label<'a>>,
     tips: Vec<Tip<'a>>,
 }
 
-impl<'a> Message<'a> {
+impl<'a> Report<'a> {
     pub fn new(title: impl Into<CowStr<'a>>, level: log::Level) -> Self {
         Self {
             title: title.into(),
@@ -146,21 +146,21 @@ impl<'a> Message<'a> {
         self
     }
 
-    pub fn push_primary(&mut self, range: ops::Range<usize>, message: impl Into<CowStr<'a>>) {
-        self.push_label(Label::primary(range, message));
+    pub fn push_primary(&mut self, range: ops::Range<usize>, text: impl Into<CowStr<'a>>) {
+        self.push_label(Label::primary(range, text));
     }
 
-    pub fn primary(mut self, range: ops::Range<usize>, message: impl Into<CowStr<'a>>) -> Self {
-        self.push_primary(range, message);
+    pub fn primary(mut self, range: ops::Range<usize>, text: impl Into<CowStr<'a>>) -> Self {
+        self.push_primary(range, text);
         self
     }
 
-    pub fn push_secondary(&mut self, range: ops::Range<usize>, message: impl Into<CowStr<'a>>) {
-        self.push_label(Label::secondary(range, message));
+    pub fn push_secondary(&mut self, range: ops::Range<usize>, text: impl Into<CowStr<'a>>) {
+        self.push_label(Label::secondary(range, text));
     }
 
-    pub fn secondary(mut self, range: ops::Range<usize>, message: impl Into<CowStr<'a>>) -> Self {
-        self.push_secondary(range, message);
+    pub fn secondary(mut self, range: ops::Range<usize>, text: impl Into<CowStr<'a>>) -> Self {
+        self.push_secondary(range, text);
         self
     }
 
@@ -173,28 +173,28 @@ impl<'a> Message<'a> {
         self
     }
 
-    pub fn push_note(&mut self, message: impl Into<CowStr<'a>>) {
-        self.push_tip(Tip::note(message));
+    pub fn push_note(&mut self, text: impl Into<CowStr<'a>>) {
+        self.push_tip(Tip::note(text));
     }
 
-    pub fn note(self, message: impl Into<CowStr<'a>>) -> Self {
-        self.tip(Tip::note(message))
+    pub fn note(self, text: impl Into<CowStr<'a>>) -> Self {
+        self.tip(Tip::note(text))
     }
 
-    pub fn push_help(&mut self, message: impl Into<CowStr<'a>>) {
-        self.push_tip(Tip::help(message));
+    pub fn push_help(&mut self, text: impl Into<CowStr<'a>>) {
+        self.push_tip(Tip::help(text));
     }
 
-    pub fn help(self, message: impl Into<CowStr<'a>>) -> Self {
-        self.tip(Tip::help(message))
+    pub fn help(self, text: impl Into<CowStr<'a>>) -> Self {
+        self.tip(Tip::help(text))
     }
 
     pub fn log_with(&'a self, file: &'a File<'a>) -> impl fmt::Display {
-        struct WithFile<'a>(&'a Message<'a>, &'a File<'a>);
+        struct WithFile<'a>(&'a Report<'a>, &'a File<'a>);
 
         impl fmt::Display for WithFile<'_> {
             fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-                let Message {
+                let Report {
                     title,
                     labels,
                     tips,
