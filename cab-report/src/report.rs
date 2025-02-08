@@ -1,6 +1,5 @@
 use std::{
     cell::RefCell,
-    collections::VecDeque,
     fmt::{
         self,
         Write as _,
@@ -8,6 +7,7 @@ use std::{
     ops,
 };
 
+use smallvec::SmallVec;
 use yansi::Paint;
 
 use crate::*;
@@ -15,8 +15,8 @@ use crate::*;
 pub struct Report<'a> {
     title: CowStr<'a>,
     level: log::Level,
-    labels: Vec<Label<'a>>,
-    tips: Vec<Tip<'a>>,
+    labels: SmallVec<Label<'a>, 2>,
+    tips: SmallVec<Tip<'a>, 2>,
 }
 
 impl<'a> Report<'a> {
@@ -24,8 +24,8 @@ impl<'a> Report<'a> {
         Self {
             title: title.into(),
             level,
-            labels: Vec::new(),
-            tips: Vec::new(),
+            labels: SmallVec::new(),
+            tips: SmallVec::new(),
         }
     }
 
@@ -152,11 +152,11 @@ impl fmt::Display for ReportDisplay<'_> {
         const TOP_TO_BOTTOM: char = '┃';
         const DOT: char = '·';
 
-        let gutter_style_number = yansi::Style::new().blue().bold();
-        let gutter_style_line = yansi::Style::new().blue();
+        const GUTTER_STYLE_NUMBER: yansi::Style = yansi::Style::new().blue().bold();
+        const GUTTER_STYLE_LINE: yansi::Style = yansi::Style::new().blue();
 
-        let gutter_style_header_path = yansi::Style::new().green();
-        let gutter_style_header_position = yansi::Style::new().blue();
+        const GUTTER_STYLE_HEADER_PATH: yansi::Style = yansi::Style::new().green();
+        const GUTTER_STYLE_HEADER_POSITION: yansi::Style = yansi::Style::new().blue();
 
         let Report {
             title,
@@ -170,7 +170,7 @@ impl fmt::Display for ReportDisplay<'_> {
         // TITLE
         writeln!(writer, "{title}", title = title.bright_white().bold())?;
 
-        let mut labels: Vec<_> = labels
+        let mut labels: SmallVec<_, 2> = labels
             .clone()
             .into_iter()
             .map(|label| (Position::from(&label.range, file), label))
@@ -187,6 +187,7 @@ impl fmt::Display for ReportDisplay<'_> {
 
         let line_number = RefCell::new(None::<usize>);
 
+        // INDENT: Line numbers and gutter "123 | ".
         let mut _line_number_last = None;
         indent!(writer, line_number_max_width + 3, with: |writer: &mut dyn fmt::Write| {
             let Some(line_number) = *line_number.borrow() else { return Ok(0) };
@@ -195,36 +196,36 @@ impl fmt::Display for ReportDisplay<'_> {
                 let dot_width = number_width(line_number);
                 write!(writer, "{:>space_width$}", "", space_width = line_number_max_width - dot_width)?;
 
-                gutter_style_number.fmt_prefix(writer)?;
+                GUTTER_STYLE_NUMBER.fmt_prefix(writer)?;
                 for _ in 0..dot_width {
                     write!(writer, "{DOT}")?;
                 }
-                gutter_style_number.fmt_suffix(writer)?;
+                GUTTER_STYLE_NUMBER.fmt_suffix(writer)?;
             } else {
-                write!(writer, "{line_number:>line_number_max_width$}", line_number = line_number.paint(gutter_style_number))?;
+                write!(writer, "{line_number:>line_number_max_width$}", line_number = line_number.paint(GUTTER_STYLE_NUMBER))?;
             }
 
-            write!(writer, " {separator} ", separator = TOP_TO_BOTTOM.paint(gutter_style_line))?;
+            write!(writer, " {separator} ", separator = TOP_TO_BOTTOM.paint(GUTTER_STYLE_LINE))?;
 
             _line_number_last = Some(line_number);
             Ok(line_number_max_width + 3)
         });
 
-        // ┏━━━ <island>/path:{line}:{column}
         {
             // Dedent that separator and space as we are going to align.
             dedent!(writer, 2);
 
             if let Some(((start, ..), ..)) = labels.first() {
-                indent!(writer, header: const_str::concat!(BOTTOM_TO_RIGHT, LEFT_TO_RIGHT, LEFT_TO_RIGHT, LEFT_TO_RIGHT).paint(gutter_style_line));
+                // INDENT: "┏━━━ ".
+                indent!(writer, header: const_str::concat!(BOTTOM_TO_RIGHT, LEFT_TO_RIGHT, LEFT_TO_RIGHT, LEFT_TO_RIGHT).paint(GUTTER_STYLE_LINE));
 
                 let File { island, path, .. } = file;
-                gutter_style_header_path.fmt_prefix(writer)?;
+                GUTTER_STYLE_HEADER_PATH.fmt_prefix(writer)?;
                 write!(writer, "{island}{path}")?;
-                gutter_style_header_path.fmt_suffix(writer)?;
+                GUTTER_STYLE_HEADER_PATH.fmt_suffix(writer)?;
 
-                let line = start.line.paint(gutter_style_header_position);
-                let column = start.column.paint(gutter_style_header_position);
+                let line = start.line.paint(GUTTER_STYLE_HEADER_POSITION);
+                let column = start.column.paint(GUTTER_STYLE_HEADER_POSITION);
                 writeln!(writer, ":{line}:{column}")?;
             }
         }
@@ -237,12 +238,12 @@ impl fmt::Display for ReportDisplay<'_> {
             struct LineData<'a> {
                 number: usize,
                 content: &'a str,
-                styles: Vec<(ops::Range<usize>, LabelLevel)>,
-                prefix: VecDeque<(LabelId, yansi::Painted<char>)>,
-                finish: Vec<(LabelId, &'a Label<'a>)>,
+                styles: SmallVec<(ops::Range<usize>, LabelLevel), 4>,
+                prefix: SmallVec<(LabelId, yansi::Painted<char>), 3>,
+                finish: SmallVec<(LabelId, &'a Label<'a>), 2>,
             }
 
-            let mut lines: Vec<LineData> = Vec::new();
+            let mut lines: SmallVec<LineData, 2> = SmallVec::new();
 
             for (id, ((start, end), label)) in labels
                 .iter()
@@ -271,9 +272,9 @@ impl fmt::Display for ReportDisplay<'_> {
                             lines.push(LineData {
                                 number: line_number,
                                 content: line,
-                                styles: Vec::new(),
-                                prefix: VecDeque::new(),
-                                finish: Vec::new(),
+                                styles: SmallVec::new(),
+                                prefix: SmallVec::new(),
+                                finish: SmallVec::new(),
                             });
 
                             lines.last_mut().unwrap()
@@ -290,7 +291,7 @@ impl fmt::Display for ReportDisplay<'_> {
 
                         prefix.style = label.style();
 
-                        item.prefix.push_front((id, prefix));
+                        item.prefix.push((id, prefix));
                     }
 
                     if line_number == end.line {
@@ -316,17 +317,15 @@ impl fmt::Display for ReportDisplay<'_> {
 
             let current_line = RefCell::new(lines.first().unwrap());
 
-            // +1 for a space at the start.
+            // INDENT: "<prefix-lines> ".
             indent!(writer, prefix_width + 1, with: |writer: &mut dyn fmt::Write| {
                 let line = current_line.borrow_mut();
 
-                let space_width = prefix_width - line.prefix.len();
-                write!(writer, "{:>space_width$}", "")?;
-
-                for (.., prefix) in line.prefix.iter().rev() {
+                for (.., prefix) in &line.prefix {
                     write!(writer, "{prefix}")?;
                 }
-                Ok(prefix_width)
+
+                Ok(prefix_width) // Leave one for the indenter to fill with a space.
             });
 
             for line in &lines {
@@ -358,7 +357,8 @@ impl fmt::Display for ReportDisplay<'_> {
             );
 
             for tip in tips {
-                indent!(writer, header: "=".paint(gutter_style_line));
+                // INDENT: "= ".
+                indent!(writer, header: "=".paint(GUTTER_STYLE_LINE));
                 write!(writer, "{tip}")?;
             }
         }
