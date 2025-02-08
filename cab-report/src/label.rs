@@ -23,8 +23,8 @@ impl LabelSeverity {
             (ReportSeverity::Note, LabelSeverity::Secondary) => Blue,
             (ReportSeverity::Note, LabelSeverity::Primary) => Magenta,
 
-            (ReportSeverity::Warning, LabelSeverity::Secondary) => Blue,
-            (ReportSeverity::Warning, LabelSeverity::Primary) => Yellow,
+            (ReportSeverity::Warn, LabelSeverity::Secondary) => Blue,
+            (ReportSeverity::Warn, LabelSeverity::Primary) => Yellow,
 
             (ReportSeverity::Error, LabelSeverity::Secondary) => Yellow,
             (ReportSeverity::Error, LabelSeverity::Primary) => Red,

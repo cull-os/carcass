@@ -23,7 +23,7 @@ pub struct Report<'a> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ReportSeverity {
     Note,
-    Warning,
+    Warn,
     Error,
     Bug,
 }
@@ -43,7 +43,7 @@ impl<'a> Report<'a> {
     }
 
     pub fn warning(title: impl Into<CowStr<'a>>) -> Self {
-        Self::new(ReportSeverity::Warning, title)
+        Self::new(ReportSeverity::Warn, title)
     }
 
     pub fn error(title: impl Into<CowStr<'a>>) -> Self {
@@ -474,12 +474,26 @@ impl fmt::Display for ReportDisplay<'_> {
             strike_prefix_width,
         )));
 
-        // TITLE
-        writeln!(
-            writer,
-            "{title}",
-            title = report.title.bright_white().bold()
-        )?;
+        {
+            // INDENT: "note: "
+            indent!(
+                writer,
+                header: match report.severity {
+                    ReportSeverity::Note => "note:",
+                    ReportSeverity::Warn => "warn:",
+                    ReportSeverity::Error => "error:",
+                    ReportSeverity::Bug => "bug:",
+                }
+                .paint(LabelSeverity::Primary.style_in(report.severity))
+                .bold()
+            );
+
+            writeln!(
+                writer,
+                "{title}",
+                title = report.title.bright_white().bold()
+            )?;
+        }
 
         // INDENT: "123 | "
         let mut line_number_previous = None;
