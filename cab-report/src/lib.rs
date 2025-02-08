@@ -1,5 +1,5 @@
 //! Diagnostic reporting utilities.
-#![feature(gen_blocks, iter_intersperse, try_blocks)]
+#![feature(if_let_guard, iter_intersperse, let_chains)]
 
 mod file;
 mod indent;

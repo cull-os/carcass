@@ -243,7 +243,7 @@ impl<'a> Report<'a> {
                     {
                         let Position { line, column } = start;
 
-                        write!(
+                        writeln!(
                             formatter,
                             ":{line}:{column}",
                             line = line.blue(),
@@ -254,7 +254,6 @@ impl<'a> Report<'a> {
 
                 {
                     dedent!(formatter);
-                    writeln!(formatter)?;
 
                     let source = &*file.source;
 
@@ -290,8 +289,7 @@ impl<'a> Report<'a> {
                     let mut prefix_indent = [(&' ').new()].repeat(prefix_indent_width);
                     let mut prefix_indent_patch = prefix_indent.clone();
 
-                    let mut lines = lines.into_iter().peekable();
-                    while let Some((line_number, line)) = lines.next() {
+                    for (line_number, line) in lines {
                         write!(
                             formatter,
                             "{line_number:>line_number_width$} {separator} ",
@@ -326,16 +324,10 @@ impl<'a> Report<'a> {
                             write!(formatter, "{c}")?;
                         }
 
-                        write!(formatter, "{line}")?;
-
-                        if lines.peek().is_some() {
-                            writeln!(formatter)?;
-                        }
+                        writeln!(formatter, "{line}")?;
                         // TODO: print labels
                     }
                 }
-
-                writeln!(formatter)?;
 
                 for tip in tips {
                     indent!(formatter, header: "=".blue());

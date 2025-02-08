@@ -35,7 +35,10 @@ impl fmt::Write for Writer<'_> {
 
         for line in s.split('\n').map(Line).intersperse(New) {
             match self.place {
-                Place::Start => {
+                Place::Start
+                    if let Line(line) = line
+                        && !line.is_empty() =>
+                {
                     let wrote = (self.with)(self.writer)?;
 
                     if wrote > self.count {
@@ -51,7 +54,7 @@ impl fmt::Write for Writer<'_> {
                     self.place = Place::Start;
                 },
 
-                Place::Middle => {},
+                _ => {},
             }
 
             match line {
