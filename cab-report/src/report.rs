@@ -548,7 +548,13 @@ impl fmt::Display for ReportDisplay<'_> {
                                     write!(
                                         writer,
                                         "{symbol}",
-                                        symbol = if index == 0 { TOP_TO_RIGHT } else { LEFT_TO_RIGHT }.paint(label_severity.style_in(report.severity))
+                                        symbol = if wrote {
+                                            ' '
+                                        } else if index == 0 {
+                                            TOP_TO_RIGHT
+                                        } else {
+                                            LEFT_TO_RIGHT
+                                        }.paint(label_severity.style_in(report.severity)),
                                     )?;
                                 }
 
@@ -556,10 +562,11 @@ impl fmt::Display for ReportDisplay<'_> {
                                     writer,
                                     "{symbol}",
                                     symbol = match underline_width {
+                                        _ if wrote => TOP_TO_BOTTOM,
                                         0 => TOP_LEFT_TO_RIGHT,
                                         1 => TOP_TO_BOTTOM,
                                         _ => LEFT_TO_BOTTOM,
-                                    }.paint(label_severity.style_in(report.severity))
+                                    }.paint(label_severity.style_in(report.severity)),
                                 )?;
 
                                 wrote = true;
