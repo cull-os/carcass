@@ -183,12 +183,12 @@ impl fmt::Display for ReportDisplay<'_> {
             .map(|label| (file.position(&label.range), label))
             .collect();
 
-        labels.sort_by(|((a_start, _), a_label), ((b_start, _), b_label)| {
-            if a_start != b_start {
-                return a_start.cmp(b_start);
-            }
+        labels.sort_by(|((a_start, a_end), _), ((b_start, b_end), _)| {
+            match a_start.line.cmp(&b_start.line) {
+                cmp::Ordering::Equal => a_end.column.cmp(&b_end.column),
 
-            a_label.range.end.cmp(&b_label.range.end)
+                other => other,
+            }
         });
 
         let mut lines: SmallVec<Line, 2> = SmallVec::new();
