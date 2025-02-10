@@ -381,7 +381,7 @@ impl fmt::Display for ReportDisplay<'_> {
                     let mut strike_override = None::<yansi::Painted<&char>>;
 
                     for strike_slot in &*strike_prefix.borrow() {
-                        let Some(mut strike @ (_, strike_status, strike_severity)) = *strike_slot else {
+                        let Some((_, strike_status, strike_severity)) = *strike_slot else {
                             match strike_override {
                                 Some(strike) => write!(writer, "{strike}")?,
                                 None => write!(writer, " ")?,
@@ -451,7 +451,7 @@ impl fmt::Display for ReportDisplay<'_> {
                 for (label_range, label_text, label_severity) in line.labels.iter().rev() {
                     match label_range {
                         LabelRange::FromStart(label_range) => {
-                            let &strike @ (strike_id, _, strike_severity) = strike_prefix
+                            let &(strike_id, _, strike_severity) = strike_prefix
                                 .borrow()
                                 .iter()
                                 .flatten()
