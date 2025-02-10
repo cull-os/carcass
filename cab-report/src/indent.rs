@@ -206,13 +206,13 @@ macro_rules! __indent {
             }
 
             let header = $header;
-            ::unicode_width::UnicodeWidthStr::width(header.to_str()) + 1
+            ::unicode_width::UnicodeWidthStr::width(header.to_str())
         };
 
         let mut wrote = false;
         $crate::indent::indent!(
             $writer,
-            header_width,
+            header_width + 1,
             with = move |writer: &mut dyn fmt::Write| {
                 if wrote {
                     return Ok(0);
@@ -221,7 +221,7 @@ macro_rules! __indent {
                 write!(writer, "{header} ", header = $header)?;
 
                 wrote = true;
-                Ok(header_width)
+                Ok(header_width + 1)
             }
         );
     };
