@@ -213,33 +213,14 @@ impl fmt::Display for ReportDisplay<'_> {
         let line_current = RefCell::new(None::<Line>);
 
         for (label_index, label) in labels.iter().enumerate() {
-            let (label_start, label_end) = Position::from(&label.range, file);
-
+            let (label_start, label_end) = file.position(&label.range);
             let label_is_multiline = label_start.line != label_end.line;
 
-            let shrinked = shrink_to_line_boundaries(&file.source, label.range());
-            let normal = label.range();
-            let extended = extend_to_line_boundaries(&file.source, label.range());
+            let label_range_extended = extend_to_line_boundaries(&file.source, label.range());
 
-            //       /--------->normal.start
-            // &&&&&&#######*
-            // \---------------> extended.start
-            // /---------------> shrinked.start
-            // #############*
-            //              \--> shrinked.end
-            // ######&&&&&&&*
-            //       \      \--> extended.end
-            //        \--------> normal.end
-            //
-            // & = uncolored
-            // # =   colored
-            // * =   newline
-            let (start_colored, end_colored) = (
-                normal.start - extended.start..(shrinked.start - extended.start).saturating_sub(1),
-                0..normal.end - shrinked.end,
-            );
-
-            for (line_number, line) in (label_start.line..).zip(file.source[extended].split('\n')) {
+            for (line_number, line) in (label_start.line.get()..)
+                .zip(file.source[label_range_extended.clone()].split('\n'))
+            {
                 let line = match lines.iter_mut().find(|line| line.number == line_number) {
                     Some(item) => item,
 
@@ -259,29 +240,45 @@ impl fmt::Display for ReportDisplay<'_> {
                 };
 
                 if !label_is_multiline {
-                    line.styles.push((start_colored.clone(), label.level));
-                    line.labels.push((
-                        LabelRange::Inline(start_colored.clone()),
-                        &label.text,
-                        label.level,
-                    ));
+                    let left = label_range_extended.start;
+
+                    let start = label.range().start;
+                    let end = label.range().end;
+
+                    let range = start - left..end - left;
+
+                    line.labels
+                        .push((LabelRange::Inline(range.clone()), &label.text, label.level));
+
+                    line.styles.push((range.clone(), label.level));
+
+                    continue;
                 }
 
                 let strike_status = match line_number {
-                    n if n == label_start.line => StrikeStatus::Start,
-                    n if n == label_end.line => StrikeStatus::End,
+                    n if n == label_start.line.get() => StrikeStatus::Start,
+                    n if n == label_end.line.get() => StrikeStatus::End,
                     _ => StrikeStatus::Continue,
                 };
 
                 line.strikes
                     .push((StrikeId(label_index), strike_status, label.level));
 
-                let line_is_first = line_number == label_start.line;
-                let line_is_last = line_number == label_end.line;
+                let line_is_first = line_number == label_start.line.get();
+                let line_is_last = line_number == label_end.line.get();
 
                 match (line_is_first, line_is_last) {
                     (true, false) => {
-                        line.styles.push((start_colored.clone(), label.level));
+                        let left = label_range_extended.start;
+
+                        let start = label.range().start;
+                        let end = file.source[start..]
+                            .find('\n')
+                            .map_or(file.source.len(), |index| start + index);
+
+                        let range = start - left..end - left;
+
+                        line.styles.push((range, label.level));
                     },
 
                     (false, false) => {
@@ -289,13 +286,20 @@ impl fmt::Display for ReportDisplay<'_> {
                     },
 
                     (false, true) => {
-                        line.styles.push((end_colored.clone(), label.level));
+                        let right = label_range_extended.end;
+
+                        let start = 0;
+                        let end = line.content.len() - (right - label.range().end);
+
+                        let range = start..end;
 
                         line.labels.push((
-                            LabelRange::FromStart(..end_colored.clone().end),
+                            LabelRange::FromStart(..range.end),
                             &label.text,
                             label.level,
-                        ))
+                        ));
+
+                        line.styles.push((range, label.level));
                     },
 
                     _ => unreachable!(),
@@ -388,11 +392,7 @@ impl fmt::Display for ReportDisplay<'_> {
             writeln!(writer, ":{line_number}:{column_number}")?;
         }
 
-        'display_lines: {
-            if strike_prefix_width == 0 {
-                break 'display_lines;
-            }
-
+        {
             // INDENT: "<strikes-prefix> "
             indent!(writer, strike_prefix_width + 1, with: |writer: &mut dyn fmt::Write| {
                 let mut strike_override = None::<yansi::Painted<&char>>;
@@ -591,26 +591,6 @@ fn number_width(number: usize) -> usize {
     } else {
         (number as f64).log10() as usize + 1
     }
-}
-
-fn shrink_to_line_boundaries(source: &str, mut range: ops::Range<usize>) -> ops::Range<usize> {
-    while range.start < range.end {
-        if source[range.start..].starts_with('\n') {
-            range.start += 1;
-            break;
-        }
-        range.start += 1;
-    }
-
-    while range.end > range.start {
-        if source[..range.end].ends_with('\n') {
-            range.end -= 1;
-            break;
-        }
-        range.end -= 1;
-    }
-
-    range
 }
 
 fn extend_to_line_boundaries(source: &str, mut range: ops::Range<usize>) -> ops::Range<usize> {
