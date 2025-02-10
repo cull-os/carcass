@@ -1,4 +1,7 @@
-use std::ops;
+use std::{
+    num::NonZeroUsize,
+    ops,
+};
 
 use crate::*;
 
@@ -10,41 +13,45 @@ pub struct File<'a> {
     pub source: CowStr<'a>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Position {
-    pub line: usize,
-    pub column: usize,
-}
+impl File<'_> {
+    pub fn position(&self, range: &ops::Range<usize>) -> (Position, Position) {
+        let _ = self.source[range.clone()];
 
-impl Position {
-    pub fn from(range: &ops::Range<usize>, file: &File) -> (Self, Self) {
-        let mut start = Self { line: 1, column: 0 };
-        let mut end = Self { line: 1, column: 0 };
+        let mut line = NonZeroUsize::MIN;
+        let mut column = Some(NonZeroUsize::MIN);
 
-        for (index, c) in file.source.char_indices() {
+        let mut start = Position { line, column };
+        let mut end = Position { line, column };
+
+        for (index, c) in self.source.char_indices() {
             if index > range.end {
                 break;
             }
 
-            if index <= range.start {
-                if c == '\n' {
-                    start.line += 1;
-                    start.column = 0;
-                } else {
-                    start.column += 1;
-                }
+            if index == range.start {
+                start.line = line;
+                start.column = column;
             }
 
-            if index <= range.end {
-                if c == '\n' {
-                    end.line += 1;
-                    end.column = 0;
-                } else {
-                    end.column += 1;
-                }
+            if c == '\n' {
+                line = line.saturating_add(1);
+                column = None;
+            } else {
+                column = Some(column.map_or(NonZeroUsize::MIN, |column| column.saturating_add(1)));
+            }
+
+            if index + 1 == range.end {
+                end.line = line;
+                end.column = column;
             }
         }
 
         (start, end)
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Position {
+    pub line: NonZeroUsize,
+    pub column: Option<NonZeroUsize>,
 }
