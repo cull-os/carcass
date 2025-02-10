@@ -499,7 +499,7 @@ impl fmt::Display for ReportDisplay<'_> {
                                 // INDENT: "<strike-prefix>            <top-to-bottom>"
                                 let mut wrote = false;
                                 indent!(writer, strike_prefix_width + 1 + label_range.end, with: |writer: &mut dyn fmt::Write| {
-                                    for strike in strike_prefix.borrow().iter().take(if wrote { usize::MAX } else { strike_index }) {
+                                    for strike in strike_prefix.borrow().iter().take(if !wrote { strike_index } else { usize::MAX }) {
                                         match strike {
                                             Some((
                                                 _,
@@ -523,19 +523,19 @@ impl fmt::Display for ReportDisplay<'_> {
                                         write_strike(writer, &Some(strike))?;
                                     }
 
-                                    for _ in 0..strike_prefix_width - strike_index + label_range.end - 1
+                                    for _ in 0..if !wrote { strike_prefix_width - strike_index - 1 } else { 0 } + label_range.end
                                     {
                                         write!(
                                             writer,
                                             "{symbol}",
-                                            symbol = if wrote { ' ' } else { LEFT_TO_RIGHT }.paint(strike_level.style_in(report.severity))
+                                            symbol = if !wrote { LEFT_TO_RIGHT } else { ' ' }.paint(strike_level.style_in(report.severity))
                                         )?;
                                     }
 
                                     write!(
                                         writer,
                                         "{symbol}",
-                                        symbol = if wrote { TOP_TO_BOTTOM } else { LEFT_TO_BOTTOM }.paint(strike_level.style_in(report.severity))
+                                        symbol = if !wrote { LEFT_TO_BOTTOM } else { TOP_TO_BOTTOM }.paint(strike_level.style_in(report.severity))
                                     )?;
 
                                     wrote = true;
