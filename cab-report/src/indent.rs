@@ -18,7 +18,6 @@ thread_local! {
     pub static LINE_WIDTH: Cell<usize> = const { Cell::new(0) };
 }
 
-// TODO: Split within words when it doesn't fit on the next line.
 pub(crate) fn writeln_wrapped<'a>(
     writer: &'a mut dyn fmt::Write,
     parts: impl Iterator<Item = yansi::Painted<&'a str>>,
@@ -26,39 +25,77 @@ pub(crate) fn writeln_wrapped<'a>(
     use None as Space;
     use Some as Word;
 
-    let mut line_width = LINE_WIDTH.get();
+    let mut line_width_max = *LINE_WIDTH_MAX;
 
-    parts
+    let line_width_start = LINE_WIDTH.get();
+    let mut line_width = line_width_start;
+
+    // If we can't even write any text just assume the line is uncapped.
+    if line_width_start >= line_width_max {
+        line_width_max = usize::MAX;
+    }
+
+    let mut parts = parts
         .flat_map(|part| {
             part.value
                 .split_whitespace()
                 .map(move |word| Word(word.paint(part.style)))
                 .intersperse(Space)
         })
-        .try_for_each(|part| {
-            match part {
-                Word(word) => {
-                    let word_width = word.value.width();
+        .peekable();
 
-                    if line_width != 0 && line_width + word_width >= *LINE_WIDTH_MAX {
-                        writeln!(writer)?;
-                        line_width = line_width - (line_width - LINE_WIDTH.get());
-                    }
-
-                    write!(writer, "{word}")?;
-                    line_width += word_width;
-                },
-
-                Space => {
-                    if line_width != 0 && line_width < *LINE_WIDTH_MAX {
-                        write!(writer, " ")?;
-                        line_width += 1;
-                    }
-                },
+    while let Some(part) = parts.peek_mut() {
+        let Word(word) = part.as_mut() else {
+            if line_width != 0 && line_width < line_width_max {
+                write!(writer, " ")?;
+                line_width += 1;
             }
 
-            Ok(())
-        })?;
+            parts.next();
+            continue;
+        };
+
+        let word_width = word.value.width();
+
+        // Word fits in current line.
+        if line_width + word_width < line_width_max {
+            write!(writer, "{word}")?;
+            line_width += word_width;
+
+            parts.next();
+            continue;
+        }
+
+        // Word fits in the next line.
+        if line_width_start + word_width < line_width_max {
+            writeln!(writer)?;
+            line_width = line_width_start;
+
+            write!(writer, "{word}")?;
+            line_width += word_width;
+
+            parts.next();
+            continue;
+        }
+
+        // Word doesn't fit in the next line.
+        let line_width_remainder = line_width_max - line_width;
+
+        let split_index = word
+            .value
+            .char_indices()
+            .enumerate()
+            .find_map(|(index, (split_index, _))| (index + 1 >= line_width_remainder).then_some(split_index))
+            .unwrap();
+
+        let (word_this, word_rest) = word.value.split_at(split_index);
+
+        word.value = word_this;
+        writeln!(writer, "{word}")?;
+        line_width = line_width_start;
+
+        word.value = word_rest;
+    }
 
     writeln!(writer)
 }

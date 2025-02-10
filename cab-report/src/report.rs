@@ -649,11 +649,11 @@ fn number_width(number: usize) -> usize {
 }
 
 fn extend_to_line_boundaries(source: &str, mut range: ops::Range<usize>) -> ops::Range<usize> {
-    while range.start > 0 && !source[range.start - 1..].starts_with('\n') {
+    while source.as_bytes().get(range.start - 1).copied() == Some(b'\n') {
         range.start -= 1;
     }
 
-    while range.end < source.len() && !source[range.end..].starts_with('\n') {
+    while source.as_bytes().get(range.end).copied() == Some(b'\n') {
         range.end += 1;
     }
 
