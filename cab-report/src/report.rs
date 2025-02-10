@@ -55,7 +55,7 @@ impl<'a> Report<'a> {
         Self::new(ReportSeverity::Note, title)
     }
 
-    pub fn warning(title: impl Into<CowStr<'a>>) -> Self {
+    pub fn warn(title: impl Into<CowStr<'a>>) -> Self {
         Self::new(ReportSeverity::Warn, title)
     }
 

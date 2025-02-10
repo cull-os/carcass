@@ -22,8 +22,8 @@ impl LabelSeverity {
             (ReportSeverity::Error, LabelSeverity::Secondary) => Yellow,
             (ReportSeverity::Error, LabelSeverity::Primary) => Red,
 
-            (ReportSeverity::Bug, LabelSeverity::Primary) => Yellow,
-            (ReportSeverity::Bug, LabelSeverity::Secondary) => Red,
+            (ReportSeverity::Bug, LabelSeverity::Secondary) => Yellow,
+            (ReportSeverity::Bug, LabelSeverity::Primary) => Red,
         }
         .foreground()
     }
