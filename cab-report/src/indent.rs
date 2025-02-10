@@ -115,13 +115,14 @@ macro_rules! __indent {
             $writer,
             header_width,
             with = move |writer: &mut dyn fmt::Write| {
-                if !wrote {
-                    write!(writer, "{header} ", header = $header)?;
-                    wrote = true;
-                    Ok(header_width)
-                } else {
-                    Ok(0)
+                if wrote {
+                    return Ok(0);
                 }
+
+                write!(writer, "{header} ", header = $header)?;
+
+                wrote = true;
+                Ok(header_width)
             }
         );
     };
