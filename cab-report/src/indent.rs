@@ -121,13 +121,6 @@ pub struct Writer<'a> {
     pub place: Place,
 }
 
-impl Writer<'_> {
-    pub fn continuation(mut self) -> Self {
-        self.place = Place::Middle;
-        self
-    }
-}
-
 impl Drop for Writer<'_> {
     fn drop(&mut self) {
         LINE_WIDTH.set(LINE_WIDTH.get().saturating_sub(self.count));
@@ -233,20 +226,11 @@ macro_rules! __indent {
         );
     };
 
-    ($writer:ident, $count:expr,continue: true) => {
-        let $writer = &mut $crate::indent::indent($writer, $count).continuation();
-    };
-
-    ($writer:ident, $count:expr $(,continue: false)?) => {
+    ($writer:ident, $count:expr) => {
         let $writer = &mut $crate::indent::indent($writer, $count);
     };
 
-    ($writer:ident, $count:expr,continue: true,with = $with:expr) => {
-        let mut with = $with;
-        let $writer = &mut $crate::indent::indent_with($writer, $count, &mut with).continuation();
-    };
-
-    ($writer:ident, $count:expr $(,continue: false)?,with = $with:expr) => {
+    ($writer:ident, $count:expr,with = $with:expr) => {
         let mut with = $with;
         let $writer = &mut $crate::indent::indent_with($writer, $count, &mut with);
     };

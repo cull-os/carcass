@@ -5,7 +5,6 @@ use std::{
         Write as _,
     },
     iter,
-    num::NonZeroUsize,
     ops,
 };
 
@@ -138,7 +137,6 @@ impl fmt::Display for ReportDisplay<'_> {
         const TOP_LEFT_TO_RIGHT: char = '╲';
         const LEFT_TO_RIGHT: char = '━';
         const LEFT_TO_TOP_BOTTOM: char = '┫';
-        const LEFT_TO_BOTTOM: char = '┓';
         const DOT: char = '·';
 
         const STYLE_GUTTER: yansi::Style = yansi::Style::new().blue();
