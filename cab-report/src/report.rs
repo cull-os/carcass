@@ -301,7 +301,7 @@ impl fmt::Display for ReportDisplay<'_> {
             // INDENT: "note: "
             indent!(writer, header = report.severity.styled());
 
-            write_wrapped(writer, [report.title.as_ref().bright_white().bold()].into_iter())?;
+            writeln_wrapped(writer, [report.title.as_ref().bright_white().bold()].into_iter())?;
         }
 
         // INDENT: "123 | "
@@ -442,8 +442,7 @@ impl fmt::Display for ReportDisplay<'_> {
                 {
                     *line_number.borrow_mut() = Some((line.number, true));
 
-                    write_wrapped(writer, resolve_style(line.content, &mut line.styles, report.severity))?;
-                    writeln!(writer)?;
+                    writeln_wrapped(writer, resolve_style(line.content, &mut line.styles, report.severity))?;
 
                     *line_number.borrow_mut() = Some((line.number, false));
                 }
@@ -532,12 +531,10 @@ impl fmt::Display for ReportDisplay<'_> {
                                 }
                             );
 
-                            write_wrapped(
+                            writeln_wrapped(
                                 writer,
                                 [label_text.as_ref().paint(label_severity.style_in(report.severity))].into_iter(),
                             )?;
-
-                            writeln!(writer)?;
                         },
 
                         LabelRange::Inline(label_range) => {
@@ -610,12 +607,10 @@ impl fmt::Display for ReportDisplay<'_> {
                                 }
                             );
 
-                            write_wrapped(
+                            writeln_wrapped(
                                 writer,
                                 [label_text.as_ref().paint(label_severity.style_in(report.severity))].into_iter(),
                             )?;
-
-                            writeln!(writer)?;
                         },
                     }
                 }
@@ -636,7 +631,7 @@ impl fmt::Display for ReportDisplay<'_> {
                 // INDENT: "note: "
                 indent!(writer, header = &point.title);
 
-                write_wrapped(writer, [point.text.as_ref().new()].into_iter())?;
+                writeln_wrapped(writer, [point.text.as_ref().new()].into_iter())?;
             }
         }
 

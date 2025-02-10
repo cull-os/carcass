@@ -19,7 +19,7 @@ thread_local! {
 }
 
 // TODO: Split within words when it doesn't fit on the next line.
-pub(crate) fn write_wrapped<'a>(
+pub(crate) fn writeln_wrapped<'a>(
     writer: &'a mut dyn fmt::Write,
     parts: impl Iterator<Item = yansi::Painted<&'a str>>,
 ) -> fmt::Result {
@@ -60,7 +60,7 @@ pub(crate) fn write_wrapped<'a>(
             Ok(())
         })?;
 
-    Ok(())
+    writeln!(writer)
 }
 
 #[doc(hidden)]
