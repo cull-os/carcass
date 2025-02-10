@@ -474,29 +474,32 @@ impl fmt::Display for ReportDisplay<'_> {
                     dedent!(writer);
 
                     for (label_range, label_text, _) in line.labels.iter().rev() {
-                        let &strike @ (strike_id, _, strike_level) = strike_prefix
-                            .borrow()
-                            .iter()
-                            .flatten()
-                            .rev()
-                            .find(|(_, status, _)| *status == StrikeStatus::End)
-                            .unwrap();
-
-                        let strike_index = strike_prefix
-                            .borrow()
-                            .iter()
-                            .enumerate()
-                            .find_map(|(index, strike)| {
-                                strike
-                                    .is_some_and(|(id, ..)| id == strike_id)
-                                    .then_some(index)
-                            })
-                            .unwrap();
-
                         match label_range {
                             LabelRange::FromStart(label_range) => {
+                                let &strike @ (strike_id, _, strike_level) = strike_prefix
+                                    .borrow()
+                                    .iter()
+                                    .flatten()
+                                    .rev()
+                                    .find(|(_, status, _)| *status == StrikeStatus::End)
+                                    .unwrap();
+
+                                let strike_index = strike_prefix
+                                    .borrow()
+                                    .iter()
+                                    .enumerate()
+                                    .find_map(|(index, strike)| {
+                                        strike
+                                            .is_some_and(|(id, ..)| id == strike_id)
+                                            .then_some(index)
+                                    })
+                                    .unwrap();
+
+                                // INDENT: "<strike-prefix><horizontal><left-to-bottom>"
+                                // INDENT: "<strike-prefix>            <top-to-bottom>"
+                                let mut wrote = false;
                                 indent!(writer, strike_prefix_width + 1 + label_range.end, with: |writer: &mut dyn fmt::Write| {
-                                    for strike in strike_prefix.borrow().iter().take(strike_index) {
+                                    for strike in strike_prefix.borrow().iter().take(if wrote { usize::MAX } else { strike_index }) {
                                         match strike {
                                             Some((
                                                 _,
@@ -516,22 +519,27 @@ impl fmt::Display for ReportDisplay<'_> {
                                         }
                                     }
 
-                                    write_strike(writer, &Some(strike))?;
+                                    if !wrote {
+                                        write_strike(writer, &Some(strike))?;
+                                    }
 
                                     for _ in 0..strike_prefix_width - strike_index + label_range.end - 1
                                     {
                                         write!(
                                             writer,
                                             "{symbol}",
-                                            symbol = LEFT_TO_RIGHT.paint(strike_level.style_in(report.severity))
+                                            symbol = if wrote { ' ' } else { LEFT_TO_RIGHT }.paint(strike_level.style_in(report.severity))
                                         )?;
                                     }
 
                                     write!(
                                         writer,
                                         "{symbol}",
-                                        symbol = LEFT_TO_BOTTOM.paint(strike_level.style_in(report.severity))
+                                        symbol = if wrote { TOP_TO_BOTTOM } else { LEFT_TO_BOTTOM }.paint(strike_level.style_in(report.severity))
                                     )?;
+
+                                    wrote = true;
+                                    strike_prefix.borrow_mut()[strike_index] = None;
 
                                     Ok(strike_prefix_width + 1 + label_range.end)
                                 });
@@ -549,8 +557,6 @@ impl fmt::Display for ReportDisplay<'_> {
 
                             LabelRange::Inline(_range) => todo!(),
                         }
-
-                        strike_prefix.borrow_mut()[strike_index] = None;
                     }
                 }
             }
