@@ -451,6 +451,8 @@ impl fmt::Display for ReportDisplay<'_> {
                 for (label_range, label_text, label_severity) in line.labels.iter().rev() {
                     match label_range {
                         LabelRange::FromStart(label_range) => {
+                            let label_range_end = label_range.end.min(60);
+
                             let &(strike_id, _, strike_severity) = strike_prefix
                                 .borrow()
                                 .iter()
@@ -476,7 +478,7 @@ impl fmt::Display for ReportDisplay<'_> {
                             let mut wrote = false;
                             indent!(
                                 writer,
-                                strike_prefix_width + 1 + label_range.end,
+                                strike_prefix_width + 1 + label_range_end,
                                 with = |writer: &mut dyn fmt::Write| {
                                     for strike in strike_prefix.borrow().iter().take(if !wrote {
                                         strike_index
@@ -506,7 +508,7 @@ impl fmt::Display for ReportDisplay<'_> {
                                         strike_prefix_width - strike_index - 1
                                     } else {
                                         0
-                                    } + label_range.end
+                                    } + label_range_end
                                     {
                                         write!(
                                             writer,
@@ -526,7 +528,7 @@ impl fmt::Display for ReportDisplay<'_> {
                                     wrote = true;
                                     strike_prefix.borrow_mut()[strike_index] = None;
 
-                                    Ok(strike_prefix_width + 1 + label_range.end)
+                                    Ok(strike_prefix_width + 1 + label_range_end)
                                 }
                             );
 
@@ -538,7 +540,9 @@ impl fmt::Display for ReportDisplay<'_> {
                             writeln!(writer)?;
                         },
 
-                        LabelRange::Inline(range) => {
+                        LabelRange::Inline(label_range) => {
+                            let label_range_end = label_range.end.min(60);
+
                             // DEDENT: "<strike-prefix> "
                             dedent!(writer);
 
@@ -564,11 +568,11 @@ impl fmt::Display for ReportDisplay<'_> {
                             );
 
                             // INDENT: "<prefix-spaces>"
-                            indent!(writer, range.start);
+                            indent!(writer, label_range.start);
 
                             // INDENT: "<horizontal><left-to-bottom>"
                             // INDENT: "            <top-to-bottom>"
-                            let underline_width = range.end - range.start;
+                            let underline_width = label_range_end - label_range.start;
                             let mut wrote = false;
                             indent!(
                                 writer,
