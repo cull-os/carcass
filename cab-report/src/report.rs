@@ -136,6 +136,7 @@ impl fmt::Display for ReportDisplay<'_> {
         const TOP_TO_RIGHT: char = '┗';
         const TOP_LEFT_TO_RIGHT: char = '╲';
         const LEFT_TO_RIGHT: char = '━';
+        const LEFT_TO_TOP_BOTTOM: char = '┫';
         const LEFT_TO_BOTTOM: char = '┓';
         const DOT: char = '·';
 
@@ -520,7 +521,7 @@ impl fmt::Display for ReportDisplay<'_> {
                                     write!(
                                         writer,
                                         "{symbol}",
-                                        symbol = if !wrote { LEFT_TO_BOTTOM } else { TOP_TO_BOTTOM }
+                                        symbol = if !wrote { LEFT_TO_TOP_BOTTOM } else { TOP_TO_BOTTOM }
                                             .paint(label_severity.style_in(report.severity))
                                     )?;
 
@@ -597,7 +598,7 @@ impl fmt::Display for ReportDisplay<'_> {
                                             _ if wrote => TOP_TO_BOTTOM,
                                             0 => TOP_LEFT_TO_RIGHT,
                                             1 => TOP_TO_BOTTOM,
-                                            _ => LEFT_TO_BOTTOM,
+                                            _ => LEFT_TO_TOP_BOTTOM,
                                         }
                                         .paint(label_severity.style_in(report.severity)),
                                     )?;
