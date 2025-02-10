@@ -307,7 +307,7 @@ impl fmt::Display for ReportDisplay<'_> {
 
         {
             // INDENT: "note: "
-            indent!(writer, header: report.severity.styled());
+            indent!(writer, header = report.severity.styled());
 
             writeln!(
                 writer,
@@ -319,38 +319,62 @@ impl fmt::Display for ReportDisplay<'_> {
         // INDENT: "123 | "
         let line_number = RefCell::new(None::<(usize, bool)>);
         let mut line_number_previous = None;
-        indent!(writer, line_number_width + 3, with: |writer: &mut dyn fmt::Write| {
-            let Some((line_number, should_write_number)) = *line_number.borrow() else { return Ok(0) };
+        indent!(
+            writer,
+            line_number_width + 3,
+            with = |writer: &mut dyn fmt::Write| {
+                let Some((line_number, should_write_number)) = *line_number.borrow() else {
+                    return Ok(0);
+                };
 
-            STYLE_GUTTER.fmt_prefix(writer)?;
+                STYLE_GUTTER.fmt_prefix(writer)?;
 
-            if !should_write_number {
-                write!(writer, "{:>line_number_width$}", "")?;
-            } else if line_number_previous == Some(line_number) {
-                let dot_width = number_width(line_number);
+                if !should_write_number {
+                    write!(writer, "{:>line_number_width$}", "")?;
+                } else if line_number_previous == Some(line_number) {
+                    let dot_width = number_width(line_number);
 
-                write!(writer, "{:>space_width$}", "", space_width = line_number_width - dot_width)?;
+                    write!(
+                        writer,
+                        "{:>space_width$}",
+                        "",
+                        space_width = line_number_width - dot_width
+                    )?;
 
-                for _ in 0..dot_width {
-                    write!(writer, "{DOT}")?;
+                    for _ in 0..dot_width {
+                        write!(writer, "{DOT}")?;
+                    }
+                } else {
+                    write!(
+                        writer,
+                        "{line_number:>line_number_width$}",
+                        line_number = line_number
+                    )?;
                 }
-            } else {
-                write!(writer, "{line_number:>line_number_width$}", line_number = line_number)?;
+
+                write!(writer, " {TOP_TO_BOTTOM} ")?;
+                STYLE_GUTTER.fmt_suffix(writer)?;
+
+                line_number_previous = Some(line_number);
+                Ok(line_number_width + 3)
             }
-
-            write!(writer, " {TOP_TO_BOTTOM} ")?;
-            STYLE_GUTTER.fmt_suffix(writer)?;
-
-            line_number_previous = Some(line_number);
-            Ok(line_number_width + 3)
-        });
+        );
 
         if let Some(line) = lines.first() {
             // DEDENT: "| "
             dedent!(writer, 2);
 
             // INDENT: "┏━━━ ".
-            indent!(writer, header: const_str::concat!(BOTTOM_TO_RIGHT, LEFT_TO_RIGHT, LEFT_TO_RIGHT, LEFT_TO_RIGHT).paint(STYLE_GUTTER));
+            indent!(
+                writer,
+                header = const_str::concat!(
+                    BOTTOM_TO_RIGHT,
+                    LEFT_TO_RIGHT,
+                    LEFT_TO_RIGHT,
+                    LEFT_TO_RIGHT
+                )
+                .paint(STYLE_GUTTER)
+            );
 
             STYLE_HEADER_PATH.fmt_prefix(writer)?;
             write!(
@@ -376,43 +400,62 @@ impl fmt::Display for ReportDisplay<'_> {
 
         {
             // INDENT: "<strikes-prefix> "
-            indent!(writer, strike_prefix_width + 1, with: |writer: &mut dyn fmt::Write| {
-                let mut strike_override = None::<yansi::Painted<&char>>;
+            indent!(
+                writer,
+                strike_prefix_width + 1,
+                with = |writer: &mut dyn fmt::Write| {
+                    let mut strike_override = None::<yansi::Painted<&char>>;
 
-                for strike_slot in &*strike_prefix.borrow() {
-                    let Some(mut strike @ (_, strike_status, strike_severity)) = *strike_slot else {
-                        match strike_override {
-                            Some(strike) => write!(writer, "{strike}")?,
-                            None => write!(writer, " ")?,
-                        }
-                        continue;
-                    };
+                    for strike_slot in &*strike_prefix.borrow() {
+                        let Some(mut strike @ (_, strike_status, strike_severity)) = *strike_slot
+                        else {
+                            match strike_override {
+                                Some(strike) => write!(writer, "{strike}")?,
+                                None => write!(writer, " ")?,
+                            }
+                            continue;
+                        };
 
-                    match strike_status {
-                        StrikeStatus::Start => {
-                            write!(writer, "{symbol}", symbol = BOTTOM_TO_RIGHT.paint(strike_severity.style_in(report.severity)))?;
+                        match strike_status {
+                            StrikeStatus::Start => {
+                                write!(
+                                    writer,
+                                    "{symbol}",
+                                    symbol = BOTTOM_TO_RIGHT
+                                        .paint(strike_severity.style_in(report.severity))
+                                )?;
 
-                            strike_override = Some(LEFT_TO_RIGHT.paint(strike_severity.style_in(report.severity)));
-                        },
+                                strike_override = Some(
+                                    LEFT_TO_RIGHT.paint(strike_severity.style_in(report.severity)),
+                                );
+                            },
 
-                        StrikeStatus::Continue | StrikeStatus::End if let Some(strike) = strike_override => {
-                            write!(writer, "{strike}")?;
-                        }
+                            StrikeStatus::Continue | StrikeStatus::End
+                                if let Some(strike) = strike_override =>
+                            {
+                                write!(writer, "{strike}")?;
+                            },
 
-                        StrikeStatus::Continue | StrikeStatus::End => {
-                            write!(writer, "{symbol}", symbol = TOP_TO_BOTTOM.paint(strike_severity.style_in(report.severity)))?;
+                            StrikeStatus::Continue | StrikeStatus::End => {
+                                write!(
+                                    writer,
+                                    "{symbol}",
+                                    symbol = TOP_TO_BOTTOM
+                                        .paint(strike_severity.style_in(report.severity))
+                                )?;
+                            },
                         }
                     }
-                }
 
-                if let Some(strike) = strike_override {
-                    write!(writer, "{strike}")?;
+                    if let Some(strike) = strike_override {
+                        write!(writer, "{strike}")?;
 
-                    Ok(strike_prefix_width + 1)
-                } else {
-                    Ok(strike_prefix_width)
+                        Ok(strike_prefix_width + 1)
+                    } else {
+                        Ok(strike_prefix_width)
+                    }
                 }
-            });
+            );
 
             for line in &mut lines {
                 {
@@ -476,38 +519,67 @@ impl fmt::Display for ReportDisplay<'_> {
                             // INDENT: "<strike-prefix><horizontal><left-to-bottom>"
                             // INDENT: "<strike-prefix>            <top-to-bottom>"
                             let mut wrote = false;
-                            indent!(writer, strike_prefix_width + 1 + label_range.end, with: |writer: &mut dyn fmt::Write| {
-                                for strike in strike_prefix.borrow().iter().take(if !wrote { strike_index } else { usize::MAX }) {
-                                    write!(writer, "{symbol}", symbol = match strike {
-                                        Some((.., severity)) => TOP_TO_BOTTOM.paint(severity.style_in(report.severity)),
-                                        None => (&' ').new(),
-                                    })?;
-                                }
+                            indent!(
+                                writer,
+                                strike_prefix_width + 1 + label_range.end,
+                                with = |writer: &mut dyn fmt::Write| {
+                                    for strike in strike_prefix.borrow().iter().take(if !wrote {
+                                        strike_index
+                                    } else {
+                                        usize::MAX
+                                    }) {
+                                        write!(
+                                            writer,
+                                            "{symbol}",
+                                            symbol = match strike {
+                                                Some((.., severity)) =>
+                                                    TOP_TO_BOTTOM
+                                                        .paint(severity.style_in(report.severity)),
+                                                None => (&' ').new(),
+                                            }
+                                        )?;
+                                    }
 
-                                if !wrote {
-                                    write!(writer, "{symbol}", symbol = TOP_TO_RIGHT.paint(strike_severity.style_in(report.severity)))?;
-                                }
+                                    if !wrote {
+                                        write!(
+                                            writer,
+                                            "{symbol}",
+                                            symbol = TOP_TO_RIGHT
+                                                .paint(strike_severity.style_in(report.severity))
+                                        )?;
+                                    }
 
-                                for _ in 0..if !wrote { strike_prefix_width - strike_index - 1 } else { 0 } + label_range.end
-                                {
+                                    for _ in 0..if !wrote {
+                                        strike_prefix_width - strike_index - 1
+                                    } else {
+                                        0
+                                    } + label_range.end
+                                    {
+                                        write!(
+                                            writer,
+                                            "{symbol}",
+                                            symbol = if !wrote { LEFT_TO_RIGHT } else { ' ' }
+                                                .paint(label_severity.style_in(report.severity))
+                                        )?;
+                                    }
+
                                     write!(
                                         writer,
                                         "{symbol}",
-                                        symbol = if !wrote { LEFT_TO_RIGHT } else { ' ' }.paint(label_severity.style_in(report.severity))
+                                        symbol = if !wrote {
+                                            LEFT_TO_BOTTOM
+                                        } else {
+                                            TOP_TO_BOTTOM
+                                        }
+                                        .paint(label_severity.style_in(report.severity))
                                     )?;
+
+                                    wrote = true;
+                                    strike_prefix.borrow_mut()[strike_index] = None;
+
+                                    Ok(strike_prefix_width + 1 + label_range.end)
                                 }
-
-                                write!(
-                                    writer,
-                                    "{symbol}",
-                                    symbol = if !wrote { LEFT_TO_BOTTOM } else { TOP_TO_BOTTOM }.paint(label_severity.style_in(report.severity))
-                                )?;
-
-                                wrote = true;
-                                strike_prefix.borrow_mut()[strike_index] = None;
-
-                                Ok(strike_prefix_width + 1 + label_range.end)
-                            });
+                            );
 
                             write_wrapped(
                                 writer,
@@ -525,16 +597,26 @@ impl fmt::Display for ReportDisplay<'_> {
                             dedent!(writer);
 
                             // INDENT: "<strike-prefix>"
-                            indent!(writer, strike_prefix_width + 1, with: |writer: &mut dyn fmt::Write| {
-                                for strike in &*strike_prefix.borrow() {
-                                    write!(writer, "{symbol}", symbol = match strike {
-                                        Some((.., severity)) => TOP_TO_BOTTOM.paint(severity.style_in(report.severity)),
-                                        None => (&' ').new(),
-                                    })?;
-                                }
+                            indent!(
+                                writer,
+                                strike_prefix_width + 1,
+                                with = |writer: &mut dyn fmt::Write| {
+                                    for strike in &*strike_prefix.borrow() {
+                                        write!(
+                                            writer,
+                                            "{symbol}",
+                                            symbol = match strike {
+                                                Some((.., severity)) =>
+                                                    TOP_TO_BOTTOM
+                                                        .paint(severity.style_in(report.severity)),
+                                                None => (&' ').new(),
+                                            }
+                                        )?;
+                                    }
 
-                                Ok(strike_prefix_width)
-                            });
+                                    Ok(strike_prefix_width)
+                                }
+                            );
 
                             // INDENT: "<prefix-spaces>"
                             indent!(writer, range.start);
@@ -543,35 +625,41 @@ impl fmt::Display for ReportDisplay<'_> {
                             // INDENT: "            <top-to-bottom>"
                             let underline_width = range.end - range.start;
                             let mut wrote = false;
-                            indent!(writer, underline_width, with: |writer: &mut dyn fmt::Write| {
-                                for index in 0..underline_width.saturating_sub(1) {
+                            indent!(
+                                writer,
+                                underline_width,
+                                with = |writer: &mut dyn fmt::Write| {
+                                    for index in 0..underline_width.saturating_sub(1) {
+                                        write!(
+                                            writer,
+                                            "{symbol}",
+                                            symbol = if wrote {
+                                                ' '
+                                            } else if index == 0 {
+                                                TOP_TO_RIGHT
+                                            } else {
+                                                LEFT_TO_RIGHT
+                                            }
+                                            .paint(label_severity.style_in(report.severity)),
+                                        )?;
+                                    }
+
                                     write!(
                                         writer,
                                         "{symbol}",
-                                        symbol = if wrote {
-                                            ' '
-                                        } else if index == 0 {
-                                            TOP_TO_RIGHT
-                                        } else {
-                                            LEFT_TO_RIGHT
-                                        }.paint(label_severity.style_in(report.severity)),
+                                        symbol = match underline_width {
+                                            _ if wrote => TOP_TO_BOTTOM,
+                                            0 => TOP_LEFT_TO_RIGHT,
+                                            1 => TOP_TO_BOTTOM,
+                                            _ => LEFT_TO_BOTTOM,
+                                        }
+                                        .paint(label_severity.style_in(report.severity)),
                                     )?;
+
+                                    wrote = true;
+                                    Ok(underline_width)
                                 }
-
-                                write!(
-                                    writer,
-                                    "{symbol}",
-                                    symbol = match underline_width {
-                                        _ if wrote => TOP_TO_BOTTOM,
-                                        0 => TOP_LEFT_TO_RIGHT,
-                                        1 => TOP_TO_BOTTOM,
-                                        _ => LEFT_TO_BOTTOM,
-                                    }.paint(label_severity.style_in(report.severity)),
-                                )?;
-
-                                wrote = true;
-                                Ok(underline_width)
-                            });
+                            );
 
                             write_wrapped(
                                 writer,
@@ -597,10 +685,10 @@ impl fmt::Display for ReportDisplay<'_> {
 
             for point in &report.points {
                 // INDENT: "= "
-                indent!(writer, header: "=".paint(STYLE_GUTTER));
+                indent!(writer, header = "=".paint(STYLE_GUTTER));
 
                 // INDENT: "note: "
-                indent!(writer, header: &point.title);
+                indent!(writer, header = &point.title);
 
                 write_wrapped(writer, [point.text.as_ref().new()].into_iter())?;
             }

@@ -76,25 +76,7 @@ impl fmt::Write for Writer<'_> {
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __indent {
-    ($writer:ident, $count:expr,continue: true) => {
-        let $writer = &mut $crate::indent::indent($writer, $count).continuation();
-    };
-
-    ($writer:ident, $count:expr $(,continue: false)?) => {
-        let $writer = &mut $crate::indent::indent($writer, $count);
-    };
-
-    ($writer:ident, $count:expr,continue: true,with: $with:expr) => {
-        let mut with = $with;
-        let $writer = &mut $crate::indent::indent_with($writer, $count, &mut with).continuation();
-    };
-
-    ($writer:ident, $count:expr $(,continue: false)?,with: $with:expr) => {
-        let mut with = $with;
-        let $writer = &mut $crate::indent::indent_with($writer, $count, &mut with);
-    };
-
-    ($writer:ident, header: $header:expr) => {
+    ($writer:ident,header = $header:expr) => {
         let header_width = {
             trait ToStr {
                 fn to_str(&self) -> &str;
@@ -129,16 +111,38 @@ macro_rules! __indent {
         };
 
         let mut wrote = false;
-        $crate::indent::indent!($writer, header_width, with: move |writer: &mut dyn fmt::Write| {
-            if !wrote {
-                write!(writer, "{header} ", header = $header)?;
-                wrote = true;
-                Ok(header_width)
-            } else {
-                Ok(0)
+        $crate::indent::indent!(
+            $writer,
+            header_width,
+            with = move |writer: &mut dyn fmt::Write| {
+                if !wrote {
+                    write!(writer, "{header} ", header = $header)?;
+                    wrote = true;
+                    Ok(header_width)
+                } else {
+                    Ok(0)
+                }
             }
-        });
-    }
+        );
+    };
+
+    ($writer:ident, $count:expr,continue: true) => {
+        let $writer = &mut $crate::indent::indent($writer, $count).continuation();
+    };
+
+    ($writer:ident, $count:expr $(,continue: false)?) => {
+        let $writer = &mut $crate::indent::indent($writer, $count);
+    };
+
+    ($writer:ident, $count:expr,continue: true,with = $with:expr) => {
+        let mut with = $with;
+        let $writer = &mut $crate::indent::indent_with($writer, $count, &mut with).continuation();
+    };
+
+    ($writer:ident, $count:expr $(,continue: false)?,with = $with:expr) => {
+        let mut with = $with;
+        let $writer = &mut $crate::indent::indent_with($writer, $count, &mut with);
+    };
 }
 
 pub fn indent(writer: &mut dyn fmt::Write, count: usize) -> Writer<'_> {
