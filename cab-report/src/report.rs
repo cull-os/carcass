@@ -184,15 +184,6 @@ impl fmt::Display for ReportDisplay<'_> {
             Inline(ops::Range<usize>),
         }
 
-        impl LabelRange {
-            fn end(&self) -> usize {
-                match self {
-                    LabelRange::FromStart(range) => range.end,
-                    LabelRange::Inline(range) => range.end,
-                }
-            }
-        }
-
         type LabelDynamic<'a> = (LabelRange, &'a CowStr<'a>, LabelSeverity);
 
         #[derive(Debug, Clone)]
@@ -222,7 +213,6 @@ impl fmt::Display for ReportDisplay<'_> {
         });
 
         let mut lines: SmallVec<Line, 2> = SmallVec::new();
-        let line_current = RefCell::new(None::<Line>);
 
         for (label_index, ((label_start, label_end), label)) in labels.iter().enumerate() {
             let label_is_multiline = label_start.line != label_end.line;
@@ -348,15 +338,17 @@ impl fmt::Display for ReportDisplay<'_> {
         }
 
         // INDENT: "123 | "
+        let line_number = RefCell::new(None::<(usize, bool)>);
         let mut line_number_previous = None;
         indent!(writer, line_number_width + 3, with: |writer: &mut dyn fmt::Write| {
-            let line_current = line_current.borrow();
-            let Some(line) = line_current.as_ref() else { return Ok(0) };
+            let Some((line_number, should_write_number)) = *line_number.borrow() else { return Ok(0) };
 
             STYLE_GUTTER.fmt_prefix(writer)?;
 
-            if line_number_previous == Some(line.number) {
-                let dot_width = number_width(line.number);
+            if !should_write_number {
+                write!(writer, "{:>line_number_width$}", "")?;
+            } else if line_number_previous == Some(line_number) {
+                let dot_width = number_width(line_number);
 
                 write!(writer, "{:>space_width$}", "", space_width = line_number_width - dot_width)?;
 
@@ -364,13 +356,13 @@ impl fmt::Display for ReportDisplay<'_> {
                     write!(writer, "{DOT}")?;
                 }
             } else {
-                write!(writer, "{line_number:>line_number_width$}", line_number = line.number)?;
+                write!(writer, "{line_number:>line_number_width$}", line_number = line_number)?;
             }
 
             write!(writer, " {TOP_TO_BOTTOM} ")?;
             STYLE_GUTTER.fmt_suffix(writer)?;
 
-            line_number_previous = Some(line.number);
+            line_number_previous = Some(line_number);
             Ok(line_number_width + 3)
         });
 
@@ -449,8 +441,6 @@ impl fmt::Display for ReportDisplay<'_> {
             });
 
             for line in &mut lines {
-                *line_current.borrow_mut() = Some(line.clone());
-
                 {
                     let mut strike_prefix = strike_prefix.borrow_mut();
 
@@ -473,99 +463,103 @@ impl fmt::Display for ReportDisplay<'_> {
                 }
 
                 {
+                    *line_number.borrow_mut() = Some((line.number, true));
+
                     write_wrapped(
                         writer,
                         resolve_style(line.content, &mut line.styles, report.severity),
                     )?;
                     writeln!(writer)?;
 
-                    // DEDENT: "<strike-prefix> "
-                    dedent!(writer);
+                    *line_number.borrow_mut() = Some((line.number, false));
+                }
 
-                    for (label_range, label_text, label_severity) in line.labels.iter().rev() {
-                        match label_range {
-                            LabelRange::FromStart(label_range) => {
-                                let &strike @ (strike_id, ..) = strike_prefix
-                                    .borrow()
-                                    .iter()
-                                    .flatten()
-                                    .rev()
-                                    .find(|(_, status, _)| *status == StrikeStatus::End)
-                                    .unwrap();
+                // DEDENT: "<strike-prefix> "
+                dedent!(writer);
 
-                                let strike_index = strike_prefix
-                                    .borrow()
-                                    .iter()
-                                    .enumerate()
-                                    .find_map(|(index, strike)| {
-                                        strike
-                                            .is_some_and(|(id, ..)| id == strike_id)
-                                            .then_some(index)
-                                    })
-                                    .unwrap();
+                for (label_range, label_text, label_severity) in line.labels.iter().rev() {
+                    match label_range {
+                        LabelRange::FromStart(label_range) => {
+                            let &strike @ (strike_id, ..) = strike_prefix
+                                .borrow()
+                                .iter()
+                                .flatten()
+                                .rev()
+                                .find(|(_, status, _)| *status == StrikeStatus::End)
+                                .unwrap();
 
-                                // INDENT: "<strike-prefix><horizontal><left-to-bottom>"
-                                // INDENT: "<strike-prefix>            <top-to-bottom>"
-                                let mut wrote = false;
-                                indent!(writer, strike_prefix_width + 1 + label_range.end, with: |writer: &mut dyn fmt::Write| {
-                                    for strike in strike_prefix.borrow().iter().take(if !wrote { strike_index } else { usize::MAX }) {
-                                        match strike {
-                                            Some((
-                                                _,
-                                                StrikeStatus::Start | StrikeStatus::End,
-                                                label,
-                                            )) => {
-                                                write!(
-                                                    writer,
-                                                    "{symbol}",
-                                                    symbol = TOP_TO_BOTTOM.paint(label.style_in(report.severity))
-                                                )?;
-                                            },
+                            let strike_index = strike_prefix
+                                .borrow()
+                                .iter()
+                                .enumerate()
+                                .find_map(|(index, strike)| {
+                                    strike
+                                        .is_some_and(|(id, ..)| id == strike_id)
+                                        .then_some(index)
+                                })
+                                .unwrap();
 
-                                            _ => {
-                                                write_strike(writer, strike)?;
-                                            },
-                                        }
+                            // INDENT: "<strike-prefix><horizontal><left-to-bottom>"
+                            // INDENT: "<strike-prefix>            <top-to-bottom>"
+                            let mut wrote = false;
+                            indent!(writer, strike_prefix_width + 1 + label_range.end, with: |writer: &mut dyn fmt::Write| {
+                                for strike in strike_prefix.borrow().iter().take(if !wrote { strike_index } else { usize::MAX }) {
+                                    match strike {
+                                        Some((
+                                            _,
+                                            StrikeStatus::Start | StrikeStatus::End,
+                                            label,
+                                        )) => {
+                                            write!(
+                                                writer,
+                                                "{symbol}",
+                                                symbol = TOP_TO_BOTTOM.paint(label.style_in(report.severity))
+                                            )?;
+                                        },
+
+                                        _ => {
+                                            write_strike(writer, strike)?;
+                                        },
                                     }
+                                }
 
-                                    if !wrote {
-                                        write_strike(writer, &Some(strike))?;
-                                    }
+                                if !wrote {
+                                    write_strike(writer, &Some(strike))?;
+                                }
 
-                                    for _ in 0..if !wrote { strike_prefix_width - strike_index - 1 } else { 0 } + label_range.end
-                                    {
-                                        write!(
-                                            writer,
-                                            "{symbol}",
-                                            symbol = if !wrote { LEFT_TO_RIGHT } else { ' ' }.paint(label_severity.style_in(report.severity))
-                                        )?;
-                                    }
-
+                                for _ in 0..if !wrote { strike_prefix_width - strike_index - 1 } else { 0 } + label_range.end
+                                {
                                     write!(
                                         writer,
                                         "{symbol}",
-                                        symbol = if !wrote { LEFT_TO_BOTTOM } else { TOP_TO_BOTTOM }.paint(label_severity.style_in(report.severity))
+                                        symbol = if !wrote { LEFT_TO_RIGHT } else { ' ' }.paint(label_severity.style_in(report.severity))
                                     )?;
+                                }
 
-                                    wrote = true;
-                                    strike_prefix.borrow_mut()[strike_index] = None;
-
-                                    Ok(strike_prefix_width + 1 + label_range.end)
-                                });
-
-                                write_wrapped(
+                                write!(
                                     writer,
-                                    [label_text
-                                        .as_ref()
-                                        .paint(label_severity.style_in(report.severity))]
-                                    .into_iter(),
+                                    "{symbol}",
+                                    symbol = if !wrote { LEFT_TO_BOTTOM } else { TOP_TO_BOTTOM }.paint(label_severity.style_in(report.severity))
                                 )?;
 
-                                writeln!(writer)?;
-                            },
+                                wrote = true;
+                                strike_prefix.borrow_mut()[strike_index] = None;
 
-                            LabelRange::Inline(_range) => todo!(),
-                        }
+                                Ok(strike_prefix_width + 1 + label_range.end)
+                            });
+
+                            write_wrapped(
+                                writer,
+                                [label_text
+                                    .as_ref()
+                                    .paint(label_severity.style_in(report.severity))]
+                                .into_iter(),
+                            )?;
+
+                            writeln!(writer)?;
+                        },
+
+                        LabelRange::Inline(_range) => todo!(),
                     }
                 }
             }
@@ -573,17 +567,10 @@ impl fmt::Display for ReportDisplay<'_> {
 
         // = help: foo bar
         {
-            *line_current.borrow_mut() = None;
+            *line_number.borrow_mut() = None;
 
-            // Dedent that separator as we are going to align.
-            dedent!(
-                writer,
-                if line_number_width == 0 {
-                    line_number_width + 3
-                } else {
-                    line_number_width + 1
-                }
-            );
+            // DEDENT: "| "
+            dedent!(writer, 2);
 
             for point in &report.points {
                 // INDENT: "= "
