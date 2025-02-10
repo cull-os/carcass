@@ -286,23 +286,14 @@ pub use crate::__indent as indent;
 #[macro_export]
 macro_rules! __dedent {
     ($writer:ident) => {
-        let count = $writer.count;
-        let old_count = $crate::indent::LINE_WIDTH.get();
-
-        $crate::indent::LINE_WIDTH.set(old_count.saturating_sub(count));
-        let _guard = ::scopeguard::guard((), |_| {
-            $crate::indent::LINE_WIDTH.set(old_count);
-        });
-
-        let $writer = &mut $crate::indent::Writer {
-            writer: $writer.writer,
-            count: 0,
-            with: &mut move |_| Ok(0),
-            place: $writer.place,
-        };
+        $crate::indent::dedent!($writer, $writer.count, discard = true);
     };
 
     ($writer:ident, $count:expr) => {
+        $crate::indent::dedent!($writer, $count, discard = true);
+    };
+
+    ($writer:ident, $count:expr,discard = $discard:literal) => {
         let count = $count;
         let old_count = $crate::indent::LINE_WIDTH.get();
 
@@ -314,7 +305,7 @@ macro_rules! __dedent {
         let $writer = &mut $crate::indent::Writer {
             writer: $writer.writer,
             count: $writer.count.checked_sub(count).expect("dedented too hard"),
-            with: $writer.with,
+            with: if $discard { &mut move |_| Ok(0) } else { $writer.with },
             place: $writer.place,
         };
     };
