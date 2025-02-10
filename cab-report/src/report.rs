@@ -206,14 +206,25 @@ impl fmt::Display for ReportDisplay<'_> {
             labels: SmallVec<LabelDynamic<'a>, 2>,
         }
 
-        let mut labels = report.labels.clone();
-        labels.sort_by_key(|label| label.range.start);
+        let mut labels: SmallVec<_, 2> = report
+            .labels
+            .clone()
+            .into_iter()
+            .map(|label| (file.position(&label.range), label))
+            .collect();
+
+        labels.sort_by(|((a_start, _), a_label), ((b_start, _), b_label)| {
+            if a_start != b_start {
+                return a_start.cmp(b_start);
+            }
+
+            a_label.range.end.cmp(&b_label.range.end)
+        });
 
         let mut lines: SmallVec<Line, 2> = SmallVec::new();
         let line_current = RefCell::new(None::<Line>);
 
-        for (label_index, label) in labels.iter().enumerate() {
-            let (label_start, label_end) = file.position(&label.range);
+        for (label_index, ((label_start, label_end), label)) in labels.iter().enumerate() {
             let label_is_multiline = label_start.line != label_end.line;
 
             let label_range_extended = extend_to_line_boundaries(&file.source, label.range());
@@ -398,7 +409,7 @@ impl fmt::Display for ReportDisplay<'_> {
                 let mut strike_override = None::<yansi::Painted<&char>>;
 
                 for strike_slot in &*strike_prefix.borrow() {
-                    let Some(mut strike @ (_, strike_status, strike_level)) = *strike_slot else {
+                    let Some(mut strike @ (_, strike_status, strike_severity)) = *strike_slot else {
                         match strike_override {
                             Some(strike) => write!(writer, "{strike}")?,
                             None => write!(writer, " ")?,
@@ -410,7 +421,7 @@ impl fmt::Display for ReportDisplay<'_> {
                         StrikeStatus::Start => {
                             write_strike(writer, &Some(strike))?;
 
-                            strike_override = Some(LEFT_TO_RIGHT.paint(strike_level.style_in(report.severity)));
+                            strike_override = Some(LEFT_TO_RIGHT.paint(strike_severity.style_in(report.severity)));
                         },
 
                         StrikeStatus::Continue | StrikeStatus::End if let Some(strike) = strike_override => {
@@ -438,7 +449,6 @@ impl fmt::Display for ReportDisplay<'_> {
             });
 
             for line in &mut lines {
-                line.labels.sort_by_key(|(range, ..)| range.end());
                 *line_current.borrow_mut() = Some(line.clone());
 
                 {
@@ -455,7 +465,6 @@ impl fmt::Display for ReportDisplay<'_> {
                             None => {
                                 *strike_prefix
                                     .iter_mut()
-                                    .rev()
                                     .find(|slot| slot.is_none())
                                     .unwrap() = Some(*strike_new);
                             },
@@ -473,10 +482,10 @@ impl fmt::Display for ReportDisplay<'_> {
                     // DEDENT: "<strike-prefix> "
                     dedent!(writer);
 
-                    for (label_range, label_text, _) in line.labels.iter().rev() {
+                    for (label_range, label_text, label_severity) in line.labels.iter().rev() {
                         match label_range {
                             LabelRange::FromStart(label_range) => {
-                                let &strike @ (strike_id, _, strike_level) = strike_prefix
+                                let &strike @ (strike_id, ..) = strike_prefix
                                     .borrow()
                                     .iter()
                                     .flatten()
@@ -528,14 +537,14 @@ impl fmt::Display for ReportDisplay<'_> {
                                         write!(
                                             writer,
                                             "{symbol}",
-                                            symbol = if !wrote { LEFT_TO_RIGHT } else { ' ' }.paint(strike_level.style_in(report.severity))
+                                            symbol = if !wrote { LEFT_TO_RIGHT } else { ' ' }.paint(label_severity.style_in(report.severity))
                                         )?;
                                     }
 
                                     write!(
                                         writer,
                                         "{symbol}",
-                                        symbol = if !wrote { LEFT_TO_BOTTOM } else { TOP_TO_BOTTOM }.paint(strike_level.style_in(report.severity))
+                                        symbol = if !wrote { LEFT_TO_BOTTOM } else { TOP_TO_BOTTOM }.paint(label_severity.style_in(report.severity))
                                     )?;
 
                                     wrote = true;
@@ -548,7 +557,7 @@ impl fmt::Display for ReportDisplay<'_> {
                                     writer,
                                     [label_text
                                         .as_ref()
-                                        .paint(strike_level.style_in(report.severity))]
+                                        .paint(label_severity.style_in(report.severity))]
                                     .into_iter(),
                                 )?;
 
@@ -619,8 +628,8 @@ pub(crate) fn resolve_style<'a>(
     styles: &'a mut [(ops::Range<usize>, LabelSeverity)],
     severity: ReportSeverity,
 ) -> impl Iterator<Item = yansi::Painted<&'a str>> + 'a {
-    styles.sort_by(|(a_range, a_level), (b_range, b_level)| {
-        match (a_range.start.cmp(&b_range.start), a_level, b_level) {
+    styles.sort_by(|(a_range, a_severity), (b_range, b_severity)| {
+        match (a_range.start.cmp(&b_range.start), a_severity, b_severity) {
             (cmp::Ordering::Equal, LabelSeverity::Primary, LabelSeverity::Secondary) => {
                 cmp::Ordering::Less
             },
