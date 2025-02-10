@@ -18,7 +18,7 @@ thread_local! {
     pub static LINE_WIDTH: Cell<usize> = const { Cell::new(0) };
 }
 
-pub(crate) fn writeln_wrapped<'a>(
+pub fn writeln_wrapped<'a>(
     writer: &'a mut dyn fmt::Write,
     parts: impl Iterator<Item = yansi::Painted<&'a str>>,
 ) -> fmt::Result {
