@@ -30,6 +30,7 @@ impl ReportSeverity {
             ReportSeverity::Bug => "bug:",
         }
         .paint(LabelSeverity::Primary.style_in(self))
+        .bold()
     }
 }
 
