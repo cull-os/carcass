@@ -73,6 +73,7 @@ impl fmt::Write for Writer<'_> {
     }
 }
 
+#[doc(hidden)]
 #[macro_export]
 macro_rules! __indent {
     ($writer:ident, $count:expr,continue: true) => {
@@ -167,8 +168,10 @@ pub fn indent_with<'a>(
     }
 }
 
+#[doc(inline)]
 pub use crate::__indent as indent;
 
+#[doc(hidden)]
 #[macro_export]
 macro_rules! __dedent {
     ($writer:ident) => {
@@ -193,4 +196,5 @@ macro_rules! __dedent {
     };
 }
 
+#[doc(inline)]
 pub use crate::__dedent as dedent;
