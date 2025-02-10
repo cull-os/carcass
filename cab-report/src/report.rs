@@ -5,6 +5,7 @@ use std::{
         Write as _,
     },
     iter,
+    num::NonZeroUsize,
     ops,
 };
 
@@ -345,7 +346,7 @@ impl fmt::Display for ReportDisplay<'_> {
             }
         );
 
-        if let Some(line) = lines.first() {
+        if let Some(((label_start, _), _)) = labels.first() {
             // DEDENT: "| "
             dedent!(writer, 2);
 
@@ -360,16 +361,8 @@ impl fmt::Display for ReportDisplay<'_> {
             write!(writer, "{island}{path}", island = file.island, path = file.path)?;
             STYLE_HEADER_PATH.fmt_suffix(writer)?;
 
-            let line_number = line.number.paint(STYLE_HEADER_POSITION);
-
-            let column_number = line
-                .styles
-                .first()
-                .expect("every line must have a non empty style")
-                .0
-                .start
-                .paint(STYLE_HEADER_POSITION);
-
+            let line_number = label_start.line.paint(STYLE_HEADER_POSITION);
+            let column_number = label_start.column.paint(STYLE_HEADER_POSITION);
             writeln!(writer, ":{line_number}:{column_number}")?;
         }
 

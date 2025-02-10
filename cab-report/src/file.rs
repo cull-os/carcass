@@ -16,7 +16,7 @@ pub struct File<'a> {
 impl File<'_> {
     pub fn position(&self, range: &ops::Range<usize>) -> (Position, Position) {
         let mut line = NonZeroUsize::MIN;
-        let mut column = Some(NonZeroUsize::MIN);
+        let mut column = 1;
 
         let mut start = Position { line, column };
         let mut end = Position { line, column };
@@ -33,9 +33,9 @@ impl File<'_> {
 
             if c == '\n' {
                 line = line.saturating_add(1);
-                column = None;
+                column = 0;
             } else {
-                column = Some(column.map_or(NonZeroUsize::MIN, |column| column.saturating_add(1)));
+                column += 1;
             }
 
             if index + 1 == range.end {
@@ -51,5 +51,5 @@ impl File<'_> {
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Position {
     pub line: NonZeroUsize,
-    pub column: Option<NonZeroUsize>,
+    pub column: usize,
 }
