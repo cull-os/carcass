@@ -41,11 +41,7 @@ impl<'a, W: io::Write> Formatter<'a, W> {
     }
 
     fn bracket_start(&mut self, bracket: &str) -> io::Result<()> {
-        write!(
-            self.inner,
-            "{painted}",
-            painted = self.paint_bracket(bracket)
-        )?;
+        write!(self.inner, "{painted}", painted = self.paint_bracket(bracket))?;
         self.bracket_count += 1;
 
         Ok(())
@@ -53,11 +49,7 @@ impl<'a, W: io::Write> Formatter<'a, W> {
 
     fn bracket_end(&mut self, bracket: &str) -> io::Result<()> {
         self.bracket_count -= 1;
-        write!(
-            self.inner,
-            "{painted}",
-            painted = self.paint_bracket(bracket)
-        )
+        write!(self.inner, "{painted}", painted = self.paint_bracket(bracket))
     }
 
     fn write(&mut self, painted: impl fmt::Display) -> io::Result<()> {

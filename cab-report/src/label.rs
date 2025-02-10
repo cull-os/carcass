@@ -37,11 +37,7 @@ pub struct Label<'a> {
 }
 
 impl<'a> Label<'a> {
-    pub fn new(
-        range: ops::Range<usize>,
-        text: impl Into<CowStr<'a>>,
-        level: LabelSeverity,
-    ) -> Self {
+    pub fn new(range: ops::Range<usize>, text: impl Into<CowStr<'a>>, level: LabelSeverity) -> Self {
         Self {
             range,
             text: text.into(),

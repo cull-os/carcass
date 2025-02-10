@@ -25,8 +25,7 @@ fuzz_target!(|data: &str| -> Corpus {
         Default::default(),
     ));
 
-    if !env::var("FUZZ_PARSER_SAVE_VALID").is_ok_and(|value| !matches!(&*value, "" | "0" | "false"))
-    {
+    if !env::var("FUZZ_PARSER_SAVE_VALID").is_ok_and(|value| !matches!(&*value, "" | "0" | "false")) {
         return Corpus::Keep;
     }
 

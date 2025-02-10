@@ -86,10 +86,8 @@ async fn main() {
                 },
 
                 Dump::Syntax | Dump::Parenthesize => {
-                    let parse = syntax::parse::<_, syntax::node::Expression>(
-                        syntax::tokenize(&contents),
-                        Default::default(),
-                    );
+                    let parse =
+                        syntax::parse::<_, syntax::node::Expression>(syntax::tokenize(&contents), Default::default());
 
                     // let mut files = diagnostic_files::SimpleFiles::new();
                     // let input_file = files.add(name, &contents);

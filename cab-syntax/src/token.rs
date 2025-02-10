@@ -93,11 +93,7 @@ impl Comment {
     /// Returns whether if this comment has the capability to span multiple
     /// lines.
     pub fn is_multiline(&self) -> bool {
-        self.text()
-            .as_bytes()
-            .get(1)
-            .copied()
-            .is_some_and(|c| c == b'=')
+        self.text().as_bytes().get(1).copied().is_some_and(|c| c == b'=')
     }
 }
 

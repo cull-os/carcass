@@ -147,11 +147,7 @@ impl<'a> Tokenizer<'a> {
             let remaining = self.remaining();
 
             if before.is_none_or(|before| remaining.starts_with(before))
-                && remaining
-                    .as_bytes()
-                    .get(before.map(str::len).unwrap_or(0))
-                    .copied()
-                    == Some(end)
+                && remaining.as_bytes().get(before.map(str::len).unwrap_or(0)).copied() == Some(end)
             {
                 self.context_pop(TokenizerContext::Stringlike { before, end });
                 self.context_push(TokenizerContext::StringlikeEnd { before, end });
@@ -185,10 +181,7 @@ impl<'a> Tokenizer<'a> {
 
     fn consume_path(&mut self) -> Option<Kind> {
         loop {
-            if self
-                .peek_character()
-                .is_none_or(|c| !is_valid_path_character(c))
-            {
+            if self.peek_character().is_none_or(|c| !is_valid_path_character(c)) {
                 self.context_pop(TokenizerContext::Path);
 
                 return Some(TOKEN_PATH);
@@ -267,8 +260,7 @@ impl<'a> Tokenizer<'a> {
                         Some('=')
                             if let remaining = self.remaining()
                                 && remaining.starts_with(equals)
-                                && remaining.as_bytes().get(equals_length).copied()
-                                    == Some(b'#') =>
+                                && remaining.as_bytes().get(equals_length).copied() == Some(b'#') =>
                         {
                             // Hard code a 1 here because that comparision up top is a byte.
                             self.offset += equals_length + 1;
@@ -309,18 +301,14 @@ impl<'a> Tokenizer<'a> {
             '|' if self.try_consume_character('>') => TOKEN_PIPE_MORE,
 
             '(' => {
-                if let Some(TokenizerContext::Interpolation { parentheses }) =
-                    self.context.last_mut()
-                {
+                if let Some(TokenizerContext::Interpolation { parentheses }) = self.context.last_mut() {
                     *parentheses += 1;
                 }
 
                 TOKEN_LEFT_PARENTHESIS
             },
             ')' => {
-                if let Some(TokenizerContext::Interpolation { parentheses }) =
-                    self.context.last_mut()
-                {
+                if let Some(TokenizerContext::Interpolation { parentheses }) = self.context.last_mut() {
                     match parentheses.checked_sub(1) {
                         Some(new) => *parentheses = new,
                         None => {
@@ -375,12 +363,10 @@ impl<'a> Tokenizer<'a> {
 
                 let digits_length = self.consume_while(is_valid_digit);
                 let digits = self.consumed_since(self.offset - digits_length);
-                let error_token = (digits.is_empty() || digits.bytes().all(|c| c == b'_'))
-                    .then_some(TOKEN_ERROR_NUMBER_NO_DIGIT);
+                let error_token =
+                    (digits.is_empty() || digits.bytes().all(|c| c == b'_')).then_some(TOKEN_ERROR_NUMBER_NO_DIGIT);
 
-                if self.peek_character() == Some('.')
-                    && self.peek_character_nth(1).is_some_and(is_valid_digit)
-                {
+                if self.peek_character() == Some('.') && self.peek_character_nth(1).is_some_and(is_valid_digit) {
                     self.consume_character();
                     self.consume_while(is_valid_digit);
                     error_token.unwrap_or(self.consume_scientific())
@@ -394,9 +380,7 @@ impl<'a> Tokenizer<'a> {
 
                 self.consume_while(is_valid_digit);
 
-                if self.peek_character() == Some('.')
-                    && self.peek_character_nth(1).is_some_and(is_valid_digit)
-                {
+                if self.peek_character() == Some('.') && self.peek_character_nth(1).is_some_and(is_valid_digit) {
                     self.consume_character();
                     self.consume_while(is_valid_digit);
                     self.consume_scientific()

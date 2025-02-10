@@ -82,21 +82,16 @@ fn actual_main() -> Result<(), Box<dyn error::Error>> {
                 let expected_syntax = fs::read_to_string(&expected_syntax_file)?;
 
                 let actual_syntax = {
-                    let node = syntax::parse::<_, syntax::node::Expression>(
-                        syntax::tokenize(&data),
-                        Default::default(),
-                    )
-                    .syntax;
+                    let node =
+                        syntax::parse::<_, syntax::node::Expression>(syntax::tokenize(&data), Default::default())
+                            .syntax;
                     format!("{node:#?}")
                 };
 
                 let name = data_file.file_stem().unwrap().to_str().unwrap().bold();
 
                 if expected_syntax == actual_syntax {
-                    log::info!(
-                        "expected and actual syntax matched for {name}",
-                        name = name.green()
-                    );
+                    log::info!("expected and actual syntax matched for {name}", name = name.green());
                     continue;
                 }
 

@@ -160,11 +160,7 @@ pub fn indent(writer: &mut dyn fmt::Write, count: usize) -> Writer<'_> {
     }
 }
 
-pub fn indent_with<'a>(
-    writer: &'a mut dyn fmt::Write,
-    count: usize,
-    with: IndentWith<'a>,
-) -> Writer<'a> {
+pub fn indent_with<'a>(writer: &'a mut dyn fmt::Write, count: usize, with: IndentWith<'a>) -> Writer<'a> {
     Writer {
         writer,
         with,
@@ -191,10 +187,7 @@ macro_rules! __dedent {
     ($writer:ident, $count:expr) => {
         let $writer = &mut Writer {
             writer: $writer.writer,
-            count: $writer
-                .count
-                .checked_sub($count)
-                .expect("dedented too hard"),
+            count: $writer.count.checked_sub($count).expect("dedented too hard"),
             with: $writer.with,
             place: $writer.place,
         };

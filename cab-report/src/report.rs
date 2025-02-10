@@ -198,8 +198,8 @@ impl fmt::Display for ReportDisplay<'_> {
 
             let label_range_extended = extend_to_line_boundaries(&file.source, label.range());
 
-            for (line_number, line) in (label_start.line.get()..)
-                .zip(file.source[label_range_extended.clone()].split('\n'))
+            for (line_number, line) in
+                (label_start.line.get()..).zip(file.source[label_range_extended.clone()].split('\n'))
             {
                 let line = match lines.iter_mut().find(|line| line.number == line_number) {
                     Some(item) => item,
@@ -241,8 +241,7 @@ impl fmt::Display for ReportDisplay<'_> {
                     _ => StrikeStatus::Continue,
                 };
 
-                line.strikes
-                    .push((StrikeId(label_index), strike_status, label.level));
+                line.strikes.push((StrikeId(label_index), strike_status, label.level));
 
                 let line_is_first = line_number == label_start.line.get();
                 let line_is_last = line_number == label_end.line.get();
@@ -273,11 +272,8 @@ impl fmt::Display for ReportDisplay<'_> {
 
                         let range = start..end;
 
-                        line.labels.push((
-                            LabelRange::FromStart(..range.end),
-                            &label.text,
-                            label.level,
-                        ));
+                        line.labels
+                            .push((LabelRange::FromStart(..range.end), &label.text, label.level));
 
                         line.styles.push((range, label.level));
                     },
@@ -294,11 +290,7 @@ impl fmt::Display for ReportDisplay<'_> {
             .map(number_width)
             .unwrap_or(0);
 
-        let strike_prefix_width = lines
-            .iter()
-            .map(|line| line.strikes.len())
-            .max()
-            .unwrap_or(0);
+        let strike_prefix_width = lines.iter().map(|line| line.strikes.len()).max().unwrap_or(0);
 
         let strike_prefix = RefCell::new(SmallVec::<_, 3>::from_iter(iter::repeat_n(
             None::<Strike>,
@@ -309,11 +301,7 @@ impl fmt::Display for ReportDisplay<'_> {
             // INDENT: "note: "
             indent!(writer, header = report.severity.styled());
 
-            writeln!(
-                writer,
-                "{title}",
-                title = report.title.bright_white().bold()
-            )?;
+            writeln!(writer, "{title}", title = report.title.bright_white().bold())?;
         }
 
         // INDENT: "123 | "
@@ -345,11 +333,7 @@ impl fmt::Display for ReportDisplay<'_> {
                         write!(writer, "{DOT}")?;
                     }
                 } else {
-                    write!(
-                        writer,
-                        "{line_number:>line_number_width$}",
-                        line_number = line_number
-                    )?;
+                    write!(writer, "{line_number:>line_number_width$}", line_number = line_number)?;
                 }
 
                 write!(writer, " {TOP_TO_BOTTOM} ")?;
@@ -367,22 +351,12 @@ impl fmt::Display for ReportDisplay<'_> {
             // INDENT: "┏━━━ ".
             indent!(
                 writer,
-                header = const_str::concat!(
-                    BOTTOM_TO_RIGHT,
-                    LEFT_TO_RIGHT,
-                    LEFT_TO_RIGHT,
-                    LEFT_TO_RIGHT
-                )
-                .paint(STYLE_GUTTER)
+                header = const_str::concat!(BOTTOM_TO_RIGHT, LEFT_TO_RIGHT, LEFT_TO_RIGHT, LEFT_TO_RIGHT)
+                    .paint(STYLE_GUTTER)
             );
 
             STYLE_HEADER_PATH.fmt_prefix(writer)?;
-            write!(
-                writer,
-                "{island}{path}",
-                island = file.island,
-                path = file.path
-            )?;
+            write!(writer, "{island}{path}", island = file.island, path = file.path)?;
             STYLE_HEADER_PATH.fmt_suffix(writer)?;
 
             let line_number = line.number.paint(STYLE_HEADER_POSITION);
@@ -407,8 +381,7 @@ impl fmt::Display for ReportDisplay<'_> {
                     let mut strike_override = None::<yansi::Painted<&char>>;
 
                     for strike_slot in &*strike_prefix.borrow() {
-                        let Some(mut strike @ (_, strike_status, strike_severity)) = *strike_slot
-                        else {
+                        let Some(mut strike @ (_, strike_status, strike_severity)) = *strike_slot else {
                             match strike_override {
                                 Some(strike) => write!(writer, "{strike}")?,
                                 None => write!(writer, " ")?,
@@ -421,18 +394,13 @@ impl fmt::Display for ReportDisplay<'_> {
                                 write!(
                                     writer,
                                     "{symbol}",
-                                    symbol = BOTTOM_TO_RIGHT
-                                        .paint(strike_severity.style_in(report.severity))
+                                    symbol = BOTTOM_TO_RIGHT.paint(strike_severity.style_in(report.severity))
                                 )?;
 
-                                strike_override = Some(
-                                    LEFT_TO_RIGHT.paint(strike_severity.style_in(report.severity)),
-                                );
+                                strike_override = Some(LEFT_TO_RIGHT.paint(strike_severity.style_in(report.severity)));
                             },
 
-                            StrikeStatus::Continue | StrikeStatus::End
-                                if let Some(strike) = strike_override =>
-                            {
+                            StrikeStatus::Continue | StrikeStatus::End if let Some(strike) = strike_override => {
                                 write!(writer, "{strike}")?;
                             },
 
@@ -440,8 +408,7 @@ impl fmt::Display for ReportDisplay<'_> {
                                 write!(
                                     writer,
                                     "{symbol}",
-                                    symbol = TOP_TO_BOTTOM
-                                        .paint(strike_severity.style_in(report.severity))
+                                    symbol = TOP_TO_BOTTOM.paint(strike_severity.style_in(report.severity))
                                 )?;
                             },
                         }
@@ -462,18 +429,11 @@ impl fmt::Display for ReportDisplay<'_> {
                     let mut strike_prefix = strike_prefix.borrow_mut();
 
                     for strike_new @ (strike_id, ..) in &line.strikes {
-                        match strike_prefix
-                            .iter_mut()
-                            .flatten()
-                            .find(|(id, ..)| id == strike_id)
-                        {
+                        match strike_prefix.iter_mut().flatten().find(|(id, ..)| id == strike_id) {
                             Some(strike) => *strike = *strike_new,
 
                             None => {
-                                *strike_prefix
-                                    .iter_mut()
-                                    .find(|slot| slot.is_none())
-                                    .unwrap() = Some(*strike_new);
+                                *strike_prefix.iter_mut().find(|slot| slot.is_none()).unwrap() = Some(*strike_new);
                             },
                         }
                     }
@@ -482,10 +442,7 @@ impl fmt::Display for ReportDisplay<'_> {
                 {
                     *line_number.borrow_mut() = Some((line.number, true));
 
-                    write_wrapped(
-                        writer,
-                        resolve_style(line.content, &mut line.styles, report.severity),
-                    )?;
+                    write_wrapped(writer, resolve_style(line.content, &mut line.styles, report.severity))?;
                     writeln!(writer)?;
 
                     *line_number.borrow_mut() = Some((line.number, false));
@@ -507,9 +464,7 @@ impl fmt::Display for ReportDisplay<'_> {
                                 .iter()
                                 .enumerate()
                                 .find_map(|(index, strike)| {
-                                    strike
-                                        .is_some_and(|(id, ..)| id == strike_id)
-                                        .then_some(index)
+                                    strike.is_some_and(|(id, ..)| id == strike_id).then_some(index)
                                 })
                                 .unwrap();
 
@@ -533,8 +488,7 @@ impl fmt::Display for ReportDisplay<'_> {
                                             "{symbol}",
                                             symbol = match strike {
                                                 Some((.., severity)) =>
-                                                    TOP_TO_BOTTOM
-                                                        .paint(severity.style_in(report.severity)),
+                                                    TOP_TO_BOTTOM.paint(severity.style_in(report.severity)),
                                                 None => (&' ').new(),
                                             }
                                         )?;
@@ -544,8 +498,7 @@ impl fmt::Display for ReportDisplay<'_> {
                                         write!(
                                             writer,
                                             "{symbol}",
-                                            symbol = TOP_TO_RIGHT
-                                                .paint(strike_severity.style_in(report.severity))
+                                            symbol = TOP_TO_RIGHT.paint(strike_severity.style_in(report.severity))
                                         )?;
                                     }
 
@@ -566,12 +519,8 @@ impl fmt::Display for ReportDisplay<'_> {
                                     write!(
                                         writer,
                                         "{symbol}",
-                                        symbol = if !wrote {
-                                            LEFT_TO_BOTTOM
-                                        } else {
-                                            TOP_TO_BOTTOM
-                                        }
-                                        .paint(label_severity.style_in(report.severity))
+                                        symbol = if !wrote { LEFT_TO_BOTTOM } else { TOP_TO_BOTTOM }
+                                            .paint(label_severity.style_in(report.severity))
                                     )?;
 
                                     wrote = true;
@@ -583,10 +532,7 @@ impl fmt::Display for ReportDisplay<'_> {
 
                             write_wrapped(
                                 writer,
-                                [label_text
-                                    .as_ref()
-                                    .paint(label_severity.style_in(report.severity))]
-                                .into_iter(),
+                                [label_text.as_ref().paint(label_severity.style_in(report.severity))].into_iter(),
                             )?;
 
                             writeln!(writer)?;
@@ -607,8 +553,7 @@ impl fmt::Display for ReportDisplay<'_> {
                                             "{symbol}",
                                             symbol = match strike {
                                                 Some((.., severity)) =>
-                                                    TOP_TO_BOTTOM
-                                                        .paint(severity.style_in(report.severity)),
+                                                    TOP_TO_BOTTOM.paint(severity.style_in(report.severity)),
                                                 None => (&' ').new(),
                                             }
                                         )?;
@@ -663,10 +608,7 @@ impl fmt::Display for ReportDisplay<'_> {
 
                             write_wrapped(
                                 writer,
-                                [label_text
-                                    .as_ref()
-                                    .paint(label_severity.style_in(report.severity))]
-                                .into_iter(),
+                                [label_text.as_ref().paint(label_severity.style_in(report.severity))].into_iter(),
                             )?;
 
                             writeln!(writer)?;
@@ -728,12 +670,8 @@ pub(crate) fn resolve_style<'a>(
 ) -> impl Iterator<Item = yansi::Painted<&'a str>> + 'a {
     styles.sort_by(|(a_range, a_severity), (b_range, b_severity)| {
         match (a_range.start.cmp(&b_range.start), a_severity, b_severity) {
-            (cmp::Ordering::Equal, LabelSeverity::Primary, LabelSeverity::Secondary) => {
-                cmp::Ordering::Less
-            },
-            (cmp::Ordering::Equal, LabelSeverity::Secondary, LabelSeverity::Primary) => {
-                cmp::Ordering::Greater
-            },
+            (cmp::Ordering::Equal, LabelSeverity::Primary, LabelSeverity::Secondary) => cmp::Ordering::Less,
+            (cmp::Ordering::Equal, LabelSeverity::Secondary, LabelSeverity::Primary) => cmp::Ordering::Greater,
             (ordering, ..) => ordering,
         }
     });
@@ -758,9 +696,7 @@ pub(crate) fn resolve_style<'a>(
                                 .iter()
                                 .enumerate()
                                 .take_while(|(_, (r, _))| r.start <= range.end)
-                                .find(|(_, (r, label))| {
-                                    *label == LabelSeverity::Primary && r.start > offset
-                                })
+                                .find(|(_, (r, label))| *label == LabelSeverity::Primary && r.start > offset)
                         })
                         .flatten();
 

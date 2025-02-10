@@ -14,17 +14,7 @@ fn reachable_unreachable() -> &'static str {
 
 /// The syntax kind.
 #[derive(
-    Display,
-    Debug,
-    Clone,
-    Copy,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-    Hash,
-    enumset::EnumSetType,
-    num_enum::TryFromPrimitive,
+    Display, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, enumset::EnumSetType, num_enum::TryFromPrimitive,
 )]
 #[enumset(no_super_impls)]
 #[repr(u16)]
@@ -297,10 +287,7 @@ impl Kind {
     ///     t  t    f
     /// ```
     pub fn is_argument(self) -> bool {
-        Self::EXPRESSION_SET
-            .difference(TOKEN_LITERAL_IF.into())
-            .contains(self)
-            || self.is_error() // Error nodes are expressions.
+        Self::EXPRESSION_SET.difference(TOKEN_LITERAL_IF.into()).contains(self) || self.is_error() // Error nodes are expressions.
     }
 
     /// Whether if the token should be ignored by the noder.

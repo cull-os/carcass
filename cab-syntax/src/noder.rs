@@ -76,10 +76,7 @@ impl Default for ParseOptions {
 ///
 /// Parsing will always fail if the given [`node::Node`] type is not an
 /// expression as we cannot parse sub expressions.
-pub fn parse<'a, I: Iterator<Item = (Kind, &'a str)>, N: node::Node>(
-    tokens: I,
-    options: ParseOptions,
-) -> Parse<N> {
+pub fn parse<'a, I: Iterator<Item = (Kind, &'a str)>, N: node::Node>(tokens: I, options: ParseOptions) -> Parse<N> {
     let mut noder = Noder::new(tokens);
 
     noder.node(NODE_ROOT, |this| {
@@ -124,11 +121,7 @@ pub fn parse<'a, I: Iterator<Item = (Kind, &'a str)>, N: node::Node>(
         node.validate(&mut errors);
     }
 
-    Parse {
-        syntax,
-        node,
-        errors,
-    }
+    Parse { syntax, node, errors }
 }
 
 /// A node error.
@@ -148,11 +141,7 @@ impl NodeError {
         }
     }
 
-    pub fn unexpected(
-        got: Option<Kind>,
-        mut expected: EnumSet<Kind>,
-        range: rowan::TextRange,
-    ) -> NodeError {
+    pub fn unexpected(got: Option<Kind>, mut expected: EnumSet<Kind>, range: rowan::TextRange) -> NodeError {
         let mut reason = String::from("expected ");
 
         if expected == EnumSet::empty() {
@@ -242,12 +231,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
         result
     }
 
-    fn node_from<T>(
-        &mut self,
-        checkpoint: rowan::Checkpoint,
-        kind: Kind,
-        closure: impl FnOnce(&mut Self) -> T,
-    ) -> T {
+    fn node_from<T>(&mut self, checkpoint: rowan::Checkpoint, kind: Kind, closure: impl FnOnce(&mut Self) -> T) -> T {
         self.builder.start_node_at(checkpoint, kind.into());
 
         let result = closure(self);
@@ -351,11 +335,8 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
 
                 self.node_from(expected_at, NODE_ERROR, |_| {});
 
-                self.errors.push(NodeError::unexpected(
-                    unexpected,
-                    expected,
-                    unexpected_range,
-                ));
+                self.errors
+                    .push(NodeError::unexpected(unexpected, expected, unexpected_range));
 
                 let next = self.peek()?;
 
@@ -514,11 +495,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
 
         self.next_expect(
             TOKEN_LITERAL_IF.into(),
-            until
-                | Kind::EXPRESSION_SET
-                | TOKEN_LITERAL_THEN
-                | TOKEN_LITERAL_IS
-                | TOKEN_LITERAL_ELSE,
+            until | Kind::EXPRESSION_SET | TOKEN_LITERAL_THEN | TOKEN_LITERAL_IS | TOKEN_LITERAL_ELSE,
         );
 
         self.node_expression_binding_power(
@@ -526,16 +503,10 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
             until | TOKEN_LITERAL_THEN | TOKEN_LITERAL_IS | TOKEN_LITERAL_ELSE,
         );
 
-        match self.next_expect(
-            TOKEN_LITERAL_THEN | TOKEN_LITERAL_IS,
-            until | TOKEN_LITERAL_ELSE,
-        ) {
+        match self.next_expect(TOKEN_LITERAL_THEN | TOKEN_LITERAL_IS, until | TOKEN_LITERAL_ELSE) {
             Some(TOKEN_LITERAL_THEN) => {
                 self.node_from(start_of_if, NODE_IF_THEN, |this| {
-                    this.node_expression_binding_power(
-                        then_else_binding_power,
-                        until | TOKEN_LITERAL_ELSE,
-                    );
+                    this.node_expression_binding_power(then_else_binding_power, until | TOKEN_LITERAL_ELSE);
 
                     if this.next_if(TOKEN_LITERAL_ELSE) {
                         this.node_expression_binding_power(then_else_binding_power, until);
@@ -571,9 +542,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
 
             Some(next) if Kind::IDENTIFIER_SET.contains(next) => self.node_identifier(until),
 
-            Some(TOKEN_STRING_START | TOKEN_RUNE_START | TOKEN_ISLAND_START) => {
-                self.node_stringlike()
-            },
+            Some(TOKEN_STRING_START | TOKEN_RUNE_START | TOKEN_ISLAND_START) => self.node_stringlike(),
 
             Some(TOKEN_INTEGER | TOKEN_FLOAT) => self.node_number(until),
 
@@ -585,8 +554,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
                 let unexpected_range = self.next_while(|kind| {
                     !((until | Kind::EXPRESSION_SET).contains(kind)
                         || node::PrefixOperator::try_from(kind).is_ok()
-                        || node::InfixOperator::try_from(kind)
-                            .is_ok_and(|operator| operator.is_token_owning())
+                        || node::InfixOperator::try_from(kind).is_ok_and(|operator| operator.is_token_owning())
                         || node::SuffixOperator::try_from(kind).is_ok())
                 });
 
@@ -604,10 +572,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
     fn node_expression_binding_power(&mut self, minimum_power: u16, until: EnumSet<Kind>) {
         let start_of_expression = self.checkpoint();
 
-        if let Some(operator) = self
-            .peek()
-            .and_then(|kind| node::PrefixOperator::try_from(kind).ok())
-        {
+        if let Some(operator) = self.peek().and_then(|kind| node::PrefixOperator::try_from(kind).ok()) {
             let ((), right_power) = operator.binding_power();
 
             self.node(NODE_PREFIX_OPERATION, |this| {
@@ -618,10 +583,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
             self.node_expression_single(until);
         }
 
-        while let Some(operator) = self
-            .peek()
-            .and_then(|kind| node::InfixOperator::try_from(kind).ok())
-        {
+        while let Some(operator) = self.peek().and_then(|kind| node::InfixOperator::try_from(kind).ok()) {
             let (left_power, right_power) = operator.binding_power();
             if left_power < minimum_power {
                 break;
@@ -632,9 +594,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
             // Handle suffix-able infix operators. Not for purely suffix operators.
             if operator_token.is_some()
                 && node::SuffixOperator::try_from(operator_token.unwrap()).is_ok()
-                && self
-                    .peek()
-                    .is_none_or(|kind| !Kind::EXPRESSION_SET.contains(kind))
+                && self.peek().is_none_or(|kind| !Kind::EXPRESSION_SET.contains(kind))
             {
                 self.node_from(start_of_expression, NODE_SUFFIX_OPERATION, |_| {});
             } else {

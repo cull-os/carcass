@@ -107,8 +107,7 @@ pub trait Node: rowan::ast::AstNode<Language = Language> + ops::Deref<Target = R
     where
         Self: Sized,
     {
-        self.children_tokens_untyped()
-            .find(|token| token.kind() == kind)
+        self.children_tokens_untyped().find(|token| token.kind() == kind)
     }
 
     /// Returns all immediate children tokens that can be cast to the given
@@ -127,8 +126,7 @@ pub trait Node: rowan::ast::AstNode<Language = Language> + ops::Deref<Target = R
     where
         Self: Sized,
     {
-        self.children_with_tokens()
-            .filter_map(RowanElement::into_token)
+        self.children_with_tokens().filter_map(RowanElement::into_token)
     }
 }
 
@@ -344,8 +342,7 @@ impl Expression {
             Self::AttributeList(attribute_list) => attribute_list.validate(to),
 
             Self::InfixOperation(operation)
-                if let InfixOperator::ImplicitApply | InfixOperator::Apply =
-                    operation.operator() =>
+                if let InfixOperator::ImplicitApply | InfixOperator::Apply = operation.operator() =>
             {
                 operation.left().validate(to);
                 operation.right().validate_pattern(to);
@@ -356,9 +353,7 @@ impl Expression {
                 operation.right().validate(to);
             },
 
-            Self::InfixOperation(operation)
-                if let InfixOperator::Construct = operation.operator() =>
-            {
+            Self::InfixOperation(operation) if let InfixOperator::Construct = operation.operator() => {
                 operation.left().validate_pattern(to);
                 operation.right().validate_pattern(to);
             },
@@ -380,9 +375,7 @@ impl Expression {
                 operation.right().validate_pattern(to);
             },
 
-            Self::InfixOperation(operation)
-                if let InfixOperator::All | InfixOperator::Any = operation.operator() =>
-            {
+            Self::InfixOperation(operation) if let InfixOperator::All | InfixOperator::Any = operation.operator() => {
                 operation.left().validate_pattern(to);
                 operation.right().validate_pattern(to);
             },
@@ -400,9 +393,7 @@ impl Expression {
 
     fn validate_pattern_arithmetic(&self, to: &mut Vec<NodeError>) -> bool {
         match self {
-            Self::Parenthesis(parenthesis) => {
-                parenthesis.expression().validate_pattern_arithmetic(to)
-            },
+            Self::Parenthesis(parenthesis) => parenthesis.expression().validate_pattern_arithmetic(to),
 
             Self::InfixOperation(operation)
                 if let InfixOperator::Addition
@@ -464,16 +455,12 @@ impl Expression {
 
             while let Some(expression) = expressions.pop_back() {
                 match expression {
-                    Expression::InfixOperation(operation)
-                        if let InfixOperator::Same = operation.operator() =>
-                    {
+                    Expression::InfixOperation(operation) if let InfixOperator::Same = operation.operator() => {
                         expressions.push_front(operation.left());
                         expressions.push_front(operation.right());
                     },
 
-                    Expression::SuffixOperation(operation)
-                        if let SuffixOperator::Same = operation.operator() =>
-                    {
+                    Expression::SuffixOperation(operation) if let SuffixOperator::Same = operation.operator() => {
                         expressions.push_front(operation.left());
                     },
 
@@ -989,10 +976,7 @@ impl<T: Token> InterpolatedPart<T> {
 }
 
 macro_rules! interpolated {
-    (
-        impl
-        $name:ident { let content_kind = $content_kind:expr; type ContentToken = $content_token:ty; }
-    ) => {
+    (impl $name:ident { let content_kind = $content_kind:expr; type ContentToken = $content_token:ty; }) => {
         impl $name {
             pub fn parts(&self) -> impl Iterator<Item = InterpolatedPart<$content_token>> {
                 self.children_with_tokens().map(|child| {
@@ -1008,9 +992,7 @@ macro_rules! interpolated {
                         rowan::NodeOrToken::Node(node) => {
                             assert_eq!(node.kind(), NODE_INTERPOLATION);
 
-                            InterpolatedPart::Interpolation(
-                                Interpolation::cast(node.clone()).unwrap(),
-                            )
+                            InterpolatedPart::Interpolation(Interpolation::cast(node.clone()).unwrap())
                         },
                     }
                 })
