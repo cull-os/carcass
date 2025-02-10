@@ -1,4 +1,67 @@
-use std::fmt;
+use std::{
+    cell::Cell,
+    fmt,
+    sync::LazyLock,
+};
+
+use unicode_width::UnicodeWidthStr;
+use yansi::Paint as _;
+
+static LINE_WIDTH_MAX: LazyLock<usize> = LazyLock::new(|| {
+    terminal_size::terminal_size()
+        .map(|(width, _)| width.0 as usize)
+        .unwrap_or(120)
+});
+
+thread_local! {
+    #[doc(hidden)]
+    pub static LINE_WIDTH: Cell<usize> = const { Cell::new(0) };
+}
+
+// TODO: Split within words when it doesn't fit on the next line.
+pub(crate) fn write_wrapped<'a>(
+    writer: &'a mut dyn fmt::Write,
+    parts: impl Iterator<Item = yansi::Painted<&'a str>>,
+) -> fmt::Result {
+    use None as Space;
+    use Some as Word;
+
+    let mut line_width = LINE_WIDTH.get();
+
+    parts
+        .flat_map(|part| {
+            part.value
+                .split_whitespace()
+                .map(move |word| Word(word.paint(part.style)))
+                .intersperse(Space)
+        })
+        .try_for_each(|part| {
+            match part {
+                Word(word) => {
+                    let word_width = word.value.width();
+
+                    if line_width != 0 && line_width + word_width >= *LINE_WIDTH_MAX {
+                        writeln!(writer)?;
+                        line_width = line_width - (line_width - LINE_WIDTH.get());
+                    }
+
+                    write!(writer, "{word}")?;
+                    line_width += word_width;
+                },
+
+                Space => {
+                    if line_width != 0 && line_width < *LINE_WIDTH_MAX {
+                        write!(writer, " ")?;
+                        line_width += 1;
+                    }
+                },
+            }
+
+            Ok(())
+        })?;
+
+    Ok(())
+}
 
 #[doc(hidden)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -25,6 +88,12 @@ impl Writer<'_> {
     pub fn continuation(mut self) -> Self {
         self.place = Place::Middle;
         self
+    }
+}
+
+impl Drop for Writer<'_> {
+    fn drop(&mut self) {
+        LINE_WIDTH.set(LINE_WIDTH.get().saturating_sub(self.count));
     }
 }
 
@@ -149,6 +218,8 @@ macro_rules! __indent {
 pub fn indent(writer: &mut dyn fmt::Write, count: usize) -> Writer<'_> {
     static mut ZERO_INDENTER: IndentWith<'static> = &mut |_| Ok(0);
 
+    LINE_WIDTH.set(LINE_WIDTH.get() + count);
+
     Writer {
         writer,
         // SAFETY: ZERO_INDENTER does not modify anything and the pointee of self.writer in Writer
@@ -161,6 +232,8 @@ pub fn indent(writer: &mut dyn fmt::Write, count: usize) -> Writer<'_> {
 }
 
 pub fn indent_with<'a>(writer: &'a mut dyn fmt::Write, count: usize, with: IndentWith<'a>) -> Writer<'a> {
+    LINE_WIDTH.set(LINE_WIDTH.get() + count);
+
     Writer {
         writer,
         with,
@@ -176,7 +249,15 @@ pub use crate::__indent as indent;
 #[macro_export]
 macro_rules! __dedent {
     ($writer:ident) => {
-        let $writer = &mut Writer {
+        let count = $writer.count;
+        let old_count = $crate::indent::LINE_WIDTH.get();
+
+        $crate::indent::LINE_WIDTH.set(old_count.saturating_sub(count));
+        let _guard = ::scopeguard::guard((), |_| {
+            $crate::indent::LINE_WIDTH.set(old_count);
+        });
+
+        let $writer = &mut $crate::indent::Writer {
             writer: $writer.writer,
             count: 0,
             with: &mut move |_| Ok(0),
@@ -185,9 +266,17 @@ macro_rules! __dedent {
     };
 
     ($writer:ident, $count:expr) => {
-        let $writer = &mut Writer {
+        let count = $count;
+        let old_count = $crate::indent::LINE_WIDTH.get();
+
+        $crate::indent::LINE_WIDTH.set(old_count.saturating_sub(count));
+        let _guard = ::scopeguard::guard((), |_| {
+            $crate::indent::LINE_WIDTH.set(old_count);
+        });
+
+        let $writer = &mut $crate::indent::Writer {
             writer: $writer.writer,
-            count: $writer.count.checked_sub($count).expect("dedented too hard"),
+            count: $writer.count.checked_sub(count).expect("dedented too hard"),
             with: $writer.with,
             place: $writer.place,
         };

@@ -301,7 +301,7 @@ impl fmt::Display for ReportDisplay<'_> {
             // INDENT: "note: "
             indent!(writer, header = report.severity.styled());
 
-            writeln!(writer, "{title}", title = report.title.bright_white().bold())?;
+            write_wrapped(writer, [report.title.as_ref().bright_white().bold()].into_iter())?;
         }
 
         // INDENT: "123 | "
@@ -572,7 +572,7 @@ impl fmt::Display for ReportDisplay<'_> {
                             let mut wrote = false;
                             indent!(
                                 writer,
-                                underline_width,
+                                underline_width.max(1),
                                 with = |writer: &mut dyn fmt::Write| {
                                     for index in 0..underline_width.saturating_sub(1) {
                                         write!(
@@ -602,7 +602,7 @@ impl fmt::Display for ReportDisplay<'_> {
                                     )?;
 
                                     wrote = true;
-                                    Ok(underline_width)
+                                    Ok(underline_width.max(1))
                                 }
                             );
 
@@ -732,50 +732,4 @@ pub(crate) fn resolve_style<'a>(
             }
         }
     }
-}
-
-pub(crate) fn write_wrapped<'a>(
-    writer: &'a mut dyn fmt::Write,
-    parts: impl Iterator<Item = yansi::Painted<&'a str>>,
-) -> fmt::Result {
-    const LINE_WIDTH_MAX: usize = 120;
-
-    let mut line_width: usize = 0;
-
-    use None as Space;
-    use Some as Word;
-
-    parts
-        .flat_map(|part| {
-            part.value
-                .split_whitespace()
-                .map(move |word| Word(word.paint(part.style)))
-                .intersperse(Space)
-        })
-        .try_for_each(|part| {
-            match part {
-                Word(word) => {
-                    let word_width = word.value.width();
-
-                    if line_width != 0 && line_width + 1 + word_width > LINE_WIDTH_MAX {
-                        writeln!(writer)?;
-                        line_width = 0;
-                    }
-
-                    write!(writer, "{word}")?;
-                    line_width += word_width;
-                },
-
-                Space => {
-                    if line_width != 0 {
-                        write!(writer, " ")?;
-                        line_width += 1;
-                    }
-                },
-            }
-
-            Ok(())
-        })?;
-
-    Ok(())
 }

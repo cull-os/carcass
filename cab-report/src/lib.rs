@@ -12,7 +12,6 @@ use std::{
     cmp,
 };
 
-use unicode_width::UnicodeWidthStr as _;
 use yansi::Paint as _;
 
 pub use crate::{
