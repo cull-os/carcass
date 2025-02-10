@@ -15,8 +15,6 @@ pub struct File<'a> {
 
 impl File<'_> {
     pub fn position(&self, range: &ops::Range<usize>) -> (Position, Position) {
-        let _ = self.source[range.clone()];
-
         let mut line = NonZeroUsize::MIN;
         let mut column = Some(NonZeroUsize::MIN);
 
