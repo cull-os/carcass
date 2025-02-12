@@ -86,22 +86,17 @@ async fn main() {
                 },
 
                 Dump::Syntax | Dump::Parenthesize => {
-                    let parse =
-                        syntax::parse::<_, syntax::node::Expression>(syntax::tokenize(&contents), Default::default());
+                    let parse = syntax::parse::<_, syntax::node::Expression>(syntax::tokenize(&contents));
 
-                    // let mut files = diagnostic_files::SimpleFiles::new();
-                    // let input_file = files.add(name, &contents);
+                    let file = report::File {
+                        island: name.into(),
+                        path: "".into(),
+                        source: contents.as_str().into(),
+                    };
 
-                    // for error in &parse.errors {
-                    //     let diagnostic = diagnostic::Diagnostic::error()
-                    //         .with_message("syntax error")
-                    //         .with_labels(vec![
-                    //             diagnostic::Label::primary(input_file, error.range)
-                    //                 .with_message(&*error.reason),
-                    //         ]);
-
-                    //     term::emit(&mut err.lock(), &Default::default(), &files,
-                    // &diagnostic).ok(); }
+                    for report in parse.reports {
+                        writeln!(err, "{report}", report = report.with(&file)).ok();
+                    }
 
                     if let Dump::Syntax = command {
                         write!(out, "{syntax:#?}", syntax = parse.syntax)

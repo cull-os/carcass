@@ -38,7 +38,7 @@ pub fn writeln_wrapped<'a>(
     let mut parts = parts
         .flat_map(|part| {
             part.value
-                .split_whitespace()
+                .split(' ')
                 .map(move |word| Word(word.paint(part.style)))
                 .intersperse(Space)
         })
@@ -121,6 +121,26 @@ pub struct Writer<'a> {
     pub place: Place,
 }
 
+impl Writer<'_> {
+    pub fn write_indent(&mut self) -> fmt::Result {
+        assert_eq!(self.place, Place::Start);
+
+        let wrote = (self.with)(self.writer)?;
+
+        if wrote > self.count {
+            panic!(
+                "indent writer wrote ({wrote}) more than the indent ({count})",
+                count = self.count
+            );
+        }
+
+        write!(self.writer, "{:>count$}", "", count = self.count - wrote)?;
+        self.place = Place::Middle;
+
+        Ok(())
+    }
+}
+
 impl Drop for Writer<'_> {
     fn drop(&mut self) {
         LINE_WIDTH.set(LINE_WIDTH.get().saturating_sub(self.count));
@@ -138,17 +158,7 @@ impl fmt::Write for Writer<'_> {
                     if let Line(line) = line
                         && !line.is_empty() =>
                 {
-                    let wrote = (self.with)(self.writer)?;
-
-                    if wrote > self.count {
-                        panic!(
-                            "indent writer wrote ({wrote}) more than the indent ({count})",
-                            count = self.count
-                        );
-                    }
-
-                    write!(self.writer, "{:>count$}", "", count = self.count - wrote)?;
-                    self.place = Place::Middle;
+                    self.write_indent()?;
                 },
 
                 Place::End => {

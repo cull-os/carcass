@@ -7,6 +7,10 @@ use std::{
     },
 };
 
+use cab_report::{
+    Label,
+    Report,
+};
 use num::Num;
 use static_assertions::assert_obj_safe;
 
@@ -15,7 +19,6 @@ use crate::{
         self,
         *,
     },
-    NodeError,
     RowanToken,
 };
 
@@ -141,7 +144,9 @@ token! { #[from(TOKEN_IDENTIFIER)] struct Identifier; }
 token! { #[from(TOKEN_CONTENT)] struct Content; }
 
 impl Content {
-    pub fn validate_escapes(&self, to: &mut Vec<NodeError>) -> usize {
+    pub fn validate_escapes(&self, report: &mut Report<'_>) -> usize {
+        let mut errored = false;
+
         let mut text = self.text().bytes().enumerate();
         let mut count: usize = 0;
 
@@ -156,15 +161,22 @@ impl Content {
                 Some((_, b'0' | b't' | b'n' | b'r' | b'`' | b'"' | b'\'' | b'>' | b'\\')) => {},
 
                 next @ (Some(_) | None) => {
-                    to.push(NodeError::new(
-                        r#"invalid escape, escapes must be one of: \0, \t, \n, \r, \`, \", \', \>, \\"#,
+                    report.push_label(Label::primary(
                         rowan::TextRange::at(
                             self.text_range().start() + rowan::TextSize::new(offset as u32),
                             (1 + next.is_some() as u32).into(),
-                        ),
+                        )
+                        .into(),
+                        "invalid escape",
                     ));
+
+                    errored = true;
                 },
             }
+        }
+
+        if errored {
+            report.push_tip(r#"escapes must be one of: \0, \t, \n, \r, \`, \", \', \>, \\"#);
         }
 
         count

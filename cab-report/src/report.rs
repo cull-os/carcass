@@ -34,11 +34,12 @@ impl ReportSeverity {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct Report<'a> {
-    severity: ReportSeverity,
-    title: CowStr<'a>,
-    labels: SmallVec<Label<'a>, 2>,
-    points: SmallVec<Point<'a>, 2>,
+    pub severity: ReportSeverity,
+    pub title: CowStr<'a>,
+    pub labels: SmallVec<Label<'a>, 2>,
+    pub points: SmallVec<Point<'a>, 2>,
 }
 
 impl<'a> Report<'a> {
@@ -67,17 +68,16 @@ impl<'a> Report<'a> {
         Self::new(ReportSeverity::Bug, title)
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.labels.is_empty() && self.points.is_empty()
+    }
+
     pub fn push_label(&mut self, label: Label<'a>) {
         self.labels.push(label)
     }
 
-    pub fn label(mut self, label: Label<'a>) -> Self {
-        self.push_label(label);
-        self
-    }
-
     pub fn push_primary(&mut self, range: ops::Range<usize>, text: impl Into<CowStr<'a>>) {
-        self.push_label(Label::primary(range, text));
+        self.labels.push(Label::primary(range, text));
     }
 
     pub fn primary(mut self, range: ops::Range<usize>, text: impl Into<CowStr<'a>>) -> Self {
@@ -86,7 +86,7 @@ impl<'a> Report<'a> {
     }
 
     pub fn push_secondary(&mut self, range: ops::Range<usize>, text: impl Into<CowStr<'a>>) {
-        self.push_label(Label::secondary(range, text));
+        self.labels.push(Label::secondary(range, text));
     }
 
     pub fn secondary(mut self, range: ops::Range<usize>, text: impl Into<CowStr<'a>>) -> Self {
@@ -94,17 +94,17 @@ impl<'a> Report<'a> {
         self
     }
 
-    pub fn push_point(&mut self, point: Point<'a>) {
-        self.points.push(point)
+    pub fn points(&self) -> &[Point<'a>] {
+        &self.points
     }
 
     pub fn point(mut self, point: Point<'a>) -> Self {
-        self.push_point(point);
+        self.points.push(point);
         self
     }
 
     pub fn push_tip(&mut self, text: impl Into<CowStr<'a>>) {
-        self.push_point(Point::tip(text));
+        self.points.push(Point::tip(text));
     }
 
     pub fn tip(self, text: impl Into<CowStr<'a>>) -> Self {
@@ -112,20 +112,20 @@ impl<'a> Report<'a> {
     }
 
     pub fn push_help(&mut self, text: impl Into<CowStr<'a>>) {
-        self.push_point(Point::help(text));
+        self.points.push(Point::help(text));
     }
 
     pub fn help(self, text: impl Into<CowStr<'a>>) -> Self {
         self.point(Point::help(text))
     }
 
-    pub fn with(self, file: &'a File<'a>) -> impl fmt::Display + 'a {
+    pub fn with(&'a self, file: &'a File<'a>) -> impl fmt::Display + 'a {
         ReportDisplay { report: self, file }
     }
 }
 
 struct ReportDisplay<'a> {
-    report: Report<'a>,
+    report: &'a Report<'a>,
     file: &'a File<'a>,
 }
 
@@ -307,7 +307,7 @@ impl fmt::Display for ReportDisplay<'_> {
             // INDENT: "note: "
             indent!(writer, header = report.severity.styled());
 
-            writeln_wrapped(writer, [report.title.as_ref().bright_white().bold()].into_iter())?;
+            writeln_wrapped(writer, [report.title.as_ref().bold()].into_iter())?;
         }
 
         // INDENT: "123 | "
@@ -422,7 +422,14 @@ impl fmt::Display for ReportDisplay<'_> {
                 }
             );
 
-            for line in &mut lines {
+            for (line_index, line) in lines.iter_mut().enumerate() {
+                if line_index == 0 {
+                    *line_number.borrow_mut() = Some((0, false));
+
+                    writer.write_indent()?;
+                    writeln!(writer)?;
+                }
+
                 {
                     let mut strike_prefix = strike_prefix.borrow_mut();
 
@@ -470,12 +477,12 @@ impl fmt::Display for ReportDisplay<'_> {
                             // DEDENT: "<strike-prefix> "
                             dedent!(writer);
 
-                            // INDENT: "<strike-prefix><horizontal><left-to-bottom>"
-                            // INDENT: "<strike-prefix>            <top-to-bottom>"
+                            // INDENT: "<strike-prefix><horizontal><left-to-bottom> "
+                            // INDENT: "<strike-prefix>            <top--to-bottom> "
                             let mut wrote = false;
                             indent!(
                                 writer,
-                                strike_prefix_width + 1 + label_range_end,
+                                strike_prefix_width + 1 + label_range_end + 1,
                                 with = |writer: &mut dyn fmt::Write| {
                                     for strike in strike_prefix.borrow().iter().take(if !wrote {
                                         strike_index
@@ -565,13 +572,13 @@ impl fmt::Display for ReportDisplay<'_> {
                             // INDENT: "<prefix-spaces>"
                             indent!(writer, label_range.start);
 
-                            // INDENT: "<horizontal><left-to-bottom>"
-                            // INDENT: "            <top-to-bottom>"
+                            // INDENT: "<horizontal><left-to-bottom> "
+                            // INDENT: "            <top--to-bottom> "
                             let underline_width = label_range_end - label_range.start;
                             let mut wrote = false;
                             indent!(
                                 writer,
-                                underline_width.max(1),
+                                underline_width.max(1) + 1,
                                 with = |writer: &mut dyn fmt::Write| {
                                     for index in 0..underline_width.saturating_sub(1) {
                                         write!(
@@ -617,7 +624,10 @@ impl fmt::Display for ReportDisplay<'_> {
 
         // = help: foo bar
         {
-            *line_number.borrow_mut() = None;
+            if !report.points.is_empty() {
+                writer.write_indent()?;
+                writeln!(writer)?;
+            }
 
             // DEDENT: "| "
             dedent!(writer, 2);

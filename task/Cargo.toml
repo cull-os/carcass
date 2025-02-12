@@ -7,10 +7,10 @@ repository.workspace = true
 version.workspace    = true
 
 [dependencies]
-cab.path            = "../cab"
-clap-verbosity-flag = "3.0.2"
-log.workspace       = true
-which               = "7.0.1"
+cab.path                      = "../cab"
+clap-verbosity-flag.workspace = true
+log.workspace                 = true
+which                         = "7.0.1"
 
 [dependencies.clap]
 features = [ "derive" ]

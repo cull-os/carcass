@@ -7,8 +7,10 @@ use std::{
     },
 };
 
+use cab_report::Report;
 use enumset::EnumSet;
 use rowan::ast::AstNode as _;
+use smallvec::SmallVec;
 use static_assertions::assert_obj_safe;
 
 use crate::{
@@ -17,7 +19,6 @@ use crate::{
         *,
     },
     Language,
-    NodeError,
     RowanElement,
     RowanNode,
     RowanToken,
@@ -71,9 +72,9 @@ pub trait Node: rowan::ast::AstNode<Language = Language> + ops::Deref<Target = R
     where
         Self: Sized;
 
-    /// Validates the node appending errors to the provided [`Vec`]. If there
-    /// are no nodes appended the node is valid.
-    fn validate(&self, _to: &mut Vec<NodeError>) {}
+    /// Validates the node appending reports to the provided [`Vec`]. If there
+    /// are no reports appended the node is valid.
+    fn validate(&self, _to: &mut Vec<Report<'_>>) {}
 
     /// Returns the Nth immediate child node that can be cast to the given
     /// typed node.
@@ -302,7 +303,7 @@ node! {
         IfIs,
     )] enum Expression;
 
-    fn validate(&self, to: &mut Vec<NodeError>) {
+    fn validate(&self, to: &mut Vec<Report<'_>>) {
         match self {
             Self::Error(error) => error.validate(to),
             Self::Parenthesis(parenthesis) => parenthesis.validate(to),
@@ -324,7 +325,7 @@ node! {
 }
 
 impl Expression {
-    fn validate_pattern(&self, to: &mut Vec<NodeError>) {
+    fn validate_pattern(&self, to: &mut Vec<Report<'_>>) {
         match self {
             Self::Parenthesis(parenthesis) => {
                 parenthesis.expression().validate_pattern(to);
@@ -365,10 +366,10 @@ impl Expression {
                     },
 
                     invalid => {
-                        to.push(NodeError::new(
-                            "left operand of a select pattern must be an identifier",
-                            invalid.text_range(),
-                        ))
+                        to.push(
+                            Report::error("invalid select pattern")
+                                .primary(invalid.text_range().into(), "left operand must be an identifier"),
+                        )
                     },
                 }
 
@@ -386,65 +387,67 @@ impl Expression {
             },
 
             _ => {
-                self.validate_pattern_arithmetic(to);
+                let mut report = Report::error("arithmetic patterns cannot have multiple binds");
+
+                let mut bind_ranges = SmallVec::new();
+                self.validate_pattern_arithmetic(&mut bind_ranges, to);
+                for bind_range in bind_ranges {
+                    report.push_primary(bind_range.into(), "bind");
+                }
+
+                if report.labels.len() > 1 {
+                    to.push(report);
+                }
             },
         }
     }
 
-    fn validate_pattern_arithmetic(&self, to: &mut Vec<NodeError>) -> bool {
+    fn validate_pattern_arithmetic(
+        &self,
+        bind_ranges: &mut SmallVec<rowan::TextRange, 4>,
+        reports: &mut Vec<Report<'_>>,
+    ) {
         match self {
-            Self::Parenthesis(parenthesis) => parenthesis.expression().validate_pattern_arithmetic(to),
+            Expression::Parenthesis(parenthesis) => {
+                parenthesis.expression().validate_pattern(reports);
+            },
 
-            Self::InfixOperation(operation)
+            Expression::InfixOperation(operation)
                 if let InfixOperator::Addition
                 | InfixOperator::Subtraction
                 | InfixOperator::Multiplication
                 | InfixOperator::Power
                 | InfixOperator::Division = operation.operator() =>
             {
-                let left_bound = operation.left().validate_pattern_arithmetic(to);
-                let right_bound = operation.right().validate_pattern_arithmetic(to);
-
-                if left_bound && right_bound {
-                    to.push(NodeError::new(
-                        "arithmetic patterns must only have a single bind for determinism",
-                        operation.text_range(),
-                    ));
-                    false
-                } else {
-                    left_bound || right_bound
-                }
+                operation.left().validate_pattern_arithmetic(bind_ranges, reports);
+                operation.right().validate_pattern_arithmetic(bind_ranges, reports);
             },
 
-            Self::InfixOperation(_) => {
-                to.push(NodeError::new(
-                    "non-arithmetic infix operators are not valid patterns",
-                    self.text_range(),
-                ));
-                false
+            Expression::InfixOperation(_) => {
+                reports.push(
+                    Report::error("non-arithmetic infix operators are not valid patterns")
+                        .primary(self.text_range().into(), "here"),
+                );
             },
 
-            Self::Identifier(identifier) => {
-                identifier.validate(to);
-                true
+            Expression::Identifier(identifier) => {
+                identifier.validate(reports);
+                bind_ranges.push(identifier.text_range());
             },
 
-            Self::SString(string) => {
-                string.validate(to);
-                false
+            Expression::SString(string) => {
+                string.validate(reports);
             },
 
-            Self::Number(number) => {
-                number.validate(to);
-                false
+            Expression::Number(number) => {
+                number.validate(reports);
             },
 
             _ => {
-                to.push(NodeError::new(
-                    format!("{kind} is not a valid constant pattern", kind = self.kind()),
-                    self.text_range(),
+                reports.push(Report::error("invalid pattern").primary(
+                    self.text_range().into(),
+                    format!("{kind} is not a valid pattern element", kind = self.kind()),
                 ));
-                false
             },
         }
     }
@@ -480,7 +483,7 @@ node! { #[from(NODE_ERROR)] struct Error; }
 node! {
     #[from(NODE_PARENTHESIS)] struct Parenthesis;
 
-    fn validate(&self, to: &mut Vec<NodeError>) {
+    fn validate(&self, to: &mut Vec<Report<'_>>) {
         self.expression().validate(to);
     }
 }
@@ -498,13 +501,14 @@ impl Parenthesis {
 node! {
    #[from(NODE_LIST)] struct List;
 
-    fn validate(&self, to: &mut Vec<NodeError>) {
+    fn validate(&self, to: &mut Vec<Report<'_>>) {
         if let Some(Expression::InfixOperation(operation)) = self.expression()
-            && operation.operator() == InfixOperator::Sequence {
-            to.push(NodeError::new(
-                 "inner expression of list cannot be sequence, consider parenthesizing",
-                 operation.text_range(),
-            ));
+            && operation.operator() == InfixOperator::Sequence
+        {
+            to.push(
+                Report::error("inner expression of list cannot be sequence")
+                    .primary(operation.text_range().into(), "consider parenthesizing this")
+            );
         }
 
         for item in self.items() {
@@ -532,17 +536,16 @@ impl List {
 node! {
     #[from(NODE_ATTRIBUTE_LIST)] struct AttributeList;
 
-    fn validate(&self, to: &mut Vec<NodeError>) {
-        if let Some(Expression::InfixOperation(operation)) = self.expression()
-            && operation.operator() == InfixOperator::Sequence {
-            to.push(NodeError::new(
-                "sequence operator has the lowest binding power, please parenthesize",
-                operation.text_range(),
-            ));
-        }
-
+    fn validate(&self, to: &mut Vec<Report<'_>>) {
         for entry in self.entries() {
             match entry {
+                Expression::InfixOperation(operation) if let InfixOperator::Sequence = operation.operator() => {
+                    to.push(
+                        Report::error("unexpected sequence operator inside attribute list")
+                            .primary(operation.text_range().into(), "sequence operator has lower binding power and will consume everything")
+                    );
+                }
+
                 Expression::InfixOperation(operation) if let InfixOperator::Bind = operation.operator() => {
                     operation.validate(to);
                 },
@@ -552,9 +555,9 @@ node! {
                 },
 
                 invalid => {
-                    to.push(NodeError::new(
-                        "invalid attribute",
-                        invalid.text_range(),
+                    to.push(Report::error(
+                        "invalid attribute").primary(
+                        invalid.text_range().into(), "here"
                     ))
                 }
             }
@@ -581,7 +584,7 @@ impl AttributeList {
 node! {
     #[from(NODE_PREFIX_OPERATION)] struct PrefixOperation;
 
-    fn validate(&self, to: &mut Vec<NodeError>) {
+    fn validate(&self, to: &mut Vec<Report<'_>>) {
         self.right().validate(to);
     }
 }
@@ -648,7 +651,7 @@ impl PrefixOperator {
 node! {
     #[from(NODE_INFIX_OPERATION)] struct InfixOperation;
 
-    fn validate(&self, to: &mut Vec<NodeError>) {
+    fn validate(&self, to: &mut Vec<Report<'_>>) {
         match self.operator() {
             InfixOperator::Same => {
                 let mut same_operator = None;
@@ -660,19 +663,21 @@ node! {
                         let same_operator = same_operator.get_or_insert(operator);
 
                         if *same_operator != operator {
-                            to.push(NodeError::new(
-                                "all same-operands must be of matching type: either all lambdas or all binds",
-                                item.text_range(),
-                            ));
+                            to.push(
+                                Report::error("invalid same-operand")
+                                    .primary(item.text_range().into(), "operand")
+                                    .help("all same-operands must be of matching type: either all lambdas or all binds")
+                            );
                             continue;
                         }
 
                         operation.validate(to);
                     } else {
-                        to.push(NodeError::new(
-                            "all same-operands must either be lambdas or binds",
-                            item.text_range(),
-                        ));
+                        to.push(
+                            Report::error("invalid same-operand")
+                                .primary(item.text_range().into(), "operand")
+                                .help("all same-operands must either be lambdas or binds")
+                        );
                     }
                 }
             },
@@ -694,7 +699,6 @@ node! {
                     expression.validate(to);
                 }
 
-                // No, I am not proud of this.
                 let (InfixOperator::Apply | InfixOperator::Pipe) = operator else { return; };
 
                 for expression in expressions {
@@ -702,10 +706,11 @@ node! {
                         && let child_operator @ (InfixOperator::Apply | InfixOperator::Pipe) = operation.operator()
                         && child_operator != operator
                     {
-                        to.push(NodeError::new(
-                            "application and piping operators do not associate, consider parentehsizing",
-                            operation.text_range(),
-                        ));
+                        to.push(
+                            Report::error("application and pipe operators do not associate")
+                                .secondary(self.text_range().into(), "this")
+                                .primary(operation.text_range().into(), "does not associate with this")
+                        );
                     }
                 }
             },
@@ -734,7 +739,7 @@ impl InfixOperation {
 
     /// Asserts that this node is a this-expression and validates the left
     /// expression.
-    pub fn validate_left(&self, to: &mut Vec<NodeError>) {
+    pub fn validate_left(&self, to: &mut Vec<Report<'_>>) {
         assert_eq!(self.operator(), InfixOperator::This);
 
         match self.left() {
@@ -743,10 +748,10 @@ impl InfixOperation {
             },
 
             invalid => {
-                to.push(NodeError::new(
-                    "left operand of a this-expression must be an identifier",
-                    invalid.text_range(),
-                ));
+                to.push(
+                    Report::error("left operand of a this-expression must be an identifier")
+                        .primary(invalid.text_range().into(), "left operand")
+                );
             }
         }
     }
@@ -894,7 +899,7 @@ impl InfixOperator {
 node! {
     #[from(NODE_SUFFIX_OPERATION)] struct SuffixOperation;
 
-    fn validate(&self, to: &mut Vec<NodeError>) {
+    fn validate(&self, to: &mut Vec<Report<'_>>) {
         self.left().validate(to);
     }
 }
@@ -941,7 +946,7 @@ impl TryFrom<Kind> for SuffixOperator {
 node! {
     #[from(NODE_INTERPOLATION)] struct Interpolation;
 
-    fn validate(&self, to: &mut Vec<NodeError>) {
+    fn validate(&self, to: &mut Vec<Report<'_>>) {
         self.expression().validate(to);
     }
 }
@@ -1006,7 +1011,7 @@ macro_rules! interpolated {
 node! {
     #[from(NODE_PATH)] struct Path;
 
-    fn validate(&self, to: &mut Vec<NodeError>) {
+    fn validate(&self, to: &mut Vec<Report<'_>>) {
         for part in self.parts() {
             if let InterpolatedPart::Interpolation(interpolation) = part {
                 interpolation.validate(to);
@@ -1027,7 +1032,7 @@ interpolated! {
 node! {
     #[from(NODE_IDENTIFIER)] struct Identifier;
 
-    fn validate(&self, to: &mut Vec<NodeError>) {
+    fn validate(&self, to: &mut Vec<Report<'_>>) {
         if let IdentifierValue::Quoted(quoted) = self.value() {
             quoted.validate(to);
         }
@@ -1062,20 +1067,21 @@ pub enum IdentifierValue {
 node! {
     #[from(NODE_IDENTIFIER)] struct IdentifierQuoted;
 
-    fn validate(&self, to: &mut Vec<NodeError>) {
+    fn validate(&self, to: &mut Vec<Report<'_>>) {
+        let mut report = Report::error("invalid identifier");
+        let mut reported_control_character = false;
+
         for part in self.parts() {
             match part {
                 InterpolatedPart::Content(content) => {
-                    content.validate_escapes(to);
+                    content.validate_escapes(&mut report);
 
                     let text = content.text();
 
-                    if text.chars().any(char::is_control) {
-                        to.push(NodeError::new(
-                            "quoted identifiers cannot contain control characters (non-escaped newlines, tabs, ...)",
-                            self.text_range(),
-                        ));
-                        break;
+                    if !reported_control_character && text.chars().any(char::is_control) {
+                        reported_control_character = true;
+                        report.push_primary(content.text_range().into(), "contains control characters");
+                        report.push_help("quoted identifiers cannot contain control characters (non-escaped newlines, tabs, ...)");
                     }
                 },
 
@@ -1085,6 +1091,10 @@ node! {
 
                 _ => {},
             }
+        }
+
+        if !report.is_empty() {
+            to.push(report);
         }
     }
 }
@@ -1102,7 +1112,10 @@ node! {
     #[from(NODE_STRING)] struct SString;
 
     // What a behemoth. And the sad part is I can't figure out a way to make this simpler.
-    fn validate(&self, to: &mut Vec<NodeError>) {
+    fn validate(&self, to: &mut Vec<Report<'_>>) {
+        let mut report = Report::error("invalid string");
+        let mut reported_mixed_indentation = false;
+
         let mut parts = self
             .parts()
             .scan(0, |index, part| {
@@ -1123,7 +1136,6 @@ node! {
         let mut string_last_line_range = None;
 
         let mut indentation: Option<char> = None;
-        let mut indentation_errorred = false;
 
         let mut previous_part_is_not_delimiter_range = None;
         while let Some((part_index, part)) = parts.next() {
@@ -1145,7 +1157,7 @@ node! {
                 },
 
                 InterpolatedPart::Content(content) => {
-                    content.validate_escapes(to);
+                    content.validate_escapes(&mut report);
 
                     let text = content.text();
 
@@ -1202,12 +1214,12 @@ node! {
                                     continue;
                                 };
 
-                                if !indentation_errorred && indentation != c {
-                                    indentation_errorred = true;
-                                    to.push(NodeError::new(
+                                if !reported_mixed_indentation && indentation != c {
+                                    reported_mixed_indentation = true;
+                                    report.push_primary(
+                                        self.text_range().into(),
                                         "strings cannot mix different kinds of whitespace in indentation",
-                                        self.text_range(),
-                                    ));
+                                    );
                                 }
                             }
                         }
@@ -1228,11 +1240,15 @@ node! {
 
         if string_is_multiline {
             for range in [string_first_line_range, string_last_line_range].into_iter().flatten() {
-                to.push(NodeError::new(
+                report.push_primary(
+                    range.into(),
                     "multiline strings' first and last lines must be empty",
-                    range,
-                ));
+                );
             }
+        }
+
+        if !report.is_empty() {
+            to.push(report);
         }
     }
 }
@@ -1249,55 +1265,62 @@ interpolated! {
 node! {
     #[from(NODE_RUNE)] struct Rune;
 
-    fn validate(&self, to: &mut Vec<NodeError>) {
+    fn validate(&self, to: &mut Vec<Report<'_>>) {
+        let mut report = Report::error("invalid rune");
+        let mut reported_control_character = false;
+        let mut reported_interpolation = false;
+
         let mut got_content = false;
 
         for part in self.parts() {
             match part {
                 InterpolatedPart::Content(content) => {
-                    got_content = true;
-
                     let text = content.text();
 
-                    match content.validate_escapes(to) {
+                    match content.validate_escapes(&mut report) {
                         0 if text.chars().count() == 1 => {},
                         1 => {},
 
                         _ => {
-                            to.push(NodeError::new(
+                            report.push_primary(
+                                content.text_range().into(),
                                 "invalid rune literal length",
-                                content.text_range(),
-                            ));
+                            );
                         },
                     }
 
-                    if text.chars().any(char::is_control) {
-                        to.push(NodeError::new(
+                    if !reported_control_character && text.chars().any(char::is_control) {
+                        reported_control_character = true;
+                        report.push_primary(
+                            content.text_range().into(),
                             "runes cannot contain control characters (non-escaped newlines, tabs, ...)",
-                            content.text_range(),
-                        ));
-                        break;
+                        );
                     }
                 },
 
-                InterpolatedPart::Interpolation(interpolation) => {
-                    got_content = true;
-
-                    to.push(NodeError::new(
+                InterpolatedPart::Interpolation(interpolation) if !reported_interpolation => {
+                    reported_interpolation = true;
+                    report.push_primary(
+                        interpolation.text_range().into(),
                         "runes cannot contain interpolation",
-                        interpolation.text_range(),
-                    ));
+                    );
                 }
 
-                _ => {},
+                _ => continue,
             }
+
+            got_content = true;
         }
 
         if !got_content {
-            to.push(NodeError::new(
+            report.push_primary(
+                self.text_range().into(),
                 "runes cannot be empty",
-                self.text_range(),
-            ));
+            );
+        }
+
+        if !report.is_empty() {
+            to.push(report);
         }
     }
 }
@@ -1314,20 +1337,22 @@ interpolated! {
 node! {
     #[from(NODE_ISLAND)] struct Island;
 
-    fn validate(&self, to: &mut Vec<NodeError>) {
+    fn validate(&self, to: &mut Vec<Report<'_>>) {
+        let mut reported_control_character = false;
+
         for part in self.parts() {
             match part {
                 InterpolatedPart::Content(content) => {
-                    content.validate_escapes(to);
+                    // content.validate_escapes(to);
 
                     let text = content.text();
 
-                    if text.chars().any(char::is_control) {
-                        to.push(NodeError::new(
-                            "islands cannot contain control characters (non-escaped newlines, tabs, ...)",
-                            self.text_range(),
+                    if !reported_control_character && text.chars().any(char::is_control) {
+                        reported_control_character = true;
+                        to.push(Report::error(
+                            "islands cannot contain control characters (non-escaped newlines, tabs, ...)").primary(
+                            self.text_range().into(), "here"
                         ));
-                        break;
                     }
                 },
 
@@ -1379,7 +1404,7 @@ pub enum NumberValue {
 node! {
     #[from(NODE_IF_THEN)] struct IfThen;
 
-    fn validate(&self, to: &mut Vec<NodeError>) {
+    fn validate(&self, to: &mut Vec<Report<'_>>) {
         self.condition().validate(to);
         self.consequence().validate(to);
 
@@ -1408,7 +1433,9 @@ impl IfThen {
 node! {
     #[from(NODE_IF_IS)] struct IfIs;
 
-    fn validate(&self, to: &mut Vec<NodeError>) {
+    fn validate(&self, to: &mut Vec<Report<'_>>) {
+        let mut report = Report::error("invalid if-is");
+
         self.expression().validate(to);
 
         for item in self.patterns().same_items() {
@@ -1418,12 +1445,17 @@ node! {
                 },
 
                 invalid => {
-                    to.push(NodeError::new(
-                        "all if-is branches must be lambdas",
-                        invalid.text_range(),
-                    ));
+                    report.push_primary(
+                        invalid.text_range().into(),
+                        "invalid branch",
+                    );
+                    report.push_help("all if-is branches must be lambdas");
                 },
             }
+        }
+
+        if !report.is_empty() {
+            to.push(report);
         }
     }
 }

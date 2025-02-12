@@ -1,9 +1,12 @@
 use std::{
-    borrow,
     fmt::Write as _,
     result,
 };
 
+use cab_report::{
+    Report,
+    ReportSeverity,
+};
 use enumset::EnumSet;
 use peekmore::{
     PeekMore as _,
@@ -22,52 +25,31 @@ use crate::{
 /// A parse result that contains a [`rowan::SyntaxNode`],
 /// contains a [`node::Node`] if it was successfully created,
 /// and a list of [`NodeError`]s.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Parse<N: node::Node> {
+#[derive(Debug, Clone)]
+pub struct Parse<'a, N: node::Node> {
     /// The underlying [`rowan::SyntaxNode`].
     pub syntax: RowanNode,
 
     /// The [`node::Node`], if it was successfully created.
     pub node: Option<N>,
 
-    /// Errors encountered during parsing.
-    pub errors: Vec<NodeError>,
+    /// Issues reported during parsing.
+    pub reports: Vec<Report<'a>>,
 }
 
-impl<N: node::Node> Parse<N> {
-    /// Returns [`Ok`] with the [`node::Node`] node if there are no errors,
-    /// returns [`Err`] with the list of errors obtained from
-    /// [`Self::errors`] otherwise.
-    pub fn result(self) -> result::Result<N, Vec<NodeError>> {
-        if self.errors.is_empty() {
+impl<'a, N: node::Node> Parse<'a, N> {
+    /// Returns [`Ok`] with the [`node::Node`] node if there are no error level
+    /// or above reports, returns [`Err`] with the list of reports
+    /// otherwise.
+    pub fn result(self) -> result::Result<N, Vec<Report<'a>>> {
+        if self
+            .reports
+            .iter()
+            .all(|report| report.severity < ReportSeverity::Error)
+        {
             Ok(self.node.unwrap())
         } else {
-            Err(self.errors)
-        }
-    }
-}
-
-/// Options related to parsing.
-#[derive(Debug, Clone)]
-pub struct ParseOptions {
-    /// Whether to deduplicate errors. For every error with the same range, the
-    /// first one will be kept.
-    ///
-    /// This means that the following string will only produce a single error,
-    /// instead of two:
-    ///
-    /// ```txt
-    /// [{ a := (b]
-    ///           ^ expected ')', found ']'
-    ///           ^ expected '}', found ']' (omitted if option is set)
-    /// ```
-    pub deduplicate_errors: bool,
-}
-
-impl Default for ParseOptions {
-    fn default() -> Self {
-        ParseOptions {
-            deduplicate_errors: true,
+            Err(self.reports)
         }
     }
 }
@@ -76,7 +58,7 @@ impl Default for ParseOptions {
 ///
 /// Parsing will always fail if the given [`node::Node`] type is not an
 /// expression as we cannot parse sub expressions.
-pub fn parse<'a, I: Iterator<Item = (Kind, &'a str)>, N: node::Node>(tokens: I, options: ParseOptions) -> Parse<N> {
+pub fn parse<'a, I: Iterator<Item = (Kind, &'a str)>, N: node::Node>(tokens: I) -> Parse<'a, N> {
     let mut noder = Noder::new(tokens);
 
     noder.node(NODE_ROOT, |this| {
@@ -86,7 +68,7 @@ pub fn parse<'a, I: Iterator<Item = (Kind, &'a str)>, N: node::Node>(tokens: I, 
 
     let syntax = RowanNode::new_root(noder.builder.finish());
     let node = syntax.first_child().and_then(|node| N::cast(node));
-    let mut errors = noder.errors;
+    let mut reports = noder.reports;
 
     // Handle unexpected node type. Happens when you
     // `parse::<node::Foo>(...)` and the input
@@ -94,7 +76,7 @@ pub fn parse<'a, I: Iterator<Item = (Kind, &'a str)>, N: node::Node>(tokens: I, 
     if node.is_none() {
         let node = syntax.first_child();
 
-        errors.push(NodeError::unexpected(
+        reports.push(unexpected(
             node.as_ref().map(|node| node.kind()),
             N::kind(),
             node.as_ref()
@@ -103,95 +85,60 @@ pub fn parse<'a, I: Iterator<Item = (Kind, &'a str)>, N: node::Node>(tokens: I, 
         ));
     }
 
-    if options.deduplicate_errors {
-        let mut previous_text_range = None;
-
-        errors.retain(move |NodeError { range, .. }| {
-            if previous_text_range != Some(range.start()) {
-                previous_text_range = Some(range.start());
-                true
-            } else {
-                false
-            }
-        })
-    }
-
-    // Purposefully after error deduplication.
     if let Some(node) = &node {
-        node.validate(&mut errors);
+        node.validate(&mut reports);
     }
 
-    Parse { syntax, node, errors }
+    Parse { syntax, node, reports }
 }
 
-/// A node error.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct NodeError {
-    /// The error's reason.
-    pub reason: borrow::Cow<'static, str>,
-    /// Where the error happened in the source.
-    pub range: rowan::TextRange,
-}
+fn unexpected(got: Option<Kind>, mut expected: EnumSet<Kind>, range: rowan::TextRange) -> Report<'static> {
+    let report = match got {
+        Some(kind) => Report::error(format!("unexpected {kind}")),
+        None => Report::error("unexpected end of file"),
+    };
 
-impl NodeError {
-    pub fn new(reason: impl Into<borrow::Cow<'static, str>>, range: rowan::TextRange) -> Self {
-        Self {
-            reason: reason.into(),
-            range,
-        }
+    let mut reason = if expected.is_empty() {
+        return report.primary(range.into(), "expected end of file");
+    } else {
+        String::from("expected ")
+    };
+
+    if expected.is_superset(Kind::EXPRESSION_SET) {
+        expected.remove_all(Kind::EXPRESSION_SET);
+
+        let separator = match expected.len() {
+            0 => "",
+            1 => " or ",
+            2.. => ", ",
+        };
+
+        write!(reason, "an expression{separator}").ok();
     }
 
-    pub fn unexpected(got: Option<Kind>, mut expected: EnumSet<Kind>, range: rowan::TextRange) -> NodeError {
-        let mut reason = String::from("expected ");
-
-        if expected == EnumSet::empty() {
-            write!(reason, "end of file, got {got}", got = got.unwrap()).ok();
-
-            return Self {
-                reason: reason.into(),
-                range,
-            };
-        }
-
-        if expected.is_superset(Kind::EXPRESSION_SET) {
-            expected.remove_all(Kind::EXPRESSION_SET);
-
-            let separator = match expected.len() {
-                0 => "",
-                1 => " or ",
-                2.. => ", ",
-            };
-
-            write!(reason, "an expression{separator}").ok();
-        }
-
-        if expected.is_superset(Kind::IDENTIFIER_SET) {
-            expected.remove(TOKEN_IDENTIFIER_START);
-        }
-
-        for (index, item) in expected.into_iter().enumerate() {
-            let position = index + 1;
-
-            let separator = match position {
-                position if expected.len() == position => "",
-                position if expected.len() == position + 1 => " or ",
-                _ => ", ",
-            };
-
-            write!(reason, "{item}{separator}").ok();
-        }
-
-        if let Some(got) = got {
-            write!(reason, ", got {got}").ok();
-        } else {
-            write!(reason, ", reached end of file").ok();
-        }
-
-        Self {
-            reason: reason.into(),
-            range,
-        }
+    if expected.is_superset(Kind::IDENTIFIER_SET) {
+        expected.remove(TOKEN_IDENTIFIER_START);
     }
+
+    for (index, item) in expected.into_iter().enumerate() {
+        let position = index + 1;
+
+        let separator = match position {
+            position if expected.len() == position => "",
+            position if expected.len() == position + 1 => " or ",
+            _ => ", ",
+        };
+
+        write!(reason, "{item}{separator}").ok();
+    }
+
+    if let Some(got) = got {
+        write!(reason, ", got {got}").ok();
+    } else {
+        write!(reason, ", reached end of file").ok();
+    }
+
+    report.primary(range.into(), reason)
 }
 
 type Result<T> = result::Result<T, ()>;
@@ -200,7 +147,7 @@ struct Noder<'a, I: Iterator<Item = (Kind, &'a str)>> {
     builder: rowan::GreenNodeBuilder<'a>,
 
     tokens: PeekMore<I>,
-    errors: Vec<NodeError>,
+    reports: Vec<Report<'a>>,
 
     offset: rowan::TextSize,
 }
@@ -211,7 +158,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
             builder: rowan::GreenNodeBuilder::new(),
 
             tokens: tokens.peekmore(),
-            errors: Vec::new(),
+            reports: Vec::new(),
 
             offset: 0.into(),
         }
@@ -277,11 +224,8 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
             },
 
             None => {
-                self.errors.push(NodeError::unexpected(
-                    None,
-                    EnumSet::empty(),
-                    rowan::TextRange::empty(self.offset),
-                ));
+                self.reports
+                    .push(unexpected(None, EnumSet::empty(), rowan::TextRange::empty(self.offset)));
 
                 Err(())
             },
@@ -335,8 +279,8 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
 
                 self.node_from(expected_at, NODE_ERROR, |_| {});
 
-                self.errors
-                    .push(NodeError::unexpected(unexpected, expected, unexpected_range));
+                self.reports
+                    .push(self::unexpected(unexpected, expected, unexpected_range));
 
                 let next = self.peek()?;
 
@@ -449,7 +393,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
                     },
 
                     None => {
-                        this.errors.push(NodeError::unexpected(
+                        this.reports.push(unexpected(
                             None,
                             TOKEN_CONTENT | end,
                             rowan::TextRange::empty(this.offset),
@@ -560,11 +504,8 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
 
                 self.node_from(expected_at, NODE_ERROR, |_| {});
 
-                self.errors.push(NodeError::unexpected(
-                    unexpected,
-                    Kind::EXPRESSION_SET,
-                    unexpected_range,
-                ));
+                self.reports
+                    .push(self::unexpected(unexpected, Kind::EXPRESSION_SET, unexpected_range));
             },
         }
     }

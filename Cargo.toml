@@ -11,10 +11,11 @@ repository  = "https://github.com/cull-os/cab"
 version     = "0.0.1"
 
 [workspace.dependencies]
-log               = "0.4.21"
-num               = "0.4.3"
-smallvec          = "2.0.0-alpha.10"
-static_assertions = "1.1.0"
+clap-verbosity-flag = "3.0.2"
+log                 = "0.4.21"
+num                 = "0.4.3"
+smallvec            = "2.0.0-alpha.10"
+static_assertions   = "1.1.0"
 
 [workspace.dependencies.derive_more]
 features = [ "full" ]

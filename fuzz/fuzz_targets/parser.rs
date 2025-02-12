@@ -20,12 +20,19 @@ use libfuzzer_sys::{
 use yansi::Paint as _;
 
 fuzz_target!(|data: &str| -> Corpus {
-    let parse = hint::black_box(syntax::parse::<_, syntax::node::Expression>(
-        syntax::tokenize(data),
-        Default::default(),
-    ));
+    let parse = hint::black_box(syntax::parse::<_, syntax::node::Expression>(syntax::tokenize(data)));
 
-    if !env::var("FUZZ_PARSER_SAVE_VALID").is_ok_and(|value| !matches!(&*value, "" | "0" | "false")) {
+    for report in &parse.reports {
+        let file = cab::report::File {
+            island: "".into(),
+            path: "".into(),
+            source: data.into(),
+        };
+
+        println!("{report}", report = report.with(&file));
+    }
+
+    if let Ok("" | "0" | "false") = env::var("FUZZ_PARSER_SAVE_VALID").as_deref() {
         return Corpus::Keep;
     }
 

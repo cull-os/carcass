@@ -82,9 +82,7 @@ fn actual_main() -> Result<(), Box<dyn error::Error>> {
                 let expected_syntax = fs::read_to_string(&expected_syntax_file)?;
 
                 let actual_syntax = {
-                    let node =
-                        syntax::parse::<_, syntax::node::Expression>(syntax::tokenize(&data), Default::default())
-                            .syntax;
+                    let node = syntax::parse::<_, syntax::node::Expression>(syntax::tokenize(&data)).syntax;
                     format!("{node:#?}")
                 };
 
