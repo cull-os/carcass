@@ -447,6 +447,7 @@ impl fmt::Display for ReportDisplay<'_> {
                 {
                     *line_number.borrow_mut() = Some((line.number, true));
 
+                    writer.write_indent()?;
                     writeln_wrapped(writer, resolve_style(line.content, &mut line.styles, report.severity))?;
 
                     *line_number.borrow_mut() = Some((line.number, false));
