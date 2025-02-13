@@ -1,3 +1,5 @@
+use smallvec::SmallVec;
+
 use crate::Kind::{
     self,
     *,
@@ -25,8 +27,8 @@ fn is_valid_path_character(c: char) -> bool {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum TokenizerContext<'a> {
     Path,
-    Stringlike { before: Option<&'a str>, end: u8 },
-    StringlikeEnd { before: Option<&'a str>, end: u8 },
+    Stringlike { before: Option<&'a str>, end: char },
+    StringlikeEnd { before: Option<&'a str>, end: char },
     InterpolationStart,
     Interpolation { parentheses: usize },
 }
@@ -36,7 +38,7 @@ struct Tokenizer<'a> {
     input: &'a str,
     offset: usize,
 
-    context: Vec<TokenizerContext<'a>>,
+    context: SmallVec<TokenizerContext<'a>, 4>,
 }
 
 impl<'a> Iterator for Tokenizer<'a> {
@@ -184,14 +186,14 @@ impl<'a> Tokenizer<'a> {
             if self.peek_character().is_none_or(|c| !is_valid_path_character(c)) {
                 self.context_pop(TokenizerContext::Path);
 
-                return Some(TOKEN_PATH);
+                return Some(TOKEN_PATH_CONTENT);
             }
 
             match self.peek_character().unwrap() {
                 '\\' if self.peek_character_nth(1) == Some('(') => {
                     self.context_push(TokenizerContext::InterpolationStart);
 
-                    return Some(TOKEN_PATH);
+                    return Some(TOKEN_PATH_CONTENT);
                 },
 
                 '\\' => {
@@ -421,7 +423,7 @@ impl<'a> Tokenizer<'a> {
             start @ '`' => {
                 self.context_push(TokenizerContext::Stringlike {
                     before: None,
-                    end: start as u8,
+                    end: start,
                 });
 
                 TOKEN_IDENTIFIER_START
@@ -433,7 +435,7 @@ impl<'a> Tokenizer<'a> {
 
                 self.context_push(TokenizerContext::Stringlike {
                     before: Some(equals),
-                    end: start as u8,
+                    end: start,
                 });
 
                 TOKEN_STRING_START
@@ -442,7 +444,7 @@ impl<'a> Tokenizer<'a> {
             start @ '\'' => {
                 self.context_push(TokenizerContext::Stringlike {
                     before: None,
-                    end: start as u8,
+                    end: start,
                 });
 
                 TOKEN_RUNE_START
@@ -455,10 +457,7 @@ impl<'a> Tokenizer<'a> {
                 .peek_character()
                 .is_some_and(|c| is_valid_initial_identifier_character(c) || c == '\\') =>
             {
-                self.context_push(TokenizerContext::Stringlike {
-                    before: None,
-                    end: b'>',
-                });
+                self.context_push(TokenizerContext::Stringlike { before: None, end: '>' });
 
                 TOKEN_ISLAND_START
             },
@@ -517,11 +516,11 @@ mod tests {
     fn path() {
         assert_token_matches!(
             r"../foo\(𓃰)///baz",
-            (TOKEN_PATH, "../foo"),
+            (TOKEN_PATH_CONTENT, "../foo"),
             (TOKEN_INTERPOLATION_START, r"\("),
             (TOKEN_IDENTIFIER, "𓃰"),
             (TOKEN_INTERPOLATION_END, ")"),
-            (TOKEN_PATH, "///baz"),
+            (TOKEN_PATH_CONTENT, "///baz"),
         );
     }
 

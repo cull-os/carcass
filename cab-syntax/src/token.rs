@@ -11,6 +11,10 @@ use cab_report::{
     Label,
     Report,
 };
+use cstree::text::{
+    TextRange,
+    TextSize,
+};
 use num::Num;
 use static_assertions::assert_obj_safe;
 
@@ -19,55 +23,55 @@ use crate::{
         self,
         *,
     },
-    RowanToken,
+    red,
 };
 
 assert_obj_safe!(Token);
-pub trait Token: ops::Deref<Target = RowanToken> {
-    /// Determines if this token can be created from this Kind.
+pub trait Token: ops::Deref<Target = red::Token> {
+    /// Returns the underlying [`red::Token`].
+    fn red(&self) -> &red::Token;
+
+    /// Determines if this token can be created from the [`Kind`].
     fn can_cast(from: Kind) -> bool
     where
         Self: Sized;
 
-    /// Casts a RowanToken to this Token. Returns None if it can't.
-    fn cast(from: RowanToken) -> Option<Self>
+    /// Casts a [`red::Token`] to this token. Returns [`None`] if it can't.
+    fn cast(from: red::Token) -> Option<Self>
     where
         Self: Sized;
-
-    /// Returns the underlying RowanToken.
-    fn syntax(&self) -> &RowanToken;
 }
 
 macro_rules! token {
     (#[from($kind:ident)]struct $name:ident;) => {
         #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-        pub struct $name(pub(crate) RowanToken);
+        pub struct $name(pub(crate) red::Token);
 
         impl fmt::Display for $name {
             fn fmt(&self, writer: &mut fmt::Formatter<'_>) -> fmt::Result {
-                fmt::Display::fmt(self.deref(), writer)
-            }
-        }
-
-        impl Token for $name {
-            fn can_cast(kind: Kind) -> bool {
-                kind == $kind
-            }
-
-            fn cast(token: RowanToken) -> Option<Self> {
-                Self::can_cast(token.kind()).then_some(Self(token))
-            }
-
-            fn syntax(&self) -> &RowanToken {
-                &self.0
+                self.deref().fmt(writer)
             }
         }
 
         impl ops::Deref for $name {
-            type Target = RowanToken;
+            type Target = red::Token;
 
             fn deref(&self) -> &Self::Target {
-                self.syntax()
+                self.red()
+            }
+        }
+
+        impl Token for $name {
+            fn red(&self) -> &red::Token {
+                &self.0
+            }
+
+            fn can_cast(kind: Kind) -> bool {
+                kind == $kind
+            }
+
+            fn cast(token: red::Token) -> Option<Self> {
+                Self::can_cast(token.kind()).then_some(Self(token))
             }
         }
     };
@@ -76,19 +80,26 @@ macro_rules! token {
 token! { #[from(TOKEN_WHITESPACE)] struct Whitespace; }
 
 impl Whitespace {
-    /// The newline count of this whitespace.
+    /// Returns the amount of lines this whitespace.
     pub fn newline_count(&self) -> usize {
-        self.text().bytes().filter(|&c| c == b'\n').count()
+        self.text().bytes().filter(|&c| c == b'\n').count() + 1
     }
 }
 
 token! { #[from(TOKEN_COMMENT)] struct Comment; }
 
 impl Comment {
+    const START_HASHTAG_LENGTH: usize = 1;
+
     /// Returns the starting delimiter of this comment.
     pub fn start_delimiter(&self) -> &str {
         let text = self.text();
-        let content_start_index = text.bytes().skip(1).take_while(|&c| c == b'=').count() + 1;
+        let content_start_index = text
+            .bytes()
+            .skip(Self::START_HASHTAG_LENGTH)
+            .take_while(|&c| c == b'=')
+            .count()
+            + Self::START_HASHTAG_LENGTH;
 
         &text[..content_start_index]
     }
@@ -96,7 +107,11 @@ impl Comment {
     /// Returns whether if this comment has the capability to span multiple
     /// lines.
     pub fn is_multiline(&self) -> bool {
-        self.text().as_bytes().get(1).copied().is_some_and(|c| c == b'=')
+        self.text()
+            .as_bytes()
+            .get(Self::START_HASHTAG_LENGTH)
+            .copied()
+            .is_some_and(|c| c == b'=')
     }
 }
 
@@ -111,12 +126,12 @@ impl Integer {
         let text = self.text();
 
         match text.as_bytes().get(1).copied() {
-            Some(b'b') => num::BigInt::from_str_radix(text.get(2..).unwrap(), 2),
-            Some(b'o') => num::BigInt::from_str_radix(text.get(2..).unwrap(), 8),
-            Some(b'x') => num::BigInt::from_str_radix(text.get(2..).unwrap(), 16),
+            Some(b'b' | b'B') => num::BigInt::from_str_radix(text.get(2..).unwrap(), 2),
+            Some(b'o' | b'O') => num::BigInt::from_str_radix(text.get(2..).unwrap(), 8),
+            Some(b'x' | b'X') => num::BigInt::from_str_radix(text.get(2..).unwrap(), 16),
             _ => num::BigInt::from_str_radix(text, 10),
         }
-        .unwrap()
+        .expect("invalid interger token")
     }
 }
 
@@ -128,16 +143,16 @@ impl Float {
         let text = self.text();
 
         match text.as_bytes().get(1).copied() {
-            Some(b'b') => f64::from_str_radix(text.get(2..).unwrap(), 2),
-            Some(b'o') => f64::from_str_radix(text.get(2..).unwrap(), 8),
-            Some(b'x') => f64::from_str_radix(text.get(2..).unwrap(), 16),
+            Some(b'b' | b'B') => f64::from_str_radix(text.get(2..).unwrap(), 2),
+            Some(b'o' | b'O') => f64::from_str_radix(text.get(2..).unwrap(), 8),
+            Some(b'x' | b'X') => f64::from_str_radix(text.get(2..).unwrap(), 16),
             _ => f64::from_str_radix(text, 10),
         }
-        .unwrap()
+        .expect("invalid float token")
     }
 }
 
-token! { #[from(TOKEN_PATH)] struct Path; }
+token! { #[from(TOKEN_PATH_CONTENT)] struct PathContent; }
 
 token! { #[from(TOKEN_IDENTIFIER)] struct Identifier; }
 
@@ -145,38 +160,37 @@ token! { #[from(TOKEN_CONTENT)] struct Content; }
 
 impl Content {
     pub fn validate_escapes(&self, report: &mut Report<'_>) -> usize {
-        let mut errored = false;
+        let mut reported = false;
 
-        let mut text = self.text().bytes().enumerate();
+        let mut bytes = self.text().bytes().enumerate();
         let mut count: usize = 0;
 
-        while let Some((offset, c)) = text.next() {
+        while let Some((offset, c)) = bytes.next() {
             if c != b'\\' {
                 continue;
             }
 
             count += 1;
 
-            match text.next() {
+            match bytes.next() {
                 Some((_, b'0' | b't' | b'n' | b'r' | b'`' | b'"' | b'\'' | b'>' | b'\\')) => {},
 
-                next @ (Some(_) | None) => {
+                next @ (Some(_) | None) if !reported => {
+                    reported = true;
+
                     report.push_label(Label::primary(
-                        rowan::TextRange::at(
-                            self.text_range().start() + rowan::TextSize::new(offset as u32),
+                        TextRange::at(
+                            self.text_range().start() + TextSize::new(offset as u32),
                             (1 + next.is_some() as u32).into(),
                         )
                         .into(),
                         "invalid escape",
                     ));
-
-                    errored = true;
+                    report.push_tip(r#"escapes must be one of: \0, \t, \n, \r, \`, \", \', \>, \\"#);
                 },
-            }
-        }
 
-        if errored {
-            report.push_tip(r#"escapes must be one of: \0, \t, \n, \r, \`, \", \', \>, \\"#);
+                _ => {},
+            }
         }
 
         count

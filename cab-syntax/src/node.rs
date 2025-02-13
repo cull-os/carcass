@@ -18,10 +18,9 @@ use crate::{
         self,
         *,
     },
-    Language,
-    RowanElement,
-    RowanNode,
-    RowanToken,
+    RedNode,
+    RedNodeOrToken,
+    RedToken,
     token::{
         self,
         Token,
@@ -65,7 +64,7 @@ assert_obj_safe!(Node);
 
 /// A typed AST node. Implementors will usually have methods to make accessing
 /// children elements and attributes related to the node simpler.
-pub trait Node: rowan::ast::AstNode<Language = Language> + ops::Deref<Target = RowanNode> {
+pub trait Node: rowan::ast::AstNode<Language = Language> + ops::Deref<Target = RedNode> {
     /// Returns its inherent kind, returning None if it is a node that can be
     /// created from multiple different kinds.
     fn kind() -> EnumSet<Kind>
@@ -104,7 +103,7 @@ pub trait Node: rowan::ast::AstNode<Language = Language> + ops::Deref<Target = R
     }
 
     /// Returns the first immediate children token that is the given kind.
-    fn token_untyped(&self, kind: Kind) -> Option<RowanToken>
+    fn token_untyped(&self, kind: Kind) -> Option<RedToken>
     where
         Self: Sized,
     {
@@ -118,16 +117,16 @@ pub trait Node: rowan::ast::AstNode<Language = Language> + ops::Deref<Target = R
         Self: Sized,
     {
         self.children_with_tokens()
-            .filter_map(RowanElement::into_token)
+            .filter_map(RedNodeOrToken::into_token)
             .filter_map(T::cast)
     }
 
     /// Returns all immediate children tokens.
-    fn children_tokens_untyped(&self) -> impl Iterator<Item = RowanToken>
+    fn children_tokens_untyped(&self) -> impl Iterator<Item = RedToken>
     where
         Self: Sized,
     {
-        self.children_with_tokens().filter_map(RowanElement::into_token)
+        self.children_with_tokens().filter_map(RedNodeOrToken::into_token)
     }
 }
 
@@ -592,7 +591,7 @@ node! {
 #[rustfmt::skip]
 impl PrefixOperation {
     /// Returns the operator token of this operation.
-    pub fn operator_token(&self) -> RowanToken {
+    pub fn operator_token(&self) -> RedToken {
         self.children_tokens_untyped()
             .find(|token| PrefixOperator::try_from(token.kind()).is_ok())
             .unwrap()
@@ -723,7 +722,7 @@ impl InfixOperation {
     get_node! { left -> 0 @ Expression }
 
     /// Returns the operator token of this operation.
-    pub fn operator_token(&self) -> Option<RowanToken> {
+    pub fn operator_token(&self) -> Option<RedToken> {
         self.children_tokens_untyped()
             .find(|token| InfixOperator::try_from(token.kind()).is_ok())
     }
@@ -908,7 +907,7 @@ impl SuffixOperation {
     get_node! { left -> 0 @ Expression }
 
     /// Returns the operator token of this operation.
-    pub fn operator_token(&self) -> RowanToken {
+    pub fn operator_token(&self) -> RedToken {
         self.children_tokens_untyped()
             .find(|token| SuffixOperator::try_from(token.kind()).is_ok())
             .unwrap()
@@ -961,7 +960,7 @@ impl Interpolation {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum InterpolatedPart<T: Token> {
-    Delimiter(RowanToken),
+    Delimiter(RedToken),
     Content(T),
     Interpolation(Interpolation),
 }

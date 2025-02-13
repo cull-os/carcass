@@ -1,4 +1,7 @@
-use std::ops;
+use cab_text::{
+    Range,
+    into,
+};
 
 use crate::*;
 
@@ -31,29 +34,26 @@ impl LabelSeverity {
 
 #[derive(Debug, Clone)]
 pub struct Label<'a> {
-    pub(crate) range: ops::Range<usize>,
-    pub(crate) level: LabelSeverity,
-    pub(crate) text: CowStr<'a>,
+    pub range: Range,
+    pub level: LabelSeverity,
+    pub text: CowStr<'a>,
 }
 
 impl<'a> Label<'a> {
-    pub fn new(range: ops::Range<usize>, text: impl Into<CowStr<'a>>, level: LabelSeverity) -> Self {
-        Self {
-            range,
-            text: text.into(),
-            level,
-        }
+    #[inline]
+    pub fn new(range: impl Into<Range>, text: impl Into<CowStr<'a>>, level: LabelSeverity) -> Self {
+        into!(range, text);
+
+        Self { range, text, level }
     }
 
-    pub fn primary(range: ops::Range<usize>, text: impl Into<CowStr<'a>>) -> Self {
+    #[inline]
+    pub fn primary(range: impl Into<Range>, text: impl Into<CowStr<'a>>) -> Self {
         Self::new(range, text, LabelSeverity::Primary)
     }
 
-    pub fn secondary(range: ops::Range<usize>, text: impl Into<CowStr<'a>>) -> Self {
+    #[inline]
+    pub fn secondary(range: impl Into<Range>, text: impl Into<CowStr<'a>>) -> Self {
         Self::new(range, text, LabelSeverity::Secondary)
-    }
-
-    pub fn range(&self) -> ops::Range<usize> {
-        self.range.clone()
     }
 }

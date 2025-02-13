@@ -1,9 +1,14 @@
-use std::{
-    num::NonZeroUsize,
-    ops,
-};
+use std::num;
+
+use cab_text::Range;
 
 use crate::*;
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Position {
+    pub line: num::NonZeroU32,
+    pub column: u32,
+}
 
 #[derive(Debug)]
 pub struct File<'a> {
@@ -14,8 +19,10 @@ pub struct File<'a> {
 }
 
 impl File<'_> {
-    pub fn position(&self, range: &ops::Range<usize>) -> (Position, Position) {
-        let mut line = NonZeroUsize::MIN;
+    pub fn position_of(&self, range: Range) -> (Position, Position) {
+        let range: std::ops::Range<usize> = range.into();
+
+        let mut line = num::NonZeroU32::MIN;
         let mut column = 1;
 
         let mut start = Position { line, column };
@@ -46,10 +53,4 @@ impl File<'_> {
 
         (start, end)
     }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Position {
-    pub line: NonZeroUsize,
-    pub column: usize,
 }

@@ -10,6 +10,8 @@ version.workspace     = true
 [dependencies]
 cab-report.path               = "../cab-report"
 cab-syntax.path               = "../cab-syntax"
+cab-text.path                 = "../cab-text"
+cab-wrap.path                 = "../cab-wrap"
 clap-stdin                    = "0.6.0"
 clap-verbosity-flag.workspace = true
 log.workspace                 = true

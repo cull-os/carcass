@@ -11,6 +11,12 @@
 !cab-syntax/
 !cab-syntax/src/
 
+!cab-text/
+!cab-text/src/
+
+!cab-wrap/
+!cab-wrap/src/
+
 !docs/
 
 !fuzz/

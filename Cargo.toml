@@ -14,8 +14,14 @@ version     = "0.0.1"
 clap-verbosity-flag = "3.0.2"
 log                 = "0.4.21"
 num                 = "0.4.3"
+scopeguard          = "1.2.0"
 smallvec            = "2.0.0-alpha.10"
 static_assertions   = "1.1.0"
+unicode-width       = "0.2.0"
+
+[workspace.dependencies.cstree]
+features = [ "derive", "lasso", "multi_threaded_interning" ]
+version  = "0.12.2"
 
 [workspace.dependencies.derive_more]
 features = [ "full" ]

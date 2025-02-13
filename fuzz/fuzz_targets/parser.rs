@@ -12,7 +12,10 @@ use std::{
     path,
 };
 
-use cab::syntax;
+use cab::{
+    report,
+    syntax,
+};
 use libfuzzer_sys::{
     Corpus,
     fuzz_target,
@@ -23,7 +26,7 @@ fuzz_target!(|data: &str| -> Corpus {
     let parse = hint::black_box(syntax::parse::<_, syntax::node::Expression>(syntax::tokenize(data)));
 
     for report in &parse.reports {
-        let file = cab::report::File {
+        let file = report::File {
             island: "".into(),
             path: "".into(),
             source: data.into(),

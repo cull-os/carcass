@@ -1,5 +1,5 @@
 [package]
-name                  = "cab-report"
+name                  = "cab-wrap"
 description.workspace = true
 edition.workspace     = true
 license.workspace     = true
@@ -9,11 +9,7 @@ version.workspace     = true
 
 [dependencies]
 cab-text.path           = "../cab-text"
-cab-wrap.path           = "../cab-wrap"
-const-str               = "0.6.2"
-cstree.workspace        = true
-env_logger              = "0.11.6"
-log.workspace           = true
-smallvec.workspace      = true
+scopeguard.workspace    = true
+terminal_size           = "0.4.1"
 unicode-width.workspace = true
 yansi.workspace         = true

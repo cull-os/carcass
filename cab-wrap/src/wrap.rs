@@ -1,0 +1,88 @@
+use core::fmt;
+
+use unicode_width::UnicodeWidthStr as _;
+use yansi::Paint as _;
+
+use crate::{
+    LINE_WIDTH,
+    LINE_WIDTH_MAX,
+};
+
+pub fn wrapln<'a>(writer: &'a mut dyn fmt::Write, parts: impl Iterator<Item = yansi::Painted<&'a str>>) -> fmt::Result {
+    use None as Space;
+    use Some as Word;
+
+    let line_width_start = LINE_WIDTH.get();
+    let mut line_width = line_width_start;
+
+    let line_width_max = if line_width_start < *LINE_WIDTH_MAX {
+        *LINE_WIDTH_MAX
+    } else {
+        // If we can't even write any text just assume the line is uncapped.
+        u16::MAX
+    };
+
+    let mut parts = parts
+        .flat_map(|part| {
+            part.value
+                .split(' ')
+                .map(move |word| Word(word.paint(part.style)))
+                .intersperse(Space)
+        })
+        .peekable();
+
+    while let Some(part) = parts.peek_mut() {
+        let Word(word) = part.as_mut() else {
+            if line_width != 0 && line_width < line_width_max {
+                write!(writer, " ")?;
+                line_width += 1;
+            }
+
+            parts.next();
+            continue;
+        };
+
+        let word_width = word.value.width() as u16;
+
+        // Word fits in current line.
+        if line_width + word_width < line_width_max {
+            write!(writer, "{word}")?;
+            line_width += word_width;
+
+            parts.next();
+            continue;
+        }
+
+        // Word fits in the next line.
+        if line_width_start + word_width < line_width_max {
+            writeln!(writer)?;
+            line_width = line_width_start;
+
+            write!(writer, "{word}")?;
+            line_width += word_width;
+
+            parts.next();
+            continue;
+        }
+
+        // Word doesn't fit in the next line.
+        let line_width_remainder = line_width_max - line_width;
+
+        let split_index = word
+            .value
+            .char_indices()
+            .enumerate()
+            .find_map(|(index, (split_index, _))| (index as u16 + 1 >= line_width_remainder).then_some(split_index))
+            .unwrap();
+
+        let (word_this, word_rest) = word.value.split_at(split_index);
+
+        word.value = word_this;
+        writeln!(writer, "{word}")?;
+        line_width = line_width_start;
+
+        word.value = word_rest;
+    }
+
+    writeln!(writer)
+}

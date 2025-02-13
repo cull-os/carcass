@@ -1,0 +1,12 @@
+[package]
+name                  = "cab-text"
+description.workspace = true
+edition.workspace     = true
+license.workspace     = true
+publish.workspace     = true
+repository.workspace  = true
+version.workspace     = true
+
+[dependencies]
+cstree.workspace = true
+yansi.workspace  = true

@@ -2,7 +2,6 @@
 #![feature(if_let_guard, iter_intersperse, let_chains, gen_blocks)]
 
 mod file;
-mod indent;
 mod label;
 mod point;
 mod report;
@@ -16,7 +15,6 @@ use yansi::Paint as _;
 
 pub use crate::{
     file::*,
-    indent::*,
     label::*,
     point::*,
     report::*,

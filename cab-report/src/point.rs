@@ -1,34 +1,30 @@
-use std::borrow;
-
+use cab_text::{
+    into,
+    paint,
+};
 use yansi::Paint as _;
 
 use crate::*;
 
 #[derive(Debug, Clone)]
 pub struct Point<'a> {
-    pub(crate) title: yansi::Painted<CowStr<'a>>,
-    pub(crate) text: CowStr<'a>,
+    pub title: yansi::Painted<CowStr<'a>>,
+    pub text: CowStr<'a>,
 }
 
 impl<'a> Point<'a> {
-    pub fn new(title: yansi::Painted<CowStr<'a>>, text: impl Into<CowStr<'a>>) -> Self {
-        Self {
-            title,
-            text: text.into(),
-        }
+    pub fn new(title: yansi::Painted<impl Into<CowStr<'a>>>, text: impl Into<CowStr<'a>>) -> Self {
+        let title = paint(title.value.into(), title.style);
+        into!(text);
+
+        Self { title, text }
     }
 
     pub fn tip(text: impl Into<CowStr<'a>>) -> Self {
-        Self {
-            title: borrow::Cow::Borrowed("tip:").new().magenta().bold(),
-            text: text.into(),
-        }
+        Self::new("tip:".magenta().bold(), text)
     }
 
     pub fn help(text: impl Into<CowStr<'a>>) -> Self {
-        Self {
-            title: borrow::Cow::Borrowed("help:").new().cyan().bold(),
-            text: text.into(),
-        }
+        Self::new("help:".cyan().bold(), text)
     }
 }
