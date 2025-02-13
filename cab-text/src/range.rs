@@ -50,6 +50,13 @@ impl Range {
     }
 
     #[inline]
+    pub fn at_end(end: impl Into<Size>, len: impl Into<Size>) -> Self {
+        into!(end, len);
+
+        Self::new(end - len, end)
+    }
+
+    #[inline]
     pub fn empty(start: impl Into<Size>) -> Self {
         into!(start);
 

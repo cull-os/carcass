@@ -25,7 +25,7 @@ fn is_valid_path_character(c: char) -> bool {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum TokenizerContext<'a> {
+enum Context<'a> {
     Path,
     Stringlike { before: Option<&'a str>, end: char },
     StringlikeEnd { before: Option<&'a str>, end: char },
@@ -38,7 +38,7 @@ struct Tokenizer<'a> {
     input: &'a str,
     offset: usize,
 
-    context: SmallVec<TokenizerContext<'a>, 4>,
+    context: SmallVec<Context<'a>, 4>,
 }
 
 impl<'a> Iterator for Tokenizer<'a> {
@@ -61,15 +61,15 @@ impl<'a> Tokenizer<'a> {
         Self {
             input,
             offset: 0,
-            context: Vec::new(),
+            context: SmallVec::new(),
         }
     }
 
-    fn context_push(&mut self, context: TokenizerContext<'a>) {
+    fn context_push(&mut self, context: Context<'a>) {
         self.context.push(context)
     }
 
-    fn context_pop(&mut self, context: TokenizerContext) {
+    fn context_pop(&mut self, context: Context) {
         assert_eq!(self.context.last(), Some(&context));
         self.context.pop();
     }
@@ -87,15 +87,15 @@ impl<'a> Tokenizer<'a> {
     }
 
     fn consume_while(&mut self, predicate: fn(char) -> bool) -> usize {
-        let length: usize = self
+        let len: usize = self
             .remaining()
             .chars()
             .take_while(|&c| predicate(c))
             .map(char::len_utf8)
             .sum();
 
-        self.offset += length;
-        length
+        self.offset += len;
+        len
     }
 
     fn try_consume_character(&mut self, pattern: char) -> bool {
@@ -132,8 +132,8 @@ impl<'a> Tokenizer<'a> {
         if self.try_consume_character('e') || self.try_consume_character('E') {
             let _ = self.try_consume_character('+') || self.try_consume_character('-');
 
-            let exponent_length = self.consume_while(|c| c.is_ascii_digit() || c == '_');
-            let exponent = self.consumed_since(self.offset - exponent_length);
+            let exponent_len = self.consume_while(|c| c.is_ascii_digit() || c == '_');
+            let exponent = self.consumed_since(self.offset - exponent_len);
             if exponent.is_empty() || exponent.bytes().all(|c| c == b'_') {
                 TOKEN_ERROR_FLOAT_NO_EXPONENT
             } else {
@@ -144,22 +144,24 @@ impl<'a> Tokenizer<'a> {
         }
     }
 
-    fn consume_stringlike(&mut self, before: Option<&'a str>, end: u8) -> Option<Kind> {
+    fn consume_stringlike(&mut self, before: Option<&'a str>, end: char) -> Option<Kind> {
         loop {
             let remaining = self.remaining();
 
             if before.is_none_or(|before| remaining.starts_with(before))
-                && remaining.as_bytes().get(before.map(str::len).unwrap_or(0)).copied() == Some(end)
+                && remaining
+                    .get(before.map(str::len).unwrap_or(0)..)
+                    .is_some_and(|remaining| remaining.starts_with(end))
             {
-                self.context_pop(TokenizerContext::Stringlike { before, end });
-                self.context_push(TokenizerContext::StringlikeEnd { before, end });
+                self.context_pop(Context::Stringlike { before, end });
+                self.context_push(Context::StringlikeEnd { before, end });
 
                 return Some(TOKEN_CONTENT);
             }
 
             match self.peek_character() {
                 Some('\\') if self.peek_character_nth(1) == Some('(') => {
-                    self.context_push(TokenizerContext::InterpolationStart);
+                    self.context_push(Context::InterpolationStart);
 
                     return Some(TOKEN_CONTENT);
                 },
@@ -174,7 +176,7 @@ impl<'a> Tokenizer<'a> {
                 },
 
                 None => {
-                    self.context_pop(TokenizerContext::Stringlike { before, end });
+                    self.context_pop(Context::Stringlike { before, end });
                     return Some(TOKEN_CONTENT);
                 },
             }
@@ -184,14 +186,14 @@ impl<'a> Tokenizer<'a> {
     fn consume_path(&mut self) -> Option<Kind> {
         loop {
             if self.peek_character().is_none_or(|c| !is_valid_path_character(c)) {
-                self.context_pop(TokenizerContext::Path);
+                self.context_pop(Context::Path);
 
                 return Some(TOKEN_PATH_CONTENT);
             }
 
             match self.peek_character().unwrap() {
                 '\\' if self.peek_character_nth(1) == Some('(') => {
-                    self.context_push(TokenizerContext::InterpolationStart);
+                    self.context_push(Context::InterpolationStart);
 
                     return Some(TOKEN_PATH_CONTENT);
                 },
@@ -212,39 +214,39 @@ impl<'a> Tokenizer<'a> {
         let start_offset = self.offset;
 
         match self.context.last().copied() {
-            Some(TokenizerContext::Path) => {
+            Some(Context::Path) => {
                 return self.consume_path();
             },
 
-            Some(TokenizerContext::Stringlike { before, end }) => {
+            Some(Context::Stringlike { before, end }) => {
                 return self.consume_stringlike(before, end);
             },
-            Some(TokenizerContext::StringlikeEnd { before, end }) => {
+            Some(Context::StringlikeEnd { before, end }) => {
                 if let Some(before) = before {
                     assert!(self.try_consume_string(before));
                 }
-                assert_eq!(self.consume_character(), Some(end as char));
+                assert_eq!(self.consume_character(), Some(end));
 
-                self.context_pop(TokenizerContext::StringlikeEnd { before, end });
+                self.context_pop(Context::StringlikeEnd { before, end });
 
                 return Some(match end {
-                    b'`' => TOKEN_IDENTIFIER_END,
-                    b'>' => TOKEN_ISLAND_END,
-                    b'"' => TOKEN_STRING_END,
-                    b'\'' => TOKEN_RUNE_END,
+                    '`' => TOKEN_IDENTIFIER_END,
+                    '>' => TOKEN_ISLAND_END,
+                    '"' => TOKEN_STRING_END,
+                    '\'' => TOKEN_RUNE_END,
                     _ => unreachable!(),
                 });
             },
 
-            Some(TokenizerContext::InterpolationStart) => {
+            Some(Context::InterpolationStart) => {
                 assert!(self.try_consume_string(r"\("));
 
-                self.context_pop(TokenizerContext::InterpolationStart);
-                self.context_push(TokenizerContext::Interpolation { parentheses: 0 });
+                self.context_pop(Context::InterpolationStart);
+                self.context_push(Context::Interpolation { parentheses: 0 });
                 return Some(TOKEN_INTERPOLATION_START);
             },
 
-            Some(TokenizerContext::Interpolation { .. }) | None => {},
+            Some(Context::Interpolation { .. }) | None => {},
         }
 
         Some(match self.consume_character()? {
@@ -254,18 +256,18 @@ impl<'a> Tokenizer<'a> {
             },
 
             '#' if self.peek_character() == Some('=') => {
-                let equals_length = self.consume_while(|c| c == '=');
-                let equals = self.consumed_since(self.offset - equals_length);
+                let equals_len = self.consume_while(|c| c == '=');
+                let equals = self.consumed_since(self.offset - equals_len);
 
                 loop {
                     match self.peek_character() {
                         Some('=')
                             if let remaining = self.remaining()
                                 && remaining.starts_with(equals)
-                                && remaining.as_bytes().get(equals_length).copied() == Some(b'#') =>
+                                && remaining.as_bytes().get(equals_len).copied() == Some(b'#') =>
                         {
                             // Hard code a 1 here because that comparision up top is a byte.
-                            self.offset += equals_length + 1;
+                            self.offset += equals_len + 1;
 
                             break TOKEN_COMMENT;
                         },
@@ -303,18 +305,18 @@ impl<'a> Tokenizer<'a> {
             '|' if self.try_consume_character('>') => TOKEN_PIPE_MORE,
 
             '(' => {
-                if let Some(TokenizerContext::Interpolation { parentheses }) = self.context.last_mut() {
+                if let Some(Context::Interpolation { parentheses }) = self.context.last_mut() {
                     *parentheses += 1;
                 }
 
                 TOKEN_LEFT_PARENTHESIS
             },
             ')' => {
-                if let Some(TokenizerContext::Interpolation { parentheses }) = self.context.last_mut() {
+                if let Some(Context::Interpolation { parentheses }) = self.context.last_mut() {
                     match parentheses.checked_sub(1) {
                         Some(new) => *parentheses = new,
                         None => {
-                            self.context_pop(TokenizerContext::Interpolation { parentheses: 0 });
+                            self.context_pop(Context::Interpolation { parentheses: 0 });
                             return Some(TOKEN_INTERPOLATION_END);
                         },
                     }
@@ -363,8 +365,8 @@ impl<'a> Tokenizer<'a> {
                     _ => unreachable!(),
                 };
 
-                let digits_length = self.consume_while(is_valid_digit);
-                let digits = self.consumed_since(self.offset - digits_length);
+                let digits_len = self.consume_while(is_valid_digit);
+                let digits = self.consumed_since(self.offset - digits_len);
                 let error_token =
                     (digits.is_empty() || digits.bytes().all(|c| c == b'_')).then_some(TOKEN_ERROR_NUMBER_NO_DIGIT);
 
@@ -409,19 +411,19 @@ impl<'a> Tokenizer<'a> {
 
             start @ '.' if let Some('.' | '/') = self.peek_character() => {
                 self.offset -= start.len_utf8();
-                self.context_push(TokenizerContext::Path);
+                self.context_push(Context::Path);
 
                 return self.consume_kind();
             },
             start @ '/' if self.peek_character().is_some_and(is_valid_path_character) => {
                 self.offset -= start.len_utf8();
-                self.context_push(TokenizerContext::Path);
+                self.context_push(Context::Path);
 
                 return self.consume_kind();
             },
 
             start @ '`' => {
-                self.context_push(TokenizerContext::Stringlike {
+                self.context_push(Context::Stringlike {
                     before: None,
                     end: start,
                 });
@@ -430,10 +432,10 @@ impl<'a> Tokenizer<'a> {
             },
 
             start @ '"' => {
-                let equals_length = self.consume_while(|c| c == '=');
-                let equals = self.consumed_since(self.offset - equals_length);
+                let equals_len = self.consume_while(|c| c == '=');
+                let equals = self.consumed_since(self.offset - equals_len);
 
-                self.context_push(TokenizerContext::Stringlike {
+                self.context_push(Context::Stringlike {
                     before: Some(equals),
                     end: start,
                 });
@@ -442,7 +444,7 @@ impl<'a> Tokenizer<'a> {
             },
 
             start @ '\'' => {
-                self.context_push(TokenizerContext::Stringlike {
+                self.context_push(Context::Stringlike {
                     before: None,
                     end: start,
                 });
@@ -457,7 +459,7 @@ impl<'a> Tokenizer<'a> {
                 .peek_character()
                 .is_some_and(|c| is_valid_initial_identifier_character(c) || c == '\\') =>
             {
-                self.context_push(TokenizerContext::Stringlike { before: None, end: '>' });
+                self.context_push(Context::Stringlike { before: None, end: '>' });
 
                 TOKEN_ISLAND_START
             },

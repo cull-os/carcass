@@ -8,6 +8,7 @@ version.workspace    = true
 
 [dependencies]
 cab-report.path             = "../cab-report"
+cab-text.path               = "../cab-text"
 cstree.workspace            = true
 derive_more.workspace       = true
 enumset                     = "1.1.3"

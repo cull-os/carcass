@@ -88,20 +88,20 @@ impl<'a> Report<'a> {
         self.labels.push(label)
     }
 
-    pub fn push_primary(&mut self, range: ops::Range<usize>, text: impl Into<CowStr<'a>>) {
+    pub fn push_primary(&mut self, range: impl Into<Range>, text: impl Into<CowStr<'a>>) {
         self.labels.push(Label::primary(range, text));
     }
 
-    pub fn primary(mut self, range: ops::Range<usize>, text: impl Into<CowStr<'a>>) -> Self {
+    pub fn primary(mut self, range: impl Into<Range>, text: impl Into<CowStr<'a>>) -> Self {
         self.push_primary(range, text);
         self
     }
 
-    pub fn push_secondary(&mut self, range: ops::Range<usize>, text: impl Into<CowStr<'a>>) {
+    pub fn push_secondary(&mut self, range: impl Into<Range>, text: impl Into<CowStr<'a>>) {
         self.labels.push(Label::secondary(range, text));
     }
 
-    pub fn secondary(mut self, range: ops::Range<usize>, text: impl Into<CowStr<'a>>) -> Self {
+    pub fn secondary(mut self, range: impl Into<Range>, text: impl Into<CowStr<'a>>) -> Self {
         self.push_secondary(range, text);
         self
     }

@@ -1,9 +1,9 @@
 #![feature(gen_blocks, if_let_guard, iter_map_windows, let_chains)]
 
-// mod color;
-// pub mod format;
+mod color;
+pub mod format;
 
-// pub mod node;
+pub mod node;
 // mod noder;
 
 pub mod token;
@@ -15,13 +15,13 @@ use enumset::{
 };
 
 pub use crate::{
-    // color::*,
+    color::*,
     // noder::*,
     tokenizer::*,
 };
 
 pub(crate) mod red {
-    use super::*;
+    use crate::*;
 
     pub type Node = cstree::syntax::ResolvedNode<Kind>;
     pub type UnresolvedNode = cstree::syntax::SyntaxNode<Kind>;
@@ -29,7 +29,28 @@ pub(crate) mod red {
     pub type Token = cstree::syntax::ResolvedToken<Kind>;
     pub type UnresolvedToken = cstree::syntax::SyntaxToken<Kind>;
 
-    pub type NodeOrToken = cstree::util::NodeOrToken<Node, Token>;
+    pub type Element = cstree::syntax::ResolvedElement<Kind>;
+    pub type UnresolvedElement = cstree::syntax::SyntaxElement<Kind>;
+
+    pub type NodeOrToken<'a> = cstree::util::NodeOrToken<&'a Node, &'a Token>;
+    pub type UnresolvedNodeOrToken<'a> = cstree::util::NodeOrToken<&'a UnresolvedNode, &'a UnresolvedToken>;
+}
+
+pub type Kinds = EnumSet<Kind>;
+
+/// A trait to signal that the implementor can be created from a red node or
+/// token.
+pub trait FromRed<Red>
+where
+    Self: Sized,
+{
+    const KINDS: Kinds;
+
+    /// Determines if the implementor can be created from the [`Red`].
+    fn can_cast(from: &Red) -> bool;
+
+    /// Casts a [`Red`] to the implementor. Returns [`None`] if it can't.
+    fn cast(from: Red) -> Option<Self>;
 }
 
 /// [`derive_more`] causes [`unreachable`] to warn too many times
@@ -40,8 +61,9 @@ const fn unreachable() -> &'static str {
 }
 
 /// The syntax kind.
-#[derive(derive_more::Display, Debug, Hash, enumset::EnumSetType, cstree::Syntax)]
+#[derive(derive_more::Display, Debug, Clone, Copy, PartialEq, Eq, Hash, enumset::EnumSetType, cstree::Syntax)]
 #[repr(u32)]
+#[enumset(no_super_impls)]
 #[allow(non_camel_case_types)]
 #[non_exhaustive]
 pub enum Kind {
@@ -325,7 +347,7 @@ use Kind::*;
 
 impl Kind {
     /// An enumset of all valid expression starter token kinds.
-    pub const EXPRESSIONS: EnumSet<Kind> = enum_set!(
+    pub const EXPRESSIONS: Kinds = enum_set!(
         TOKEN_LEFT_PARENTHESIS
             | TOKEN_LEFT_BRACKET
             | TOKEN_LEFT_CURLYBRACE
@@ -340,7 +362,7 @@ impl Kind {
             | TOKEN_ISLAND_START
     );
     /// An enumset of all identifier starter token kinds.
-    pub const IDENTIFIERS: EnumSet<Kind> = enum_set!(TOKEN_IDENTIFIER | TOKEN_IDENTIFIER_START);
+    pub const IDENTIFIERS: Kinds = enum_set!(TOKEN_IDENTIFIER | TOKEN_IDENTIFIER_START);
 
     /// Whether if this token can be used as a lambda argument.
     ///

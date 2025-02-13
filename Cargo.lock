@@ -175,6 +175,7 @@ name = "cab-syntax"
 version = "0.0.1"
 dependencies = [
  "cab-report",
+ "cab-text",
  "cstree",
  "derive_more",
  "enumset",

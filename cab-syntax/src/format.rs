@@ -8,15 +8,14 @@ use yansi::Paint as _;
 
 use crate::{
     COLORS,
-    RedNode,
     node,
     token,
 };
 
 /// Formats the given node with parentheses to disambiguate.
 /// The node must be a valid [`node::Expression`] or this will panic.
-pub fn parenthesize(writer: &mut impl io::Write, node: &RedNode) -> io::Result<()> {
-    Formatter::new(writer).parenthesize(node)
+pub fn parenthesize(writer: &mut impl io::Write, expression: node::Expression) -> io::Result<()> {
+    Formatter::new(writer).parenthesize(expression)
 }
 
 #[derive(Debug)]
@@ -81,7 +80,7 @@ impl<'a, W: io::Write> Formatter<'a, W> {
         Ok(())
     }
 
-    fn parenthesize(&mut self, node: &RedNode) -> io::Result<()> {
+    fn parenthesize(&mut self, expression: node::Expression) -> io::Result<()> {
         node::r#match! { node =>
             node::Error as _error => {
                 self.write("error".red().bold())

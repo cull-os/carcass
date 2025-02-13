@@ -1,46 +1,26 @@
 //! [`Token`] definitions.
 use std::{
     fmt,
-    ops::{
-        self,
-        Deref as _,
-    },
+    ops,
 };
 
 use cab_report::{
     Label,
     Report,
 };
-use cstree::text::{
-    TextRange,
-    TextSize,
+use cab_text::{
+    Range,
+    Rangeable,
 };
-use num::Num;
-use static_assertions::assert_obj_safe;
+use enumset::enum_set;
 
+// use num::Num;
 use crate::{
-    Kind::{
-        self,
-        *,
-    },
+    FromRed,
+    Kind::*,
+    Kinds,
     red,
 };
-
-assert_obj_safe!(Token);
-pub trait Token: ops::Deref<Target = red::Token> {
-    /// Returns the underlying [`red::Token`].
-    fn red(&self) -> &red::Token;
-
-    /// Determines if this token can be created from the [`Kind`].
-    fn can_cast(from: Kind) -> bool
-    where
-        Self: Sized;
-
-    /// Casts a [`red::Token`] to this token. Returns [`None`] if it can't.
-    fn cast(from: red::Token) -> Option<Self>
-    where
-        Self: Sized;
-}
 
 macro_rules! token {
     (#[from($kind:ident)]struct $name:ident;) => {
@@ -49,7 +29,7 @@ macro_rules! token {
 
         impl fmt::Display for $name {
             fn fmt(&self, writer: &mut fmt::Formatter<'_>) -> fmt::Result {
-                self.deref().fmt(writer)
+                (*self).fmt(writer)
             }
         }
 
@@ -57,17 +37,15 @@ macro_rules! token {
             type Target = red::Token;
 
             fn deref(&self) -> &Self::Target {
-                self.red()
+                &self.0
             }
         }
 
-        impl Token for $name {
-            fn red(&self) -> &red::Token {
-                &self.0
-            }
+        impl FromRed<red::Token> for $name {
+            const KINDS: Kinds = enum_set!($kind);
 
-            fn can_cast(kind: Kind) -> bool {
-                kind == $kind
+            fn can_cast(token: &red::Token) -> bool {
+                Self::KINDS.contains(token.kind())
             }
 
             fn cast(token: red::Token) -> Option<Self> {
@@ -89,17 +67,18 @@ impl Whitespace {
 token! { #[from(TOKEN_COMMENT)] struct Comment; }
 
 impl Comment {
-    const START_HASHTAG_LENGTH: usize = 1;
+    const START_HASHTAG_LEN: usize = 1;
 
     /// Returns the starting delimiter of this comment.
     pub fn start_delimiter(&self) -> &str {
         let text = self.text();
+
         let content_start_index = text
             .bytes()
-            .skip(Self::START_HASHTAG_LENGTH)
+            .skip(Self::START_HASHTAG_LEN)
             .take_while(|&c| c == b'=')
             .count()
-            + Self::START_HASHTAG_LENGTH;
+            + Self::START_HASHTAG_LEN;
 
         &text[..content_start_index]
     }
@@ -109,7 +88,7 @@ impl Comment {
     pub fn is_multiline(&self) -> bool {
         self.text()
             .as_bytes()
-            .get(Self::START_HASHTAG_LENGTH)
+            .get(Self::START_HASHTAG_LEN)
             .copied()
             .is_some_and(|c| c == b'=')
     }
@@ -178,14 +157,9 @@ impl Content {
                 next @ (Some(_) | None) if !reported => {
                     reported = true;
 
-                    report.push_label(Label::primary(
-                        TextRange::at(
-                            self.text_range().start() + TextSize::new(offset as u32),
-                            (1 + next.is_some() as u32).into(),
-                        )
-                        .into(),
-                        "invalid escape",
-                    ));
+                    let start = self.range().start + offset;
+                    let len = 1 + next.is_some() as u32;
+                    report.push_label(Label::primary(Range::at(start, len), "invalid escape"));
                     report.push_tip(r#"escapes must be one of: \0, \t, \n, \r, \`, \", \', \>, \\"#);
                 },
 

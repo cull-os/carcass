@@ -1,229 +1,89 @@
 //! [`Node`] definitions.
 use std::{
     collections::VecDeque,
-    ops::{
-        self,
-        Deref as _,
-    },
+    ops,
 };
 
 use cab_report::Report;
-use enumset::EnumSet;
-use rowan::ast::AstNode as _;
+use cab_text::{
+    Range,
+    Rangeable,
+};
+use enumset::{
+    EnumSet,
+    enum_set,
+};
 use smallvec::SmallVec;
-use static_assertions::assert_obj_safe;
 
 use crate::{
+    FromRed,
     Kind::{
         self,
         *,
     },
-    RedNode,
-    RedNodeOrToken,
-    RedToken,
-    token::{
-        self,
-        Token,
-    },
+    red,
+    token,
 };
-
-#[macro_export]
-#[doc(hidden)]
-macro_rules! __node_match {
-    ($raw:expr =>
-        $($typed:ty as $name:ident => $result:expr,)*
-        else => $catch:expr $(,)?
-    ) => {{
-        use ::rowan::ast::AstNode as _;
-
-        $(if <$typed>::can_cast($raw.kind()) {
-            let $name = <$typed>::cast($raw.clone()).unwrap();
-            $result
-        } else )*{
-            $catch
-        }
-    }};
-}
-
-/// A macro that allows you to match on a [`rowan::SyntaxNode`] efficiently.
-/// The branches must all implement [`Node`] for this macro to work properly.
-///
-/// # Example
-///
-/// ```ignore
-/// node::r#match! { rowan_node =>
-///    IfThen as if_then => { unimplemented!() },
-///    Identifier as identifier => { unimplemented!() },
-///    else => unimplemented!(),
-/// }
-/// ```
-#[doc(inline)]
-pub use crate::__node_match as r#match;
-
-assert_obj_safe!(Node);
-
-/// A typed AST node. Implementors will usually have methods to make accessing
-/// children elements and attributes related to the node simpler.
-pub trait Node: rowan::ast::AstNode<Language = Language> + ops::Deref<Target = RedNode> {
-    /// Returns its inherent kind, returning None if it is a node that can be
-    /// created from multiple different kinds.
-    fn kind() -> EnumSet<Kind>
-    where
-        Self: Sized;
-
-    /// Validates the node appending reports to the provided [`Vec`]. If there
-    /// are no reports appended the node is valid.
-    fn validate(&self, _to: &mut Vec<Report<'_>>) {}
-
-    /// Returns the Nth immediate child node that can be cast to the given
-    /// typed node.
-    fn nth<N: Node>(&self, n: usize) -> Option<N>
-    where
-        Self: Sized,
-    {
-        self.children::<N>().nth(n)
-    }
-
-    /// Returns all immediate children nodes that can be cast to the given typed
-    /// node.
-    fn children<N: Node>(&self) -> rowan::ast::AstChildren<N>
-    where
-        Self: Sized,
-    {
-        rowan::ast::support::children(self)
-    }
-
-    /// Returns the first immediate children token that can be cast to the given
-    /// typed token.
-    fn token<T: Token>(&self) -> Option<T>
-    where
-        Self: Sized,
-    {
-        self.children_tokens().next()
-    }
-
-    /// Returns the first immediate children token that is the given kind.
-    fn token_untyped(&self, kind: Kind) -> Option<RedToken>
-    where
-        Self: Sized,
-    {
-        self.children_tokens_untyped().find(|token| token.kind() == kind)
-    }
-
-    /// Returns all immediate children tokens that can be cast to the given
-    /// typed token.
-    fn children_tokens<T: Token>(&self) -> impl Iterator<Item = T>
-    where
-        Self: Sized,
-    {
-        self.children_with_tokens()
-            .filter_map(RedNodeOrToken::into_token)
-            .filter_map(T::cast)
-    }
-
-    /// Returns all immediate children tokens.
-    fn children_tokens_untyped(&self) -> impl Iterator<Item = RedToken>
-    where
-        Self: Sized,
-    {
-        self.children_with_tokens().filter_map(RedNodeOrToken::into_token)
-    }
-}
 
 macro_rules! node {
     (
         #[from($kind:ident)]
         struct $name:ident;
-
-        $($items:item)*
     ) => {
         #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-        pub struct $name(pub(crate) RowanNode);
+        pub struct $name(pub(crate) red::Node);
 
-        impl rowan::ast::AstNode for $name {
-            type Language = Language;
+        impl ops::Deref for $name {
+            type Target = red::Node;
 
-            fn can_cast(kind: Kind) -> bool {
-                kind == Self::KIND
-            }
-
-            fn cast(token: RowanNode) -> Option<Self> {
-                Self::can_cast(token.kind()).then_some(Self(token))
-            }
-
-            fn syntax(&self) -> &RowanNode {
+            fn deref(&self) -> &Self::Target {
                 &self.0
             }
         }
 
-        impl ops::Deref for $name {
-            type Target = RowanNode;
+        impl FromRed<red::Node> for $name {
+            const KINDS: EnumSet<Kind> = enum_set!($kind);
 
-            fn deref(&self) -> &Self::Target {
-                self.syntax()
-            }
-        }
-
-        impl Node for $name {
-            fn kind() -> EnumSet<Kind> {
-                Self::KIND.into()
+            fn can_cast(node: &red::Node) -> bool {
+                Self::KINDS.contains(node.kind())
             }
 
-            $($items)*
-        }
-
-        impl $name {
-            /// The syntax kind this node can be cast from.
-            pub const KIND: Kind = $kind;
+            fn cast(node: red::Node) -> Option<Self> {
+                Self::can_cast(node.kind()).then_some(Self(node))
+            }
         }
     };
 
     (
         #[from($($variant:ident),* $(,)?)]
         enum $name:ident;
-
-        $($items:item)*
     ) => {
         #[derive(Debug, Clone, PartialEq, Eq, Hash)]
         pub enum $name {
             $($variant($variant),)*
         }
 
-        impl rowan::ast::AstNode for $name {
-            type Language = Language;
+        impl ops::Deref for $name {
+            type Target = red::Node;
 
-            fn can_cast(kind: Kind) -> bool {
-                matches!(kind, $($variant::KIND)|*)
+            fn deref(&self) -> &Self::Target {
+                &self.0
+            }
+        }
+
+        impl FromRed<red::Node> for $name {
+            const KINDS: EnumSet<Kind> = enum_set!($($variant::KIND)|*);
+
+            fn can_cast(node: &red::Node) -> bool {
+                Self::KINDS.contains(node.kind())
             }
 
-            fn cast(token: RowanNode) -> Option<Self> {
-                match token.kind() {
-                    $($variant::KIND => Some(Self::$variant($variant(token))),)*
+            fn cast(node: red::Node) -> Option<Self> {
+                match node.kind() {
+                    $($variant::KIND => Some(Self::$variant($variant(node))),)*
                     _ => None,
                 }
             }
-
-            fn syntax(&self) -> &RowanNode {
-                match self {
-                    $(Self::$variant(this) => this,)*
-                }
-            }
-        }
-
-        impl ops::Deref for $name {
-            type Target = RowanNode;
-
-            fn deref(&self) -> &Self::Target {
-                self.syntax()
-            }
-        }
-
-        impl Node for $name {
-            fn kind() -> EnumSet<Kind> {
-                $($variant::KIND)|*
-            }
-
-            $($items)*
         }
 
         $(
@@ -247,36 +107,54 @@ macro_rules! node {
     };
 }
 
-macro_rules! get_token {
-    ($name:ident -> ? $token:ident) => {
-        pub fn $name(&self) -> Option<RowanToken> {
-            self.token_untyped($token)
+macro_rules! token_get {
+    ($name:ident -> $($skip:literal @)? Option<$kind:ident>) => {
+        pub fn $name(&self) -> Option<&red::Token> {
+            self.children_with_tokens()
+                .filter_map(red::Element::into_token)
+                $(.skip($skip))?
+                .find(|token| token.kind() == $kind)
         }
     };
 
-    ($name:ident -> $token:ident) => {
-        pub fn $name(&self) -> RowanToken {
-            self.token_untyped($token).unwrap()
+    ($name:ident -> $($skip:literal @)? $kind:ident) => {
+        pub fn $name(&self) -> &red::Token {
+            self.children_with_tokens()
+                .filter_map(red::Element::into_token)
+                $(.skip($skip))?
+                .find(|token| token.kind() == $kind)
+                .expect("node must have a token child")
         }
     };
 }
 
-macro_rules! get_node {
-    ($name:ident -> $n:literal @ ? $type:ty) => {
+macro_rules! node__get {
+    ($name:ident -> $($skip:literal @)? Option<$type:ty>) => {
         pub fn $name(&self) -> Option<$type> {
-            self.nth($n)
-        }
-    };
-
-    ($name:ident -> $n:literal @ $type:ty) => {
-        pub fn $name(&self) -> $type {
-            self.nth($n).unwrap()
-        }
-    };
-
-    ($name:ident -> [$type:ty]) => {
-        pub fn $name(&self) -> rowan::ast::AstChildren<$type> {
             self.children()
+                .filter_map(|node| <$type>::can_cast(node.kind()))
+                $(.skip($skip))?
+                .next()
+                .map(|node| <$type>::cast(node.clone()).unwrap())
+        }
+    };
+
+    ($name:ident -> $($skip:literal @)? $type:ty) => {
+        pub fn $name(&self) -> $type {
+            self.children()
+                .filter(|node| <$type>::can_cast(node.kind()))
+                $(.skip($skip))?
+                .next()
+                .map(|node| <$type>::cast(node.clone()).unwrap())
+                .expect("node must have a matching node child")
+        }
+    };
+
+    ($name:ident -> impl Iterator<Item = $type:ty>) => {
+        pub fn $name(&self) -> impl Iterator<Item = &<$type>> {
+            self.children()
+                .filter(|node| <$type>::can_cast(node.kind()))
+                .map(|node| <$type>::cast(node.clone()).unwrap())
         }
     };
 }
@@ -301,7 +179,9 @@ node! {
         IfThen,
         IfIs,
     )] enum Expression;
+}
 
+impl Expression {
     fn validate(&self, to: &mut Vec<Report<'_>>) {
         match self {
             Self::Error(error) => error.validate(to),
@@ -321,9 +201,7 @@ node! {
             Self::IfIs(if_is) => if_is.validate(to),
         }
     }
-}
 
-impl Expression {
     fn validate_pattern(&self, to: &mut Vec<Report<'_>>) {
         match self {
             Self::Parenthesis(parenthesis) => {
@@ -367,7 +245,7 @@ impl Expression {
                     invalid => {
                         to.push(
                             Report::error("invalid select pattern")
-                                .primary(invalid.text_range().into(), "left operand must be an identifier"),
+                                .primary(invalid.range(), "left operand must be an identifier"),
                         )
                     },
                 }
@@ -390,8 +268,9 @@ impl Expression {
 
                 let mut bind_ranges = SmallVec::new();
                 self.validate_pattern_arithmetic(&mut bind_ranges, to);
+
                 for bind_range in bind_ranges {
-                    report.push_primary(bind_range.into(), "bind");
+                    report.push_primary(bind_range, "bind");
                 }
 
                 if report.labels.len() > 1 {
@@ -401,11 +280,7 @@ impl Expression {
         }
     }
 
-    fn validate_pattern_arithmetic(
-        &self,
-        bind_ranges: &mut SmallVec<rowan::TextRange, 4>,
-        reports: &mut Vec<Report<'_>>,
-    ) {
+    fn validate_pattern_arithmetic(&self, bind_ranges: &mut SmallVec<Range, 4>, reports: &mut Vec<Report<'_>>) {
         match self {
             Expression::Parenthesis(parenthesis) => {
                 parenthesis.expression().validate_pattern(reports);
@@ -425,13 +300,13 @@ impl Expression {
             Expression::InfixOperation(_) => {
                 reports.push(
                     Report::error("non-arithmetic infix operators are not valid patterns")
-                        .primary(self.text_range().into(), "here"),
+                        .primary(self.range(), "here"),
                 );
             },
 
             Expression::Identifier(identifier) => {
                 identifier.validate(reports);
-                bind_ranges.push(identifier.text_range());
+                bind_ranges.push(identifier.range());
             },
 
             Expression::SString(string) => {
@@ -444,7 +319,7 @@ impl Expression {
 
             _ => {
                 reports.push(Report::error("invalid pattern").primary(
-                    self.text_range().into(),
+                    self.range(),
                     format!("{kind} is not a valid pattern element", kind = self.kind()),
                 ));
             },
@@ -479,26 +354,35 @@ node! { #[from(NODE_ERROR)] struct Error; }
 
 // PARENTHESIS
 
-node! {
-    #[from(NODE_PARENTHESIS)] struct Parenthesis;
+node! { #[from(NODE_PARENTHESIS)] struct Parenthesis; }
+
+impl Parenthesis {
+    token_get! { token_left_parenthesis -> TOKEN_LEFT_PARENTHESIS }
+
+    node__get! { expression -> Expression }
+
+    token_get! { token_right_parenthesis -> Option<TOKEN_RIGHT_PARENTHESIS> }
 
     fn validate(&self, to: &mut Vec<Report<'_>>) {
         self.expression().validate(to);
     }
 }
 
-impl Parenthesis {
-    get_token! { left_parenthesis_token -> TOKEN_LEFT_PARENTHESIS }
-
-    get_node! { expression -> 0 @ Expression }
-
-    get_token! { right_parenthesis_token -> ? TOKEN_RIGHT_PARENTHESIS }
-}
-
 // LIST
 
-node! {
-   #[from(NODE_LIST)] struct List;
+node! { #[from(NODE_LIST)] struct List; }
+
+impl List {
+    token_get! { token_left_bracket -> TOKEN_LEFT_BRACKET }
+
+    node__get! { expression -> Option<Expression> }
+
+    token_get! { token_right_bracket -> Option<TOKEN_RIGHT_BRACKET> }
+
+    /// Returns all items of the list.
+    pub fn items(&self) -> impl Iterator<Item = Expression> {
+        self.expression().into_iter().flat_map(Expression::same_items)
+    }
 
     fn validate(&self, to: &mut Vec<Report<'_>>) {
         if let Some(Expression::InfixOperation(operation)) = self.expression()
@@ -506,7 +390,7 @@ node! {
         {
             to.push(
                 Report::error("inner expression of list cannot be sequence")
-                    .primary(operation.text_range().into(), "consider parenthesizing this")
+                    .primary(operation.range(), "consider parenthesizing this"),
             );
         }
 
@@ -516,34 +400,33 @@ node! {
     }
 }
 
-#[rustfmt::skip]
-impl List {
-    get_token! { left_bracket_token -> TOKEN_LEFT_BRACKET }
-
-    get_node! { expression -> 0 @ ? Expression }
-
-    /// Returns all items of the list.
-    pub fn items(&self) -> impl Iterator<Item = Expression> {
-        self.expression().into_iter().flat_map(Expression::same_items)
-    }
-
-    get_token! { right_bracket_token -> ? TOKEN_RIGHT_BRACKET }
-}
-
 // ATTRIBUTE LIST
 
-node! {
-    #[from(NODE_ATTRIBUTE_LIST)] struct AttributeList;
+node! { #[from(NODE_ATTRIBUTE_LIST)] struct AttributeList; }
+
+impl AttributeList {
+    token_get! { left_curlybrace_token -> TOKEN_LEFT_CURLYBRACE }
+
+    node__get! { expression -> Option<Expression> }
+
+    token_get! { right_curlybrace_token -> Option<TOKEN_RIGHT_CURLYBRACE> }
+
+    /// Returns all entries of the attribute list.
+    pub fn entries(&self) -> impl Iterator<Item = Expression> {
+        self.expression().into_iter().flat_map(Expression::same_items)
+    }
 
     fn validate(&self, to: &mut Vec<Report<'_>>) {
         for entry in self.entries() {
             match entry {
                 Expression::InfixOperation(operation) if let InfixOperator::Sequence = operation.operator() => {
                     to.push(
-                        Report::error("unexpected sequence operator inside attribute list")
-                            .primary(operation.text_range().into(), "sequence operator has lower binding power and will consume everything")
+                        Report::error("unexpected sequence operator inside attribute list").primary(
+                            operation.range(),
+                            "sequence operator has lower binding power and will consume everything",
+                        ),
                     );
-                }
+                },
 
                 Expression::InfixOperation(operation) if let InfixOperator::Bind = operation.operator() => {
                     operation.validate(to);
@@ -553,59 +436,13 @@ node! {
                     identifier.validate(to);
                 },
 
-                invalid => {
-                    to.push(Report::error(
-                        "invalid attribute").primary(
-                        invalid.text_range().into(), "here"
-                    ))
-                }
+                invalid => to.push(Report::error("invalid attribute").primary(invalid.range(), "here")),
             }
         }
     }
 }
 
-#[rustfmt::skip]
-impl AttributeList {
-    get_token! { left_curlybrace_token -> TOKEN_LEFT_CURLYBRACE }
-
-    get_node! { expression -> 0 @ ? Expression }
-
-    /// Returns all entries of the attribute list.
-    pub fn entries(&self) -> impl Iterator<Item = Expression> {
-        self.expression().into_iter().flat_map(Expression::same_items)
-    }
-
-    get_token! { right_curlybrace_token -> ? TOKEN_RIGHT_CURLYBRACE }
-}
-
 // PREFIX OPERATION
-
-node! {
-    #[from(NODE_PREFIX_OPERATION)] struct PrefixOperation;
-
-    fn validate(&self, to: &mut Vec<Report<'_>>) {
-        self.right().validate(to);
-    }
-}
-
-#[rustfmt::skip]
-impl PrefixOperation {
-    /// Returns the operator token of this operation.
-    pub fn operator_token(&self) -> RedToken {
-        self.children_tokens_untyped()
-            .find(|token| PrefixOperator::try_from(token.kind()).is_ok())
-            .unwrap()
-    }
-
-    /// Returns the operator of this operation.
-    pub fn operator(&self) -> PrefixOperator {
-        self.children_tokens_untyped()
-            .find_map(|token| PrefixOperator::try_from(token.kind()).ok())
-            .unwrap()
-    }
-
-    get_node! { right -> 0 @ Expression }
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PrefixOperator {
@@ -645,116 +482,33 @@ impl PrefixOperator {
     }
 }
 
-// INFIX OPERATION
+node! { #[from(NODE_PREFIX_OPERATION)] struct PrefixOperation; }
 
-node! {
-    #[from(NODE_INFIX_OPERATION)] struct InfixOperation;
-
-    fn validate(&self, to: &mut Vec<Report<'_>>) {
-        match self.operator() {
-            InfixOperator::Same => {
-                let mut same_operator = None;
-
-                for item in Expression::InfixOperation(self.clone()).same_items() {
-                    if let Expression::InfixOperation(operation) = &item
-                        && let operator @ (InfixOperator::Lambda | InfixOperator::Bind) = operation.operator()
-                    {
-                        let same_operator = same_operator.get_or_insert(operator);
-
-                        if *same_operator != operator {
-                            to.push(
-                                Report::error("invalid same-operand")
-                                    .primary(item.text_range().into(), "operand")
-                                    .help("all same-operands must be of matching type: either all lambdas or all binds")
-                            );
-                            continue;
-                        }
-
-                        operation.validate(to);
-                    } else {
-                        to.push(
-                            Report::error("invalid same-operand")
-                                .primary(item.text_range().into(), "operand")
-                                .help("all same-operands must either be lambdas or binds")
-                        );
-                    }
-                }
-            },
-
-            InfixOperator::This => {
-                self.validate_left(to);
-                self.right().validate(to);
-            }
-
-            InfixOperator::Lambda | InfixOperator::Bind => {
-                self.left().validate_pattern(to);
-                self.right().validate(to);
-            },
-
-            operator => {
-                let expressions = &[self.left(), self.right()];
-
-                for expression in expressions {
-                    expression.validate(to);
-                }
-
-                let (InfixOperator::Apply | InfixOperator::Pipe) = operator else { return; };
-
-                for expression in expressions {
-                    if let Expression::InfixOperation(operation) = expression
-                        && let child_operator @ (InfixOperator::Apply | InfixOperator::Pipe) = operation.operator()
-                        && child_operator != operator
-                    {
-                        to.push(
-                            Report::error("application and pipe operators do not associate")
-                                .secondary(self.text_range().into(), "this")
-                                .primary(operation.text_range().into(), "does not associate with this")
-                        );
-                    }
-                }
-            },
-        }
-    }
-}
-
-#[rustfmt::skip]
-impl InfixOperation {
-    get_node! { left -> 0 @ Expression }
+impl PrefixOperation {
+    node__get! { right -> 0 @ Expression }
 
     /// Returns the operator token of this operation.
-    pub fn operator_token(&self) -> Option<RedToken> {
-        self.children_tokens_untyped()
-            .find(|token| InfixOperator::try_from(token.kind()).is_ok())
+    pub fn operator_token(&self) -> &red::Token {
+        self.children_with_tokens()
+            .filter_map(|child| child.into_token())
+            .find(|token| PrefixOperator::try_from(token.kind()).is_ok())
+            .unwrap()
     }
 
     /// Returns the operator of this operation.
-    pub fn operator(&self) -> InfixOperator {
-        self.children_tokens_untyped()
-            .find_map(|token| InfixOperator::try_from(token.kind()).ok())
-            .unwrap_or(InfixOperator::ImplicitApply)
+    pub fn operator(&self) -> PrefixOperator {
+        self.children_red_tokens()
+            .filter_map(|child| child.into_token())
+            .find_map(|token| PrefixOperator::try_from(token.kind()).ok())
+            .unwrap()
     }
 
-    get_node! { right -> 1 @ Expression }
-
-    /// Asserts that this node is a this-expression and validates the left
-    /// expression.
-    pub fn validate_left(&self, to: &mut Vec<Report<'_>>) {
-        assert_eq!(self.operator(), InfixOperator::This);
-
-        match self.left() {
-            Expression::Identifier(identifier) => {
-                   identifier.validate(to);
-            },
-
-            invalid => {
-                to.push(
-                    Report::error("left operand of a this-expression must be an identifier")
-                        .primary(invalid.text_range().into(), "left operand")
-                );
-            }
-        }
+    fn validate(&self, to: &mut Vec<Report<'_>>) {
+        self.right().validate(to);
     }
 }
+
+// INFIX OPERATION
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum InfixOperator {
@@ -893,33 +647,119 @@ impl InfixOperator {
     }
 }
 
-// SUFFIX OPERATION
+node! { #[from(NODE_INFIX_OPERATION)] struct InfixOperation; }
 
-node! {
-    #[from(NODE_SUFFIX_OPERATION)] struct SuffixOperation;
+impl InfixOperation {
+    node__get! { left -> 0 @ Expression }
 
-    fn validate(&self, to: &mut Vec<Report<'_>>) {
-        self.left().validate(to);
-    }
-}
-
-impl SuffixOperation {
-    get_node! { left -> 0 @ Expression }
+    node__get! { right -> 1 @ Expression }
 
     /// Returns the operator token of this operation.
-    pub fn operator_token(&self) -> RedToken {
-        self.children_tokens_untyped()
-            .find(|token| SuffixOperator::try_from(token.kind()).is_ok())
-            .unwrap()
+    pub fn operator_token(&self) -> Option<&red::Token> {
+        self.children_with_tokens()
+            .filter_map(|child| child.into_token())
+            .find(|token| InfixOperator::try_from(token.kind()).is_ok())
     }
 
     /// Returns the operator of this operation.
-    pub fn operator(&self) -> SuffixOperator {
-        self.children_tokens_untyped()
-            .find_map(|token| SuffixOperator::try_from(token.kind()).ok())
-            .unwrap()
+    pub fn operator(&self) -> InfixOperator {
+        self.children_with_tokens()
+            .filter_map(|child| child.into_token())
+            .find_map(|token| InfixOperator::try_from(token.kind()).ok())
+            .unwrap_or(InfixOperator::ImplicitApply)
+    }
+
+    fn validate(&self, to: &mut Vec<Report<'_>>) {
+        match self.operator() {
+            InfixOperator::Same => {
+                let mut same_operator = None;
+
+                for item in Expression::InfixOperation(self.clone()).same_items() {
+                    if let Expression::InfixOperation(operation) = &item
+                        && let operator @ (InfixOperator::Lambda | InfixOperator::Bind) = operation.operator()
+                    {
+                        let same_operator = same_operator.get_or_insert(operator);
+
+                        if *same_operator != operator {
+                            to.push(
+                                Report::error("invalid same-operand")
+                                    .primary(item.range(), "operand")
+                                    .help(
+                                        "all same-operands must be of matching type: either all lambdas or all binds",
+                                    ),
+                            );
+                            continue;
+                        }
+
+                        operation.validate(to);
+                    } else {
+                        to.push(
+                            Report::error("invalid same-operand")
+                                .primary(item.range(), "operand")
+                                .help("all same-operands must either be lambdas or binds"),
+                        );
+                    }
+                }
+            },
+
+            InfixOperator::This => {
+                self.validate_left(to);
+                self.right().validate(to);
+            },
+
+            InfixOperator::Lambda | InfixOperator::Bind => {
+                self.left().validate_pattern(to);
+                self.right().validate(to);
+            },
+
+            operator => {
+                let expressions = &[self.left(), self.right()];
+
+                for expression in expressions {
+                    expression.validate(to);
+                }
+
+                let (InfixOperator::Apply | InfixOperator::Pipe) = operator else {
+                    return;
+                };
+
+                for expression in expressions {
+                    if let Expression::InfixOperation(operation) = expression
+                        && let child_operator @ (InfixOperator::Apply | InfixOperator::Pipe) = operation.operator()
+                        && child_operator != operator
+                    {
+                        to.push(
+                            Report::error("application and pipe operators do not associate")
+                                .secondary(self.range(), "this")
+                                .primary(operation.range(), "does not associate with this"),
+                        );
+                    }
+                }
+            },
+        }
+    }
+
+    /// Asserts that this node is a this-expression and validates the left
+    /// expression.
+    fn validate_left(&self, to: &mut Vec<Report<'_>>) {
+        assert_eq!(self.operator(), InfixOperator::This);
+
+        match self.left() {
+            Expression::Identifier(identifier) => {
+                identifier.validate(to);
+            },
+
+            invalid => {
+                to.push(
+                    Report::error("left operand of a this-expression must be an identifier")
+                        .primary(invalid.range(), "left operand"),
+                );
+            },
+        }
     }
 }
+
+// SUFFIX OPERATION
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SuffixOperator {
@@ -940,75 +780,100 @@ impl TryFrom<Kind> for SuffixOperator {
     }
 }
 
+node! { #[from(NODE_SUFFIX_OPERATION)] struct SuffixOperation; }
+
+impl SuffixOperation {
+    node__get! { left -> 0 @ Expression }
+
+    /// Returns the operator token of this operation.
+    pub fn operator_token(&self) -> &red::Token {
+        self.children_with_tokens()
+            .filter_map(|child| child.into_token())
+            .find(|token| SuffixOperator::try_from(token.kind()).is_ok())
+            .unwrap()
+    }
+
+    /// Returns the operator of this operation.
+    pub fn operator(&self) -> SuffixOperator {
+        self.children_with_tokens()
+            .filter_map(|child| child.into_token())
+            .find_map(|token| SuffixOperator::try_from(token.kind()).ok())
+            .unwrap()
+    }
+
+    fn validate(&self, to: &mut Vec<Report<'_>>) {
+        self.left().validate(to);
+    }
+}
+
 // INTERPOLATION
 
-node! {
-    #[from(NODE_INTERPOLATION)] struct Interpolation;
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum InterpolatedPart<Token: FromRed<red::Token>> {
+    Delimiter(red::Token),
+    Content(Token),
+    Interpolation(Interpolation),
+}
+
+impl<Token: FromRed<red::Token>> InterpolatedPart<Token> {
+    pub fn is_delimiter(&self) -> bool {
+        matches!(self, Self::Delimiter(_))
+    }
+
+    pub fn range(&self) -> Range {
+        match self {
+            InterpolatedPart::Delimiter(delimiter) => delimiter.range(),
+            InterpolatedPart::Content(content) => content.range(),
+            InterpolatedPart::Interpolation(interpolation) => interpolation.range(),
+        }
+    }
+}
+
+node! { #[from(NODE_INTERPOLATION)] struct Interpolation; }
+
+impl Interpolation {
+    token_get! { interpolation_start_token -> TOKEN_INTERPOLATION_START }
+
+    node__get! { expression -> 0 @ Expression }
+
+    token_get! { interpolation_end_token -> Option<TOKEN_INTERPOLATION_END> }
 
     fn validate(&self, to: &mut Vec<Report<'_>>) {
         self.expression().validate(to);
     }
 }
 
-impl Interpolation {
-    get_token! { interpolation_start_token -> TOKEN_INTERPOLATION_START }
+macro_rules! parted {
+    ($content_type:ty) => {
+        pub fn parts(&self) -> impl Iterator<Item = InterpolatedPart<$content_type>> {
+            self.children_with_tokens().map(|child| {
+                match child {
+                    red::NodeOrToken::Token(token) => {
+                        if <$content_type>::can_cast(token) {
+                            InterpolatedPart::Content(<$content_type>::cast(token.clone()).unwrap())
+                        } else {
+                            InterpolatedPart::Delimiter(token.clone())
+                        }
+                    },
 
-    get_node! { expression -> 0 @ Expression }
-
-    get_token! { interpolation_end_token -> ? TOKEN_INTERPOLATION_END }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum InterpolatedPart<T: Token> {
-    Delimiter(RedToken),
-    Content(T),
-    Interpolation(Interpolation),
-}
-
-impl<T: Token> InterpolatedPart<T> {
-    pub fn is_delimiter(&self) -> bool {
-        matches!(self, Self::Delimiter(_))
-    }
-
-    pub fn text_range(&self) -> rowan::TextRange {
-        match self {
-            InterpolatedPart::Delimiter(delimiter) => delimiter.text_range(),
-            InterpolatedPart::Content(content) => content.text_range(),
-            InterpolatedPart::Interpolation(interpolation) => interpolation.text_range(),
-        }
-    }
-}
-
-macro_rules! interpolated {
-    (impl $name:ident { let content_kind = $content_kind:expr; type ContentToken = $content_token:ty; }) => {
-        impl $name {
-            pub fn parts(&self) -> impl Iterator<Item = InterpolatedPart<$content_token>> {
-                self.children_with_tokens().map(|child| {
-                    match child {
-                        rowan::NodeOrToken::Token(token) => {
-                            if token.kind() == $content_kind {
-                                InterpolatedPart::Content(<$content_token>::cast(token).unwrap())
-                            } else {
-                                InterpolatedPart::Delimiter(token)
-                            }
-                        },
-
-                        rowan::NodeOrToken::Node(node) => {
-                            assert_eq!(node.kind(), NODE_INTERPOLATION);
-
-                            InterpolatedPart::Interpolation(Interpolation::cast(node.clone()).unwrap())
-                        },
-                    }
-                })
-            }
+                    red::NodeOrToken::Node(node) => {
+                        InterpolatedPart::Interpolation(
+                            Interpolation::cast(node.clone())
+                                .expect("child node of a parted element wasn't an interpolation"),
+                        )
+                    },
+                }
+            })
         }
     };
 }
 
 // PATH
 
-node! {
-    #[from(NODE_PATH)] struct Path;
+node! { #[from(NODE_PATH)] struct Path; }
+
+impl Path {
+    parted!(token::PathContent);
 
     fn validate(&self, to: &mut Vec<Report<'_>>) {
         for part in self.parts() {
@@ -1019,52 +884,12 @@ node! {
     }
 }
 
-interpolated! {
-    impl Path {
-        let content_kind = TOKEN_PATH;
-        type ContentToken = token::Path;
-    }
-}
-
 // IDENTIFIER
 
-node! {
-    #[from(NODE_IDENTIFIER)] struct Identifier;
+node! { #[from(NODE_IDENTIFIER)] struct IdentifierQuoted; }
 
-    fn validate(&self, to: &mut Vec<Report<'_>>) {
-        if let IdentifierValue::Quoted(quoted) = self.value() {
-            quoted.validate(to);
-        }
-    }
-}
-
-impl Identifier {
-    /// Returns the value of this identifier. A value may either be a
-    /// [`token::Identifier`] or a quoted stringlike.
-    pub fn value(&self) -> IdentifierValue {
-        if let Some(token) = self.token() {
-            return IdentifierValue::Plain(token);
-        }
-
-        if self.token_untyped(TOKEN_IDENTIFIER_START).is_some() {
-            return IdentifierValue::Quoted(IdentifierQuoted(self.deref().clone()));
-        }
-
-        unreachable!()
-    }
-}
-
-/// An identifier value.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum IdentifierValue {
-    /// A plain identifier backed by a [`token::Identifier`].
-    Plain(token::Identifier),
-    /// A quoted identifier backed by a stringlike [`IdentifierQuoted`].
-    Quoted(IdentifierQuoted),
-}
-
-node! {
-    #[from(NODE_IDENTIFIER)] struct IdentifierQuoted;
+impl IdentifierQuoted {
+    parted!(token::Content);
 
     fn validate(&self, to: &mut Vec<Report<'_>>) {
         let mut report = Report::error("invalid identifier");
@@ -1079,8 +904,10 @@ node! {
 
                     if !reported_control_character && text.chars().any(char::is_control) {
                         reported_control_character = true;
-                        report.push_primary(content.text_range().into(), "contains control characters");
-                        report.push_help("quoted identifiers cannot contain control characters (non-escaped newlines, tabs, ...)");
+                        report.push_primary(content.range(), "contains control characters");
+                        report.push_help(
+                            "quoted identifiers cannot contain control characters (non-escaped newlines, tabs, ...)",
+                        );
                     }
                 },
 
@@ -1098,19 +925,54 @@ node! {
     }
 }
 
-interpolated! {
-    impl IdentifierQuoted {
-        let content_kind = TOKEN_CONTENT;
-        type ContentToken = token::Content;
+/// An identifier value.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum IdentifierValue {
+    /// A plain identifier backed by a [`token::Identifier`].
+    Plain(token::Identifier),
+    /// A quoted identifier backed by a stringlike [`IdentifierQuoted`].
+    Quoted(IdentifierQuoted),
+}
+
+node! { #[from(NODE_IDENTIFIER)] struct Identifier; }
+
+impl Identifier {
+    /// Returns the value of this identifier. A value may either be a
+    /// [`token::Identifier`] or a quoted stringlike.
+    pub fn value(&self) -> IdentifierValue {
+        if let Some(token) = self
+            .first_token()
+            .and_then(|token| token::Identifier::cast(token.clone()))
+        {
+            return IdentifierValue::Plain(token);
+        }
+
+        if self
+            .first_token()
+            .is_some_and(|token| IdentifierQuoted::can_cast(token))
+        {
+            return IdentifierValue::Quoted(IdentifierQuoted((*self).clone()));
+        }
+
+        unreachable!("identifier node did not have an identifier or identifier starter token")
+    }
+
+    fn validate(&self, to: &mut Vec<Report<'_>>) {
+        if let IdentifierValue::Quoted(quoted) = self.value() {
+            quoted.validate(to);
+        }
     }
 }
 
 // STRING
 
-node! {
-    #[from(NODE_STRING)] struct SString;
+node! { #[from(NODE_STRING)] struct SString; }
 
-    // What a behemoth. And the sad part is I can't figure out a way to make this simpler.
+impl SString {
+    parted!(token::Content);
+
+    // What a behemoth. And the sad part is I can't figure out a way to make this
+    // simpler.
     fn validate(&self, to: &mut Vec<Report<'_>>) {
         let mut report = Report::error("invalid string");
         let mut reported_mixed_indentation = false;
@@ -1136,7 +998,7 @@ node! {
 
         let mut indentation: Option<char> = None;
 
-        let mut previous_part_is_not_delimiter_range = None;
+        let mut previous_interpolation_range = None;
         while let Some((part_index, part)) = parts.next() {
             let mut part_is_multiline = true;
             let part_is_first = part_index == 0;
@@ -1146,7 +1008,7 @@ node! {
                 InterpolatedPart::Interpolation(interpolation) => {
                     interpolation.validate(to);
 
-                    let range = interpolation.text_range();
+                    let range = interpolation.range();
 
                     if part_is_first {
                         string_first_line_range = Some(range);
@@ -1161,7 +1023,7 @@ node! {
                     let text = content.text();
 
                     let mut lines = text.split('\n').enumerate().peekable();
-                    while let Some((line_index, line)) = lines.next()  {
+                    while let Some((line_index, line)) = lines.next() {
                         let line_is_first = line_index == 0;
                         let line_is_last = lines.peek().is_none();
 
@@ -1174,34 +1036,29 @@ node! {
 
                         if line_is_firstest {
                             if !line.trim().is_empty() {
-                                string_first_line_range = Some(rowan::TextRange::at(
-                                    content.text_range().start(),
-                                    rowan::TextSize::new(line.trim_end().len() as u32),
-                                ));
+                                string_first_line_range = Some(Range::at(content.range().start, line.trim_end().len()));
                             } else if text.trim().is_empty()
                                 && let Some((_, part)) = parts.peek()
-                                && !part.is_delimiter() {
-                                string_first_line_range = Some(part.text_range());
+                                && !part.is_delimiter()
+                            {
+                                string_first_line_range = Some(part.range());
                             }
                         } else if line_is_lastest {
                             if !line.trim().is_empty() {
-                                let last_line_length = rowan::TextSize::new(line.trim_start().len() as u32);
+                                let last_line_length = line.trim_start().len();
 
-                                string_last_line_range = Some(rowan::TextRange::at(
-                                    content.text_range().end().checked_sub(last_line_length).unwrap(),
-                                    last_line_length,
-                                ));
-                            } else if !part_is_multiline
-                                && let Some(range) = previous_part_is_not_delimiter_range {
+                                string_last_line_range = Some(Range::at_end(content.range().end, last_line_length));
+                            } else if !part_is_multiline && let Some(range) = previous_interpolation_range {
                                 string_last_line_range = Some(range);
                             }
                         }
 
-                        #[allow(clippy::nonminimal_bool)] if
-                            // Ignore firstest and lastest lines.
-                            !(line_is_firstest || line_is_lastest)
+                        #[allow(clippy::nonminimal_bool)]
+                        if
+                        // Ignore firstest and lastest lines.
+                        !(line_is_firstest || line_is_lastest)
                             // Ignore lines right after an interpolation end.
-                            && !(previous_part_is_not_delimiter_range.is_some() && line_is_first)
+                            && !(previous_interpolation_range.is_some() && line_is_first)
                         {
                             for c in line.chars() {
                                 if !c.is_whitespace() {
@@ -1216,7 +1073,7 @@ node! {
                                 if !reported_mixed_indentation && indentation != c {
                                     reported_mixed_indentation = true;
                                     report.push_primary(
-                                        self.text_range().into(),
+                                        self.range(),
                                         "strings cannot mix different kinds of whitespace in indentation",
                                     );
                                 }
@@ -1229,7 +1086,7 @@ node! {
             }
 
             if !part.is_delimiter() {
-                previous_part_is_not_delimiter_range = Some(part.text_range());
+                previous_interpolation_range = Some(part.range());
             }
 
             if part_is_multiline {
@@ -1239,10 +1096,7 @@ node! {
 
         if string_is_multiline {
             for range in [string_first_line_range, string_last_line_range].into_iter().flatten() {
-                report.push_primary(
-                    range.into(),
-                    "multiline strings' first and last lines must be empty",
-                );
+                report.push_primary(range.into(), "multiline strings' first and last lines must be empty");
             }
         }
 
@@ -1252,17 +1106,12 @@ node! {
     }
 }
 
-interpolated! {
-    impl SString {
-        let content_kind = TOKEN_CONTENT;
-        type ContentToken = token::Content;
-    }
-}
-
 // RUNE
 
-node! {
-    #[from(NODE_RUNE)] struct Rune;
+node! { #[from(NODE_RUNE)] struct Rune; }
+
+impl Rune {
+    parted!(token::Content);
 
     fn validate(&self, to: &mut Vec<Report<'_>>) {
         let mut report = Report::error("invalid rune");
@@ -1278,20 +1127,19 @@ node! {
 
                     match content.validate_escapes(&mut report) {
                         0 if text.chars().count() == 1 => {},
-                        1 => {},
+
+                        // <= 2 because all escapes are at most two characters wide.
+                        1 => if text.as_bytes().len() <= 2 {},
 
                         _ => {
-                            report.push_primary(
-                                content.text_range().into(),
-                                "invalid rune literal length",
-                            );
+                            report.push_primary(content.range(), "invalid rune literal length");
                         },
                     }
 
                     if !reported_control_character && text.chars().any(char::is_control) {
                         reported_control_character = true;
                         report.push_primary(
-                            content.text_range().into(),
+                            content.range(),
                             "runes cannot contain control characters (non-escaped newlines, tabs, ...)",
                         );
                     }
@@ -1299,11 +1147,8 @@ node! {
 
                 InterpolatedPart::Interpolation(interpolation) if !reported_interpolation => {
                     reported_interpolation = true;
-                    report.push_primary(
-                        interpolation.text_range().into(),
-                        "runes cannot contain interpolation",
-                    );
-                }
+                    report.push_primary(interpolation.range(), "runes cannot contain interpolation");
+                },
 
                 _ => continue,
             }
@@ -1312,10 +1157,7 @@ node! {
         }
 
         if !got_content {
-            report.push_primary(
-                self.text_range().into(),
-                "runes cannot be empty",
-            );
+            report.push_primary(self.range(), "runes cannot be empty");
         }
 
         if !report.is_empty() {
@@ -1324,34 +1166,28 @@ node! {
     }
 }
 
-interpolated! {
-    impl Rune {
-        let content_kind = TOKEN_CONTENT;
-        type ContentToken = token::Content;
-    }
-}
-
 // ISLAND
 
-node! {
-    #[from(NODE_ISLAND)] struct Island;
+node! { #[from(NODE_ISLAND)] struct Island; }
+
+impl Island {
+    parted!(token::Content);
 
     fn validate(&self, to: &mut Vec<Report<'_>>) {
+        let mut report = Report::error("invalid island");
         let mut reported_control_character = false;
 
         for part in self.parts() {
             match part {
                 InterpolatedPart::Content(content) => {
-                    // content.validate_escapes(to);
+                    content.validate_escapes(&mut report);
 
                     let text = content.text();
 
                     if !reported_control_character && text.chars().any(char::is_control) {
                         reported_control_character = true;
-                        to.push(Report::error(
-                            "islands cannot contain control characters (non-escaped newlines, tabs, ...)").primary(
-                            self.text_range().into(), "here"
-                        ));
+                        report.push_primary(content.range(), "here");
+                        report.push_tip("islands cannot contain control characters (non-escaped newlines, tabs, ...)");
                     }
                 },
 
@@ -1362,34 +1198,14 @@ node! {
                 _ => {},
             }
         }
-    }
-}
 
-interpolated! {
-    impl Island {
-        let content_kind = TOKEN_CONTENT;
-        type ContentToken = token::Content;
+        if !report.is_empty() {
+            to.push(report)
+        }
     }
 }
 
 // NUMBER
-
-node! { #[from(NODE_NUMBER)] struct Number; }
-
-impl Number {
-    /// Returns the underlying value of this number.
-    pub fn value(&self) -> NumberValue {
-        if let Some(token) = self.token() {
-            return NumberValue::Integer(token);
-        }
-
-        if let Some(token) = self.token() {
-            return NumberValue::Float(token);
-        }
-
-        unreachable!()
-    }
-}
 
 /// A Number value. May either be a [`token::Integer`] or a [`token::Float`].
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -1398,10 +1214,39 @@ pub enum NumberValue {
     Float(token::Float),
 }
 
+node! { #[from(NODE_NUMBER)] struct Number; }
+
+impl Number {
+    /// Returns the underlying value of this number.
+    pub fn value(&self) -> NumberValue {
+        if let Some(token) = self.first_token().and(|token| token::Integer::cast(token.clone())) {
+            return NumberValue::Integer(token);
+        }
+
+        if let Some(token) = self.first_token().and(|token| token::Float::cast(token.clone())) {
+            return NumberValue::Float(token);
+        }
+
+        unreachable!()
+    }
+}
+
 // IF THEN
 
-node! {
-    #[from(NODE_IF_THEN)] struct IfThen;
+node! { #[from(NODE_IF_THEN)] struct IfThen; }
+
+impl IfThen {
+    token_get! { if_token -> TOKEN_LITERAL_IF }
+
+    node__get! { condition -> 0 @ Expression }
+
+    token_get! { then_token -> TOKEN_LITERAL_THEN }
+
+    node__get! { consequence -> 1 @ Expression }
+
+    token_get! { else_token -> Option<TOKEN_LITERAL_ELSE> }
+
+    node__get! { alternative -> 2 @ Option<Expression> }
 
     fn validate(&self, to: &mut Vec<Report<'_>>) {
         self.condition().validate(to);
@@ -1413,24 +1258,18 @@ node! {
     }
 }
 
-impl IfThen {
-    get_token! { if_token -> TOKEN_LITERAL_IF }
-
-    get_node! { condition -> 0 @ Expression }
-
-    get_token! { then_token -> TOKEN_LITERAL_THEN }
-
-    get_node! { consequence -> 1 @ Expression }
-
-    get_token! { else_token -> ? TOKEN_LITERAL_ELSE }
-
-    get_node! { alternative -> 2 @ ? Expression }
-}
-
 // IF IS
 
-node! {
-    #[from(NODE_IF_IS)] struct IfIs;
+node! { #[from(NODE_IF_IS)] struct IfIs; }
+
+impl IfIs {
+    token_get! { if_token -> TOKEN_LITERAL_IF }
+
+    node__get! { expression -> 0 @ Expression }
+
+    token_get! { is_token -> TOKEN_LITERAL_IS }
+
+    node__get! { patterns -> 1 @ Expression }
 
     fn validate(&self, to: &mut Vec<Report<'_>>) {
         let mut report = Report::error("invalid if-is");
@@ -1444,10 +1283,7 @@ node! {
                 },
 
                 invalid => {
-                    report.push_primary(
-                        invalid.text_range().into(),
-                        "invalid branch",
-                    );
+                    report.push_primary(invalid.range(), "invalid branch");
                     report.push_help("all if-is branches must be lambdas");
                 },
             }
@@ -1457,14 +1293,4 @@ node! {
             to.push(report);
         }
     }
-}
-
-impl IfIs {
-    get_token! { if_token -> TOKEN_LITERAL_IF }
-
-    get_node! { expression -> 0 @ Expression }
-
-    get_token! { is_token -> TOKEN_LITERAL_IS }
-
-    get_node! { patterns -> 1 @ Expression }
 }
