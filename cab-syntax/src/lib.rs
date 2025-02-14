@@ -1,13 +1,9 @@
-#![feature(gen_blocks, if_let_guard, iter_map_windows, let_chains)]
+#![feature(gen_blocks, if_let_guard, iter_map_windows, let_chains, trait_alias)]
 
 mod color;
 pub mod format;
 
-pub mod node;
-// mod noder;
-
-pub mod token;
-mod tokenizer;
+use std::ops;
 
 use enumset::{
     EnumSet,
@@ -16,41 +12,58 @@ use enumset::{
 
 pub use crate::{
     color::*,
-    // noder::*,
+    noder::*,
     tokenizer::*,
 };
 
+pub mod node;
+mod noder;
+
+pub mod token;
+mod tokenizer;
+
+#[allow(dead_code)]
 pub(crate) mod red {
     use crate::*;
 
     pub type Node = cstree::syntax::ResolvedNode<Kind>;
-    pub type UnresolvedNode = cstree::syntax::SyntaxNode<Kind>;
+    pub type ResolvedNode = cstree::syntax::SyntaxNode<Kind>;
 
     pub type Token = cstree::syntax::ResolvedToken<Kind>;
-    pub type UnresolvedToken = cstree::syntax::SyntaxToken<Kind>;
+    pub type ResolvedToken = cstree::syntax::SyntaxToken<Kind>;
 
     pub type Element = cstree::syntax::ResolvedElement<Kind>;
-    pub type UnresolvedElement = cstree::syntax::SyntaxElement<Kind>;
+    pub type ResolvedElement = cstree::syntax::SyntaxElement<Kind>;
 
-    pub type NodeOrToken<'a> = cstree::util::NodeOrToken<&'a Node, &'a Token>;
-    pub type UnresolvedNodeOrToken<'a> = cstree::util::NodeOrToken<&'a UnresolvedNode, &'a UnresolvedToken>;
+    pub type ElementRef<'a> = cstree::util::NodeOrToken<&'a Node, &'a Token>;
+    pub type ResolvedElementRef<'a> = cstree::util::NodeOrToken<&'a Node, &'a Token>;
 }
 
-pub type Kinds = EnumSet<Kind>;
+pub trait Node = TryFrom<red::Node> + ops::Deref<Target = red::Node>;
+pub trait NodeRef<'a> = TryFrom<&'a red::Node> + ops::Deref<Target: ops::Deref<Target = red::Node>>;
 
-/// A trait to signal that the implementor can be created from a red node or
-/// token.
-pub trait FromRed<Red>
-where
-    Self: Sized,
-{
-    const KINDS: Kinds;
+pub trait Token = TryFrom<red::Token> + ops::Deref<Target = red::Token>;
+pub trait TokenRef<'a> = TryFrom<&'a red::Token> + ops::Deref<Target: ops::Deref<Target = red::Token>>;
 
-    /// Determines if the implementor can be created from the [`Red`].
-    fn can_cast(from: &Red) -> bool;
+#[allow(dead_code)]
+mod green {
+    use std::sync::Arc;
 
-    /// Casts a [`Red`] to the implementor. Returns [`None`] if it can't.
-    fn cast(from: Red) -> Option<Self>;
+    use crate::*;
+
+    pub type Interner = Arc<cstree::interning::MultiThreadedTokenInterner>;
+
+    pub fn interner() -> Interner {
+        Arc::new(cstree::interning::new_threaded_interner())
+    }
+
+    pub type Checkpoint = cstree::build::Checkpoint;
+
+    pub type NodeBuilder = cstree::build::GreenNodeBuilder<'static, 'static, Kind, Interner>;
+    pub type NodeCache = cstree::build::NodeCache<'static, Interner>;
+
+    pub type Node = cstree::green::GreenNode;
+    pub type Token = cstree::green::GreenToken;
 }
 
 /// [`derive_more`] causes [`unreachable`] to warn too many times
@@ -347,7 +360,7 @@ use Kind::*;
 
 impl Kind {
     /// An enumset of all valid expression starter token kinds.
-    pub const EXPRESSIONS: Kinds = enum_set!(
+    pub const EXPRESSIONS: EnumSet<Kind> = enum_set!(
         TOKEN_LEFT_PARENTHESIS
             | TOKEN_LEFT_BRACKET
             | TOKEN_LEFT_CURLYBRACE
@@ -362,7 +375,7 @@ impl Kind {
             | TOKEN_ISLAND_START
     );
     /// An enumset of all identifier starter token kinds.
-    pub const IDENTIFIERS: Kinds = enum_set!(TOKEN_IDENTIFIER | TOKEN_IDENTIFIER_START);
+    pub const IDENTIFIERS: EnumSet<Kind> = enum_set!(TOKEN_IDENTIFIER | TOKEN_IDENTIFIER_START);
 
     /// Whether if this token can be used as a lambda argument.
     ///

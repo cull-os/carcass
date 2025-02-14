@@ -8,7 +8,6 @@ use std::{
         Hash as _,
         Hasher as _,
     },
-    hint,
     path,
 };
 
@@ -23,7 +22,8 @@ use libfuzzer_sys::{
 use yansi::Paint as _;
 
 fuzz_target!(|data: &str| -> Corpus {
-    let parse = hint::black_box(syntax::parse::<_, syntax::node::Expression>(syntax::tokenize(data)));
+    let mut oracle = syntax::oracle();
+    let parse = oracle.parse(syntax::tokenize(data));
 
     for report in &parse.reports {
         let file = report::File {
@@ -47,7 +47,7 @@ fuzz_target!(|data: &str| -> Corpus {
 
     print!("found a valid parse!");
 
-    let syntax = format!("{syntax:#?}", syntax = *node);
+    let syntax = format!("{node:#?}", node = *node);
 
     let syntax_hash = {
         let mut hasher = hash::DefaultHasher::new();

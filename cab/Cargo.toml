@@ -12,15 +12,9 @@ cab-report.path               = "../cab-report"
 cab-syntax.path               = "../cab-syntax"
 cab-text.path                 = "../cab-text"
 cab-wrap.path                 = "../cab-wrap"
-clap-stdin                    = "0.6.0"
+clap.workspace                = true
+clap-stdin.workspace          = true
 clap-verbosity-flag.workspace = true
 log.workspace                 = true
+tokio.workspace               = true
 yansi.workspace               = true
-
-[dependencies.clap]
-features = [ "derive" ]
-version  = "4.5.4"
-
-[dependencies.tokio]
-features = [ "full" ]
-version  = "1.37.0"

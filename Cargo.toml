@@ -11,22 +11,32 @@ repository  = "https://github.com/cull-os/cab"
 version     = "0.0.1"
 
 [workspace.dependencies]
+clap = { version = "4.5.4", features = [ "derive" ] }
+clap-stdin = "0.6.0"
 clap-verbosity-flag = "3.0.2"
-log                 = "0.4.21"
-num                 = "0.4.3"
-scopeguard          = "1.2.0"
-smallvec            = "2.0.0-alpha.10"
-static_assertions   = "1.1.0"
-unicode-width       = "0.2.0"
+const-str = "0.6.2"
+cstree = { git = "https://github.com/cull-os/cstree", features = [
+  "derive",
+  "lasso_compat",
+  "multi_threaded_interning",
+] }
+derive_more = { version = "2.0.1", features = [ "full" ] }
+enumset = "1.1.3"
+env_logger = "0.11.6"
+libfuzzer-sys = "0.4"
+log = "0.4.21"
+num = "0.4.3"
+paste = "1.0.15"
+peekmore = "1.3.0"
+phf = { version = "0.11.3", features = [ "macros" ] }
+scopeguard = "1.2.0"
+smallvec = "2.0.0-alpha.10"
+static_assertions = "1.1.0"
+terminal_size = "0.4.1"
+tokio = { version = "1.37.0", features = [ "full" ] }
+unicode-width = "0.2.0"
+which = "7.0.1"
+yansi = { version = "1.0.1", features = [ "detect-env", "detect-tty", "hyperlink" ] }
 
-[workspace.dependencies.cstree]
-features = [ "derive", "lasso", "multi_threaded_interning" ]
-version  = "0.12.2"
-
-[workspace.dependencies.derive_more]
-features = [ "full" ]
-version  = "2.0.1"
-
-[workspace.dependencies.yansi]
-features = [ "detect-env", "detect-tty", "hyperlink" ]
-version  = "1.0.1"
+# cstree              = { version = "0.12.2", features = [ "derive", "lasso_compat", "multi_threaded_interning" ] }
+# cstree              = { path = "../cstree/cstree", features = [ "derive", "lasso_compat", "multi_threaded_interning" ] }

@@ -10,9 +10,9 @@ version.workspace    = true
 cargo-fuzz = true
 
 [dependencies]
-cab.path        = "../cab"
-libfuzzer-sys   = "0.4"
-yansi.workspace = true
+cab.path                = "../cab"
+libfuzzer-sys.workspace = true
+yansi.workspace         = true
 
 [[bin]]
 bench = false

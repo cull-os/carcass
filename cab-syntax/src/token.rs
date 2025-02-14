@@ -1,6 +1,7 @@
 //! [`Token`] definitions.
 use std::{
     fmt,
+    mem,
     ops,
 };
 
@@ -12,24 +13,22 @@ use cab_text::{
     Range,
     Rangeable,
 };
-use enumset::enum_set;
+use num::Num as _;
 
-// use num::Num;
 use crate::{
-    FromRed,
     Kind::*,
-    Kinds,
     red,
 };
 
 macro_rules! token {
     (#[from($kind:ident)]struct $name:ident;) => {
         #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-        pub struct $name(pub(crate) red::Token);
+        #[repr(transparent)]
+        pub struct $name(red::Token);
 
         impl fmt::Display for $name {
             fn fmt(&self, writer: &mut fmt::Formatter<'_>) -> fmt::Result {
-                (*self).fmt(writer)
+                (&**self).fmt(writer)
             }
         }
 
@@ -41,19 +40,35 @@ macro_rules! token {
             }
         }
 
-        impl FromRed<red::Token> for $name {
-            const KINDS: Kinds = enum_set!($kind);
+        impl<'a> TryFrom<&'a red::Token> for &'a $name {
+            type Error = ();
 
-            fn can_cast(token: &red::Token) -> bool {
-                Self::KINDS.contains(token.kind())
+            fn try_from(token: &'a red::Token) -> Result<Self, ()> {
+                if token.kind() != $kind {
+                    return Err(());
+                }
+
+                // SAFETY: `token` is an immutable reference and Self is a &red::Token with
+                // #[repr(transparent)].
+                Ok(unsafe { mem::transmute::<&red::Token, Self>(token) })
             }
+        }
 
-            fn cast(token: red::Token) -> Option<Self> {
-                Self::can_cast(token.kind()).then_some(Self(token))
+        impl TryFrom<red::Token> for $name {
+            type Error = ();
+
+            fn try_from(token: red::Token) -> Result<Self, ()> {
+                if token.kind() != $kind {
+                    return Err(());
+                }
+
+                Ok(Self(token))
             }
         }
     };
 }
+
+// WHITESPACE
 
 token! { #[from(TOKEN_WHITESPACE)] struct Whitespace; }
 
@@ -63,6 +78,8 @@ impl Whitespace {
         self.text().bytes().filter(|&c| c == b'\n').count() + 1
     }
 }
+
+// COMMENT
 
 token! { #[from(TOKEN_COMMENT)] struct Comment; }
 
@@ -94,6 +111,8 @@ impl Comment {
     }
 }
 
+// INTEGER
+
 token! { #[from(TOKEN_INTEGER)] struct Integer; }
 
 impl Integer {
@@ -114,6 +133,8 @@ impl Integer {
     }
 }
 
+// FLOAT
+
 token! { #[from(TOKEN_FLOAT)] struct Float; }
 
 impl Float {
@@ -131,42 +152,74 @@ impl Float {
     }
 }
 
+// PATH CONTENT
+
 token! { #[from(TOKEN_PATH_CONTENT)] struct PathContent; }
 
+// IDENTIFIER
+
 token! { #[from(TOKEN_IDENTIFIER)] struct Identifier; }
+
+// CONTENT
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ContentPart<'a> {
+    Literal(&'a str),
+    Escape(char),
+}
 
 token! { #[from(TOKEN_CONTENT)] struct Content; }
 
 impl Content {
-    pub fn validate_escapes(&self, report: &mut Report<'_>) -> usize {
-        let mut reported = false;
+    pub fn parts(&self, report: &mut Report) -> impl Iterator<Item = ContentPart<'_>> {
+        gen {
+            let mut reported = false;
 
-        let mut bytes = self.text().bytes().enumerate();
-        let mut count: usize = 0;
+            let mut literal_start_offset = 0;
 
-        while let Some((offset, c)) = bytes.next() {
-            if c != b'\\' {
-                continue;
-            }
+            let text = self.text();
+            let mut bytes = text.bytes().enumerate();
 
-            count += 1;
+            while let Some((offset, c)) = bytes.next() {
+                if c != b'\\' {
+                    let literal = &text[literal_start_offset..offset];
 
-            match bytes.next() {
-                Some((_, b'0' | b't' | b'n' | b'r' | b'`' | b'"' | b'\'' | b'>' | b'\\')) => {},
+                    if !literal.is_empty() {
+                        yield ContentPart::Literal(literal);
+                    }
 
-                next @ (Some(_) | None) if !reported => {
-                    reported = true;
+                    continue;
+                }
 
-                    let start = self.range().start + offset;
-                    let len = 1 + next.is_some() as u32;
-                    report.push_label(Label::primary(Range::at(start, len), "invalid escape"));
-                    report.push_tip(r#"escapes must be one of: \0, \t, \n, \r, \`, \", \', \>, \\"#);
-                },
+                literal_start_offset = offset;
 
-                _ => {},
+                yield ContentPart::Escape(match bytes.next() {
+                    Some((_, b'0')) => '\0',
+                    Some((_, b't')) => '\t',
+                    Some((_, b'n')) => '\n',
+                    Some((_, b'r')) => '\r',
+                    Some((_, b'`')) => '`',
+                    Some((_, b'"')) => '"',
+                    Some((_, b'\'')) => '\'',
+                    Some((_, b'>')) => '>',
+                    Some((_, b'\\')) => '\\',
+
+                    next @ (Some(_) | None) if !reported => {
+                        reported = true;
+
+                        report.push_label(Label::primary(
+                            Range::at(self.range().start + offset, 1 + next.is_some() as u32),
+                            "invalid escape",
+                        ));
+
+                        report.push_tip(r#"escapes must be one of: \0, \t, \n, \r, \`, \", \', \>, \\"#);
+
+                        continue;
+                    },
+
+                    _ => continue,
+                });
             }
         }
-
-        count
     }
 }

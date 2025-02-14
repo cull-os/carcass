@@ -11,14 +11,12 @@ cab-report.path             = "../cab-report"
 cab-text.path               = "../cab-text"
 cstree.workspace            = true
 derive_more.workspace       = true
-enumset                     = "1.1.3"
+enumset.workspace           = true
 log.workspace               = true
 num.workspace               = true
-peekmore                    = "1.3.0"
+paste.workspace             = true
+peekmore.workspace          = true
+phf.workspace               = true
 smallvec.workspace          = true
 static_assertions.workspace = true
 yansi.workspace             = true
-
-[dependencies.phf]
-features = [ "macros" ]
-version  = "0.11.3"

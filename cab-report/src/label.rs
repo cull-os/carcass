@@ -33,27 +33,27 @@ impl LabelSeverity {
 }
 
 #[derive(Debug, Clone)]
-pub struct Label<'a> {
+pub struct Label {
     pub range: Range,
     pub level: LabelSeverity,
-    pub text: CowStr<'a>,
+    pub text: CowStr,
 }
 
-impl<'a> Label<'a> {
+impl Label {
     #[inline]
-    pub fn new(range: impl Into<Range>, text: impl Into<CowStr<'a>>, level: LabelSeverity) -> Self {
+    pub fn new(range: impl Into<Range>, text: impl Into<CowStr>, level: LabelSeverity) -> Self {
         into!(range, text);
 
         Self { range, text, level }
     }
 
     #[inline]
-    pub fn primary(range: impl Into<Range>, text: impl Into<CowStr<'a>>) -> Self {
+    pub fn primary(range: impl Into<Range>, text: impl Into<CowStr>) -> Self {
         Self::new(range, text, LabelSeverity::Primary)
     }
 
     #[inline]
-    pub fn secondary(range: impl Into<Range>, text: impl Into<CowStr<'a>>) -> Self {
+    pub fn secondary(range: impl Into<Range>, text: impl Into<CowStr>) -> Self {
         Self::new(range, text, LabelSeverity::Secondary)
     }
 }

@@ -86,7 +86,8 @@ async fn main() {
                 },
 
                 Dump::Syntax | Dump::Parenthesize => {
-                    let parse = syntax::parse::<_, syntax::node::Expression>(syntax::tokenize(&contents));
+                    let mut oracle = syntax::oracle();
+                    let parse = oracle.parse(syntax::tokenize(&contents));
 
                     let file = report::File {
                         island: name.into(),
@@ -99,9 +100,9 @@ async fn main() {
                     }
 
                     if let Dump::Syntax = command {
-                        write!(out, "{syntax:#?}", syntax = parse.syntax)
+                        write!(out, "{node:#?}", node = parse.node)
                     } else {
-                        syntax::format::parenthesize(&mut out, &parse.syntax.first_child().unwrap())
+                        syntax::format::parenthesize(&mut out, parse.expression.as_ref())
                     }
                     .unwrap_or_else(|error| {
                         log::error!("failed to write to stdout: {error}");

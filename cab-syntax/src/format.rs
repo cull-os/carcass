@@ -8,25 +8,25 @@ use yansi::Paint as _;
 
 use crate::{
     COLORS,
+    Token,
     node,
-    token,
 };
 
 /// Formats the given node with parentheses to disambiguate.
 /// The node must be a valid [`node::Expression`] or this will panic.
-pub fn parenthesize(writer: &mut impl io::Write, expression: node::Expression) -> io::Result<()> {
+pub fn parenthesize(writer: &mut impl io::Write, expression: node::ExpressionRef<'_>) -> io::Result<()> {
     Formatter::new(writer).parenthesize(expression)
 }
 
 #[derive(Debug)]
-struct Formatter<'a, W: io::Write> {
-    inner: &'a mut W,
+struct Formatter<'write, W: io::Write> {
+    inner: &'write mut W,
 
     bracket_count: usize,
 }
 
-impl<'a, W: io::Write> Formatter<'a, W> {
-    fn new(inner: &'a mut W) -> Self {
+impl<'write, W: io::Write> Formatter<'write, W> {
+    fn new(inner: &'write mut W) -> Self {
         Self {
             inner,
 
@@ -55,23 +55,23 @@ impl<'a, W: io::Write> Formatter<'a, W> {
         write!(self.inner, "{painted}")
     }
 
-    fn parenthesize_parted<T: token::Token>(
+    fn parenthesize_parted<'part, T: Token + 'part>(
         &mut self,
-        parts: impl Iterator<Item = node::InterpolatedPart<T>>,
+        parts: impl Iterator<Item = node::InterpolatedPartRef<'part, T>>,
     ) -> io::Result<()> {
         for part in parts {
             match part {
-                node::InterpolatedPart::Delimiter(token) => {
+                node::InterpolatedPartRef::Delimiter(token) => {
                     self.write(token.text().green().bold())?;
                 },
 
-                node::InterpolatedPart::Content(token) => {
+                node::InterpolatedPartRef::Content(token) => {
                     self.write(token.text().green())?;
                 },
 
-                node::InterpolatedPart::Interpolation(interpolation) => {
+                node::InterpolatedPartRef::Interpolation(interpolation) => {
                     self.write(r"\(".yellow())?;
-                    self.parenthesize(&interpolation.expression())?;
+                    self.parenthesize(interpolation.expression())?;
                     self.write(")".yellow())?;
                 },
             }
@@ -80,17 +80,13 @@ impl<'a, W: io::Write> Formatter<'a, W> {
         Ok(())
     }
 
-    fn parenthesize(&mut self, expression: node::Expression) -> io::Result<()> {
-        node::r#match! { node =>
-            node::Error as _error => {
-                self.write("error".red().bold())
-            },
+    fn parenthesize(&mut self, expression: node::ExpressionRef<'_>) -> io::Result<()> {
+        match expression {
+            node::ExpressionRef::Error(_error) => self.write("error".red().bold()),
 
-            node::Parenthesis as parenthesis => {
-                self.parenthesize(&parenthesis.expression())
-            },
+            node::ExpressionRef::Parenthesis(parenthesis) => self.parenthesize(parenthesis.expression()),
 
-            node::List as list => {
+            node::ExpressionRef::List(list) => {
                 self.bracket_start("[")?;
 
                 let mut items = list.items().peekable();
@@ -99,7 +95,7 @@ impl<'a, W: io::Write> Formatter<'a, W> {
                 }
 
                 while let Some(item) = items.next() {
-                    self.parenthesize(&item)?;
+                    self.parenthesize(item)?;
 
                     if items.peek().is_some() {
                         self.write(",")?;
@@ -111,7 +107,7 @@ impl<'a, W: io::Write> Formatter<'a, W> {
                 self.bracket_end("]")
             },
 
-            node::AttributeList as attribute_list => {
+            node::ExpressionRef::AttributeList(attribute_list) => {
                 self.bracket_start("{")?;
 
                 let mut entries = attribute_list.entries().peekable();
@@ -120,7 +116,7 @@ impl<'a, W: io::Write> Formatter<'a, W> {
                 }
 
                 while let Some(entry) = entries.next() {
-                    self.parenthesize(&entry)?;
+                    self.parenthesize(entry)?;
 
                     if entries.peek().is_some() {
                         self.write(",")?;
@@ -132,7 +128,7 @@ impl<'a, W: io::Write> Formatter<'a, W> {
                 self.bracket_end("}")
             },
 
-            node::PrefixOperation as operation => {
+            node::ExpressionRef::PrefixOperation(operation) => {
                 self.bracket_start("(")?;
 
                 self.write(match operation.operator() {
@@ -144,12 +140,12 @@ impl<'a, W: io::Write> Formatter<'a, W> {
                     node::PrefixOperator::Try => "?",
                 })?;
                 self.write(" ")?;
-                self.parenthesize(&operation.right())?;
+                self.parenthesize(operation.right())?;
 
                 self.bracket_end(")")
             },
 
-            node::InfixOperation as operation => {
+            node::ExpressionRef::InfixOperation(operation) => {
                 self.bracket_start("(")?;
 
                 let operator = match operation.operator() {
@@ -160,9 +156,9 @@ impl<'a, W: io::Write> Formatter<'a, W> {
 
                     node::InfixOperator::ImplicitApply | node::InfixOperator::Apply => None,
                     node::InfixOperator::Pipe => {
-                        self.parenthesize(&operation.right())?;
+                        self.parenthesize(operation.right())?;
                         self.write(" ")?;
-                        self.parenthesize(&operation.left())?;
+                        self.parenthesize(operation.left())?;
 
                         return self.bracket_end(")");
                     },
@@ -198,7 +194,7 @@ impl<'a, W: io::Write> Formatter<'a, W> {
                     node::InfixOperator::Bind => Some(":="),
                 };
 
-                self.parenthesize(&operation.left())?;
+                self.parenthesize(operation.left())?;
                 self.write(" ")?;
 
                 if let Some(operator) = operator {
@@ -206,15 +202,15 @@ impl<'a, W: io::Write> Formatter<'a, W> {
                     self.write(" ")?;
                 }
 
-                self.parenthesize(&operation.right())?;
+                self.parenthesize(operation.right())?;
 
                 self.bracket_end(")")
             },
 
-            node::SuffixOperation as operation => {
+            node::ExpressionRef::SuffixOperation(operation) => {
                 self.bracket_start("(")?;
 
-                self.parenthesize(&operation.left())?;
+                self.parenthesize(operation.left())?;
                 self.write(" ")?;
                 self.write(match operation.operator() {
                     node::SuffixOperator::Same => ",",
@@ -224,62 +220,62 @@ impl<'a, W: io::Write> Formatter<'a, W> {
                 self.bracket_end(")")
             },
 
-            node::Path as path => self.parenthesize_parted(path.parts()),
+            node::ExpressionRef::Path(path) => self.parenthesize_parted(path.parts()),
 
-            node::Identifier as identifier => {
+            node::ExpressionRef::Identifier(identifier) => {
                 match identifier.value() {
-                    node::IdentifierValue::Plain(token) => self.write(match token.text() {
-                        boolean @ ("true" | "false") => boolean.magenta().bold(),
-                        inexistent @ ("null" | "undefined") => inexistent.cyan().bold(),
-                        import @ "import" => import.yellow().bold(),
-                        identifier => identifier.new(),
-                    }),
+                    node::IdentifierValueRef::Plain(token) => {
+                        self.write(match token.text() {
+                            boolean @ ("true" | "false") => boolean.magenta().bold(),
+                            inexistent @ ("null" | "undefined") => inexistent.cyan().bold(),
+                            import @ "import" => import.yellow().bold(),
+                            identifier => identifier.new(),
+                        })
+                    },
 
-                    node::IdentifierValue::Quoted(quoted) => self.parenthesize_parted(quoted.parts()),
+                    node::IdentifierValueRef::Quoted(quoted) => self.parenthesize_parted(quoted.parts()),
                 }
             },
 
-            node::SString as string => self.parenthesize_parted(string.parts()),
+            node::ExpressionRef::SString(string) => self.parenthesize_parted(string.parts()),
 
-            node::Rune as rune => self.parenthesize_parted(rune.parts()),
+            node::ExpressionRef::Rune(rune) => self.parenthesize_parted(rune.parts()),
 
-            node::Island as island => self.parenthesize_parted(island.parts()),
+            node::ExpressionRef::Island(island) => self.parenthesize_parted(island.parts()),
 
-            node::Number as number => {
+            node::ExpressionRef::Number(number) => {
                 match number.value() {
-                    node::NumberValue::Integer(token) => self.write(token.value().blue().bold()),
-                    node::NumberValue::Float(token) => self.write(token.value().blue().bold()),
+                    node::NumberValueRef::Integer(token) => self.write(token.value().blue().bold()),
+                    node::NumberValueRef::Float(token) => self.write(token.value().blue().bold()),
                 }
             },
 
-            node::IfThen as if_then => {
+            node::ExpressionRef::IfThen(if_then) => {
                 self.bracket_start("(")?;
 
                 self.write("if ".red().bold())?;
-                self.parenthesize(&if_then.condition())?;
+                self.parenthesize(if_then.condition())?;
                 self.write(" then ".red().bold())?;
-                self.parenthesize(&if_then.consequence())?;
+                self.parenthesize(if_then.consequence())?;
 
                 if let Some(alternative) = if_then.alternative() {
                     self.write(" else ".red().bold())?;
-                    self.parenthesize(&alternative)?;
+                    self.parenthesize(alternative)?;
                 }
 
                 self.bracket_end(")")
             },
 
-            node::IfIs as if_is => {
+            node::ExpressionRef::IfIs(if_is) => {
                 self.bracket_start("(")?;
 
                 self.write("if ".red().bold())?;
-                self.parenthesize(&if_is.expression())?;
+                self.parenthesize(if_is.expression())?;
                 self.write(" is ".red().bold())?;
-                self.parenthesize(&if_is.patterns())?;
+                self.parenthesize(if_is.patterns())?;
 
                 self.bracket_end(")")
             },
-
-            else => unreachable!(),
         }
     }
 }

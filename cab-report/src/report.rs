@@ -45,15 +45,15 @@ impl ReportSeverity {
 }
 
 #[derive(Debug, Clone)]
-pub struct Report<'a> {
+pub struct Report {
     pub severity: ReportSeverity,
-    pub title: CowStr<'a>,
-    pub labels: SmallVec<Label<'a>, 2>,
-    pub points: SmallVec<Point<'a>, 2>,
+    pub title: CowStr,
+    pub labels: SmallVec<Label, 2>,
+    pub points: SmallVec<Point, 2>,
 }
 
-impl<'a> Report<'a> {
-    pub fn new(severity: ReportSeverity, title: impl Into<CowStr<'a>>) -> Self {
+impl Report {
+    pub fn new(severity: ReportSeverity, title: impl Into<CowStr>) -> Self {
         into!(title);
 
         Self {
@@ -64,19 +64,19 @@ impl<'a> Report<'a> {
         }
     }
 
-    pub fn note(title: impl Into<CowStr<'a>>) -> Self {
+    pub fn note(title: impl Into<CowStr>) -> Self {
         Self::new(ReportSeverity::Note, title)
     }
 
-    pub fn warn(title: impl Into<CowStr<'a>>) -> Self {
+    pub fn warn(title: impl Into<CowStr>) -> Self {
         Self::new(ReportSeverity::Warn, title)
     }
 
-    pub fn error(title: impl Into<CowStr<'a>>) -> Self {
+    pub fn error(title: impl Into<CowStr>) -> Self {
         Self::new(ReportSeverity::Error, title)
     }
 
-    pub fn bug(title: impl Into<CowStr<'a>>) -> Self {
+    pub fn bug(title: impl Into<CowStr>) -> Self {
         Self::new(ReportSeverity::Bug, title)
     }
 
@@ -84,56 +84,56 @@ impl<'a> Report<'a> {
         self.labels.is_empty() && self.points.is_empty()
     }
 
-    pub fn push_label(&mut self, label: Label<'a>) {
+    pub fn push_label(&mut self, label: Label) {
         self.labels.push(label)
     }
 
-    pub fn push_primary(&mut self, range: impl Into<Range>, text: impl Into<CowStr<'a>>) {
+    pub fn push_primary(&mut self, range: impl Into<Range>, text: impl Into<CowStr>) {
         self.labels.push(Label::primary(range, text));
     }
 
-    pub fn primary(mut self, range: impl Into<Range>, text: impl Into<CowStr<'a>>) -> Self {
+    pub fn primary(mut self, range: impl Into<Range>, text: impl Into<CowStr>) -> Self {
         self.push_primary(range, text);
         self
     }
 
-    pub fn push_secondary(&mut self, range: impl Into<Range>, text: impl Into<CowStr<'a>>) {
+    pub fn push_secondary(&mut self, range: impl Into<Range>, text: impl Into<CowStr>) {
         self.labels.push(Label::secondary(range, text));
     }
 
-    pub fn secondary(mut self, range: impl Into<Range>, text: impl Into<CowStr<'a>>) -> Self {
+    pub fn secondary(mut self, range: impl Into<Range>, text: impl Into<CowStr>) -> Self {
         self.push_secondary(range, text);
         self
     }
 
-    pub fn point(mut self, point: Point<'a>) -> Self {
+    pub fn point(mut self, point: Point) -> Self {
         self.points.push(point);
         self
     }
 
-    pub fn push_tip(&mut self, text: impl Into<CowStr<'a>>) {
+    pub fn push_tip(&mut self, text: impl Into<CowStr>) {
         self.points.push(Point::tip(text));
     }
 
-    pub fn tip(self, text: impl Into<CowStr<'a>>) -> Self {
+    pub fn tip(self, text: impl Into<CowStr>) -> Self {
         self.point(Point::tip(text))
     }
 
-    pub fn push_help(&mut self, text: impl Into<CowStr<'a>>) {
+    pub fn push_help(&mut self, text: impl Into<CowStr>) {
         self.points.push(Point::help(text));
     }
 
-    pub fn help(self, text: impl Into<CowStr<'a>>) -> Self {
+    pub fn help(self, text: impl Into<CowStr>) -> Self {
         self.point(Point::help(text))
     }
 
-    pub fn with(&'a self, file: &'a File<'a>) -> impl fmt::Display + 'a {
+    pub fn with<'a>(&'a self, file: &'a File) -> impl fmt::Display {
         ReportDisplay { report: self, file }
     }
 }
 
 struct ReportDisplay<'a> {
-    report: &'a Report<'a>,
+    report: &'a Report,
     file: &'a File<'a>,
 }
 
@@ -269,7 +269,7 @@ impl fmt::Display for ReportDisplay<'_> {
             Inline(Range),
         }
 
-        type LabelDynamic<'a> = (LabelRange, &'a CowStr<'a>, LabelSeverity);
+        type LabelDynamic<'a> = (LabelRange, &'a CowStr, LabelSeverity);
 
         #[derive(Debug, Clone)]
         struct Line<'a> {

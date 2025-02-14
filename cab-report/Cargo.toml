@@ -10,9 +10,9 @@ version.workspace     = true
 [dependencies]
 cab-text.path           = "../cab-text"
 cab-wrap.path           = "../cab-wrap"
-const-str               = "0.6.2"
+const-str.workspace     = true
 cstree.workspace        = true
-env_logger              = "0.11.6"
+env_logger.workspace    = true
 log.workspace           = true
 smallvec.workspace      = true
 unicode-width.workspace = true

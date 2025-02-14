@@ -20,7 +20,7 @@ pub use crate::{
     report::*,
 };
 
-pub(crate) type CowStr<'a> = borrow::Cow<'a, str>;
+pub(crate) type CowStr = borrow::Cow<'static, str>;
 
 pub fn init(level_filter: log::LevelFilter) {
     yansi::whenever(yansi::Condition::TTY_AND_COLOR);

@@ -8,21 +8,12 @@ version.workspace    = true
 
 [dependencies]
 cab.path                      = "../cab"
+clap.workspace                = true
 clap-verbosity-flag.workspace = true
 log.workspace                 = true
-which                         = "7.0.1"
-
-[dependencies.clap]
-features = [ "derive" ]
-version  = "4.5.4"
-
-[dependencies.tokio]
-features = [ "full" ]
-version  = "1.37.0"
-
-[dependencies.yansi]
-features = [ "detect-env", "detect-tty", "hyperlink" ]
-version  = "1.0.1"
+tokio.workspace               = true
+which.workspace               = true
+yansi.workspace               = true
 
 [[bin]]
 bench = false

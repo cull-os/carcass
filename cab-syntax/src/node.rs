@@ -1,6 +1,7 @@
 //! [`Node`] definitions.
 use std::{
     collections::VecDeque,
+    mem,
     ops,
 };
 
@@ -9,21 +10,62 @@ use cab_text::{
     Range,
     Rangeable,
 };
-use enumset::{
-    EnumSet,
-    enum_set,
-};
+use paste::paste;
 use smallvec::SmallVec;
 
 use crate::{
-    FromRed,
     Kind::{
         self,
         *,
     },
+    Token,
     red,
-    token,
+    token::{
+        self,
+        ContentPart,
+    },
 };
+
+macro_rules! reffed {
+    (
+        $(#[$attribute:meta])*
+        pub enum $name:ident $(<$($ident:ident $(: $bound:path)?),+>)? {
+            $(
+                $(#[$variant_attribute:meta])*
+                $variant:ident($type:ty)
+            ),* $(,)?
+        }
+    ) => {
+        paste! {
+            $(#[$attribute])*
+            pub enum $name $(<$($ident $(: $bound)?),+>)? {
+                $(
+                    $(#[$variant_attribute])*
+                    $variant($type)
+                ),*
+            }
+
+            impl$(<$($ident $(: $bound)?),+>)? $name $(<$($ident),+>)? {
+                pub fn as_ref(&self) -> [<$name Ref>]<'_$(, $($ident),+)?> {
+                    match self {
+                        $(
+                            Self::$variant(v) => [<$name Ref>]::$variant(v)
+                        ),*
+                    }
+                }
+            }
+
+            $(#[$attribute])*
+            #[derive(Copy)]
+            pub enum [<$name Ref>]<'a $(, $($ident $(: $bound)?),+)?> {
+                $(
+                    $(#[$variant_attribute])*
+                    $variant(&'a $type)
+                ),*
+            }
+        }
+    };
+}
 
 macro_rules! node {
     (
@@ -31,7 +73,8 @@ macro_rules! node {
         struct $name:ident;
     ) => {
         #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-        pub struct $name(pub(crate) red::Node);
+        #[repr(transparent)]
+        pub struct $name(red::Node);
 
         impl ops::Deref for $name {
             type Target = red::Node;
@@ -41,16 +84,34 @@ macro_rules! node {
             }
         }
 
-        impl FromRed<red::Node> for $name {
-            const KINDS: EnumSet<Kind> = enum_set!($kind);
+        impl<'a> TryFrom<&'a red::Node> for &'a $name {
+            type Error = ();
 
-            fn can_cast(node: &red::Node) -> bool {
-                Self::KINDS.contains(node.kind())
-            }
+            fn try_from(node: &'a red::Node) -> Result<Self, ()> {
+                if node.kind() != $kind {
+                    return Err(());
+                }
 
-            fn cast(node: red::Node) -> Option<Self> {
-                Self::can_cast(node.kind()).then_some(Self(node))
+                // SAFETY: `node` is an immutable reference and Self is a &red::Node with
+                // #[repr(transparent)].
+                Ok(unsafe { mem::transmute::<&red::Node, Self>(node) })
             }
+        }
+
+        impl TryFrom<red::Node> for $name {
+            type Error = ();
+
+            fn try_from(node: red::Node) -> Result<Self, ()> {
+                if node.kind() != $kind {
+                    return Err(());
+                }
+
+                Ok(Self(node))
+            }
+        }
+
+        impl $name {
+            pub const KIND: Kind = $kind;
         }
     };
 
@@ -58,31 +119,31 @@ macro_rules! node {
         #[from($($variant:ident),* $(,)?)]
         enum $name:ident;
     ) => {
-        #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-        pub enum $name {
-            $($variant($variant),)*
+        reffed! {
+            #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+            pub enum $name {
+                $($variant($variant),)*
+            }
         }
 
         impl ops::Deref for $name {
             type Target = red::Node;
 
             fn deref(&self) -> &Self::Target {
-                &self.0
+                match self {
+                    $(Self::$variant(node) => &**node,)*
+                }
             }
         }
 
-        impl FromRed<red::Node> for $name {
-            const KINDS: EnumSet<Kind> = enum_set!($($variant::KIND)|*);
+        impl TryFrom<red::Node> for $name {
+            type Error = ();
 
-            fn can_cast(node: &red::Node) -> bool {
-                Self::KINDS.contains(node.kind())
-            }
-
-            fn cast(node: red::Node) -> Option<Self> {
-                match node.kind() {
-                    $($variant::KIND => Some(Self::$variant($variant(node))),)*
-                    _ => None,
-                }
+            fn try_from(node: red::Node) -> Result<Self, ()> {
+                Ok(match node.kind() {
+                    $($variant::KIND => Self::$variant($variant::try_from(node)?),)*
+                    _ => return Err(()),
+                })
             }
         }
 
@@ -96,22 +157,66 @@ macro_rules! node {
             impl TryFrom<$name> for $variant {
                 type Error = ();
 
-                fn try_from(from: $name) -> Result<Self, Self::Error> {
-                    match from {
-                        $name::$variant(it) => Ok(it),
-                        _ => Err(()),
+                fn try_from(from: $name) -> Result<Self, ()> {
+                    if let $name::$variant(node) = from {
+                        Ok(node)
+                    } else {
+                        Err(())
                     }
                 }
             }
         )*
+
+        paste! {
+            impl ops::Deref for [<$name Ref>]<'_> {
+                type Target = red::Node;
+
+                fn deref(&self) -> &Self::Target {
+                    match self {
+                        $(Self::$variant(node) => &**node,)*
+                    }
+                }
+            }
+
+            impl<'a> TryFrom<&'a red::Node> for [<$name Ref>]<'a> {
+                type Error = ();
+
+                fn try_from(node: &'a red::Node) -> Result<Self, ()> {
+                    Ok(match node.kind() {
+                        $($variant::KIND => Self::$variant(<&$variant>::try_from(node)?),)*
+                        _ => return Err(()),
+                    })
+                }
+            }
+
+            $(
+                impl<'a> From<&'a $variant> for [<$name Ref>]<'a> {
+                    fn from(from: &'a $variant) -> Self {
+                        Self::$variant(from)
+                    }
+                }
+
+                impl<'a> TryFrom<[<$name Ref>]<'a>> for &'a $variant {
+                    type Error = ();
+
+                    fn try_from(from: [<$name Ref>]<'a>) -> Result<Self, ()> {
+                        if let [<$name Ref>]::$variant(node) = from {
+                            Ok(node)
+                        } else {
+                            Err(())
+                        }
+                    }
+                }
+            )*
+        }
     };
 }
 
-macro_rules! token_get {
+macro_rules! get_token {
     ($name:ident -> $($skip:literal @)? Option<$kind:ident>) => {
         pub fn $name(&self) -> Option<&red::Token> {
             self.children_with_tokens()
-                .filter_map(red::Element::into_token)
+                .filter_map(red::ElementRef::into_token)
                 $(.skip($skip))?
                 .find(|token| token.kind() == $kind)
         }
@@ -120,7 +225,7 @@ macro_rules! token_get {
     ($name:ident -> $($skip:literal @)? $kind:ident) => {
         pub fn $name(&self) -> &red::Token {
             self.children_with_tokens()
-                .filter_map(red::Element::into_token)
+                .filter_map(red::ElementRef::into_token)
                 $(.skip($skip))?
                 .find(|token| token.kind() == $kind)
                 .expect("node must have a token child")
@@ -128,33 +233,23 @@ macro_rules! token_get {
     };
 }
 
-macro_rules! node__get {
+macro_rules! get_node {
     ($name:ident -> $($skip:literal @)? Option<$type:ty>) => {
         pub fn $name(&self) -> Option<$type> {
             self.children()
-                .filter_map(|node| <$type>::can_cast(node.kind()))
+                .filter_map(|node| <$type>::try_from(node).ok())
                 $(.skip($skip))?
                 .next()
-                .map(|node| <$type>::cast(node.clone()).unwrap())
         }
     };
 
     ($name:ident -> $($skip:literal @)? $type:ty) => {
         pub fn $name(&self) -> $type {
             self.children()
-                .filter(|node| <$type>::can_cast(node.kind()))
+                .filter_map(|node| <$type>::try_from(node).ok())
                 $(.skip($skip))?
                 .next()
-                .map(|node| <$type>::cast(node.clone()).unwrap())
                 .expect("node must have a matching node child")
-        }
-    };
-
-    ($name:ident -> impl Iterator<Item = $type:ty>) => {
-        pub fn $name(&self) -> impl Iterator<Item = &<$type>> {
-            self.children()
-                .filter(|node| <$type>::can_cast(node.kind()))
-                .map(|node| <$type>::cast(node.clone()).unwrap())
         }
     };
 }
@@ -181,10 +276,9 @@ node! {
     )] enum Expression;
 }
 
-impl Expression {
-    fn validate(&self, to: &mut Vec<Report<'_>>) {
+impl<'a> ExpressionRef<'a> {
+    pub fn validate(self, to: &mut Vec<Report>) {
         match self {
-            Self::Error(error) => error.validate(to),
             Self::Parenthesis(parenthesis) => parenthesis.validate(to),
             Self::List(list) => list.validate(to),
             Self::AttributeList(attribute_list) => attribute_list.validate(to),
@@ -196,13 +290,14 @@ impl Expression {
             Self::SString(string) => string.validate(to),
             Self::Rune(rune) => rune.validate(to),
             Self::Island(island) => island.validate(to),
-            Self::Number(number) => number.validate(to),
             Self::IfThen(if_else) => if_else.validate(to),
             Self::IfIs(if_is) => if_is.validate(to),
+
+            Self::Error(_) | Self::Number(_) => {},
         }
     }
 
-    fn validate_pattern(&self, to: &mut Vec<Report<'_>>) {
+    pub fn validate_pattern(self, to: &mut Vec<Report>) {
         match self {
             Self::Parenthesis(parenthesis) => {
                 parenthesis.expression().validate_pattern(to);
@@ -238,7 +333,7 @@ impl Expression {
 
             Self::InfixOperation(operation) if let InfixOperator::Select = operation.operator() => {
                 match operation.left() {
-                    Expression::Identifier(identifier) => {
+                    ExpressionRef::Identifier(identifier) => {
                         identifier.validate(to);
                     },
 
@@ -280,13 +375,13 @@ impl Expression {
         }
     }
 
-    fn validate_pattern_arithmetic(&self, bind_ranges: &mut SmallVec<Range, 4>, reports: &mut Vec<Report<'_>>) {
+    pub fn validate_pattern_arithmetic(self, bind_ranges: &mut SmallVec<Range, 4>, reports: &mut Vec<Report>) {
         match self {
-            Expression::Parenthesis(parenthesis) => {
+            ExpressionRef::Parenthesis(parenthesis) => {
                 parenthesis.expression().validate_pattern(reports);
             },
 
-            Expression::InfixOperation(operation)
+            ExpressionRef::InfixOperation(operation)
                 if let InfixOperator::Addition
                 | InfixOperator::Subtraction
                 | InfixOperator::Multiplication
@@ -297,23 +392,23 @@ impl Expression {
                 operation.right().validate_pattern_arithmetic(bind_ranges, reports);
             },
 
-            Expression::InfixOperation(_) => {
+            ExpressionRef::InfixOperation(_) => {
                 reports.push(
                     Report::error("non-arithmetic infix operators are not valid patterns")
                         .primary(self.range(), "here"),
                 );
             },
 
-            Expression::Identifier(identifier) => {
+            ExpressionRef::Identifier(identifier) => {
                 identifier.validate(reports);
                 bind_ranges.push(identifier.range());
             },
 
-            Expression::SString(string) => {
+            ExpressionRef::SString(string) => {
                 string.validate(reports);
             },
 
-            Expression::Number(number) => {
+            ExpressionRef::Number(number) => {
                 number.validate(reports);
             },
 
@@ -326,18 +421,18 @@ impl Expression {
         }
     }
 
-    fn same_items(self) -> impl Iterator<Item = Expression> {
-        gen {
+    pub fn same_items(self) -> impl Iterator<Item = ExpressionRef<'a>> {
+        gen move {
             let mut expressions = VecDeque::from([self]);
 
             while let Some(expression) = expressions.pop_back() {
                 match expression {
-                    Expression::InfixOperation(operation) if let InfixOperator::Same = operation.operator() => {
+                    ExpressionRef::InfixOperation(operation) if let InfixOperator::Same = operation.operator() => {
                         expressions.push_front(operation.left());
                         expressions.push_front(operation.right());
                     },
 
-                    Expression::SuffixOperation(operation) if let SuffixOperator::Same = operation.operator() => {
+                    ExpressionRef::SuffixOperation(operation) if let SuffixOperator::Same = operation.operator() => {
                         expressions.push_front(operation.left());
                     },
 
@@ -357,13 +452,13 @@ node! { #[from(NODE_ERROR)] struct Error; }
 node! { #[from(NODE_PARENTHESIS)] struct Parenthesis; }
 
 impl Parenthesis {
-    token_get! { token_left_parenthesis -> TOKEN_LEFT_PARENTHESIS }
+    get_token! { token_left_parenthesis -> TOKEN_LEFT_PARENTHESIS }
 
-    node__get! { expression -> Expression }
+    get_node! { expression -> ExpressionRef<'_> }
 
-    token_get! { token_right_parenthesis -> Option<TOKEN_RIGHT_PARENTHESIS> }
+    get_token! { token_right_parenthesis -> Option<TOKEN_RIGHT_PARENTHESIS> }
 
-    fn validate(&self, to: &mut Vec<Report<'_>>) {
+    pub fn validate(&self, to: &mut Vec<Report>) {
         self.expression().validate(to);
     }
 }
@@ -373,19 +468,19 @@ impl Parenthesis {
 node! { #[from(NODE_LIST)] struct List; }
 
 impl List {
-    token_get! { token_left_bracket -> TOKEN_LEFT_BRACKET }
+    get_token! { token_left_bracket -> TOKEN_LEFT_BRACKET }
 
-    node__get! { expression -> Option<Expression> }
+    get_node! { expression -> Option<ExpressionRef<'_>> }
 
-    token_get! { token_right_bracket -> Option<TOKEN_RIGHT_BRACKET> }
+    get_token! { token_right_bracket -> Option<TOKEN_RIGHT_BRACKET> }
 
     /// Returns all items of the list.
-    pub fn items(&self) -> impl Iterator<Item = Expression> {
-        self.expression().into_iter().flat_map(Expression::same_items)
+    pub fn items(&self) -> impl Iterator<Item = ExpressionRef<'_>> {
+        self.expression().into_iter().flat_map(ExpressionRef::same_items)
     }
 
-    fn validate(&self, to: &mut Vec<Report<'_>>) {
-        if let Some(Expression::InfixOperation(operation)) = self.expression()
+    pub fn validate(&self, to: &mut Vec<Report>) {
+        if let Some(ExpressionRef::InfixOperation(operation)) = self.expression()
             && operation.operator() == InfixOperator::Sequence
         {
             to.push(
@@ -405,21 +500,21 @@ impl List {
 node! { #[from(NODE_ATTRIBUTE_LIST)] struct AttributeList; }
 
 impl AttributeList {
-    token_get! { left_curlybrace_token -> TOKEN_LEFT_CURLYBRACE }
+    get_token! { left_curlybrace_token -> TOKEN_LEFT_CURLYBRACE }
 
-    node__get! { expression -> Option<Expression> }
+    get_node! { expression -> Option<ExpressionRef<'_>> }
 
-    token_get! { right_curlybrace_token -> Option<TOKEN_RIGHT_CURLYBRACE> }
+    get_token! { right_curlybrace_token -> Option<TOKEN_RIGHT_CURLYBRACE> }
 
     /// Returns all entries of the attribute list.
-    pub fn entries(&self) -> impl Iterator<Item = Expression> {
-        self.expression().into_iter().flat_map(Expression::same_items)
+    pub fn entries(&self) -> impl Iterator<Item = ExpressionRef<'_>> {
+        self.expression().into_iter().flat_map(ExpressionRef::same_items)
     }
 
-    fn validate(&self, to: &mut Vec<Report<'_>>) {
+    pub fn validate(&self, to: &mut Vec<Report>) {
         for entry in self.entries() {
             match entry {
-                Expression::InfixOperation(operation) if let InfixOperator::Sequence = operation.operator() => {
+                ExpressionRef::InfixOperation(operation) if let InfixOperator::Sequence = operation.operator() => {
                     to.push(
                         Report::error("unexpected sequence operator inside attribute list").primary(
                             operation.range(),
@@ -428,11 +523,11 @@ impl AttributeList {
                     );
                 },
 
-                Expression::InfixOperation(operation) if let InfixOperator::Bind = operation.operator() => {
+                ExpressionRef::InfixOperation(operation) if let InfixOperator::Bind = operation.operator() => {
                     operation.validate(to);
                 },
 
-                Expression::Identifier(identifier) => {
+                ExpressionRef::Identifier(identifier) => {
                     identifier.validate(to);
                 },
 
@@ -457,7 +552,7 @@ pub enum PrefixOperator {
 impl TryFrom<Kind> for PrefixOperator {
     type Error = ();
 
-    fn try_from(from: Kind) -> Result<Self, Self::Error> {
+    fn try_from(from: Kind) -> Result<Self, ()> {
         Ok(match from {
             TOKEN_PLUS => Self::Swwallation,
             TOKEN_MINUS => Self::Negation,
@@ -485,7 +580,7 @@ impl PrefixOperator {
 node! { #[from(NODE_PREFIX_OPERATION)] struct PrefixOperation; }
 
 impl PrefixOperation {
-    node__get! { right -> 0 @ Expression }
+    get_node! { right -> 0 @ ExpressionRef<'_> }
 
     /// Returns the operator token of this operation.
     pub fn operator_token(&self) -> &red::Token {
@@ -497,13 +592,13 @@ impl PrefixOperation {
 
     /// Returns the operator of this operation.
     pub fn operator(&self) -> PrefixOperator {
-        self.children_red_tokens()
+        self.children_with_tokens()
             .filter_map(|child| child.into_token())
             .find_map(|token| PrefixOperator::try_from(token.kind()).ok())
             .unwrap()
     }
 
-    fn validate(&self, to: &mut Vec<Report<'_>>) {
+    pub fn validate(&self, to: &mut Vec<Report>) {
         self.right().validate(to);
     }
 }
@@ -554,7 +649,7 @@ pub enum InfixOperator {
 impl TryFrom<Kind> for InfixOperator {
     type Error = ();
 
-    fn try_from(from: Kind) -> Result<Self, Self::Error> {
+    fn try_from(from: Kind) -> Result<Self, ()> {
         Ok(match from {
             TOKEN_COMMA => Self::Same,
             TOKEN_SEMICOLON => Self::Sequence,
@@ -650,12 +745,12 @@ impl InfixOperator {
 node! { #[from(NODE_INFIX_OPERATION)] struct InfixOperation; }
 
 impl InfixOperation {
-    node__get! { left -> 0 @ Expression }
+    get_node! { left -> 0 @ ExpressionRef<'_> }
 
-    node__get! { right -> 1 @ Expression }
+    get_node! { right -> 1 @ ExpressionRef<'_> }
 
     /// Returns the operator token of this operation.
-    pub fn operator_token(&self) -> Option<&red::Token> {
+    pub fn operator_token(&self) -> Option<&'_ red::Token> {
         self.children_with_tokens()
             .filter_map(|child| child.into_token())
             .find(|token| InfixOperator::try_from(token.kind()).is_ok())
@@ -669,13 +764,13 @@ impl InfixOperation {
             .unwrap_or(InfixOperator::ImplicitApply)
     }
 
-    fn validate(&self, to: &mut Vec<Report<'_>>) {
+    pub fn validate(&self, to: &mut Vec<Report>) {
         match self.operator() {
             InfixOperator::Same => {
                 let mut same_operator = None;
 
-                for item in Expression::InfixOperation(self.clone()).same_items() {
-                    if let Expression::InfixOperation(operation) = &item
+                for item in ExpressionRef::InfixOperation(self).same_items() {
+                    if let ExpressionRef::InfixOperation(operation) = &item
                         && let operator @ (InfixOperator::Lambda | InfixOperator::Bind) = operation.operator()
                     {
                         let same_operator = same_operator.get_or_insert(operator);
@@ -724,7 +819,7 @@ impl InfixOperation {
                 };
 
                 for expression in expressions {
-                    if let Expression::InfixOperation(operation) = expression
+                    if let ExpressionRef::InfixOperation(operation) = expression
                         && let child_operator @ (InfixOperator::Apply | InfixOperator::Pipe) = operation.operator()
                         && child_operator != operator
                     {
@@ -741,11 +836,11 @@ impl InfixOperation {
 
     /// Asserts that this node is a this-expression and validates the left
     /// expression.
-    fn validate_left(&self, to: &mut Vec<Report<'_>>) {
+    pub fn validate_left(&self, to: &mut Vec<Report>) {
         assert_eq!(self.operator(), InfixOperator::This);
 
         match self.left() {
-            Expression::Identifier(identifier) => {
+            ExpressionRef::Identifier(identifier) => {
                 identifier.validate(to);
             },
 
@@ -770,7 +865,7 @@ pub enum SuffixOperator {
 impl TryFrom<Kind> for SuffixOperator {
     type Error = ();
 
-    fn try_from(from: Kind) -> Result<Self, Self::Error> {
+    fn try_from(from: Kind) -> Result<Self, ()> {
         match from {
             TOKEN_COMMA => Ok(Self::Same),
             TOKEN_SEMICOLON => Ok(Self::Sequence),
@@ -783,10 +878,10 @@ impl TryFrom<Kind> for SuffixOperator {
 node! { #[from(NODE_SUFFIX_OPERATION)] struct SuffixOperation; }
 
 impl SuffixOperation {
-    node__get! { left -> 0 @ Expression }
+    get_node! { left -> 0 @ ExpressionRef<'_> }
 
     /// Returns the operator token of this operation.
-    pub fn operator_token(&self) -> &red::Token {
+    pub fn operator_token(&self) -> &'_ red::Token {
         self.children_with_tokens()
             .filter_map(|child| child.into_token())
             .find(|token| SuffixOperator::try_from(token.kind()).is_ok())
@@ -801,30 +896,33 @@ impl SuffixOperation {
             .unwrap()
     }
 
-    fn validate(&self, to: &mut Vec<Report<'_>>) {
+    pub fn validate(&self, to: &mut Vec<Report>) {
         self.left().validate(to);
     }
 }
 
 // INTERPOLATION
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum InterpolatedPart<Token: FromRed<red::Token>> {
-    Delimiter(red::Token),
-    Content(Token),
-    Interpolation(Interpolation),
+reffed! {
+    #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+    pub enum InterpolatedPart<T: Token> {
+        Delimiter(red::Token),
+        Content(T),
+        Interpolation(Interpolation),
+    }
 }
 
-impl<Token: FromRed<red::Token>> InterpolatedPart<Token> {
+// TODO: Find ouy why the hell s/&self/self/ doesn't work. This should be Copy.
+impl<T: Token> InterpolatedPartRef<'_, T> {
     pub fn is_delimiter(&self) -> bool {
         matches!(self, Self::Delimiter(_))
     }
 
     pub fn range(&self) -> Range {
         match self {
-            InterpolatedPart::Delimiter(delimiter) => delimiter.range(),
-            InterpolatedPart::Content(content) => content.range(),
-            InterpolatedPart::Interpolation(interpolation) => interpolation.range(),
+            Self::Delimiter(delimiter) => delimiter.range(),
+            Self::Content(content) => content.range(),
+            Self::Interpolation(interpolation) => interpolation.range(),
         }
     }
 }
@@ -832,33 +930,33 @@ impl<Token: FromRed<red::Token>> InterpolatedPart<Token> {
 node! { #[from(NODE_INTERPOLATION)] struct Interpolation; }
 
 impl Interpolation {
-    token_get! { interpolation_start_token -> TOKEN_INTERPOLATION_START }
+    get_token! { interpolation_start_token -> TOKEN_INTERPOLATION_START }
 
-    node__get! { expression -> 0 @ Expression }
+    get_node! { expression -> 0 @ ExpressionRef<'_> }
 
-    token_get! { interpolation_end_token -> Option<TOKEN_INTERPOLATION_END> }
+    get_token! { interpolation_end_token -> Option<TOKEN_INTERPOLATION_END> }
 
-    fn validate(&self, to: &mut Vec<Report<'_>>) {
+    pub fn validate(&self, to: &mut Vec<Report>) {
         self.expression().validate(to);
     }
 }
 
 macro_rules! parted {
     ($content_type:ty) => {
-        pub fn parts(&self) -> impl Iterator<Item = InterpolatedPart<$content_type>> {
+        pub fn parts(&self) -> impl Iterator<Item = InterpolatedPartRef<'_, $content_type>> {
             self.children_with_tokens().map(|child| {
                 match child {
-                    red::NodeOrToken::Token(token) => {
-                        if <$content_type>::can_cast(token) {
-                            InterpolatedPart::Content(<$content_type>::cast(token.clone()).unwrap())
+                    red::ElementRef::Token(token) => {
+                        if let Ok(token) = <&$content_type>::try_from(token) {
+                            InterpolatedPartRef::Content(token)
                         } else {
-                            InterpolatedPart::Delimiter(token.clone())
+                            InterpolatedPartRef::Delimiter(token)
                         }
                     },
 
-                    red::NodeOrToken::Node(node) => {
-                        InterpolatedPart::Interpolation(
-                            Interpolation::cast(node.clone())
+                    red::ElementRef::Node(node) => {
+                        InterpolatedPartRef::Interpolation(
+                            <&Interpolation>::try_from(node)
                                 .expect("child node of a parted element wasn't an interpolation"),
                         )
                     },
@@ -875,9 +973,9 @@ node! { #[from(NODE_PATH)] struct Path; }
 impl Path {
     parted!(token::PathContent);
 
-    fn validate(&self, to: &mut Vec<Report<'_>>) {
+    pub fn validate(&self, to: &mut Vec<Report>) {
         for part in self.parts() {
-            if let InterpolatedPart::Interpolation(interpolation) = part {
+            if let InterpolatedPartRef::Interpolation(interpolation) = part {
                 interpolation.validate(to);
             }
         }
@@ -891,14 +989,14 @@ node! { #[from(NODE_IDENTIFIER)] struct IdentifierQuoted; }
 impl IdentifierQuoted {
     parted!(token::Content);
 
-    fn validate(&self, to: &mut Vec<Report<'_>>) {
+    pub fn validate(&self, to: &mut Vec<Report>) {
         let mut report = Report::error("invalid identifier");
         let mut reported_control_character = false;
 
         for part in self.parts() {
             match part {
-                InterpolatedPart::Content(content) => {
-                    content.validate_escapes(&mut report);
+                InterpolatedPartRef::Content(content) => {
+                    content.parts(&mut report).count();
 
                     let text = content.text();
 
@@ -911,7 +1009,7 @@ impl IdentifierQuoted {
                     }
                 },
 
-                InterpolatedPart::Interpolation(interpolation) => {
+                InterpolatedPartRef::Interpolation(interpolation) => {
                     interpolation.validate(to);
                 },
 
@@ -925,40 +1023,39 @@ impl IdentifierQuoted {
     }
 }
 
-/// An identifier value.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum IdentifierValue {
-    /// A plain identifier backed by a [`token::Identifier`].
-    Plain(token::Identifier),
-    /// A quoted identifier backed by a stringlike [`IdentifierQuoted`].
-    Quoted(IdentifierQuoted),
+reffed! {
+    /// An identifier value.
+    #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+    pub enum IdentifierValue {
+        /// A plain identifier backed by a [`token::Identifier`].
+        Plain(token::Identifier),
+        /// A quoted identifier backed by a [`IdentifierQuoted`].
+        Quoted(IdentifierQuoted),
+    }
 }
 
 node! { #[from(NODE_IDENTIFIER)] struct Identifier; }
 
 impl Identifier {
     /// Returns the value of this identifier. A value may either be a
-    /// [`token::Identifier`] or a quoted stringlike.
-    pub fn value(&self) -> IdentifierValue {
+    /// [`token::Identifier`] or a [`IdentifierQuoted`].
+    pub fn value(&self) -> IdentifierValueRef<'_> {
         if let Some(token) = self
             .first_token()
-            .and_then(|token| token::Identifier::cast(token.clone()))
+            .and_then(|token| <&token::Identifier>::try_from(token).ok())
         {
-            return IdentifierValue::Plain(token);
+            return IdentifierValueRef::Plain(token);
         }
 
-        if self
-            .first_token()
-            .is_some_and(|token| IdentifierQuoted::can_cast(token))
-        {
-            return IdentifierValue::Quoted(IdentifierQuoted((*self).clone()));
+        if let Ok(quoted) = <&IdentifierQuoted>::try_from(&**self) {
+            return IdentifierValueRef::Quoted(quoted);
         }
 
         unreachable!("identifier node did not have an identifier or identifier starter token")
     }
 
-    fn validate(&self, to: &mut Vec<Report<'_>>) {
-        if let IdentifierValue::Quoted(quoted) = self.value() {
+    pub fn validate(&self, to: &mut Vec<Report>) {
+        if let IdentifierValueRef::Quoted(quoted) = self.value() {
             quoted.validate(to);
         }
     }
@@ -973,7 +1070,7 @@ impl SString {
 
     // What a behemoth. And the sad part is I can't figure out a way to make this
     // simpler.
-    fn validate(&self, to: &mut Vec<Report<'_>>) {
+    pub fn validate(&self, to: &mut Vec<Report>) {
         let mut report = Report::error("invalid string");
         let mut reported_mixed_indentation = false;
 
@@ -983,7 +1080,7 @@ impl SString {
                 let value = *index;
 
                 match part {
-                    InterpolatedPart::Delimiter(_) => {},
+                    InterpolatedPartRef::Delimiter(_) => {},
 
                     _ => *index += 1,
                 }
@@ -1005,7 +1102,7 @@ impl SString {
             let part_is_last = parts.peek().is_none_or(|(_, part)| part.is_delimiter());
 
             match &part {
-                InterpolatedPart::Interpolation(interpolation) => {
+                InterpolatedPartRef::Interpolation(interpolation) => {
                     interpolation.validate(to);
 
                     let range = interpolation.range();
@@ -1017,8 +1114,8 @@ impl SString {
                     }
                 },
 
-                InterpolatedPart::Content(content) => {
-                    content.validate_escapes(&mut report);
+                InterpolatedPartRef::Content(content) => {
+                    content.parts(&mut report).count();
 
                     let text = content.text();
 
@@ -1096,7 +1193,7 @@ impl SString {
 
         if string_is_multiline {
             for range in [string_first_line_range, string_last_line_range].into_iter().flatten() {
-                report.push_primary(range.into(), "multiline strings' first and last lines must be empty");
+                report.push_primary(range, "multiline strings' first and last lines must be empty");
             }
         }
 
@@ -1113,8 +1210,9 @@ node! { #[from(NODE_RUNE)] struct Rune; }
 impl Rune {
     parted!(token::Content);
 
-    fn validate(&self, to: &mut Vec<Report<'_>>) {
+    pub fn validate(&self, to: &mut Vec<Report>) {
         let mut report = Report::error("invalid rune");
+        let mut reported_too_long = false;
         let mut reported_control_character = false;
         let mut reported_interpolation = false;
 
@@ -1122,18 +1220,21 @@ impl Rune {
 
         for part in self.parts() {
             match part {
-                InterpolatedPart::Content(content) => {
+                InterpolatedPartRef::Content(content) => {
                     let text = content.text();
 
-                    match content.validate_escapes(&mut report) {
-                        0 if text.chars().count() == 1 => {},
+                    if !reported_too_long && {
+                        let mut parts = content.parts(&mut report);
 
-                        // <= 2 because all escapes are at most two characters wide.
-                        1 => if text.as_bytes().len() <= 2 {},
+                        match (parts.next().unwrap(), parts.next()) {
+                            (ContentPart::Literal(text), None) if text.chars().count() == 1 => false,
+                            (ContentPart::Escape(_), None) => false,
 
-                        _ => {
-                            report.push_primary(content.range(), "invalid rune literal length");
-                        },
+                            _ => true,
+                        }
+                    } {
+                        reported_too_long = true;
+                        report.push_primary(content.range(), "invalid rune literal length");
                     }
 
                     if !reported_control_character && text.chars().any(char::is_control) {
@@ -1145,7 +1246,7 @@ impl Rune {
                     }
                 },
 
-                InterpolatedPart::Interpolation(interpolation) if !reported_interpolation => {
+                InterpolatedPartRef::Interpolation(interpolation) if !reported_interpolation => {
                     reported_interpolation = true;
                     report.push_primary(interpolation.range(), "runes cannot contain interpolation");
                 },
@@ -1173,14 +1274,14 @@ node! { #[from(NODE_ISLAND)] struct Island; }
 impl Island {
     parted!(token::Content);
 
-    fn validate(&self, to: &mut Vec<Report<'_>>) {
+    pub fn validate(&self, to: &mut Vec<Report>) {
         let mut report = Report::error("invalid island");
         let mut reported_control_character = false;
 
         for part in self.parts() {
             match part {
-                InterpolatedPart::Content(content) => {
-                    content.validate_escapes(&mut report);
+                InterpolatedPartRef::Content(content) => {
+                    content.parts(&mut report).count();
 
                     let text = content.text();
 
@@ -1191,7 +1292,7 @@ impl Island {
                     }
                 },
 
-                InterpolatedPart::Interpolation(interpolation) => {
+                InterpolatedPartRef::Interpolation(interpolation) => {
                     interpolation.validate(to);
                 },
 
@@ -1207,28 +1308,39 @@ impl Island {
 
 // NUMBER
 
-/// A Number value. May either be a [`token::Integer`] or a [`token::Float`].
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum NumberValue {
-    Integer(token::Integer),
-    Float(token::Float),
+reffed! {
+    /// A Number value. May either be a [`token::Integer`] or a [`token::Float`].
+    #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+    pub enum NumberValue {
+        Integer(token::Integer),
+        Float(token::Float),
+    }
 }
 
 node! { #[from(NODE_NUMBER)] struct Number; }
 
 impl Number {
     /// Returns the underlying value of this number.
-    pub fn value(&self) -> NumberValue {
-        if let Some(token) = self.first_token().and(|token| token::Integer::cast(token.clone())) {
-            return NumberValue::Integer(token);
+    pub fn value(&self) -> NumberValueRef<'_> {
+        if let Some(token) = self
+            .first_token()
+            .and_then(|token| <&token::Integer>::try_from(token).ok())
+        {
+            return NumberValueRef::Integer(token);
         }
 
-        if let Some(token) = self.first_token().and(|token| token::Float::cast(token.clone())) {
-            return NumberValue::Float(token);
+        if let Some(token) = self
+            .first_token()
+            .and_then(|token| <&token::Float>::try_from(token).ok())
+        {
+            return NumberValueRef::Float(token);
         }
 
         unreachable!()
     }
+
+    #[allow(clippy::ptr_arg)]
+    pub fn validate(&self, _to: &mut Vec<Report>) {}
 }
 
 // IF THEN
@@ -1236,19 +1348,19 @@ impl Number {
 node! { #[from(NODE_IF_THEN)] struct IfThen; }
 
 impl IfThen {
-    token_get! { if_token -> TOKEN_LITERAL_IF }
+    get_token! { if_token -> TOKEN_LITERAL_IF }
 
-    node__get! { condition -> 0 @ Expression }
+    get_node! { condition -> 0 @ ExpressionRef<'_> }
 
-    token_get! { then_token -> TOKEN_LITERAL_THEN }
+    get_token! { then_token -> TOKEN_LITERAL_THEN }
 
-    node__get! { consequence -> 1 @ Expression }
+    get_node! { consequence -> 1 @ ExpressionRef<'_> }
 
-    token_get! { else_token -> Option<TOKEN_LITERAL_ELSE> }
+    get_token! { else_token -> Option<TOKEN_LITERAL_ELSE> }
 
-    node__get! { alternative -> 2 @ Option<Expression> }
+    get_node! { alternative -> 2 @ Option<ExpressionRef<'_>> }
 
-    fn validate(&self, to: &mut Vec<Report<'_>>) {
+    pub fn validate(&self, to: &mut Vec<Report>) {
         self.condition().validate(to);
         self.consequence().validate(to);
 
@@ -1263,22 +1375,22 @@ impl IfThen {
 node! { #[from(NODE_IF_IS)] struct IfIs; }
 
 impl IfIs {
-    token_get! { if_token -> TOKEN_LITERAL_IF }
+    get_token! { if_token -> TOKEN_LITERAL_IF }
 
-    node__get! { expression -> 0 @ Expression }
+    get_node! { expression -> 0 @ ExpressionRef<'_> }
 
-    token_get! { is_token -> TOKEN_LITERAL_IS }
+    get_token! { is_token -> TOKEN_LITERAL_IS }
 
-    node__get! { patterns -> 1 @ Expression }
+    get_node! { patterns -> 1 @ ExpressionRef<'_> }
 
-    fn validate(&self, to: &mut Vec<Report<'_>>) {
+    pub fn validate(&self, to: &mut Vec<Report>) {
         let mut report = Report::error("invalid if-is");
 
         self.expression().validate(to);
 
         for item in self.patterns().same_items() {
             match item {
-                Expression::InfixOperation(operation) if let InfixOperator::Lambda = operation.operator() => {
+                ExpressionRef::InfixOperation(operation) if let InfixOperator::Lambda = operation.operator() => {
                     operation.validate(to);
                 },
 

@@ -13,9 +13,9 @@ pub struct Position {
 #[derive(Debug)]
 pub struct File<'a> {
     // TODO: Use a real island type.
-    pub island: CowStr<'a>,
-    pub path: CowStr<'a>,
-    pub source: CowStr<'a>,
+    pub island: CowStr,
+    pub path: CowStr,
+    pub source: borrow::Cow<'a, str>,
 }
 
 impl File<'_> {

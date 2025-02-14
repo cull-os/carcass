@@ -1,11 +1,17 @@
 use std::{
     fmt::Write as _,
     result,
+    sync::Arc,
 };
 
 use cab_report::{
     Report,
     ReportSeverity,
+};
+use cab_text::{
+    Range,
+    Size,
+    Sizeable,
 };
 use enumset::EnumSet;
 use peekmore::{
@@ -18,88 +24,90 @@ use crate::{
         self,
         *,
     },
-    RedNode,
+    green,
     node,
+    red,
 };
 
-/// A parse result that contains a [`rowan::SyntaxNode`],
-/// contains a [`node::Node`] if it was successfully created,
-/// and a list of [`NodeError`]s.
-#[derive(Debug, Clone)]
-pub struct Parse<'a, N: node::Node> {
-    /// The underlying [`rowan::SyntaxNode`].
-    pub syntax: RedNode,
+/// A parse result that contains a [`red::Node`], a [`node::Expression`] and a
+/// list of [`Report`]s.
+#[derive(Debug)]
+pub struct Parse {
+    /// The underlying [`red::Node`].
+    pub node: red::Node,
 
-    /// The [`node::Node`], if it was successfully created.
-    pub node: Option<N>,
+    /// The [`node::Expression`].
+    pub expression: node::Expression,
 
     /// Issues reported during parsing.
-    pub reports: Vec<Report<'a>>,
+    pub reports: Vec<Report>,
 }
 
-impl<'a, N: node::Node> Parse<'a, N> {
-    /// Returns [`Ok`] with the [`node::Node`] node if there are no error level
-    /// or above reports, returns [`Err`] with the list of reports
+impl Parse {
+    /// Returns [`Ok`] with the [`node::Expression`] if there are no error
+    /// level or above reports, returns [`Err`] with the list of reports
     /// otherwise.
-    pub fn result(self) -> result::Result<N, Vec<Report<'a>>> {
+    pub fn result(self) -> result::Result<node::Expression, Vec<Report>> {
         if self
             .reports
             .iter()
             .all(|report| report.severity < ReportSeverity::Error)
         {
-            Ok(self.node.unwrap())
+            Ok(self.expression)
         } else {
             Err(self.reports)
         }
     }
 }
 
-/// Parses a token iterator and returns a [`Parse`].
-///
-/// Parsing will always fail if the given [`node::Node`] type is not an
-/// expression as we cannot parse sub expressions.
-pub fn parse<'a, I: Iterator<Item = (Kind, &'a str)>, N: node::Node>(tokens: I) -> Parse<'a, N> {
-    let mut noder = Noder::new(tokens);
-
-    noder.node(NODE_ROOT, |this| {
-        this.node_expression(EnumSet::empty());
-        this.next_expect(EnumSet::empty(), EnumSet::empty());
-    });
-
-    let syntax = RedNode::new_root(noder.builder.finish());
-    let node = syntax.first_child().and_then(|node| N::cast(node));
-    let mut reports = noder.reports;
-
-    // Handle unexpected node type. Happens when you
-    // `parse::<node::Foo>(...)` and the input
-    // contains a non-Foo expression.
-    if node.is_none() {
-        let node = syntax.first_child();
-
-        reports.push(unexpected(
-            node.as_ref().map(|node| node.kind()),
-            N::kind(),
-            node.as_ref()
-                .map(|node| node.text_range())
-                .unwrap_or_else(|| rowan::TextRange::empty(0.into())),
-        ));
-    }
-
-    if let Some(node) = &node {
-        node.validate(&mut reports);
-    }
-
-    Parse { syntax, node, reports }
+/// A parse oracle that holds a cache for token deduplication.
+pub struct Oracle {
+    cache: green::NodeCache,
 }
 
-fn unexpected(got: Option<Kind>, mut expected: EnumSet<Kind>, range: rowan::TextRange) -> Report<'static> {
+/// Returns a fresh parse oracle with an empty cache.
+pub fn oracle() -> Oracle {
+    Oracle {
+        cache: green::NodeCache::from_interner(green::interner()),
+    }
+}
+
+impl Oracle {
+    pub fn parse<'a>(&mut self, tokens: impl Iterator<Item = (Kind, &'a str)>) -> Parse {
+        let mut noder = Noder::with_interner_and_tokens(Arc::clone(self.cache.interner()), tokens);
+
+        noder.node(NODE_ROOT, |this| {
+            this.node_expression(EnumSet::empty());
+            this.next_expect(EnumSet::empty(), EnumSet::empty());
+        });
+
+        let (green_node, _) = noder.builder.finish();
+
+        let node = red::Node::new_root_with_resolver(green_node, Arc::clone(self.cache.interner()));
+
+        let expression = node
+            .first_child()
+            .and_then(|node| node::Expression::try_from(node.clone()).ok())
+            .unwrap();
+
+        expression.as_ref().validate(&mut noder.reports);
+
+        Parse {
+            node,
+            expression,
+            reports: noder.reports,
+        }
+    }
+}
+
+fn unexpected(got: Option<Kind>, mut expected: EnumSet<Kind>, range: Range) -> Report {
     let report = match got {
         Some(kind) => Report::error(format!("unexpected {kind}")),
         None => Report::error("unexpected end of file"),
     };
 
     let mut reason = if expected.is_empty() {
-        return report.primary(range.into(), "expected end of file");
+        return report.primary(range, "expected end of file");
     } else {
         String::from("expected ")
     };
@@ -138,39 +146,39 @@ fn unexpected(got: Option<Kind>, mut expected: EnumSet<Kind>, range: rowan::Text
         write!(reason, ", reached end of file").ok();
     }
 
-    report.primary(range.into(), reason)
+    report.primary(range, reason)
 }
 
 type Result<T> = result::Result<T, ()>;
 
 struct Noder<'a, I: Iterator<Item = (Kind, &'a str)>> {
-    builder: rowan::GreenNodeBuilder<'a>,
+    builder: green::NodeBuilder,
 
     tokens: PeekMore<I>,
-    reports: Vec<Report<'a>>,
+    reports: Vec<Report>,
 
-    offset: rowan::TextSize,
+    offset: Size,
 }
 
 impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
-    fn new(tokens: I) -> Self {
+    fn with_interner_and_tokens(interner: green::Interner, tokens: I) -> Self {
         Self {
-            builder: rowan::GreenNodeBuilder::new(),
+            builder: green::NodeBuilder::from_interner(interner),
 
             tokens: tokens.peekmore(),
             reports: Vec::new(),
 
-            offset: 0.into(),
+            offset: Size::new(0u32),
         }
     }
 
-    fn checkpoint(&mut self) -> rowan::Checkpoint {
+    fn checkpoint(&mut self) -> green::Checkpoint {
         self.next_while_trivia();
         self.builder.checkpoint()
     }
 
     fn node<T>(&mut self, kind: Kind, closure: impl FnOnce(&mut Self) -> T) -> T {
-        self.builder.start_node(kind.into());
+        self.builder.start_node(kind);
 
         let result = closure(self);
 
@@ -178,8 +186,8 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
         result
     }
 
-    fn node_from<T>(&mut self, checkpoint: rowan::Checkpoint, kind: Kind, closure: impl FnOnce(&mut Self) -> T) -> T {
-        self.builder.start_node_at(checkpoint, kind.into());
+    fn node_from<T>(&mut self, checkpoint: green::Checkpoint, kind: Kind, closure: impl FnOnce(&mut Self) -> T) -> T {
+        self.builder.start_node_at(checkpoint, kind);
 
         let result = closure(self);
 
@@ -217,15 +225,15 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
     fn next_direct(&mut self) -> Result<Kind> {
         match self.tokens.next() {
             Some((kind, slice)) => {
-                self.offset += rowan::TextSize::of(slice);
-                self.builder.token(kind.into(), slice);
+                self.offset += slice.size();
+                self.builder.token(kind, slice);
 
                 Ok(kind)
             },
 
             None => {
                 self.reports
-                    .push(unexpected(None, EnumSet::empty(), rowan::TextRange::empty(self.offset)));
+                    .push(unexpected(None, EnumSet::empty(), Range::empty(self.offset)));
 
                 Err(())
             },
@@ -257,14 +265,14 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
         condition
     }
 
-    fn next_while(&mut self, mut predicate: impl FnMut(Kind) -> bool) -> rowan::TextRange {
+    fn next_while(&mut self, mut predicate: impl FnMut(Kind) -> bool) -> Range {
         let start = self.offset;
 
         while self.peek().is_some_and(&mut predicate) {
             self.next().unwrap();
         }
 
-        rowan::TextRange::new(start, self.offset)
+        Range::new(start, self.offset)
     }
 
     fn next_expect(&mut self, expected: EnumSet<Kind>, until: EnumSet<Kind>) -> Option<Kind> {
@@ -340,7 +348,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
         self.node(NODE_PATH, |this| {
             loop {
                 match this.peek_direct() {
-                    Some(TOKEN_PATH) => {
+                    Some(TOKEN_PATH_CONTENT) => {
                         this.next_direct().unwrap();
                     },
 
@@ -356,7 +364,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
 
     fn node_identifier(&mut self, until: EnumSet<Kind>) {
         if self.peek() == Some(TOKEN_IDENTIFIER_START) {
-            self.node_stringlike();
+            self.node_delimited();
         } else {
             self.node(NODE_IDENTIFIER, |this| {
                 this.next_expect(Kind::IDENTIFIERS, until);
@@ -364,12 +372,12 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
         }
     }
 
-    fn node_stringlike(&mut self) {
-        let start_of_stringlike = self.checkpoint();
+    fn node_delimited(&mut self) {
+        let start_of_delimited = self.checkpoint();
 
         let (node, end) = self.next().unwrap().try_to_node_and_closing().unwrap();
 
-        self.node_from(start_of_stringlike, node, |this| {
+        self.node_from(start_of_delimited, node, |this| {
             loop {
                 match this.peek() {
                     Some(TOKEN_CONTENT) => {
@@ -393,11 +401,8 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
                     },
 
                     None => {
-                        this.reports.push(unexpected(
-                            None,
-                            TOKEN_CONTENT | end,
-                            rowan::TextRange::empty(this.offset),
-                        ));
+                        this.reports
+                            .push(unexpected(None, TOKEN_CONTENT | end, Range::empty(this.offset)));
                         break;
                     },
                 }
@@ -408,8 +413,8 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
         // special case on island<->path applications that contain literals to be path
         // accesses as islands are just virtual path roots anyway. Normally you cannot
         // use an island as a functor, I must say. That will be a hard error.
-        if node == NODE_ISLAND && self.peek_direct() == Some(TOKEN_PATH) {
-            self.node_from(start_of_stringlike, NODE_INFIX_OPERATION, |this| {
+        if node == NODE_ISLAND && self.peek_direct() == Some(TOKEN_PATH_CONTENT) {
+            self.node_from(start_of_delimited, NODE_INFIX_OPERATION, |this| {
                 this.node_path();
             });
         }
@@ -482,11 +487,11 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
 
             Some(TOKEN_LEFT_CURLYBRACE) => self.node_attribute_list(until),
 
-            Some(TOKEN_PATH) => self.node_path(),
+            Some(TOKEN_PATH_CONTENT) => self.node_path(),
 
             Some(next) if Kind::IDENTIFIERS.contains(next) => self.node_identifier(until),
 
-            Some(TOKEN_STRING_START | TOKEN_RUNE_START | TOKEN_ISLAND_START) => self.node_stringlike(),
+            Some(TOKEN_STRING_START | TOKEN_RUNE_START | TOKEN_ISLAND_START) => self.node_delimited(),
 
             Some(TOKEN_INTEGER | TOKEN_FLOAT) => self.node_number(until),
 

@@ -6,8 +6,8 @@ use crate::Kind::{
 };
 
 /// Returns an iterator of tokens that reference the given string.
-pub fn tokenize(input: &str) -> impl Iterator<Item = (Kind, &str)> {
-    Tokenizer::new(input)
+pub fn tokenize(source: &str) -> impl Iterator<Item = (Kind, &str)> {
+    Tokenizer::new(source)
 }
 
 fn is_valid_initial_identifier_character(c: char) -> bool {
@@ -27,15 +27,15 @@ fn is_valid_path_character(c: char) -> bool {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Context<'a> {
     Path,
-    Stringlike { before: Option<&'a str>, end: char },
-    StringlikeEnd { before: Option<&'a str>, end: char },
+    Delimited { before: Option<&'a str>, end: char },
+    DelimitedEnd { before: Option<&'a str>, end: char },
     InterpolationStart,
     Interpolation { parentheses: usize },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Tokenizer<'a> {
-    input: &'a str,
+    source: &'a str,
     offset: usize,
 
     context: SmallVec<Context<'a>, 4>,
@@ -57,9 +57,9 @@ impl<'a> Iterator for Tokenizer<'a> {
 }
 
 impl<'a> Tokenizer<'a> {
-    fn new(input: &'a str) -> Self {
+    fn new(source: &'a str) -> Self {
         Self {
-            input,
+            source,
             offset: 0,
             context: SmallVec::new(),
         }
@@ -75,7 +75,7 @@ impl<'a> Tokenizer<'a> {
     }
 
     fn remaining(&self) -> &str {
-        &self.input[self.offset..]
+        &self.source[self.offset..]
     }
 
     fn peek_character_nth(&self, n: usize) -> Option<char> {
@@ -119,7 +119,7 @@ impl<'a> Tokenizer<'a> {
     }
 
     fn consumed_since(&self, past_offset: usize) -> &'a str {
-        &self.input[past_offset..self.offset]
+        &self.source[past_offset..self.offset]
     }
 
     fn consume_character(&mut self) -> Option<char> {
@@ -144,7 +144,7 @@ impl<'a> Tokenizer<'a> {
         }
     }
 
-    fn consume_stringlike(&mut self, before: Option<&'a str>, end: char) -> Option<Kind> {
+    fn consume_delimited(&mut self, before: Option<&'a str>, end: char) -> Option<Kind> {
         loop {
             let remaining = self.remaining();
 
@@ -153,8 +153,8 @@ impl<'a> Tokenizer<'a> {
                     .get(before.map(str::len).unwrap_or(0)..)
                     .is_some_and(|remaining| remaining.starts_with(end))
             {
-                self.context_pop(Context::Stringlike { before, end });
-                self.context_push(Context::StringlikeEnd { before, end });
+                self.context_pop(Context::Delimited { before, end });
+                self.context_push(Context::DelimitedEnd { before, end });
 
                 return Some(TOKEN_CONTENT);
             }
@@ -176,7 +176,7 @@ impl<'a> Tokenizer<'a> {
                 },
 
                 None => {
-                    self.context_pop(Context::Stringlike { before, end });
+                    self.context_pop(Context::Delimited { before, end });
                     return Some(TOKEN_CONTENT);
                 },
             }
@@ -218,16 +218,16 @@ impl<'a> Tokenizer<'a> {
                 return self.consume_path();
             },
 
-            Some(Context::Stringlike { before, end }) => {
-                return self.consume_stringlike(before, end);
+            Some(Context::Delimited { before, end }) => {
+                return self.consume_delimited(before, end);
             },
-            Some(Context::StringlikeEnd { before, end }) => {
+            Some(Context::DelimitedEnd { before, end }) => {
                 if let Some(before) = before {
                     assert!(self.try_consume_string(before));
                 }
                 assert_eq!(self.consume_character(), Some(end));
 
-                self.context_pop(Context::StringlikeEnd { before, end });
+                self.context_pop(Context::DelimitedEnd { before, end });
 
                 return Some(match end {
                     '`' => TOKEN_IDENTIFIER_END,
@@ -252,6 +252,7 @@ impl<'a> Tokenizer<'a> {
         Some(match self.consume_character()? {
             c if c.is_whitespace() => {
                 self.consume_while(char::is_whitespace);
+
                 TOKEN_WHITESPACE
             },
 
@@ -357,11 +358,11 @@ impl<'a> Tokenizer<'a> {
             '*' => TOKEN_ASTERISK,
             '^' => TOKEN_CARET,
 
-            '0' if let Some('b' | 'o' | 'x') = self.peek_character() => {
+            '0' if let Some('b' | 'B' | 'o' | 'O' | 'x' | 'X') = self.peek_character() => {
                 let is_valid_digit = match self.consume_character() {
-                    Some('b') => |c: char| matches!(c, '0' | '1' | '_'),
-                    Some('o') => |c: char| matches!(c, '0'..='7' | '_'),
-                    Some('x') => |c: char| c.is_ascii_hexdigit() || c == '_',
+                    Some('b' | 'B') => |c: char| matches!(c, '0' | '1' | '_'),
+                    Some('o' | 'O') => |c: char| matches!(c, '0'..='7' | '_'),
+                    Some('x' | 'X') => |c: char| c.is_ascii_hexdigit() || c == '_',
                     _ => unreachable!(),
                 };
 
@@ -422,34 +423,21 @@ impl<'a> Tokenizer<'a> {
                 return self.consume_kind();
             },
 
-            start @ '`' => {
-                self.context_push(Context::Stringlike {
-                    before: None,
-                    end: start,
-                });
-
-                TOKEN_IDENTIFIER_START
-            },
-
-            start @ '"' => {
+            start @ ('`' | '"' | '\'') => {
                 let equals_len = self.consume_while(|c| c == '=');
                 let equals = self.consumed_since(self.offset - equals_len);
 
-                self.context_push(Context::Stringlike {
+                self.context_push(Context::Delimited {
                     before: Some(equals),
                     end: start,
                 });
 
-                TOKEN_STRING_START
-            },
-
-            start @ '\'' => {
-                self.context_push(Context::Stringlike {
-                    before: None,
-                    end: start,
-                });
-
-                TOKEN_RUNE_START
+                match start {
+                    '\"' => TOKEN_STRING_START,
+                    '\'' => TOKEN_RUNE_START,
+                    '`' => TOKEN_IDENTIFIER_START,
+                    _ => unreachable!(),
+                }
             },
 
             '.' => TOKEN_PERIOD,
@@ -459,7 +447,7 @@ impl<'a> Tokenizer<'a> {
                 .peek_character()
                 .is_some_and(|c| is_valid_initial_identifier_character(c) || c == '\\') =>
             {
-                self.context_push(Context::Stringlike { before: None, end: '>' });
+                self.context_push(Context::Delimited { before: None, end: '>' });
 
                 TOKEN_ISLAND_START
             },
