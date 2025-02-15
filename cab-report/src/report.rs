@@ -1,4 +1,5 @@
 use std::{
+    borrow::Cow,
     cell::RefCell,
     fmt::{
         self,
@@ -47,13 +48,13 @@ impl ReportSeverity {
 #[derive(Debug, Clone)]
 pub struct Report {
     pub severity: ReportSeverity,
-    pub title: CowStr,
+    pub title: Cow<'static, str>,
     pub labels: SmallVec<Label, 2>,
     pub points: SmallVec<Point, 2>,
 }
 
 impl Report {
-    pub fn new(severity: ReportSeverity, title: impl Into<CowStr>) -> Self {
+    pub fn new(severity: ReportSeverity, title: impl Into<Cow<'static, str>>) -> Self {
         into!(title);
 
         Self {
@@ -64,19 +65,19 @@ impl Report {
         }
     }
 
-    pub fn note(title: impl Into<CowStr>) -> Self {
+    pub fn note(title: impl Into<Cow<'static, str>>) -> Self {
         Self::new(ReportSeverity::Note, title)
     }
 
-    pub fn warn(title: impl Into<CowStr>) -> Self {
+    pub fn warn(title: impl Into<Cow<'static, str>>) -> Self {
         Self::new(ReportSeverity::Warn, title)
     }
 
-    pub fn error(title: impl Into<CowStr>) -> Self {
+    pub fn error(title: impl Into<Cow<'static, str>>) -> Self {
         Self::new(ReportSeverity::Error, title)
     }
 
-    pub fn bug(title: impl Into<CowStr>) -> Self {
+    pub fn bug(title: impl Into<Cow<'static, str>>) -> Self {
         Self::new(ReportSeverity::Bug, title)
     }
 
@@ -88,20 +89,20 @@ impl Report {
         self.labels.push(label)
     }
 
-    pub fn push_primary(&mut self, span: impl Into<Span>, text: impl Into<CowStr>) {
+    pub fn push_primary(&mut self, span: impl Into<Span>, text: impl Into<Cow<'static, str>>) {
         self.labels.push(Label::primary(span, text));
     }
 
-    pub fn primary(mut self, span: impl Into<Span>, text: impl Into<CowStr>) -> Self {
+    pub fn primary(mut self, span: impl Into<Span>, text: impl Into<Cow<'static, str>>) -> Self {
         self.push_primary(span, text);
         self
     }
 
-    pub fn push_secondary(&mut self, span: impl Into<Span>, text: impl Into<CowStr>) {
+    pub fn push_secondary(&mut self, span: impl Into<Span>, text: impl Into<Cow<'static, str>>) {
         self.labels.push(Label::secondary(span, text));
     }
 
-    pub fn secondary(mut self, span: impl Into<Span>, text: impl Into<CowStr>) -> Self {
+    pub fn secondary(mut self, span: impl Into<Span>, text: impl Into<Cow<'static, str>>) -> Self {
         self.push_secondary(span, text);
         self
     }
@@ -111,19 +112,19 @@ impl Report {
         self
     }
 
-    pub fn push_tip(&mut self, text: impl Into<CowStr>) {
+    pub fn push_tip(&mut self, text: impl Into<Cow<'static, str>>) {
         self.points.push(Point::tip(text));
     }
 
-    pub fn tip(self, text: impl Into<CowStr>) -> Self {
+    pub fn tip(self, text: impl Into<Cow<'static, str>>) -> Self {
         self.point(Point::tip(text))
     }
 
-    pub fn push_help(&mut self, text: impl Into<CowStr>) {
+    pub fn push_help(&mut self, text: impl Into<Cow<'static, str>>) {
         self.points.push(Point::help(text));
     }
 
-    pub fn help(self, text: impl Into<CowStr>) -> Self {
+    pub fn help(self, text: impl Into<Cow<'static, str>>) -> Self {
         self.point(Point::help(text))
     }
 
@@ -269,7 +270,7 @@ impl fmt::Display for ReportDisplay<'_> {
             Inline(Span),
         }
 
-        type LabelDynamic<'a> = (LabelSpan, &'a CowStr, LabelSeverity);
+        type LabelDynamic<'a> = (LabelSpan, &'a Cow<'static, str>, LabelSeverity);
 
         #[derive(Debug, Clone)]
         struct Line<'a> {

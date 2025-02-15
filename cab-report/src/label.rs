@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use cab_text::{
     Span,
     into,
@@ -36,24 +38,24 @@ impl LabelSeverity {
 pub struct Label {
     pub span: Span,
     pub level: LabelSeverity,
-    pub text: CowStr,
+    pub text: Cow<'static, str>,
 }
 
 impl Label {
     #[inline]
-    pub fn new(span: impl Into<Span>, text: impl Into<CowStr>, level: LabelSeverity) -> Self {
+    pub fn new(span: impl Into<Span>, text: impl Into<Cow<'static, str>>, level: LabelSeverity) -> Self {
         into!(span, text);
 
         Self { span, text, level }
     }
 
     #[inline]
-    pub fn primary(span: impl Into<Span>, text: impl Into<CowStr>) -> Self {
+    pub fn primary(span: impl Into<Span>, text: impl Into<Cow<'static, str>>) -> Self {
         Self::new(span, text, LabelSeverity::Primary)
     }
 
     #[inline]
-    pub fn secondary(span: impl Into<Span>, text: impl Into<CowStr>) -> Self {
+    pub fn secondary(span: impl Into<Span>, text: impl Into<Cow<'static, str>>) -> Self {
         Self::new(span, text, LabelSeverity::Secondary)
     }
 }

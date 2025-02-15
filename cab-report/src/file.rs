@@ -1,8 +1,9 @@
-use std::num;
+use std::{
+    borrow::Cow,
+    num,
+};
 
 use cab_text::Span;
-
-use crate::*;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Position {
@@ -13,9 +14,9 @@ pub struct Position {
 #[derive(Debug)]
 pub struct File<'a> {
     // TODO: Use a real island type.
-    pub island: CowStr,
-    pub path: CowStr,
-    pub source: borrow::Cow<'a, str>,
+    pub island: Cow<'static, str>,
+    pub path: Cow<'static, str>,
+    pub source: Cow<'a, str>,
 }
 
 impl File<'_> {

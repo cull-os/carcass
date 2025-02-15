@@ -6,10 +6,7 @@ mod label;
 mod point;
 mod report;
 
-use std::{
-    borrow,
-    cmp,
-};
+use std::cmp;
 
 use yansi::Paint as _;
 
@@ -19,8 +16,6 @@ pub use crate::{
     point::*,
     report::*,
 };
-
-pub(crate) type CowStr = borrow::Cow<'static, str>;
 
 pub fn init(level_filter: log::LevelFilter) {
     yansi::whenever(yansi::Condition::TTY_AND_COLOR);
