@@ -1,5 +1,5 @@
 use cab_text::{
-    Range,
+    Span,
     into,
 };
 
@@ -34,26 +34,26 @@ impl LabelSeverity {
 
 #[derive(Debug, Clone)]
 pub struct Label {
-    pub range: Range,
+    pub span: Span,
     pub level: LabelSeverity,
     pub text: CowStr,
 }
 
 impl Label {
     #[inline]
-    pub fn new(range: impl Into<Range>, text: impl Into<CowStr>, level: LabelSeverity) -> Self {
-        into!(range, text);
+    pub fn new(span: impl Into<Span>, text: impl Into<CowStr>, level: LabelSeverity) -> Self {
+        into!(span, text);
 
-        Self { range, text, level }
+        Self { span, text, level }
     }
 
     #[inline]
-    pub fn primary(range: impl Into<Range>, text: impl Into<CowStr>) -> Self {
-        Self::new(range, text, LabelSeverity::Primary)
+    pub fn primary(span: impl Into<Span>, text: impl Into<CowStr>) -> Self {
+        Self::new(span, text, LabelSeverity::Primary)
     }
 
     #[inline]
-    pub fn secondary(range: impl Into<Range>, text: impl Into<CowStr>) -> Self {
-        Self::new(range, text, LabelSeverity::Secondary)
+    pub fn secondary(span: impl Into<Span>, text: impl Into<CowStr>) -> Self {
+        Self::new(span, text, LabelSeverity::Secondary)
     }
 }

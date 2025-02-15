@@ -98,31 +98,31 @@ impl From<cstree::text::TextSize> for Size {
     }
 }
 
-// SIZEABLE
+// INTO SIZE
 
-pub trait Sizeable {
+pub trait IntoSize {
     fn size(&self) -> Size;
 }
 
-impl Sizeable for u8 {
+impl IntoSize for u8 {
     fn size(&self) -> Size {
         1u32.into()
     }
 }
 
-impl Sizeable for char {
+impl IntoSize for char {
     fn size(&self) -> Size {
         self.len_utf8().into()
     }
 }
 
-impl Sizeable for &'_ str {
+impl IntoSize for &'_ str {
     fn size(&self) -> Size {
         self.len().into()
     }
 }
 
-impl Sizeable for &'_ String {
+impl IntoSize for &'_ String {
     fn size(&self) -> Size {
         self.len().into()
     }

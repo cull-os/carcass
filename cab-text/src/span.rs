@@ -10,12 +10,12 @@ use crate::{
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Range {
+pub struct Span {
     pub start: Size,
     pub end: Size,
 }
 
-impl fmt::Display for Range {
+impl fmt::Display for Span {
     fn fmt(&self, writer: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use fmt::Debug as _;
 
@@ -23,7 +23,7 @@ impl fmt::Display for Range {
     }
 }
 
-impl Range {
+impl Span {
     #[inline]
     pub fn new(start: impl Into<Size>, end: impl Into<Size>) -> Self {
         into!(start, end);
@@ -69,7 +69,7 @@ impl Range {
     }
 }
 
-impl Range {
+impl Span {
     #[inline]
     pub fn len(self) -> Size {
         self.start - self.end
@@ -81,7 +81,7 @@ impl Range {
     }
 }
 
-impl Range {
+impl Span {
     #[inline]
     pub fn contains(self, that: impl Into<Self>) -> bool {
         into!(that);
@@ -119,12 +119,12 @@ impl Range {
 
 // U32 CONVERSIONS
 
-impl From<Range> for ops::Range<u32> {
-    fn from(this: Range) -> Self {
+impl From<Span> for ops::Range<u32> {
+    fn from(this: Span) -> Self {
         *this.start..*this.end
     }
 }
-impl From<ops::Range<u32>> for Range {
+impl From<ops::Range<u32>> for Span {
     fn from(that: ops::Range<u32>) -> Self {
         Self {
             start: that.start.into(),
@@ -135,13 +135,13 @@ impl From<ops::Range<u32>> for Range {
 
 // USIZE CONVERSIONS
 
-impl From<Range> for ops::Range<usize> {
-    fn from(this: Range) -> Self {
+impl From<Span> for ops::Range<usize> {
+    fn from(this: Span) -> Self {
         this.start.into()..this.end.into()
     }
 }
 
-impl From<ops::Range<usize>> for Range {
+impl From<ops::Range<usize>> for Span {
     fn from(that: ops::Range<usize>) -> Self {
         Self {
             start: that.start.into(),
@@ -152,13 +152,13 @@ impl From<ops::Range<usize>> for Range {
 
 // TEXTRANGE CONVERSIONS
 
-impl From<Range> for cstree::text::TextRange {
-    fn from(this: Range) -> Self {
+impl From<Span> for cstree::text::TextRange {
+    fn from(this: Span) -> Self {
         cstree::text::TextRange::new(this.start.into(), this.end.into())
     }
 }
 
-impl From<cstree::text::TextRange> for Range {
+impl From<cstree::text::TextRange> for Span {
     fn from(that: cstree::text::TextRange) -> Self {
         Self {
             start: that.start().into(),
@@ -167,20 +167,20 @@ impl From<cstree::text::TextRange> for Range {
     }
 }
 
-// RANGEABLE
+// INTO SPAN
 
-pub trait Rangeable {
-    fn range(&self) -> Range;
+pub trait IntoSpan {
+    fn span(&self) -> Span;
 }
 
-impl<S: cstree::Syntax> Rangeable for cstree::syntax::SyntaxToken<S> {
-    fn range(&self) -> Range {
+impl<S: cstree::Syntax> IntoSpan for cstree::syntax::SyntaxToken<S> {
+    fn span(&self) -> Span {
         self.text_range().into()
     }
 }
 
-impl<S: cstree::Syntax> Rangeable for cstree::syntax::SyntaxNode<S> {
-    fn range(&self) -> Range {
+impl<S: cstree::Syntax> IntoSpan for cstree::syntax::SyntaxNode<S> {
+    fn span(&self) -> Span {
         self.text_range().into()
     }
 }

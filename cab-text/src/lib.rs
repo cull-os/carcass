@@ -1,9 +1,9 @@
-mod range;
 mod size;
+mod span;
 
 pub use crate::{
-    range::*,
     size::*,
+    span::*,
 };
 
 // These two are kind of random but I'll include them here anyway.

@@ -9,8 +9,8 @@ use std::{
 };
 
 use cab_text::{
-    Range,
     Size,
+    Span,
     into,
 };
 use cab_wrap::{
@@ -88,21 +88,21 @@ impl Report {
         self.labels.push(label)
     }
 
-    pub fn push_primary(&mut self, range: impl Into<Range>, text: impl Into<CowStr>) {
-        self.labels.push(Label::primary(range, text));
+    pub fn push_primary(&mut self, span: impl Into<Span>, text: impl Into<CowStr>) {
+        self.labels.push(Label::primary(span, text));
     }
 
-    pub fn primary(mut self, range: impl Into<Range>, text: impl Into<CowStr>) -> Self {
-        self.push_primary(range, text);
+    pub fn primary(mut self, span: impl Into<Span>, text: impl Into<CowStr>) -> Self {
+        self.push_primary(span, text);
         self
     }
 
-    pub fn push_secondary(&mut self, range: impl Into<Range>, text: impl Into<CowStr>) {
-        self.labels.push(Label::secondary(range, text));
+    pub fn push_secondary(&mut self, span: impl Into<Span>, text: impl Into<CowStr>) {
+        self.labels.push(Label::secondary(span, text));
     }
 
-    pub fn secondary(mut self, range: impl Into<Range>, text: impl Into<CowStr>) -> Self {
-        self.push_secondary(range, text);
+    pub fn secondary(mut self, span: impl Into<Span>, text: impl Into<CowStr>) -> Self {
+        self.push_secondary(span, text);
         self
     }
 
@@ -145,33 +145,33 @@ fn number_width(number: u32) -> usize {
     }
 }
 
-fn extend_to_line_boundaries(source: &str, mut range: Range) -> Range {
-    while *range.start > 0
+fn extend_to_line_boundaries(source: &str, mut span: Span) -> Span {
+    while *span.start > 0
         && source
             .as_bytes()
-            .get(*range.start as usize - 1)
+            .get(*span.start as usize - 1)
             .is_some_and(|&c| c != b'\n')
     {
-        range.start -= 1u32;
+        span.start -= 1u32;
     }
 
-    while source.as_bytes().get(*range.end as usize).is_some_and(|&c| c != b'\n') {
-        range.end += 1u32;
+    while source.as_bytes().get(*span.end as usize).is_some_and(|&c| c != b'\n') {
+        span.end += 1u32;
     }
 
-    range
+    span
 }
 
-/// Given a list of ranges which refer to the given content and their associated
+/// Given a list of spans which refer to the given content and their associated
 /// levels (primary and secondary), resolves the colors for every part, giving
 /// the primary color precedence over the secondary color in an overlap.
 pub(crate) fn resolve_style<'a>(
     content: &'a str,
-    styles: &'a mut [(Range, LabelSeverity)],
+    styles: &'a mut [(Span, LabelSeverity)],
     severity: ReportSeverity,
 ) -> impl Iterator<Item = yansi::Painted<&'a str>> + 'a {
-    styles.sort_by(|(a_range, a_severity), (b_range, b_severity)| {
-        match (a_range.start.cmp(&b_range.start), a_severity, b_severity) {
+    styles.sort_by(|(a_span, a_severity), (b_span, b_severity)| {
+        match (a_span.start.cmp(&b_span.start), a_severity, b_severity) {
             (cmp::Ordering::Equal, LabelSeverity::Primary, LabelSeverity::Secondary) => cmp::Ordering::Less,
             (cmp::Ordering::Equal, LabelSeverity::Secondary, LabelSeverity::Primary) => cmp::Ordering::Greater,
             (ordering, ..) => ordering,
@@ -186,10 +186,10 @@ pub(crate) fn resolve_style<'a>(
             let current_style = styles[style_offset..]
                 .iter()
                 .enumerate()
-                .find(|(_, (range, _))| range.start <= offset && offset < range.end);
+                .find(|(_, (span, _))| span.start <= offset && offset < span.end);
 
             match current_style {
-                Some((relative_offset, (range, level))) => {
+                Some((relative_offset, (span, level))) => {
                     style_offset += relative_offset;
 
                     let next_primary = (*level == LabelSeverity::Secondary)
@@ -197,22 +197,22 @@ pub(crate) fn resolve_style<'a>(
                             styles[style_offset..]
                                 .iter()
                                 .enumerate()
-                                .take_while(|(_, (r, _))| r.start <= range.end)
+                                .take_while(|(_, (r, _))| r.start <= span.end)
                                 .find(|(_, (r, label))| *label == LabelSeverity::Primary && r.start > offset)
                         })
                         .flatten();
 
                     match next_primary {
-                        Some((relative_offset, (range, ..))) => {
+                        Some((relative_offset, (span, ..))) => {
                             style_offset += relative_offset;
 
-                            yield content[Range::std(offset, range.start)].paint(level.style_in(severity));
-                            offset = range.start;
+                            yield content[Span::std(offset, span.start)].paint(level.style_in(severity));
+                            offset = span.start;
                         },
 
                         None => {
-                            yield content[Range::std(offset, range.end)].paint(level.style_in(severity));
-                            offset = range.end;
+                            yield content[Span::std(offset, span.end)].paint(level.style_in(severity));
+                            offset = span.end;
                         },
                     }
                 },
@@ -221,14 +221,14 @@ pub(crate) fn resolve_style<'a>(
                     let (relative_offset, next_offset) = styles[style_offset..]
                         .iter()
                         .enumerate()
-                        .filter(|(_, (range, _))| range.start > offset)
-                        .map(|(relative_offset, (range, ..))| (relative_offset, range.start))
+                        .filter(|(_, (span, _))| span.start > offset)
+                        .map(|(relative_offset, (span, ..))| (relative_offset, span.start))
                         .next()
                         .unwrap_or((styles.len() - style_offset, content.len().into()));
 
                     style_offset += relative_offset;
 
-                    yield (&content[Range::std(offset, next_offset)]).new();
+                    yield (&content[Span::std(offset, next_offset)]).new();
                     offset = next_offset;
                 },
             }
@@ -264,19 +264,19 @@ impl fmt::Display for ReportDisplay<'_> {
         type Strike = (StrikeId, StrikeStatus, LabelSeverity);
 
         #[derive(Debug, Clone, PartialEq, Eq)]
-        enum LabelRange {
+        enum LabelSpan {
             FromStart(ops::RangeTo<Size>),
-            Inline(Range),
+            Inline(Span),
         }
 
-        type LabelDynamic<'a> = (LabelRange, &'a CowStr, LabelSeverity);
+        type LabelDynamic<'a> = (LabelSpan, &'a CowStr, LabelSeverity);
 
         #[derive(Debug, Clone)]
         struct Line<'a> {
             number: u32,
 
             content: &'a str,
-            styles: SmallVec<(Range, LabelSeverity), 4>,
+            styles: SmallVec<(Span, LabelSeverity), 4>,
 
             strikes: SmallVec<Strike, 3>,
             labels: SmallVec<LabelDynamic<'a>, 2>,
@@ -286,7 +286,7 @@ impl fmt::Display for ReportDisplay<'_> {
             .labels
             .clone()
             .into_iter()
-            .map(|label| (file.position_of(label.range), label))
+            .map(|label| (file.position_of(label.span), label))
             .collect();
 
         labels.sort_by(|((a_start, a_end), _), ((b_start, b_end), _)| {
@@ -308,10 +308,10 @@ impl fmt::Display for ReportDisplay<'_> {
         for (label_index, ((label_start, label_end), label)) in labels.iter().enumerate() {
             let label_is_multiline = label_start.line != label_end.line;
 
-            let label_range_extended = extend_to_line_boundaries(&file.source, label.range);
+            let label_span_extended = extend_to_line_boundaries(&file.source, label.span);
 
             for (line_number, line) in
-                (label_start.line.get()..).zip(file.source[label_range_extended.as_std()].split('\n'))
+                (label_start.line.get()..).zip(file.source[label_span_extended.as_std()].split('\n'))
             {
                 let line = match lines.iter_mut().find(|line| line.number == line_number) {
                     Some(item) => item,
@@ -332,16 +332,16 @@ impl fmt::Display for ReportDisplay<'_> {
                 };
 
                 if !label_is_multiline {
-                    let left = label_range_extended.start;
+                    let left = label_span_extended.start;
 
-                    let start = label.range.start;
-                    let end = label.range.end;
+                    let start = label.span.start;
+                    let end = label.span.end;
 
-                    let range = Range::new(start - left, end - left);
+                    let span = Span::new(start - left, end - left);
 
-                    line.labels.push((LabelRange::Inline(range), &label.text, label.level));
+                    line.labels.push((LabelSpan::Inline(span), &label.text, label.level));
 
-                    line.styles.push((range, label.level));
+                    line.styles.push((span, label.level));
 
                     continue;
                 }
@@ -363,34 +363,34 @@ impl fmt::Display for ReportDisplay<'_> {
 
                 match (line_is_first, line_is_last) {
                     (true, false) => {
-                        let left = label_range_extended.start;
+                        let left = label_span_extended.start;
 
-                        let start = label.range.start;
+                        let start = label.span.start;
                         let end = file.source[start.into()..]
                             .find('\n')
                             .map_or(file.source.len().into(), |index| start + index);
 
-                        let range = Range::new(start - left, end - left);
+                        let span = Span::new(start - left, end - left);
 
-                        line.styles.push((range, label.level));
+                        line.styles.push((span, label.level));
                     },
 
                     (false, false) => {
-                        line.styles.push((Range::up_to(line.content.len()), label.level));
+                        line.styles.push((Span::up_to(line.content.len()), label.level));
                     },
 
                     (false, true) => {
-                        let right = label_range_extended.end;
+                        let right = label_span_extended.end;
 
                         let start = Size::new(0u32);
-                        let end = Size::new(line.content.len()) - (right - label.range.end);
+                        let end = Size::new(line.content.len()) - (right - label.span.end);
 
-                        let range = Range::new(start, end);
+                        let span = Span::new(start, end);
 
                         line.labels
-                            .push((LabelRange::FromStart(..range.end), &label.text, label.level));
+                            .push((LabelSpan::FromStart(..span.end), &label.text, label.level));
 
-                        line.styles.push((range, label.level));
+                        line.styles.push((span, label.level));
                     },
 
                     _ => unreachable!(),
@@ -562,10 +562,10 @@ impl fmt::Display for ReportDisplay<'_> {
                     *line_number.borrow_mut() = Some((line.number, false));
                 }
 
-                for (label_range, label_text, label_severity) in line.labels.iter().rev() {
-                    match label_range {
-                        LabelRange::FromStart(label_range) => {
-                            let label_range_end = (*label_range.end).min(60) as usize;
+                for (label_span, label_text, label_severity) in line.labels.iter().rev() {
+                    match label_span {
+                        LabelSpan::FromStart(label_span) => {
+                            let label_span_end = (*label_span.end).min(60) as usize;
 
                             let &(strike_id, _, strike_severity) = strike_prefix
                                 .borrow()
@@ -592,7 +592,7 @@ impl fmt::Display for ReportDisplay<'_> {
                             let mut wrote = false;
                             indent!(
                                 writer,
-                                strike_prefix_width + 1 + label_range_end + 1,
+                                strike_prefix_width + 1 + label_span_end + 1,
                                 with = |writer: &mut dyn fmt::Write| {
                                     for strike in strike_prefix.borrow().iter().take(if !wrote {
                                         strike_index
@@ -622,7 +622,7 @@ impl fmt::Display for ReportDisplay<'_> {
                                         strike_prefix_width - strike_index - 1
                                     } else {
                                         0
-                                    } + label_range_end
+                                    } + label_span_end
                                     {
                                         write!(
                                             writer,
@@ -642,7 +642,7 @@ impl fmt::Display for ReportDisplay<'_> {
                                     wrote = true;
                                     strike_prefix.borrow_mut()[strike_index] = None;
 
-                                    Ok(strike_prefix_width + 1 + label_range_end)
+                                    Ok(strike_prefix_width + 1 + label_span_end)
                                 }
                             );
 
@@ -652,8 +652,8 @@ impl fmt::Display for ReportDisplay<'_> {
                             )?;
                         },
 
-                        LabelRange::Inline(label_range) => {
-                            let label_range_end = (*label_range.end).min(60) as usize;
+                        LabelSpan::Inline(label_span) => {
+                            let label_span_end = (*label_span.end).min(60) as usize;
 
                             // DEDENT: "<strike-prefix> "
                             dedent!(writer);
@@ -680,11 +680,11 @@ impl fmt::Display for ReportDisplay<'_> {
                             );
 
                             // INDENT: "<prefix-spaces>"
-                            indent!(writer, *label_range.start as u16);
+                            indent!(writer, *label_span.start as u16);
 
                             // INDENT: "<horizontal><left-to-bottom> "
                             // INDENT: "            <top--to-bottom> "
-                            let underline_width = label_range_end - *label_range.start as usize;
+                            let underline_width = label_span_end - *label_span.start as usize;
                             let mut wrote = false;
                             indent!(
                                 writer,

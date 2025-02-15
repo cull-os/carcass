@@ -10,8 +10,8 @@ use cab_report::{
     Report,
 };
 use cab_text::{
-    Range,
-    Rangeable,
+    IntoSpan,
+    Span,
 };
 use num::Num as _;
 
@@ -208,7 +208,7 @@ impl Content {
                         reported = true;
 
                         report.push_label(Label::primary(
-                            Range::at(self.range().start + offset, 1 + next.is_some() as u32),
+                            Span::at(self.span().start + offset, 1 + next.is_some() as u32),
                             "invalid escape",
                         ));
 

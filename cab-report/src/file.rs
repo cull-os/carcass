@@ -1,6 +1,6 @@
 use std::num;
 
-use cab_text::Range;
+use cab_text::Span;
 
 use crate::*;
 
@@ -19,8 +19,8 @@ pub struct File<'a> {
 }
 
 impl File<'_> {
-    pub fn position_of(&self, range: Range) -> (Position, Position) {
-        let range: std::ops::Range<usize> = range.into();
+    pub fn position_of(&self, span: Span) -> (Position, Position) {
+        let range: std::ops::Range<usize> = span.into();
 
         let mut line = num::NonZeroU32::MIN;
         let mut column = 1;

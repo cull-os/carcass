@@ -7,8 +7,8 @@ use std::{
 
 use cab_report::Report;
 use cab_text::{
-    Range,
-    Rangeable,
+    IntoSpan,
+    Span,
 };
 use paste::paste;
 use smallvec::SmallVec;
@@ -340,7 +340,7 @@ impl<'a> ExpressionRef<'a> {
                     invalid => {
                         to.push(
                             Report::error("invalid select pattern")
-                                .primary(invalid.range(), "left operand must be an identifier"),
+                                .primary(invalid.span(), "left operand must be an identifier"),
                         )
                     },
                 }
@@ -361,11 +361,11 @@ impl<'a> ExpressionRef<'a> {
             _ => {
                 let mut report = Report::error("arithmetic patterns cannot have multiple binds");
 
-                let mut bind_ranges = SmallVec::new();
-                self.validate_pattern_arithmetic(&mut bind_ranges, to);
+                let mut bind_spans = SmallVec::new();
+                self.validate_pattern_arithmetic(&mut bind_spans, to);
 
-                for bind_range in bind_ranges {
-                    report.push_primary(bind_range, "bind");
+                for bind_span in bind_spans {
+                    report.push_primary(bind_span, "bind");
                 }
 
                 if report.labels.len() > 1 {
@@ -375,7 +375,7 @@ impl<'a> ExpressionRef<'a> {
         }
     }
 
-    pub fn validate_pattern_arithmetic(self, bind_ranges: &mut SmallVec<Range, 4>, reports: &mut Vec<Report>) {
+    pub fn validate_pattern_arithmetic(self, bind_spans: &mut SmallVec<Span, 4>, reports: &mut Vec<Report>) {
         match self {
             ExpressionRef::Parenthesis(parenthesis) => {
                 parenthesis.expression().validate_pattern(reports);
@@ -388,20 +388,19 @@ impl<'a> ExpressionRef<'a> {
                 | InfixOperator::Power
                 | InfixOperator::Division = operation.operator() =>
             {
-                operation.left().validate_pattern_arithmetic(bind_ranges, reports);
-                operation.right().validate_pattern_arithmetic(bind_ranges, reports);
+                operation.left().validate_pattern_arithmetic(bind_spans, reports);
+                operation.right().validate_pattern_arithmetic(bind_spans, reports);
             },
 
             ExpressionRef::InfixOperation(_) => {
                 reports.push(
-                    Report::error("non-arithmetic infix operators are not valid patterns")
-                        .primary(self.range(), "here"),
+                    Report::error("non-arithmetic infix operators are not valid patterns").primary(self.span(), "here"),
                 );
             },
 
             ExpressionRef::Identifier(identifier) => {
                 identifier.validate(reports);
-                bind_ranges.push(identifier.range());
+                bind_spans.push(identifier.span());
             },
 
             ExpressionRef::SString(string) => {
@@ -414,7 +413,7 @@ impl<'a> ExpressionRef<'a> {
 
             _ => {
                 reports.push(Report::error("invalid pattern").primary(
-                    self.range(),
+                    self.span(),
                     format!("{kind} is not a valid pattern element", kind = self.kind()),
                 ));
             },
@@ -485,7 +484,7 @@ impl List {
         {
             to.push(
                 Report::error("inner expression of list cannot be sequence")
-                    .primary(operation.range(), "consider parenthesizing this"),
+                    .primary(operation.span(), "consider parenthesizing this"),
             );
         }
 
@@ -517,7 +516,7 @@ impl AttributeList {
                 ExpressionRef::InfixOperation(operation) if let InfixOperator::Sequence = operation.operator() => {
                     to.push(
                         Report::error("unexpected sequence operator inside attribute list").primary(
-                            operation.range(),
+                            operation.span(),
                             "sequence operator has lower binding power and will consume everything",
                         ),
                     );
@@ -531,7 +530,7 @@ impl AttributeList {
                     identifier.validate(to);
                 },
 
-                invalid => to.push(Report::error("invalid attribute").primary(invalid.range(), "here")),
+                invalid => to.push(Report::error("invalid attribute").primary(invalid.span(), "here")),
             }
         }
     }
@@ -778,7 +777,7 @@ impl InfixOperation {
                         if *same_operator != operator {
                             to.push(
                                 Report::error("invalid same-operand")
-                                    .primary(item.range(), "operand")
+                                    .primary(item.span(), "operand")
                                     .help(
                                         "all same-operands must be of matching type: either all lambdas or all binds",
                                     ),
@@ -790,7 +789,7 @@ impl InfixOperation {
                     } else {
                         to.push(
                             Report::error("invalid same-operand")
-                                .primary(item.range(), "operand")
+                                .primary(item.span(), "operand")
                                 .help("all same-operands must either be lambdas or binds"),
                         );
                     }
@@ -825,8 +824,8 @@ impl InfixOperation {
                     {
                         to.push(
                             Report::error("application and pipe operators do not associate")
-                                .secondary(self.range(), "this")
-                                .primary(operation.range(), "does not associate with this"),
+                                .secondary(self.span(), "this")
+                                .primary(operation.span(), "does not associate with this"),
                         );
                     }
                 }
@@ -847,7 +846,7 @@ impl InfixOperation {
             invalid => {
                 to.push(
                     Report::error("left operand of a this-expression must be an identifier")
-                        .primary(invalid.range(), "left operand"),
+                        .primary(invalid.span(), "left operand"),
                 );
             },
         }
@@ -918,11 +917,11 @@ impl<T: Token> InterpolatedPartRef<'_, T> {
         matches!(self, Self::Delimiter(_))
     }
 
-    pub fn range(&self) -> Range {
+    pub fn span(&self) -> Span {
         match self {
-            Self::Delimiter(delimiter) => delimiter.range(),
-            Self::Content(content) => content.range(),
-            Self::Interpolation(interpolation) => interpolation.range(),
+            Self::Delimiter(delimiter) => delimiter.span(),
+            Self::Content(content) => content.span(),
+            Self::Interpolation(interpolation) => interpolation.span(),
         }
     }
 }
@@ -1002,7 +1001,7 @@ impl IdentifierQuoted {
 
                     if !reported_control_character && text.chars().any(char::is_control) {
                         reported_control_character = true;
-                        report.push_primary(content.range(), "contains control characters");
+                        report.push_primary(content.span(), "contains control characters");
                         report.push_help(
                             "quoted identifiers cannot contain control characters (non-escaped newlines, tabs, ...)",
                         );
@@ -1090,12 +1089,12 @@ impl SString {
             .peekable();
 
         let mut string_is_multiline = false;
-        let mut string_first_line_range = None;
-        let mut string_last_line_range = None;
+        let mut string_first_line_span = None;
+        let mut string_last_line_span = None;
 
         let mut indentation: Option<char> = None;
 
-        let mut previous_interpolation_range = None;
+        let mut previous_span = None;
         while let Some((part_index, part)) = parts.next() {
             let mut part_is_multiline = true;
             let part_is_first = part_index == 0;
@@ -1105,12 +1104,12 @@ impl SString {
                 InterpolatedPartRef::Interpolation(interpolation) => {
                     interpolation.validate(to);
 
-                    let range = interpolation.range();
+                    let span = interpolation.span();
 
                     if part_is_first {
-                        string_first_line_range = Some(range);
+                        string_first_line_span = Some(span);
                     } else if part_is_last {
-                        string_last_line_range = Some(range);
+                        string_last_line_span = Some(span);
                     }
                 },
 
@@ -1133,20 +1132,20 @@ impl SString {
 
                         if line_is_firstest {
                             if !line.trim().is_empty() {
-                                string_first_line_range = Some(Range::at(content.range().start, line.trim_end().len()));
+                                string_first_line_span = Some(Span::at(content.span().start, line.trim_end().len()));
                             } else if text.trim().is_empty()
                                 && let Some((_, part)) = parts.peek()
                                 && !part.is_delimiter()
                             {
-                                string_first_line_range = Some(part.range());
+                                string_first_line_span = Some(part.span());
                             }
                         } else if line_is_lastest {
                             if !line.trim().is_empty() {
                                 let last_line_length = line.trim_start().len();
 
-                                string_last_line_range = Some(Range::at_end(content.range().end, last_line_length));
-                            } else if !part_is_multiline && let Some(range) = previous_interpolation_range {
-                                string_last_line_range = Some(range);
+                                string_last_line_span = Some(Span::at_end(content.span().end, last_line_length));
+                            } else if !part_is_multiline && let Some(span) = previous_span {
+                                string_last_line_span = Some(span);
                             }
                         }
 
@@ -1155,7 +1154,7 @@ impl SString {
                         // Ignore firstest and lastest lines.
                         !(line_is_firstest || line_is_lastest)
                             // Ignore lines right after an interpolation end.
-                            && !(previous_interpolation_range.is_some() && line_is_first)
+                            && !(previous_span.is_some() && line_is_first)
                         {
                             for c in line.chars() {
                                 if !c.is_whitespace() {
@@ -1170,7 +1169,7 @@ impl SString {
                                 if !reported_mixed_indentation && indentation != c {
                                     reported_mixed_indentation = true;
                                     report.push_primary(
-                                        self.range(),
+                                        self.span(),
                                         "strings cannot mix different kinds of whitespace in indentation",
                                     );
                                 }
@@ -1183,7 +1182,7 @@ impl SString {
             }
 
             if !part.is_delimiter() {
-                previous_interpolation_range = Some(part.range());
+                previous_span = Some(part.span());
             }
 
             if part_is_multiline {
@@ -1192,8 +1191,8 @@ impl SString {
         }
 
         if string_is_multiline {
-            for range in [string_first_line_range, string_last_line_range].into_iter().flatten() {
-                report.push_primary(range, "multiline strings' first and last lines must be empty");
+            for span in [string_first_line_span, string_last_line_span].into_iter().flatten() {
+                report.push_primary(span, "multiline strings' first and last lines must be empty");
             }
         }
 
@@ -1234,13 +1233,13 @@ impl Rune {
                         }
                     } {
                         reported_too_long = true;
-                        report.push_primary(content.range(), "invalid rune literal length");
+                        report.push_primary(content.span(), "invalid rune literal length");
                     }
 
                     if !reported_control_character && text.chars().any(char::is_control) {
                         reported_control_character = true;
                         report.push_primary(
-                            content.range(),
+                            content.span(),
                             "runes cannot contain control characters (non-escaped newlines, tabs, ...)",
                         );
                     }
@@ -1248,7 +1247,7 @@ impl Rune {
 
                 InterpolatedPartRef::Interpolation(interpolation) if !reported_interpolation => {
                     reported_interpolation = true;
-                    report.push_primary(interpolation.range(), "runes cannot contain interpolation");
+                    report.push_primary(interpolation.span(), "runes cannot contain interpolation");
                 },
 
                 _ => continue,
@@ -1258,7 +1257,7 @@ impl Rune {
         }
 
         if !got_content {
-            report.push_primary(self.range(), "runes cannot be empty");
+            report.push_primary(self.span(), "runes cannot be empty");
         }
 
         if !report.is_empty() {
@@ -1287,7 +1286,7 @@ impl Island {
 
                     if !reported_control_character && text.chars().any(char::is_control) {
                         reported_control_character = true;
-                        report.push_primary(content.range(), "here");
+                        report.push_primary(content.span(), "here");
                         report.push_tip("islands cannot contain control characters (non-escaped newlines, tabs, ...)");
                     }
                 },
@@ -1395,7 +1394,7 @@ impl IfIs {
                 },
 
                 invalid => {
-                    report.push_primary(invalid.range(), "invalid branch");
+                    report.push_primary(invalid.span(), "invalid branch");
                     report.push_help("all if-is branches must be lambdas");
                 },
             }

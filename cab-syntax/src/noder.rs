@@ -9,9 +9,9 @@ use cab_report::{
     ReportSeverity,
 };
 use cab_text::{
-    Range,
+    IntoSize,
     Size,
-    Sizeable,
+    Span,
 };
 use enumset::EnumSet;
 use peekmore::{
@@ -100,14 +100,14 @@ impl Oracle {
     }
 }
 
-fn unexpected(got: Option<Kind>, mut expected: EnumSet<Kind>, range: Range) -> Report {
+fn unexpected(got: Option<Kind>, mut expected: EnumSet<Kind>, span: Span) -> Report {
     let report = match got {
         Some(kind) => Report::error(format!("unexpected {kind}")),
         None => Report::error("unexpected end of file"),
     };
 
     let mut reason = if expected.is_empty() {
-        return report.primary(range, "expected end of file");
+        return report.primary(span, "expected end of file");
     } else {
         String::from("expected ")
     };
@@ -146,7 +146,7 @@ fn unexpected(got: Option<Kind>, mut expected: EnumSet<Kind>, range: Range) -> R
         write!(reason, ", reached end of file").ok();
     }
 
-    report.primary(range, reason)
+    report.primary(span, reason)
 }
 
 type Result<T> = result::Result<T, ()>;
@@ -233,7 +233,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
 
             None => {
                 self.reports
-                    .push(unexpected(None, EnumSet::empty(), Range::empty(self.offset)));
+                    .push(unexpected(None, EnumSet::empty(), Span::empty(self.offset)));
 
                 Err(())
             },
@@ -265,14 +265,14 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
         condition
     }
 
-    fn next_while(&mut self, mut predicate: impl FnMut(Kind) -> bool) -> Range {
+    fn next_while(&mut self, mut predicate: impl FnMut(Kind) -> bool) -> Span {
         let start = self.offset;
 
         while self.peek().is_some_and(&mut predicate) {
             self.next().unwrap();
         }
 
-        Range::new(start, self.offset)
+        Span::new(start, self.offset)
     }
 
     fn next_expect(&mut self, expected: EnumSet<Kind>, until: EnumSet<Kind>) -> Option<Kind> {
@@ -283,12 +283,12 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
             Some(next) if expected.contains(next) => Some(self.next().unwrap()),
 
             unexpected => {
-                let unexpected_range = self.next_while(|next| !(until | expected).contains(next));
+                let unexpected_span = self.next_while(|next| !(until | expected).contains(next));
 
                 self.node_from(expected_at, NODE_ERROR, |_| {});
 
                 self.reports
-                    .push(self::unexpected(unexpected, expected, unexpected_range));
+                    .push(self::unexpected(unexpected, expected, unexpected_span));
 
                 let next = self.peek()?;
 
@@ -402,7 +402,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
 
                     None => {
                         this.reports
-                            .push(unexpected(None, TOKEN_CONTENT | end, Range::empty(this.offset)));
+                            .push(unexpected(None, TOKEN_CONTENT | end, Span::empty(this.offset)));
                         break;
                     },
                 }
@@ -500,7 +500,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
             unexpected => {
                 // Consume until the next token is either the limit, an
                 // expression token or an operator.
-                let unexpected_range = self.next_while(|kind| {
+                let unexpected_span = self.next_while(|kind| {
                     !((until | Kind::EXPRESSIONS).contains(kind)
                         || node::PrefixOperator::try_from(kind).is_ok()
                         || node::InfixOperator::try_from(kind).is_ok_and(|operator| operator.is_token_owning())
@@ -510,7 +510,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
                 self.node_from(expected_at, NODE_ERROR, |_| {});
 
                 self.reports
-                    .push(self::unexpected(unexpected, Kind::EXPRESSIONS, unexpected_range));
+                    .push(self::unexpected(unexpected, Kind::EXPRESSIONS, unexpected_span));
             },
         }
     }
