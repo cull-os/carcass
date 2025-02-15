@@ -1,7 +1,4 @@
-use std::{
-    borrow::Cow,
-    num,
-};
+use std::num;
 
 use cab_text::Span;
 
@@ -11,16 +8,8 @@ pub struct Position {
     pub column: u32,
 }
 
-#[derive(Debug)]
-pub struct File<'a> {
-    // TODO: Use a real island type.
-    pub island: Cow<'static, str>,
-    pub path: Cow<'static, str>,
-    pub source: Cow<'a, str>,
-}
-
-impl File<'_> {
-    pub fn position_of(&self, span: Span) -> (Position, Position) {
+impl Position {
+    pub fn of(span: Span, source: &str) -> (Position, Position) {
         let range: std::ops::Range<usize> = span.into();
 
         let mut line = num::NonZeroU32::MIN;
@@ -29,7 +18,7 @@ impl File<'_> {
         let mut start = Position { line, column };
         let mut end = Position { line, column };
 
-        for (index, c) in self.source.char_indices() {
+        for (index, c) in source.char_indices() {
             if index > range.end {
                 break;
             }
@@ -38,7 +27,6 @@ impl File<'_> {
                 start.line = line;
                 start.column = column;
             }
-
             if c == '\n' {
                 line = line.saturating_add(1);
                 column = 0;

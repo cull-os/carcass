@@ -7,8 +7,13 @@ use std::{
     },
     iter,
     ops,
+    sync::Arc,
 };
 
+use cab_island::{
+    Entry,
+    Leaf,
+};
 use cab_text::{
     Size,
     Span,
@@ -128,14 +133,21 @@ impl Report {
         self.point(Point::help(text))
     }
 
-    pub fn with<'a>(&'a self, file: &'a File) -> impl fmt::Display {
-        ReportDisplay { report: self, file }
+    pub async fn with(&self, leaf: Arc<dyn Leaf>) -> impl fmt::Display {
+        let bytes = leaf.clone().read().await.unwrap();
+
+        ReportDisplay {
+            report: self,
+            leaf,
+            source: String::from_utf8(bytes.as_ref().to_vec()).unwrap(),
+        }
     }
 }
 
 struct ReportDisplay<'a> {
     report: &'a Report,
-    file: &'a File<'a>,
+    leaf: Arc<dyn Leaf>,
+    source: String,
 }
 
 fn number_width(number: u32) -> usize {
@@ -250,7 +262,7 @@ impl fmt::Display for ReportDisplay<'_> {
         const STYLE_HEADER_PATH: yansi::Style = yansi::Style::new().green();
         const STYLE_HEADER_POSITION: yansi::Style = yansi::Style::new().blue();
 
-        let Self { report, file } = self;
+        let Self { report, leaf, source } = self;
 
         #[derive(Debug, Clone, Copy, PartialEq, Eq)]
         struct StrikeId(u8);
@@ -287,7 +299,7 @@ impl fmt::Display for ReportDisplay<'_> {
             .labels
             .clone()
             .into_iter()
-            .map(|label| (file.position_of(label.span), label))
+            .map(|label| (Position::of(label.span, source), label))
             .collect();
 
         labels.sort_by(|((a_start, a_end), _), ((b_start, b_end), _)| {
@@ -309,10 +321,9 @@ impl fmt::Display for ReportDisplay<'_> {
         for (label_index, ((label_start, label_end), label)) in labels.iter().enumerate() {
             let label_is_multiline = label_start.line != label_end.line;
 
-            let label_span_extended = extend_to_line_boundaries(&file.source, label.span);
+            let label_span_extended = extend_to_line_boundaries(source, label.span);
 
-            for (line_number, line) in
-                (label_start.line.get()..).zip(file.source[label_span_extended.as_std()].split('\n'))
+            for (line_number, line) in (label_start.line.get()..).zip(source[label_span_extended.as_std()].split('\n'))
             {
                 let line = match lines.iter_mut().find(|line| line.number == line_number) {
                     Some(item) => item,
@@ -367,9 +378,9 @@ impl fmt::Display for ReportDisplay<'_> {
                         let left = label_span_extended.start;
 
                         let start = label.span.start;
-                        let end = file.source[start.into()..]
+                        let end = source[start.into()..]
                             .find('\n')
-                            .map_or(file.source.len().into(), |index| start + index);
+                            .map_or(source.len().into(), |index| start + index);
 
                         let span = Span::new(start - left, end - left);
 
@@ -472,7 +483,7 @@ impl fmt::Display for ReportDisplay<'_> {
             );
 
             STYLE_HEADER_PATH.fmt_prefix(writer)?;
-            write!(writer, "{island}{path}", island = file.island, path = file.path)?;
+            <dyn Entry>::display(Arc::<dyn Leaf>::clone(leaf), writer)?;
             STYLE_HEADER_PATH.fmt_suffix(writer)?;
 
             let line_number = label_start.line.paint(STYLE_HEADER_POSITION);

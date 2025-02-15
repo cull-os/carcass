@@ -8,12 +8,13 @@ repository.workspace  = true
 version.workspace     = true
 
 [dependencies]
+cab-error.path                = "../cab-error"
+cab-island.path               = "../cab-island"
 cab-report.path               = "../cab-report"
 cab-syntax.path               = "../cab-syntax"
 cab-text.path                 = "../cab-text"
 cab-wrap.path                 = "../cab-wrap"
 clap.workspace                = true
-clap-stdin.workspace          = true
 clap-verbosity-flag.workspace = true
 log.workspace                 = true
 tokio.workspace               = true

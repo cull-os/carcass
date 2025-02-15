@@ -1,10 +1,17 @@
 use std::{
-    io,
-    io::Write as _,
-    process,
+    io::{
+        self,
+        Write as _,
+    },
+    sync::Arc,
 };
 
 use cab::{
+    error::{
+        self,
+        Contextful as _,
+    },
+    island,
     report,
     syntax,
 };
@@ -28,9 +35,9 @@ enum Command {
         #[command(subcommand)]
         command: Dump,
 
-        /// The file to dump.
+        /// The file to dump. If set to '-', stdin is read.
         #[clap(default_value = "-", global = true)]
-        file: clap_stdin::FileOrStdin,
+        path: String,
     },
 }
 
@@ -51,7 +58,7 @@ enum Dump {
 }
 
 #[tokio::main]
-async fn main() {
+async fn main() -> error::Termination {
     let cli = Cli::parse();
 
     report::init(cli.verbosity.log_level_filter());
@@ -59,44 +66,43 @@ async fn main() {
     let (mut out, mut err) = (io::stdout(), io::stderr());
 
     match cli.command {
-        Command::Dump { file, command } => {
-            let name = file.filename().to_owned();
+        Command::Dump { path, command } => {
+            let file: Arc<dyn island::Leaf> = if path == "-" {
+                Arc::new(island::stdin())
+            } else {
+                Arc::new(island::fs(&path)?)
+            };
 
-            let contents = file.contents().unwrap_or_else(|error| {
-                log::error!("failed to read file: {error}");
-                process::exit(1);
-            });
+            let source = file
+                .clone()
+                .read()
+                .await
+                .with_context(|| format!("failed to read file '{path}'"))?
+                .to_vec();
+
+            let source =
+                String::from_utf8(source).with_context(|| format!("failed to convert '{path}' to an UTF-8 string"))?;
 
             match command {
                 Dump::Token { color } => {
-                    for (kind, slice) in syntax::tokenize(&contents) {
-                        let result = if color {
+                    for (kind, slice) in syntax::tokenize(&source) {
+                        if color {
                             let style = syntax::COLORS[kind as usize];
 
                             write!(out, "{slice}", slice = slice.paint(style))
                         } else {
                             writeln!(out, "{kind:?} {slice:?}")
-                        };
-
-                        result.unwrap_or_else(|error| {
-                            log::error!("failed to write to stdout: {error}");
-                            process::exit(1);
-                        });
+                        }
+                        .context("failed to write to stdout")?;
                     }
                 },
 
                 Dump::Syntax | Dump::Parenthesize => {
                     let oracle = syntax::oracle();
-                    let parse = oracle.parse(syntax::tokenize(&contents));
-
-                    let file = report::File {
-                        island: name.into(),
-                        path: "".into(),
-                        source: contents.as_str().into(),
-                    };
+                    let parse = oracle.parse(syntax::tokenize(&source));
 
                     for report in parse.reports {
-                        writeln!(err, "{report}", report = report.with(&file)).ok();
+                        writeln!(err, "{report}", report = report.with(file.clone()).await).ok();
                     }
 
                     if let Dump::Syntax = command {
@@ -104,12 +110,11 @@ async fn main() {
                     } else {
                         syntax::format::parenthesize(&mut out, parse.expression.as_ref())
                     }
-                    .unwrap_or_else(|error| {
-                        log::error!("failed to write to stdout: {error}");
-                        process::exit(1);
-                    });
+                    .context("failed to write to stdout")?;
                 },
             }
         },
     }
+
+    error::Termination::success()
 }

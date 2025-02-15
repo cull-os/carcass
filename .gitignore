@@ -5,6 +5,12 @@
 !cab/
 !cab/src/
 
+!cab-error/
+!cab-error/src/
+
+!cab-island/
+!cab-island/src/
+
 !cab-report/
 !cab-report/src/
 
