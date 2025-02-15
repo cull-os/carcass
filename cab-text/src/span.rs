@@ -38,6 +38,7 @@ impl Span {
         Self { start, end }.into()
     }
 
+    #[inline]
     pub fn as_std(self) -> ops::Range<usize> {
         self.into()
     }
