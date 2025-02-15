@@ -22,7 +22,7 @@ use libfuzzer_sys::{
 use yansi::Paint as _;
 
 fuzz_target!(|data: &str| -> Corpus {
-    let mut oracle = syntax::oracle();
+    let oracle = syntax::oracle();
     let parse = oracle.parse(syntax::tokenize(data));
 
     for report in &parse.reports {

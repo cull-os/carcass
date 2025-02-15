@@ -86,7 +86,7 @@ async fn main() {
                 },
 
                 Dump::Syntax | Dump::Parenthesize => {
-                    let mut oracle = syntax::oracle();
+                    let oracle = syntax::oracle();
                     let parse = oracle.parse(syntax::tokenize(&contents));
 
                     let file = report::File {

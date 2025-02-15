@@ -73,7 +73,7 @@ pub fn oracle() -> Oracle {
 }
 
 impl Oracle {
-    pub fn parse<'a>(&mut self, tokens: impl Iterator<Item = (Kind, &'a str)>) -> Parse {
+    pub fn parse<'a>(&self, tokens: impl Iterator<Item = (Kind, &'a str)>) -> Parse {
         let mut noder = Noder::with_interner_and_tokens(Arc::clone(self.cache.interner()), tokens);
 
         noder.node(NODE_ROOT, |this| {

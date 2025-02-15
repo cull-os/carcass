@@ -77,7 +77,7 @@ fn actual_main() -> Result<(), Box<dyn error::Error>> {
 
             let diff_tool = which("difft").or_else(|_| which("diff"))?;
 
-            let mut oracle = syntax::oracle();
+            let oracle = syntax::oracle();
 
             for (data_file, expected_syntax_file) in test_data {
                 let data = fs::read_to_string(&data_file)?;
