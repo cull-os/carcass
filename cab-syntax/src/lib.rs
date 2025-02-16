@@ -156,10 +156,10 @@ pub enum Kind {
     #[static_text(".")]
     TOKEN_PERIOD,
     #[display("'{{'")]
-    #[static_text("{{")]
+    #[static_text("{")]
     TOKEN_LEFT_CURLYBRACE,
     #[display("'}}'")]
-    #[static_text("}}")]
+    #[static_text("}")]
     TOKEN_RIGHT_CURLYBRACE,
 
     #[display("'!='")]
