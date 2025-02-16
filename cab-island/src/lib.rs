@@ -13,10 +13,7 @@ mod fs;
 pub use fs::*;
 
 mod stdin;
-use futures::future;
 pub use stdin::*;
-
-type Shared<T> = future::Shared<future::BoxFuture<'static, T>>;
 
 #[async_trait]
 pub trait Entry: fmt::Display + Send + Sync + 'static {
@@ -38,22 +35,30 @@ pub trait Entry: fmt::Display + Send + Sync + 'static {
 }
 
 impl dyn Entry {
-    pub fn display(self: Arc<Self>, writer: &mut dyn fmt::Write) -> fmt::Result {
-        let mut entries = vec![self];
+    pub fn to_display(self: Arc<Self>) -> impl fmt::Display {
+        struct EntryDisplay(Arc<dyn Entry>);
 
-        while let Some(parent) = entries.last().unwrap().parent() {
-            entries.push(parent);
-        }
+        impl fmt::Display for EntryDisplay {
+            fn fmt(&self, writer: &mut fmt::Formatter<'_>) -> fmt::Result {
+                let mut entries = vec![self.0.clone()];
 
-        for (index, entry) in entries.iter().rev().enumerate() {
-            if index == 0 {
-                write!(writer, "<{entry}>")?;
-            } else {
-                write!(writer, "/{entry}")?;
+                while let Some(parent) = entries.last().unwrap().parent() {
+                    entries.push(parent);
+                }
+
+                for (index, entry) in entries.iter().rev().enumerate() {
+                    if index == 0 {
+                        write!(writer, "<{entry}>")?;
+                    } else {
+                        write!(writer, "/{entry}")?;
+                    }
+                }
+
+                Ok(())
             }
         }
 
-        Ok(())
+        EntryDisplay(self)
     }
 }
 

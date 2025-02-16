@@ -483,7 +483,8 @@ impl fmt::Display for ReportDisplay<'_> {
             );
 
             STYLE_HEADER_PATH.fmt_prefix(writer)?;
-            <dyn Entry>::display(Arc::<dyn Leaf>::clone(leaf), writer)?;
+            let entry: Arc<dyn Entry> = leaf.clone();
+            write!(writer, "{leaf}", leaf = entry.to_display())?;
             STYLE_HEADER_PATH.fmt_suffix(writer)?;
 
             let line_number = label_start.line.paint(STYLE_HEADER_POSITION);

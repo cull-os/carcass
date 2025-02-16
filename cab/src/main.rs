@@ -15,6 +15,7 @@ use cab::{
     report,
     syntax,
 };
+use cab_island::Entry;
 use clap::Parser as _;
 use yansi::Paint as _;
 
@@ -67,21 +68,27 @@ async fn main() -> error::Termination {
 
     match cli.command {
         Command::Dump { path, command } => {
-            let file: Arc<dyn island::Leaf> = if path == "-" {
+            let leaf: Arc<dyn island::Leaf> = if path == "-" {
                 Arc::new(island::stdin())
             } else {
                 Arc::new(island::fs(&path)?)
             };
 
-            let source = file
+            let source = leaf
                 .clone()
                 .read()
                 .await
                 .with_context(|| format!("failed to read file '{path}'"))?
                 .to_vec();
 
-            let source =
-                String::from_utf8(source).with_context(|| format!("failed to convert '{path}' to an UTF-8 string"))?;
+            let entry: Arc<dyn Entry> = leaf.clone();
+
+            let source = String::from_utf8(source).with_context(|| {
+                format!(
+                    "failed to convert '{leaf}' to an UTF-8 string",
+                    leaf = entry.to_display()
+                )
+            })?;
 
             match command {
                 Dump::Token { color } => {
@@ -102,7 +109,7 @@ async fn main() -> error::Termination {
                     let parse = oracle.parse(syntax::tokenize(&source));
 
                     for report in parse.reports {
-                        writeln!(err, "{report}", report = report.with(file.clone()).await).ok();
+                        writeln!(err, "{report}", report = report.with(leaf.clone()).await).ok();
                     }
 
                     if let Dump::Syntax = command {
