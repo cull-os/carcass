@@ -13,10 +13,6 @@ use cab_error::{
     Contextful,
     bail,
 };
-use futures::{
-    FutureExt,
-    future::BoxFuture,
-};
 use tokio::{
     fs,
     sync::RwLock,
@@ -40,7 +36,7 @@ pub fn fs(path: impl AsRef<Path>) -> Result<impl Leaf + CollectionPeek> {
     Ok(FsEntry {
         location: FsEntryLocation::Root { path },
 
-        content: Arc::new(move |parent, name| content(parent, name)),
+        content2: RwLock::new(None),
     })
 }
 
@@ -57,7 +53,8 @@ enum FsEntryLocation {
 
 struct FsEntry {
     location: FsEntryLocation,
-    content: Arc<dyn Send + Sync + Fn(Arc<Self>, Option<&str>) -> BoxFuture<'static, Result<FsEntryContent>>>,
+
+    content2: RwLock<Option<Result<FsEntryContent>>>,
 }
 
 impl fmt::Display for FsEntry {
@@ -66,28 +63,6 @@ impl fmt::Display for FsEntry {
             FsEntryLocation::Root { path } => write!(writer, "fs:{path}", path = path.to_str().ok_or(fmt::Error)?),
             FsEntryLocation::Child { name, .. } => write!(writer, "{name}"),
         }
-    }
-}
-
-impl FsEntry {
-    fn path(&self) -> PathBuf {
-        let mut this = self;
-
-        let mut parts = Vec::new();
-
-        loop {
-            match &this.location {
-                FsEntryLocation::Root { path } => break parts.push(path.as_path()),
-
-                FsEntryLocation::Child { parent, name, .. } => {
-                    this = parent;
-
-                    parts.push(Path::new(name.as_str()));
-                },
-            }
-        }
-
-        PathBuf::from_iter(parts.into_iter().rev())
     }
 }
 
@@ -115,7 +90,7 @@ impl Entry for FsEntry {
 #[async_trait]
 impl Leaf for FsEntry {
     async fn read(self: Arc<Self>) -> Result<Bytes> {
-        match (self.content)(self.clone(), self.name()).await? {
+        match self.clone().content().await? {
             FsEntryContent::Leaf(bytes) => Ok(bytes),
 
             FsEntryContent::CollectionPeek(_) => {
@@ -145,7 +120,7 @@ impl Collection for FsEntry {
 #[async_trait]
 impl CollectionPeek for FsEntry {
     async fn list(self: Arc<Self>) -> Result<Arc<[Arc<dyn Entry>]>> {
-        match (self.content)(self.clone(), self.name()).await? {
+        match self.clone().content().await? {
             FsEntryContent::CollectionPeek(entries) => Ok(entries),
 
             FsEntryContent::Leaf(_) => {
@@ -159,91 +134,107 @@ impl CollectionPeek for FsEntry {
     }
 }
 
-fn content(parent: Arc<FsEntry>, name: Option<&str>) -> BoxFuture<'static, Result<FsEntryContent>> {
-    let content = RwLock::new(None::<Result<FsEntryContent>>);
+impl FsEntry {
+    fn path(&self) -> PathBuf {
+        let mut this = self;
 
-    let mut path = parent.path();
+        let mut parts = Vec::new();
 
-    if let Some(name) = name {
-        path.push(name);
+        loop {
+            match &this.location {
+                FsEntryLocation::Root { path } => break parts.push(path.as_path()),
+
+                FsEntryLocation::Child { parent, name, .. } => {
+                    this = parent;
+
+                    parts.push(Path::new(name.as_str()));
+                },
+            }
+        }
+
+        PathBuf::from_iter(parts.into_iter().rev())
     }
 
-    async move {
-        if let Some(content) = content.read().await.as_ref() {
+    async fn content(self: Arc<Self>) -> Result<FsEntryContent> {
+        if let Some(content) = self.content2.read().await.as_ref() {
             return content.clone();
         }
 
-        let result = content_eager(parent.clone(), path).await;
+        let result = self.clone().content_eager().await;
 
-        *content.write().await = Some(result.clone());
+        *self.content2.write().await = Some(result.clone());
 
         result
     }
-    .boxed()
-}
 
-async fn content_eager(parent: Arc<FsEntry>, path: PathBuf) -> Result<FsEntryContent> {
-    let metadata = fs::metadata(&path)
-        .await
-        .with_context(|| format!("failed to get metadata of '{path}'", path = path.to_string_lossy()))?;
+    async fn content_eager(self: Arc<Self>) -> Result<FsEntryContent> {
+        let path = self.path();
 
-    if metadata.is_file() || metadata.is_symlink() {
-        return content_file_eager(path).await;
+        let metadata = fs::metadata(&path)
+            .await
+            .with_context(|| format!("failed to get metadata of '{path}'", path = path.to_string_lossy()))?;
+
+        if metadata.is_file() || metadata.is_symlink() {
+            return self.content_file_eager().await;
+        }
+
+        if metadata.is_dir() {
+            return self.content_dir_eager().await;
+        }
+
+        bail!(
+            "unsupported file type of entry at '{path}'",
+            path = path.to_string_lossy(),
+        );
     }
 
-    if metadata.is_dir() {
-        return content_dir_eager(parent, path).await;
+    async fn content_file_eager(self: Arc<Self>) -> Result<FsEntryContent> {
+        let path = self.path();
+
+        let bytes = fs::read(&path)
+            .await
+            .with_context(|| format!("failed to read '{path}'", path = path.to_string_lossy()))?;
+
+        Ok(FsEntryContent::Leaf(Bytes::from(bytes)))
     }
 
-    bail!(
-        "unsupported file type of entry at '{path}'",
-        path = path.to_string_lossy(),
-    );
-}
+    async fn content_dir_eager(self: Arc<Self>) -> Result<FsEntryContent> {
+        let path = self.path();
 
-async fn content_file_eager(path: PathBuf) -> Result<FsEntryContent> {
-    let bytes = fs::read(&path)
-        .await
-        .with_context(|| format!("failed to read '{path}'", path = path.to_string_lossy()))?;
+        let mut read_dir = fs::read_dir(&path)
+            .await
+            .with_context(|| format!("failed to list '{path}'", path = path.to_string_lossy()))?;
 
-    Ok(FsEntryContent::Leaf(Bytes::from(bytes)))
-}
+        let mut entries = Vec::<Arc<dyn Entry>>::new();
 
-async fn content_dir_eager(parent: Arc<FsEntry>, path: PathBuf) -> Result<FsEntryContent> {
-    let mut read_dir = fs::read_dir(&path)
-        .await
-        .with_context(|| format!("failed to list '{path}'", path = path.to_string_lossy()))?;
+        while let Some(entry) = read_dir
+            .next_entry()
+            .await
+            .with_context(|| format!("failed to read entry under '{path}'", path = path.to_string_lossy()))?
+        {
+            let name = entry.file_name();
 
-    let mut entries = Vec::<Arc<dyn Entry>>::new();
+            let mut path = path.clone();
+            path.push(&name);
 
-    while let Some(entry) = read_dir
-        .next_entry()
-        .await
-        .with_context(|| format!("failed to read entry under '{path}'", path = path.to_string_lossy()))?
-    {
-        let name = entry.file_name();
+            entries.push(Arc::new(FsEntry {
+                location: FsEntryLocation::Child {
+                    parent: self.clone(),
+                    name: name
+                        .to_str()
+                        .with_context(|| {
+                            format!(
+                                "failed to convert name of '{name}' under '{path}' to valid UTF-8",
+                                name = name.to_string_lossy(),
+                                path = path.to_string_lossy(),
+                            )
+                        })?
+                        .to_owned(),
+                },
+                content2: RwLock::new(None),
+            }))
+        }
 
-        let mut path = path.clone();
-        path.push(&name);
-
-        entries.push(Arc::new(FsEntry {
-            location: FsEntryLocation::Child {
-                parent: parent.clone(),
-                name: name
-                    .to_str()
-                    .with_context(|| {
-                        format!(
-                            "failed to convert name of '{name}' under '{path}' to valid UTF-8",
-                            name = name.to_string_lossy(),
-                            path = path.to_string_lossy(),
-                        )
-                    })?
-                    .to_owned(),
-            },
-
-            content: Arc::new(move |parent, name| content(parent, name)),
-        }))
+        Ok(FsEntryContent::CollectionPeek(entries.into()))
     }
-
-    Ok(FsEntryContent::CollectionPeek(entries.into()))
 }
