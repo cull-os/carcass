@@ -38,9 +38,9 @@ pub fn fs(path: impl AsRef<Path>) -> Result<impl Leaf + CollectionPeek> {
         .with_context(|| format!("failed to canonicalize path '{path}'", path = path.to_string_lossy()))?;
 
     Ok(FsEntry {
-        location: FsEntryLocation::Root { path: path.clone() },
+        location: FsEntryLocation::Root { path },
 
-        content: Arc::new(move |parent| content(parent, path.clone())),
+        content: Arc::new(move |parent, name| content(parent, name)),
     })
 }
 
@@ -57,7 +57,7 @@ enum FsEntryLocation {
 
 struct FsEntry {
     location: FsEntryLocation,
-    content: Arc<dyn Send + Sync + Fn(Arc<Self>) -> BoxFuture<'static, Result<FsEntryContent>>>,
+    content: Arc<dyn Send + Sync + Fn(Arc<Self>, Option<&str>) -> BoxFuture<'static, Result<FsEntryContent>>>,
 }
 
 impl fmt::Display for FsEntry {
@@ -115,7 +115,7 @@ impl Entry for FsEntry {
 #[async_trait]
 impl Leaf for FsEntry {
     async fn read(self: Arc<Self>) -> Result<Bytes> {
-        match (self.content)(self.clone()).await? {
+        match (self.content)(self.clone(), self.name()).await? {
             FsEntryContent::Leaf(bytes) => Ok(bytes),
 
             FsEntryContent::CollectionPeek(_) => {
@@ -145,7 +145,7 @@ impl Collection for FsEntry {
 #[async_trait]
 impl CollectionPeek for FsEntry {
     async fn list(self: Arc<Self>) -> Result<Arc<[Arc<dyn Entry>]>> {
-        match (self.content)(self.clone()).await? {
+        match (self.content)(self.clone(), self.name()).await? {
             FsEntryContent::CollectionPeek(entries) => Ok(entries),
 
             FsEntryContent::Leaf(_) => {
@@ -159,8 +159,14 @@ impl CollectionPeek for FsEntry {
     }
 }
 
-fn content(parent: Arc<FsEntry>, path: PathBuf) -> BoxFuture<'static, Result<FsEntryContent>> {
+fn content(parent: Arc<FsEntry>, name: Option<&str>) -> BoxFuture<'static, Result<FsEntryContent>> {
     let content = RwLock::new(None::<Result<FsEntryContent>>);
+
+    let mut path = parent.path();
+
+    if let Some(name) = name {
+        path.push(name);
+    }
 
     async move {
         if let Some(content) = content.read().await.as_ref() {
@@ -235,7 +241,7 @@ async fn content_dir_eager(parent: Arc<FsEntry>, path: PathBuf) -> Result<FsEntr
                     .to_owned(),
             },
 
-            content: Arc::new(move |parent| content(parent, path.clone())),
+            content: Arc::new(move |parent, name| content(parent, name)),
         }))
     }
 
