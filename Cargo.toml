@@ -12,6 +12,7 @@ version     = "0.0.1"
 
 [workspace.dependencies]
 anyhow = "1.0.95"
+async-once-cell = "0.5.4"
 async-trait = "0.1.86"
 bytes = "1.10.0"
 clap = { version = "4.5.4", features = [ "derive" ] }

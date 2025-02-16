@@ -8,9 +8,11 @@ repository.workspace  = true
 version.workspace     = true
 
 [dependencies]
-async-trait.workspace = true
-bytes.workspace       = true
-cab-error.path        = "../cab-error"
-futures.workspace     = true
-log.workspace         = true
-tokio.workspace       = true
+cab-error.path = "../cab-error"
+
+async-once-cell.workspace = true
+async-trait.workspace     = true
+bytes.workspace           = true
+futures.workspace         = true
+log.workspace             = true
+tokio.workspace           = true

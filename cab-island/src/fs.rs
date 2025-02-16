@@ -7,16 +7,14 @@ use std::{
     sync::Arc,
 };
 
+use async_once_cell::OnceCell;
 use async_trait::async_trait;
 use bytes::Bytes;
 use cab_error::{
-    Contextful,
+    Contextful as _,
     bail,
 };
-use tokio::{
-    fs,
-    sync::RwLock,
-};
+use tokio::fs;
 
 use crate::{
     Collection,
@@ -36,7 +34,7 @@ pub fn fs(path: impl AsRef<Path>) -> Result<impl Leaf + CollectionPeek> {
     Ok(FsEntry {
         location: FsEntryLocation::Root { path },
 
-        content2: RwLock::new(None),
+        content: OnceCell::new(),
     })
 }
 
@@ -54,7 +52,7 @@ enum FsEntryLocation {
 struct FsEntry {
     location: FsEntryLocation,
 
-    content2: RwLock<Option<Result<FsEntryContent>>>,
+    content: OnceCell<Result<FsEntryContent>>,
 }
 
 impl fmt::Display for FsEntry {
@@ -90,7 +88,7 @@ impl Entry for FsEntry {
 #[async_trait]
 impl Leaf for FsEntry {
     async fn read(self: Arc<Self>) -> Result<Bytes> {
-        match self.clone().content().await? {
+        match self.content().await? {
             FsEntryContent::Leaf(bytes) => Ok(bytes),
 
             FsEntryContent::CollectionPeek(_) => {
@@ -109,7 +107,7 @@ impl Collection for FsEntry {
     async fn entry(self: Arc<Self>, name: &str) -> Result<Option<Arc<dyn Entry>>> {
         for entry in self.list().await?.iter() {
             if entry.name() == Some(name) {
-                return Ok(Some(Arc::clone(entry)));
+                return Ok(Some(entry.clone()));
             }
         }
 
@@ -120,7 +118,7 @@ impl Collection for FsEntry {
 #[async_trait]
 impl CollectionPeek for FsEntry {
     async fn list(self: Arc<Self>) -> Result<Arc<[Arc<dyn Entry>]>> {
-        match self.clone().content().await? {
+        match self.content().await? {
             FsEntryContent::CollectionPeek(entries) => Ok(entries),
 
             FsEntryContent::Leaf(_) => {
@@ -155,19 +153,11 @@ impl FsEntry {
         PathBuf::from_iter(parts.into_iter().rev())
     }
 
-    async fn content(self: Arc<Self>) -> Result<FsEntryContent> {
-        if let Some(content) = self.content2.read().await.as_ref() {
-            return content.clone();
-        }
-
-        let result = self.clone().content_eager().await;
-
-        *self.content2.write().await = Some(result.clone());
-
-        result
+    async fn content(self: &Arc<Self>) -> Result<FsEntryContent> {
+        self.content.get_or_init(self.content_eager()).await.clone()
     }
 
-    async fn content_eager(self: Arc<Self>) -> Result<FsEntryContent> {
+    async fn content_eager(self: &Arc<Self>) -> Result<FsEntryContent> {
         let path = self.path();
 
         let metadata = fs::metadata(&path)
@@ -175,11 +165,11 @@ impl FsEntry {
             .with_context(|| format!("failed to get metadata of '{path}'", path = path.to_string_lossy()))?;
 
         if metadata.is_file() || metadata.is_symlink() {
-            return self.content_file_eager().await;
+            return self.content_file_eager(&path).await;
         }
 
         if metadata.is_dir() {
-            return self.content_dir_eager().await;
+            return self.content_dir_eager(&path).await;
         }
 
         bail!(
@@ -188,20 +178,16 @@ impl FsEntry {
         );
     }
 
-    async fn content_file_eager(self: Arc<Self>) -> Result<FsEntryContent> {
-        let path = self.path();
-
-        let bytes = fs::read(&path)
+    async fn content_file_eager(self: &Arc<Self>, path: &Path) -> Result<FsEntryContent> {
+        let bytes = fs::read(path)
             .await
             .with_context(|| format!("failed to read '{path}'", path = path.to_string_lossy()))?;
 
         Ok(FsEntryContent::Leaf(Bytes::from(bytes)))
     }
 
-    async fn content_dir_eager(self: Arc<Self>) -> Result<FsEntryContent> {
-        let path = self.path();
-
-        let mut read_dir = fs::read_dir(&path)
+    async fn content_dir_eager(self: &Arc<Self>, path: &Path) -> Result<FsEntryContent> {
+        let mut read_dir = fs::read_dir(path)
             .await
             .with_context(|| format!("failed to list '{path}'", path = path.to_string_lossy()))?;
 
@@ -213,9 +199,6 @@ impl FsEntry {
             .with_context(|| format!("failed to read entry under '{path}'", path = path.to_string_lossy()))?
         {
             let name = entry.file_name();
-
-            let mut path = path.clone();
-            path.push(&name);
 
             entries.push(Arc::new(FsEntry {
                 location: FsEntryLocation::Child {
@@ -231,7 +214,7 @@ impl FsEntry {
                         })?
                         .to_owned(),
                 },
-                content2: RwLock::new(None),
+                content: OnceCell::new(),
             }))
         }
 
