@@ -20,6 +20,11 @@ use std::{
 
 use yansi::Paint as _;
 
+#[doc(hidden)]
+pub mod __private {
+    pub use anyhow;
+}
+
 // ERROR
 
 #[derive(thiserror::Error, Clone)]
@@ -114,13 +119,10 @@ impl Termination {
 
 // MACROS
 
-#[doc(hidden)]
-pub use anyhow;
-
 #[macro_export]
 macro_rules! error {
     ($($t:tt)*) => {
-        $crate::Error(::std::sync::Arc::new($crate::anyhow::anyhow!($($t)*)))
+        $crate::Error(::std::sync::Arc::new($crate::__private::anyhow::anyhow!($($t)*)))
     };
 }
 

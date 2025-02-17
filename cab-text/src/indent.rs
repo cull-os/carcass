@@ -4,7 +4,7 @@ use crate::__private::LINE_WIDTH;
 
 #[doc(hidden)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum IndentPlace {
+pub enum __IndentPlace {
     Start,
     Middle,
     End,
@@ -14,18 +14,18 @@ type IndentWith<'a> = &'a mut dyn FnMut(&mut dyn fmt::Write) -> Result<u16, fmt:
 
 pub struct IndentWriter<'a> {
     #[doc(hidden)]
-    pub writer: &'a mut dyn fmt::Write,
+    pub __writer: &'a mut dyn fmt::Write,
     #[doc(hidden)]
-    pub with: IndentWith<'a>,
+    pub __with: IndentWith<'a>,
     #[doc(hidden)]
-    pub count: u16,
+    pub __count: u16,
     #[doc(hidden)]
-    pub place: IndentPlace,
+    pub __place: __IndentPlace,
 }
 
 impl Drop for IndentWriter<'_> {
     fn drop(&mut self) {
-        LINE_WIDTH.set(LINE_WIDTH.get().saturating_sub(self.count));
+        LINE_WIDTH.set(LINE_WIDTH.get().saturating_sub(self.__count));
     }
 }
 
@@ -35,27 +35,27 @@ impl fmt::Write for IndentWriter<'_> {
         use Some as Line;
 
         for line in s.split('\n').map(Line).intersperse(New) {
-            match self.place {
-                IndentPlace::Start
+            match self.__place {
+                __IndentPlace::Start
                     if let Line(line) = line
                         && !line.is_empty() =>
                 {
                     self.write_indent()?;
                 },
 
-                IndentPlace::End => {
-                    writeln!(self.writer)?;
-                    self.place = IndentPlace::Start;
+                __IndentPlace::End => {
+                    writeln!(self.__writer)?;
+                    self.__place = __IndentPlace::Start;
                 },
 
                 _ => {},
             }
 
             match line {
-                New => self.place = IndentPlace::End,
+                New => self.__place = __IndentPlace::End,
 
                 Line(line) => {
-                    write!(self.writer, "{line}")?;
+                    write!(self.__writer, "{line}")?;
                 },
             }
         }
@@ -66,19 +66,19 @@ impl fmt::Write for IndentWriter<'_> {
 
 impl IndentWriter<'_> {
     pub fn write_indent(&mut self) -> fmt::Result {
-        assert_eq!(self.place, IndentPlace::Start);
+        assert_eq!(self.__place, __IndentPlace::Start);
 
-        let wrote = (self.with)(self.writer)?;
+        let wrote = (self.__with)(self.__writer)?;
 
-        if wrote > self.count {
+        if wrote > self.__count {
             panic!(
                 "indent writer wrote ({wrote}) more than the indent ({count})",
-                count = self.count
+                count = self.__count
             );
         }
 
-        write!(self.writer, "{:>count$}", "", count = (self.count - wrote) as usize)?;
-        self.place = IndentPlace::Middle;
+        write!(self.__writer, "{:>count$}", "", count = (self.__count - wrote) as usize)?;
+        self.__place = __IndentPlace::Middle;
 
         Ok(())
     }
@@ -90,13 +90,13 @@ pub fn indent(writer: &mut dyn fmt::Write, count: u16) -> IndentWriter<'_> {
     LINE_WIDTH.set(LINE_WIDTH.get() + count);
 
     IndentWriter {
-        writer,
+        __writer: writer,
         // SAFETY: ZERO_INDENTER does not modify anything and the pointee of self.writer in Writer
         // is never replaced. Therefore we can use it, because without writes you can't have
         // race conditions.
-        with: unsafe { ZERO_INDENTER },
-        count,
-        place: IndentPlace::Start,
+        __with: unsafe { ZERO_INDENTER },
+        __count: count,
+        __place: __IndentPlace::Start,
     }
 }
 
@@ -104,16 +104,18 @@ pub fn indent_with<'a>(writer: &'a mut dyn fmt::Write, count: u16, with: IndentW
     LINE_WIDTH.set(LINE_WIDTH.get() + count);
 
     IndentWriter {
-        writer,
-        with,
-        count,
-        place: IndentPlace::Start,
+        __writer: writer,
+        __with: with,
+        __count: count,
+        __place: __IndentPlace::Start,
     }
 }
 
 #[macro_export]
 macro_rules! indent {
     ($writer:ident,header = $header:expr) => {
+        let header = $header;
+
         let header_width: u16 = {
             trait ToStr {
                 fn to_str(&self) -> &str;
@@ -143,7 +145,6 @@ macro_rules! indent {
                 }
             }
 
-            let header = $header;
             $crate::__private::unicode_width::UnicodeWidthStr::width(header.to_str())
                 .try_into()
                 .expect("header too big")
@@ -158,7 +159,7 @@ macro_rules! indent {
                     return Ok(0);
                 }
 
-                write!(writer, "{header} ", header = $header)?;
+                write!(writer, "{header} ")?;
 
                 wrote = true;
                 Ok(header_width + 1)
@@ -171,8 +172,7 @@ macro_rules! indent {
     };
 
     ($writer:ident, $count:expr,with = $with:expr) => {
-        let mut with = $with;
-        let mut with = |writer: &mut dyn ::std::fmt::Write| with(writer).map(|wrote| wrote as u16);
+        let mut with = |writer: &mut dyn ::std::fmt::Write| $with(writer).map(|wrote| wrote as u16);
 
         let $writer = &mut $crate::indent_with($writer, ($count) as u16, &mut with);
     };
@@ -181,7 +181,7 @@ macro_rules! indent {
 #[macro_export]
 macro_rules! dedent {
     ($writer:ident) => {
-        $crate::dedent!($writer, $writer.count, discard = true);
+        $crate::dedent!($writer, $writer.__count, discard = true);
     };
 
     ($writer:ident, $dedent:expr) => {
@@ -189,7 +189,7 @@ macro_rules! dedent {
     };
 
     ($writer:ident, $dedent:expr,discard = $discard:literal) => {
-        let dedent = ($dedent) as u16;
+        let dedent = $dedent as u16;
         let old_count = $crate::__private::LINE_WIDTH.get();
 
         $crate::__private::LINE_WIDTH.set(old_count.saturating_sub(dedent));
@@ -198,10 +198,13 @@ macro_rules! dedent {
         });
 
         let $writer = &mut $crate::IndentWriter {
-            writer: $writer.writer,
-            count: $writer.count.checked_sub(dedent).expect("dedent was more than indent"),
-            with: if $discard { &mut move |_| Ok(0) } else { $writer.with },
-            place: $writer.place,
+            __writer: $writer.__writer,
+            __count: $writer
+                .__count
+                .checked_sub(dedent)
+                .expect("dedent was more than indent"),
+            __with: if $discard { &mut move |_| Ok(0) } else { $writer.__with },
+            __place: $writer.__place,
         };
     };
 }
