@@ -8,7 +8,7 @@ use std::{
         Hash as _,
         Hasher as _,
     },
-    path,
+    path::Path,
     sync::{
         Arc,
         LazyLock,
@@ -28,19 +28,19 @@ use yansi::Paint as _;
 static RUNTIME: LazyLock<tokio::runtime::Runtime> =
     LazyLock::new(|| tokio::runtime::Builder::new_current_thread().build().unwrap());
 
-fuzz_target!(|data: &str| -> Corpus {
+fuzz_target!(|source: &str| -> Corpus {
     let oracle = syntax::oracle();
-    let parse = oracle.parse(syntax::tokenize(data));
+    let parse = oracle.parse(syntax::tokenize(source));
 
-    let island: Arc<dyn island::Leaf> = Arc::new(island::blob(data.to_owned()));
+    let island: Arc<dyn island::Leaf> = Arc::new(island::blob(source.to_owned()));
 
     for report in &parse.reports {
         println!("{report}", report = RUNTIME.block_on(report.with(island.clone())));
     }
 
-    if let Ok("" | "0" | "false") = env::var("FUZZ_PARSER_SAVE_VALID").as_deref() {
+    let Ok("true" | "1") = env::var("FUZZ_PARSER_SAVE_VALID").as_deref() else {
         return Corpus::Keep;
-    }
+    };
 
     yansi::whenever(yansi::Condition::TTY_AND_COLOR);
 
@@ -50,18 +50,18 @@ fuzz_target!(|data: &str| -> Corpus {
 
     print!("found a valid parse!");
 
-    let syntax = format!("{node:#?}", node = *node);
+    let display = format!("{node:#?}", node = *node);
 
-    let syntax_hash = {
+    let display_hash = {
         let mut hasher = hash::DefaultHasher::new();
-        syntax.hash(&mut hasher);
+        display.hash(&mut hasher);
         hasher.finish()
     };
 
-    let base_file = format!("{syntax_hash:016x}");
+    let base_file = format!("{display_hash:016x}");
 
-    let (data_file, syntax_file) = {
-        let root = path::Path::new("cab-syntax/test/data");
+    let (source_file, display_file) = {
+        let root = Path::new("cab-syntax/test/data");
         fs::create_dir_all(root).unwrap();
 
         (
@@ -70,7 +70,7 @@ fuzz_target!(|data: &str| -> Corpus {
         )
     };
 
-    if data_file.exists() {
+    if source_file.exists() {
         println!(
             " seems like it was already known before, skipping writing {name}",
             name = base_file.yellow().bold()
@@ -79,8 +79,8 @@ fuzz_target!(|data: &str| -> Corpus {
         Corpus::Reject
     } else {
         println!(" wrote it to {name}", name = base_file.green().bold());
-        fs::write(data_file, data).unwrap();
-        fs::write(syntax_file, syntax).unwrap();
+        fs::write(source_file, source).unwrap();
+        fs::write(display_file, display).unwrap();
 
         Corpus::Keep
     }
