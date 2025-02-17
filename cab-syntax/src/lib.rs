@@ -23,7 +23,7 @@ pub mod token;
 mod tokenizer;
 
 #[allow(dead_code)]
-pub(crate) mod red {
+mod red {
     use crate::*;
 
     pub type Node = cstree::syntax::ResolvedNode<Kind>;

@@ -1,4 +1,6 @@
-//! [`Token`] definitions.
+//! Typed [`Token`] definitions.
+//!
+//! [`Token`]: crate::Token
 use std::{
     fmt,
     mem,

@@ -13,7 +13,6 @@ use crate::{
 };
 
 /// Formats the given node with parentheses to disambiguate.
-/// The node must be a valid [`node::Expression`] or this will panic.
 pub fn parenthesize(writer: &mut impl io::Write, expression: node::ExpressionRef<'_>) -> io::Result<()> {
     Formatter::new(writer).parenthesize(expression)
 }

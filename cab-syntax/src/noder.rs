@@ -29,11 +29,11 @@ use crate::{
     red,
 };
 
-/// A parse result that contains a [`red::Node`], a [`node::Expression`] and a
+/// A parse result that contains a node, a [`node::Expression`] and a
 /// list of [`Report`]s.
 #[derive(Debug)]
 pub struct Parse {
-    /// The underlying [`red::Node`].
+    /// The underlying node.
     pub node: red::Node,
 
     /// The [`node::Expression`].

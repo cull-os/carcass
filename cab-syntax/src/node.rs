@@ -1,4 +1,6 @@
-//! [`Node`] definitions.
+//! Typed [`Node`] definitions.
+//!
+//! [`Node`]: crate::Node
 use std::{
     collections::VecDeque,
     mem,
