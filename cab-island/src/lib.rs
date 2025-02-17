@@ -32,6 +32,10 @@ pub trait Entry: fmt::Display + Send + Sync + 'static {
     async fn as_collection(self: Arc<Self>) -> Option<Arc<dyn Collection>> {
         None
     }
+
+    async fn as_collection_peek(self: Arc<Self>) -> Option<Arc<dyn CollectionPeek>> {
+        None
+    }
 }
 
 impl dyn Entry {

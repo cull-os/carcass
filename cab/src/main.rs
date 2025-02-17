@@ -3,6 +3,10 @@ use std::{
         self,
         Write as _,
     },
+    path::{
+        Path,
+        PathBuf,
+    },
     sync::Arc,
 };
 
@@ -38,7 +42,7 @@ enum Command {
 
         /// The file to dump. If set to '-', stdin is read.
         #[clap(default_value = "-", global = true)]
-        path: String,
+        path: PathBuf,
     },
 }
 
@@ -68,18 +72,13 @@ async fn main() -> error::Termination {
 
     match cli.command {
         Command::Dump { path, command } => {
-            let leaf: Arc<dyn island::Leaf> = if path == "-" {
+            let leaf: Arc<dyn island::Leaf> = if path == Path::new("-") {
                 Arc::new(island::stdin())
             } else {
-                Arc::new(island::fs(&path)?)
+                Arc::new(island::fs(path))
             };
 
-            let source = leaf
-                .clone()
-                .read()
-                .await
-                .with_context(|| format!("failed to read file '{path}'"))?
-                .to_vec();
+            let source = leaf.clone().read().await?.to_vec();
 
             let entry: Arc<dyn Entry> = leaf.clone();
 

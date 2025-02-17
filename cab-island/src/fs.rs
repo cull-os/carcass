@@ -24,18 +24,12 @@ use crate::{
     Result,
 };
 
-pub fn fs(path: impl AsRef<Path>) -> Result<impl Leaf + CollectionPeek> {
-    let path = path.as_ref();
-
-    let path = path
-        .canonicalize()
-        .with_context(|| format!("failed to canonicalize path '{path}'", path = path.to_string_lossy()))?;
-
-    Ok(FsEntry {
+pub fn fs(path: PathBuf) -> impl Leaf + CollectionPeek {
+    FsEntry {
         location: FsEntryLocation::Root { path },
 
         content: OnceCell::new(),
-    })
+    }
 }
 
 #[derive(Clone)]
@@ -80,7 +74,16 @@ impl Entry for FsEntry {
         }
     }
 
+    // TODO: Maybe not do this and check the content?
+    async fn as_leaf(self: Arc<Self>) -> Option<Arc<dyn Leaf>> {
+        Some(self)
+    }
+
     async fn as_collection(self: Arc<Self>) -> Option<Arc<dyn Collection>> {
+        Some(self)
+    }
+
+    async fn as_collection_peek(self: Arc<Self>) -> Option<Arc<dyn CollectionPeek>> {
         Some(self)
     }
 }
@@ -92,11 +95,7 @@ impl Leaf for FsEntry {
             FsEntryContent::Leaf(bytes) => Ok(bytes),
 
             FsEntryContent::CollectionPeek(_) => {
-                bail!(
-                    "failed to read '{name}' under '{path}' as it is a directory",
-                    name = "foo",
-                    path = self.path().to_string_lossy()
-                )
+                bail!("failed to read '{this}' as it is a directory", this = self.clone())
             },
         }
     }
@@ -122,11 +121,7 @@ impl CollectionPeek for FsEntry {
             FsEntryContent::CollectionPeek(entries) => Ok(entries),
 
             FsEntryContent::Leaf(_) => {
-                bail!(
-                    "failed to read '{name}' under '{path}' as it is a directory",
-                    name = "foo",
-                    path = self.path().to_string_lossy()
-                )
+                bail!("failed to list '{this}' as it is a file", this = self.clone())
             },
         }
     }
@@ -135,7 +130,6 @@ impl CollectionPeek for FsEntry {
 impl FsEntry {
     fn path(&self) -> PathBuf {
         let mut this = self;
-
         let mut parts = Vec::new();
 
         loop {
@@ -172,10 +166,7 @@ impl FsEntry {
             return self.content_dir_eager(&path).await;
         }
 
-        bail!(
-            "unsupported file type of entry at '{path}'",
-            path = path.to_string_lossy(),
-        );
+        bail!("unsupported type of entry at '{path}'", path = path.to_string_lossy());
     }
 
     async fn content_file_eager(self: &Arc<Self>, path: &Path) -> Result<FsEntryContent> {
@@ -214,6 +205,7 @@ impl FsEntry {
                         })?
                         .to_owned(),
                 },
+
                 content: OnceCell::new(),
             }))
         }
