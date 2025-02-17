@@ -42,9 +42,6 @@ pub enum ReportSeverity {
 }
 
 impl ReportSeverity {
-    // TODO: Move all "error:" etc logic to a single place, even for the logger.
-    //
-    // Maybe even remove the logger and do tracing instead.
     pub fn header(self) -> yansi::Painted<&'static str> {
         match self {
             ReportSeverity::Note => "note:",
