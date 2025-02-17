@@ -1211,7 +1211,7 @@ impl Rune {
 
     pub fn validate(&self, to: &mut Vec<Report>) {
         let mut report = Report::error("invalid rune");
-        let mut reported_too_long = false;
+        let mut reported_invalid_length = false;
         let mut reported_control_character = false;
         let mut reported_interpolation = false;
 
@@ -1222,17 +1222,17 @@ impl Rune {
                 InterpolatedPartRef::Content(content) => {
                     let text = content.text();
 
-                    if !reported_too_long && {
+                    if !reported_invalid_length && {
                         let mut parts = content.parts(&mut report);
 
-                        match (parts.next().unwrap(), parts.next()) {
-                            (ContentPart::Literal(text), None) if text.chars().count() == 1 => false,
-                            (ContentPart::Escape(_), None) => false,
+                        match (parts.next(), parts.next()) {
+                            (Some(ContentPart::Literal(text)), None) if text.chars().count() == 1 => false,
+                            (Some(ContentPart::Escape(_)), None) => false,
 
                             _ => true,
                         }
                     } {
-                        reported_too_long = true;
+                        reported_invalid_length = true;
                         report.push_primary(content.span(), "invalid rune literal length");
                     }
 
