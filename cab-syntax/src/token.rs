@@ -182,7 +182,7 @@ impl Content {
 
             while let Some((offset, c)) = bytes.next() {
                 if c != b'\\' {
-                    let literal = &text[literal_start_offset..offset];
+                    let literal = &text[literal_start_offset..offset + 1];
 
                     if !literal.is_empty() {
                         yield ContentPart::Literal(literal);
