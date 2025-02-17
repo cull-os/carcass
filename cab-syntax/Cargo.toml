@@ -18,5 +18,4 @@ paste.workspace             = true
 peekmore.workspace          = true
 phf.workspace               = true
 smallvec.workspace          = true
-static_assertions.workspace = true
 yansi.workspace             = true

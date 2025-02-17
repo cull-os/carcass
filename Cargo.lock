@@ -164,7 +164,6 @@ dependencies = [
  "cab-text",
  "cab-wrap",
  "clap",
- "clap-verbosity-flag",
  "tokio",
  "yansi",
 ]
@@ -219,7 +218,6 @@ dependencies = [
  "peekmore",
  "phf",
  "smallvec 2.0.0-alpha.10",
- "static_assertions",
  "yansi",
 ]
 
@@ -268,16 +266,6 @@ checksum = "8acebd8ad879283633b343856142139f2da2317c96b05b4dd6181c61e2480184"
 dependencies = [
  "clap_builder",
  "clap_derive",
-]
-
-[[package]]
-name = "clap-verbosity-flag"
-version = "3.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2678fade3b77aa3a8ff3aae87e9c008d3fb00473a41c71fbf74e91c8c7b37e84"
-dependencies = [
- "clap",
- "log",
 ]
 
 [[package]]
@@ -624,12 +612,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "log"
-version = "0.4.25"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "04cbf5b083de1c7e0222a7a51dbfdba1cbe1c6ab0b15e29fff3f6c077fd9cd9f"
-
-[[package]]
 name = "memchr"
 version = "2.7.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -943,12 +925,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a8f112729512f8e442d81f95a8a7ddf2b7c6b8a1a6f509a95864142b30cab2d3"
 
 [[package]]
-name = "static_assertions"
-version = "1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
-
-[[package]]
 name = "strsim"
 version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -971,7 +947,6 @@ version = "0.0.1"
 dependencies = [
  "cab",
  "clap",
- "clap-verbosity-flag",
  "tokio",
  "which",
  "yansi",

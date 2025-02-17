@@ -24,9 +24,6 @@ use yansi::Paint as _;
 #[derive(clap::Parser)]
 #[command(version, about)]
 struct Cli {
-    #[command(flatten)]
-    verbosity: clap_verbosity_flag::Verbosity<clap_verbosity_flag::InfoLevel>,
-
     #[command(subcommand)]
     command: Command,
 }

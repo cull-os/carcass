@@ -10,7 +10,6 @@ version.workspace    = true
 cab.path = "../cab"
 
 clap.workspace                = true
-clap-verbosity-flag.workspace = true
 tokio.workspace               = true
 which.workspace               = true
 yansi.workspace               = true

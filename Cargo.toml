@@ -16,7 +16,6 @@ async-once-cell = "0.5.4"
 async-trait = "0.1.86"
 bytes = "1.10.0"
 clap = { version = "4.5.4", features = [ "derive" ] }
-clap-verbosity-flag = "3.0.2"
 const-str = "0.6.2"
 cstree = { git = "https://github.com/cull-os/cstree", features = [
   "derive",
@@ -32,7 +31,6 @@ peekmore = "1.3.0"
 phf = { version = "0.11.3", features = [ "macros" ] }
 scopeguard = "1.2.0"
 smallvec = "2.0.0-alpha.10"
-static_assertions = "1.1.0"
 terminal_size = "0.4.1"
 thiserror = "2.0.11"
 tokio = { version = "1.37.0", features = [ "full" ] }
