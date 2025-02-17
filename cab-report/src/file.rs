@@ -1,6 +1,7 @@
 use std::num;
 
 use cab_text::Span;
+use unicode_segmentation::UnicodeSegmentation as _;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Position {
@@ -18,7 +19,7 @@ impl Position {
         let mut start = Position { line, column };
         let mut end = Position { line, column };
 
-        for (index, c) in source.char_indices() {
+        for (index, c) in source.grapheme_indices(true) {
             if index > range.end {
                 break;
             }
@@ -27,7 +28,8 @@ impl Position {
                 start.line = line;
                 start.column = column;
             }
-            if c == '\n' {
+
+            if c == "\n" {
                 line = line.saturating_add(1);
                 column = 0;
             } else {

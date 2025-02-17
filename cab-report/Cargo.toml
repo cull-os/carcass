@@ -8,15 +8,16 @@ repository.workspace  = true
 version.workspace     = true
 
 [dependencies]
-cab-error.path          = "../cab-error"
-cab-island.path         = "../cab-island"
-cab-text.path           = "../cab-text"
-cab-wrap.path           = "../cab-wrap"
+cab-error.path  = "../cab-error"
+cab-island.path = "../cab-island"
+cab-text.path   = "../cab-text"
+cab-wrap.path   = "../cab-wrap"
 
-const-str.workspace     = true
-cstree.workspace        = true
-env_logger.workspace    = true
-log.workspace           = true
-smallvec.workspace      = true
-unicode-width.workspace = true
-yansi.workspace         = true
+const-str.workspace            = true
+cstree.workspace               = true
+env_logger.workspace           = true
+log.workspace                  = true
+smallvec.workspace             = true
+unicode-segmentation.workspace = true
+unicode-width.workspace        = true
+yansi.workspace                = true

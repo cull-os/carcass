@@ -8,9 +8,10 @@ repository.workspace  = true
 version.workspace     = true
 
 [dependencies]
-cab-text.path           = "../cab-text"
+cab-text.path = "../cab-text"
 
-scopeguard.workspace    = true
-terminal_size.workspace = true
-unicode-width.workspace = true
-yansi.workspace         = true
+scopeguard.workspace           = true
+terminal_size.workspace        = true
+unicode-segmentation.workspace = true
+unicode-width.workspace        = true
+yansi.workspace                = true

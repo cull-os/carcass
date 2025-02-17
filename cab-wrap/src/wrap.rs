@@ -1,5 +1,6 @@
 use core::fmt;
 
+use unicode_segmentation::UnicodeSegmentation as _;
 use unicode_width::UnicodeWidthStr as _;
 use yansi::Paint as _;
 
@@ -70,7 +71,7 @@ pub fn wrapln<'a>(writer: &'a mut dyn fmt::Write, parts: impl Iterator<Item = ya
 
         let split_index = word
             .value
-            .char_indices()
+            .grapheme_indices(true)
             .enumerate()
             .find_map(|(index, (split_index, _))| (index as u16 + 1 >= line_width_remainder).then_some(split_index))
             .unwrap();

@@ -7,7 +7,7 @@ repository.workspace = true
 version.workspace    = true
 
 [dependencies]
-cab.path                      = "../cab"
+cab.path = "../cab"
 
 clap.workspace                = true
 clap-verbosity-flag.workspace = true

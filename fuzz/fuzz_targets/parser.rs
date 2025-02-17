@@ -35,7 +35,10 @@ fuzz_target!(|source: &str| -> Corpus {
     let island: Arc<dyn island::Leaf> = Arc::new(island::blob(source.to_owned()));
 
     for report in &parse.reports {
-        println!("{report}", report = RUNTIME.block_on(report.with(island.clone())));
+        println!(
+            "{report}",
+            report = RUNTIME.block_on(report.with(island.clone())).unwrap()
+        );
     }
 
     let Ok("true" | "1") = env::var("FUZZ_PARSER_SAVE_VALID").as_deref() else {

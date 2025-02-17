@@ -10,6 +10,10 @@ use std::{
     sync::Arc,
 };
 
+use cab_error::{
+    Contextful,
+    Result,
+};
 use cab_island::{
     Leaf,
     display,
@@ -38,6 +42,9 @@ pub enum ReportSeverity {
 }
 
 impl ReportSeverity {
+    // TODO: Move all "error:" etc logic to a single place, even for the logger.
+    //
+    // Maybe even remove the logger and do tracing instead.
     pub fn header(self) -> yansi::Painted<&'static str> {
         match self {
             ReportSeverity::Note => "note:",
@@ -134,21 +141,28 @@ impl Report {
     }
 
     // TODO: Use SyntaxText rather than a leaf.
-    pub async fn with(&self, leaf: Arc<dyn Leaf>) -> impl fmt::Display {
-        let bytes = leaf.clone().read().await.unwrap();
+    pub async fn with(&self, leaf: Arc<dyn Leaf>) -> Result<impl fmt::Display> {
+        let bytes = leaf.clone().read().await?;
 
-        ReportDisplay {
+        Ok(ReportDisplay {
             report: self,
+
+            source: String::from_utf8(bytes.to_vec()).with_context(|| {
+                format!(
+                    "failed to convert the contents of {leaf} to valid UTF-8",
+                    leaf = display!(leaf)
+                )
+            })?,
+
             leaf,
-            source: String::from_utf8(bytes.as_ref().to_vec()).unwrap(),
-        }
+        })
     }
 }
 
 struct ReportDisplay<'a> {
     report: &'a Report,
-    leaf: Arc<dyn Leaf>,
     source: String,
+    leaf: Arc<dyn Leaf>,
 }
 
 fn number_width(number: u32) -> usize {
@@ -308,13 +322,6 @@ impl fmt::Display for ReportDisplay<'_> {
                 .line
                 .cmp(&b_start.line)
                 .then_with(|| a_end.column.cmp(&b_end.column))
-                .then_with(|| {
-                    if a_start.line == a_end.line && b_start.line == b_end.line {
-                        a_start.column.cmp(&b_start.column).reverse()
-                    } else {
-                        cmp::Ordering::Equal
-                    }
-                })
         });
 
         let mut lines: SmallVec<Line, 2> = SmallVec::new();

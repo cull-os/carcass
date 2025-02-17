@@ -212,6 +212,7 @@ dependencies = [
  "env_logger",
  "log",
  "smallvec 2.0.0-alpha.10",
+ "unicode-segmentation",
  "unicode-width",
  "yansi",
 ]
@@ -250,6 +251,7 @@ dependencies = [
  "cab-text",
  "scopeguard",
  "terminal_size",
+ "unicode-segmentation",
  "unicode-width",
  "yansi",
 ]

@@ -105,7 +105,7 @@ async fn main() -> error::Termination {
                     let parse = oracle.parse(syntax::tokenize(&source));
 
                     for report in parse.reports {
-                        writeln!(err, "{report}", report = report.with(leaf.clone()).await).ok();
+                        writeln!(err, "{report}", report = report.with(leaf.clone()).await?).ok();
                     }
 
                     if let Dump::Syntax = command {
