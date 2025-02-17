@@ -17,6 +17,5 @@ cab-wrap.path   = "../cab-wrap"
 
 clap.workspace                = true
 clap-verbosity-flag.workspace = true
-log.workspace                 = true
 tokio.workspace               = true
 yansi.workspace               = true

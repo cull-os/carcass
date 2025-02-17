@@ -13,7 +13,6 @@ cab-text.path   = "../cab-text"
 cstree.workspace            = true
 derive_more.workspace       = true
 enumset.workspace           = true
-log.workspace               = true
 num.workspace               = true
 paste.workspace             = true
 peekmore.workspace          = true

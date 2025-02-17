@@ -15,8 +15,6 @@ cab-wrap.path   = "../cab-wrap"
 
 const-str.workspace            = true
 cstree.workspace               = true
-env_logger.workspace           = true
-log.workspace                  = true
 smallvec.workspace             = true
 unicode-segmentation.workspace = true
 unicode-width.workspace        = true

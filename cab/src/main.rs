@@ -16,7 +16,6 @@ use cab::{
         Contextful as _,
     },
     island,
-    report,
     syntax,
 };
 use clap::Parser as _;
@@ -65,7 +64,7 @@ enum Dump {
 async fn main() -> error::Termination {
     let cli = Cli::parse();
 
-    report::init(cli.verbosity.log_level_filter());
+    yansi::whenever(yansi::Condition::TTY_AND_COLOR);
 
     let (mut out, mut err) = (io::stdout(), io::stderr());
 
