@@ -162,7 +162,6 @@ dependencies = [
  "cab-report",
  "cab-syntax",
  "cab-text",
- "cab-wrap",
  "clap",
  "tokio",
  "yansi",
@@ -195,7 +194,6 @@ dependencies = [
  "cab-error",
  "cab-island",
  "cab-text",
- "cab-wrap",
  "const-str",
  "cstree",
  "smallvec 2.0.0-alpha.10",
@@ -226,14 +224,6 @@ name = "cab-text"
 version = "0.0.1"
 dependencies = [
  "cstree",
- "yansi",
-]
-
-[[package]]
-name = "cab-wrap"
-version = "0.0.1"
-dependencies = [
- "cab-text",
  "scopeguard",
  "terminal_size",
  "unicode-segmentation",

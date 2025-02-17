@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::LINE_WIDTH;
+use crate::__private::LINE_WIDTH;
 
 #[doc(hidden)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -144,7 +144,7 @@ macro_rules! indent {
             }
 
             let header = $header;
-            $crate::macro_crates::unicode_width::UnicodeWidthStr::width(header.to_str())
+            $crate::__private::unicode_width::UnicodeWidthStr::width(header.to_str())
                 .try_into()
                 .expect("header too big")
         };
@@ -190,11 +190,11 @@ macro_rules! dedent {
 
     ($writer:ident, $dedent:expr,discard = $discard:literal) => {
         let dedent = ($dedent) as u16;
-        let old_count = $crate::LINE_WIDTH.get();
+        let old_count = $crate::__private::LINE_WIDTH.get();
 
-        $crate::LINE_WIDTH.set(old_count.saturating_sub(dedent));
-        let _guard = $crate::macro_crates::scopeguard::guard((), |_| {
-            $crate::LINE_WIDTH.set(old_count);
+        $crate::__private::LINE_WIDTH.set(old_count.saturating_sub(dedent));
+        let _guard = $crate::__private::scopeguard::guard((), |_| {
+            $crate::__private::LINE_WIDTH.set(old_count);
         });
 
         let $writer = &mut $crate::IndentWriter {

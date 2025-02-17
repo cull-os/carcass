@@ -9,10 +9,10 @@ version.workspace    = true
 [dependencies]
 cab.path = "../cab"
 
-clap.workspace                = true
-tokio.workspace               = true
-which.workspace               = true
-yansi.workspace               = true
+clap.workspace  = true
+tokio.workspace = true
+which.workspace = true
+yansi.workspace = true
 
 [[bin]]
 bench = false

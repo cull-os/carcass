@@ -5,11 +5,16 @@ use unicode_width::UnicodeWidthStr as _;
 use yansi::Paint as _;
 
 use crate::{
-    LINE_WIDTH,
+    __private::LINE_WIDTH,
     LINE_WIDTH_MAX,
 };
 
-pub fn wrapln<'a>(writer: &'a mut dyn fmt::Write, parts: impl Iterator<Item = yansi::Painted<&'a str>>) -> fmt::Result {
+pub fn wrapln<'a>(writer: &mut dyn fmt::Write, parts: impl Iterator<Item = yansi::Painted<&'a str>>) -> fmt::Result {
+    wrap(writer, parts)?;
+    writeln!(writer)
+}
+
+pub fn wrap<'a>(writer: &mut dyn fmt::Write, parts: impl Iterator<Item = yansi::Painted<&'a str>>) -> fmt::Result {
     use None as Space;
     use Some as Word;
 
@@ -85,5 +90,5 @@ pub fn wrapln<'a>(writer: &'a mut dyn fmt::Write, parts: impl Iterator<Item = ya
         word.value = word_rest;
     }
 
-    writeln!(writer)
+    Ok(())
 }

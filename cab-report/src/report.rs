@@ -21,11 +21,9 @@ use cab_island::{
 use cab_text::{
     Size,
     Span,
-    into,
-};
-use cab_wrap::{
     dedent,
     indent,
+    into,
     wrapln,
 };
 use smallvec::SmallVec;

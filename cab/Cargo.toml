@@ -13,8 +13,7 @@ cab-island.path = "../cab-island"
 cab-report.path = "../cab-report"
 cab-syntax.path = "../cab-syntax"
 cab-text.path   = "../cab-text"
-cab-wrap.path   = "../cab-wrap"
 
-clap.workspace                = true
-tokio.workspace               = true
-yansi.workspace               = true
+clap.workspace  = true
+tokio.workspace = true
+yansi.workspace = true
