@@ -178,11 +178,11 @@ impl Content {
             let mut literal_start_offset = 0;
 
             let text = self.text();
-            let mut bytes = text.bytes().enumerate();
+            let mut bytes = text.char_indices();
 
             while let Some((offset, c)) = bytes.next() {
-                if c != b'\\' {
-                    let literal = &text[literal_start_offset..offset + 1];
+                if c != '\\' {
+                    let literal = &text[literal_start_offset..offset + c.len_utf8()];
 
                     if !literal.is_empty() {
                         yield ContentPart::Literal(literal);
@@ -194,15 +194,15 @@ impl Content {
                 literal_start_offset = offset;
 
                 yield ContentPart::Escape(match bytes.next() {
-                    Some((_, b'0')) => '\0',
-                    Some((_, b't')) => '\t',
-                    Some((_, b'n')) => '\n',
-                    Some((_, b'r')) => '\r',
-                    Some((_, b'`')) => '`',
-                    Some((_, b'"')) => '"',
-                    Some((_, b'\'')) => '\'',
-                    Some((_, b'>')) => '>',
-                    Some((_, b'\\')) => '\\',
+                    Some((_, '0')) => '\0',
+                    Some((_, 't')) => '\t',
+                    Some((_, 'n')) => '\n',
+                    Some((_, 'r')) => '\r',
+                    Some((_, '`')) => '`',
+                    Some((_, '"')) => '"',
+                    Some((_, '\'')) => '\'',
+                    Some((_, '>')) => '>',
+                    Some((_, '\\')) => '\\',
 
                     next @ (Some(_) | None) if !reported => {
                         reported = true;
