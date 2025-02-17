@@ -1,5 +1,5 @@
 //! Diagnostic reporting utilities.
-#![feature(if_let_guard, iter_intersperse, let_chains, gen_blocks)]
+#![feature(gen_blocks, if_let_guard)]
 
 mod file;
 mod label;

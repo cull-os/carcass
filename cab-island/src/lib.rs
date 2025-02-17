@@ -1,5 +1,3 @@
-#![feature(trait_alias, let_chains)]
-
 use std::{
     fmt,
     sync::Arc,

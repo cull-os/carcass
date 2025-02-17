@@ -1,4 +1,4 @@
-#![feature(gen_blocks, if_let_guard, iter_map_windows, let_chains, trait_alias)]
+#![feature(gen_blocks, if_let_guard, let_chains, trait_alias)]
 
 mod color;
 pub mod format;
