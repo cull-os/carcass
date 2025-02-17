@@ -133,6 +133,7 @@ impl Report {
         self.point(Point::help(text))
     }
 
+    // TODO: Use SyntaxText rather than a leaf.
     pub async fn with(&self, leaf: Arc<dyn Leaf>) -> impl fmt::Display {
         let bytes = leaf.clone().read().await.unwrap();
 
