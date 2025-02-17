@@ -105,13 +105,12 @@ impl Leaf for FsEntry {
 #[async_trait]
 impl Collection for FsEntry {
     async fn entry(self: Arc<Self>, name: &str) -> Result<Option<Arc<dyn Entry>>> {
-        for entry in self.list().await?.iter() {
-            if entry.name() == Some(name) {
-                return Ok(Some(entry.clone()));
-            }
-        }
-
-        Ok(None)
+        Ok(self
+            .list()
+            .await?
+            .iter()
+            .find(|entry| entry.name() == Some(name))
+            .map(Arc::clone))
     }
 }
 
