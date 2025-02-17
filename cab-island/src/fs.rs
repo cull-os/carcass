@@ -22,6 +22,7 @@ use crate::{
     Entry,
     Leaf,
     Result,
+    display,
 };
 
 pub fn fs(path: PathBuf) -> impl Leaf + CollectionPeek {
@@ -95,7 +96,7 @@ impl Leaf for FsEntry {
             FsEntryContent::Leaf(bytes) => Ok(bytes),
 
             FsEntryContent::CollectionPeek(_) => {
-                bail!("failed to read '{this}' as it is a directory", this = self.clone())
+                bail!("failed to read {this} as it is a directory", this = display!(self))
             },
         }
     }
@@ -121,7 +122,7 @@ impl CollectionPeek for FsEntry {
             FsEntryContent::CollectionPeek(entries) => Ok(entries),
 
             FsEntryContent::Leaf(_) => {
-                bail!("failed to list '{this}' as it is a file", this = self.clone())
+                bail!("failed to list {this} as it is a file", this = display!(self))
             },
         }
     }

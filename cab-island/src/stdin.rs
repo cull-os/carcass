@@ -16,6 +16,7 @@ use crate::{
     Entry,
     Leaf,
     Result,
+    display,
 };
 
 pub fn stdin() -> impl Leaf {
@@ -49,7 +50,7 @@ impl Leaf for Stdin {
 }
 
 impl Stdin {
-    async fn content(&self) -> Result<Bytes> {
+    async fn content(self: Arc<Self>) -> Result<Bytes> {
         self.content
             .get_or_init(async {
                 let mut buffer = Vec::new();
@@ -57,7 +58,7 @@ impl Stdin {
                 io::stdin()
                     .read_to_end(&mut buffer)
                     .await
-                    .context("failed to read from stdin")?;
+                    .with_context(|| format!("failed to read {this}", this = display!(self)))?;
 
                 Ok(Bytes::from(buffer))
             })

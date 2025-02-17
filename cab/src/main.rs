@@ -19,7 +19,6 @@ use cab::{
     report,
     syntax,
 };
-use cab_island::Entry;
 use clap::Parser as _;
 use yansi::Paint as _;
 
@@ -80,12 +79,10 @@ async fn main() -> error::Termination {
 
             let source = leaf.clone().read().await?.to_vec();
 
-            let entry: Arc<dyn Entry> = leaf.clone();
-
             let source = String::from_utf8(source).with_context(|| {
                 format!(
-                    "failed to convert '{leaf}' to an UTF-8 string",
-                    leaf = entry.to_display()
+                    "failed to convert {leaf} to an UTF-8 string",
+                    leaf = island::display!(leaf)
                 )
             })?;
 

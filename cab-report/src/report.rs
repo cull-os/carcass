@@ -11,8 +11,8 @@ use std::{
 };
 
 use cab_island::{
-    Entry,
     Leaf,
+    display,
 };
 use cab_text::{
     Size,
@@ -483,8 +483,7 @@ impl fmt::Display for ReportDisplay<'_> {
             );
 
             STYLE_HEADER_PATH.fmt_prefix(writer)?;
-            let entry: Arc<dyn Entry> = leaf.clone();
-            write!(writer, "{leaf}", leaf = entry.to_display())?;
+            write!(writer, "{leaf}", leaf = display!(leaf))?;
             STYLE_HEADER_PATH.fmt_suffix(writer)?;
 
             let line_number = label_start.line.paint(STYLE_HEADER_POSITION);

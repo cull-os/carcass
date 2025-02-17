@@ -38,8 +38,16 @@ pub trait Entry: fmt::Display + Send + Sync + 'static {
     }
 }
 
+#[macro_export]
+macro_rules! display {
+    ($entry:expr) => {{
+        let entry: ::std::sync::Arc<dyn $crate::Entry> = $entry.clone();
+        entry.display()
+    }};
+}
+
 impl dyn Entry {
-    pub fn to_display(self: Arc<Self>) -> impl fmt::Display {
+    pub fn display(self: Arc<Self>) -> impl fmt::Display {
         struct EntryDisplay(Arc<dyn Entry>);
 
         impl fmt::Display for EntryDisplay {
