@@ -24,16 +24,16 @@ impl Position {
                 break;
             }
 
-            if index + 1 == range.start {
-                start.line = line;
-                start.column = column;
-            }
-
             if c == "\n" {
                 line = line.saturating_add(1);
                 column = 0;
             } else {
                 column += 1;
+            }
+
+            if index + 1 == range.start {
+                start.line = line;
+                start.column = column;
             }
 
             if index + 1 == range.end {
