@@ -326,9 +326,7 @@ impl<'a> Tokenizer<'a> {
                 TOKEN_RIGHT_PARENTHESIS
             },
 
-            '@' => TOKEN_AT,
             '=' if self.try_consume_character('>') => TOKEN_EQUAL_GREATER,
-            ':' if self.try_consume_character('=') => TOKEN_COLON_EQUAL,
             ',' => TOKEN_COMMA,
 
             ':' => TOKEN_COLON,
@@ -341,7 +339,7 @@ impl<'a> Tokenizer<'a> {
             '}' => TOKEN_RIGHT_CURLYBRACE,
 
             '!' if self.try_consume_character('=') => TOKEN_EXCLAMATION_EQUAL,
-            '=' if self.try_consume_character('=') => TOKEN_EQUAL_EQUAL,
+            '=' => TOKEN_EQUAL,
             '>' if self.try_consume_character('=') => TOKEN_MORE_EQUAL,
             '>' => TOKEN_MORE,
 
@@ -400,7 +398,6 @@ impl<'a> Tokenizer<'a> {
                 const KEYWORDS: phf::Map<&'static str, Kind> = phf::phf_map! {
                     "if" => TOKEN_LITERAL_IF,
                     "then" => TOKEN_LITERAL_THEN,
-                    "is" => TOKEN_LITERAL_IS,
                     "else" => TOKEN_LITERAL_ELSE,
                 };
 
@@ -423,6 +420,7 @@ impl<'a> Tokenizer<'a> {
                 return self.consume_kind();
             },
 
+            '@' => TOKEN_AT,
             start @ ('`' | '"' | '\'') => {
                 let equals_len = self.consume_while(|c| c == '=');
                 let equals = self.consumed_since(self.offset - equals_len);

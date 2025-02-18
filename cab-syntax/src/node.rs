@@ -13,7 +13,6 @@ use cab_text::{
     Span,
 };
 use paste::paste;
-use smallvec::SmallVec;
 
 use crate::{
     Kind::{
@@ -268,13 +267,13 @@ node! {
         InfixOperation,
         SuffixOperation,
         Path,
+        Bind,
         Identifier,
         SString,
         Rune,
         Island,
         Number,
-        IfThen,
-        IfIs,
+        If,
     )] enum Expression;
 }
 
@@ -288,137 +287,14 @@ impl<'a> ExpressionRef<'a> {
             Self::InfixOperation(operation) => operation.validate(to),
             Self::SuffixOperation(operation) => operation.validate(to),
             Self::Path(path) => path.validate(to),
+            Self::Bind(bind) => bind.validate(to),
             Self::Identifier(identifier) => identifier.validate(to),
             Self::SString(string) => string.validate(to),
             Self::Rune(rune) => rune.validate(to),
             Self::Island(island) => island.validate(to),
-            Self::IfThen(if_else) => if_else.validate(to),
-            Self::IfIs(if_is) => if_is.validate(to),
+            Self::If(if_else) => if_else.validate(to),
 
             Self::Error(_) | Self::Number(_) => {},
-        }
-    }
-
-    pub fn validate_pattern(self, to: &mut Vec<Report>) {
-        match self {
-            Self::Parenthesis(parenthesis) => {
-                parenthesis.expression().validate_pattern(to);
-            },
-
-            Self::List(list) => {
-                for item in list.items() {
-                    item.validate_pattern(to);
-                }
-            },
-
-            // All attribute lists are valid patterns.
-            // TODO: Add warns for right-side expression that
-            // statically never use the attribute list made the scope.
-            Self::AttributeList(attribute_list) => attribute_list.validate(to),
-
-            Self::InfixOperation(operation)
-                if let InfixOperator::ImplicitApply | InfixOperator::Apply = operation.operator() =>
-            {
-                operation.left().validate(to);
-                operation.right().validate_pattern(to);
-            },
-
-            Self::InfixOperation(operation) if let InfixOperator::Pipe = operation.operator() => {
-                operation.left().validate_pattern(to);
-                operation.right().validate(to);
-            },
-
-            Self::InfixOperation(operation) if let InfixOperator::Construct = operation.operator() => {
-                operation.left().validate_pattern(to);
-                operation.right().validate_pattern(to);
-            },
-
-            Self::InfixOperation(operation) if let InfixOperator::Select = operation.operator() => {
-                match operation.left() {
-                    ExpressionRef::Identifier(identifier) => {
-                        identifier.validate(to);
-                    },
-
-                    invalid => {
-                        to.push(
-                            Report::error("invalid select pattern")
-                                .primary(invalid.span(), "left operand must be an identifier"),
-                        )
-                    },
-                }
-
-                operation.right().validate_pattern(to);
-            },
-
-            Self::InfixOperation(operation) if let InfixOperator::All | InfixOperator::Any = operation.operator() => {
-                operation.left().validate_pattern(to);
-                operation.right().validate_pattern(to);
-            },
-
-            Self::InfixOperation(operation) if let InfixOperator::This = operation.operator() => {
-                operation.validate_left(to);
-                operation.right().validate_pattern(to);
-            },
-
-            _ => {
-                let mut report = Report::error("arithmetic patterns cannot have multiple binds");
-
-                let mut bind_spans = SmallVec::new();
-                self.validate_pattern_arithmetic(&mut bind_spans, to);
-
-                for bind_span in bind_spans {
-                    report.push_primary(bind_span, "bind");
-                }
-
-                if report.labels.len() > 1 {
-                    to.push(report);
-                }
-            },
-        }
-    }
-
-    pub fn validate_pattern_arithmetic(self, bind_spans: &mut SmallVec<Span, 4>, reports: &mut Vec<Report>) {
-        match self {
-            ExpressionRef::Parenthesis(parenthesis) => {
-                parenthesis.expression().validate_pattern(reports);
-            },
-
-            ExpressionRef::InfixOperation(operation)
-                if let InfixOperator::Addition
-                | InfixOperator::Subtraction
-                | InfixOperator::Multiplication
-                | InfixOperator::Power
-                | InfixOperator::Division = operation.operator() =>
-            {
-                operation.left().validate_pattern_arithmetic(bind_spans, reports);
-                operation.right().validate_pattern_arithmetic(bind_spans, reports);
-            },
-
-            ExpressionRef::InfixOperation(_) => {
-                reports.push(
-                    Report::error("non-arithmetic infix operators are not valid patterns").primary(self.span(), "here"),
-                );
-            },
-
-            ExpressionRef::Identifier(identifier) => {
-                identifier.validate(reports);
-                bind_spans.push(identifier.span());
-            },
-
-            ExpressionRef::SString(string) => {
-                string.validate(reports);
-            },
-
-            ExpressionRef::Number(number) => {
-                number.validate(reports);
-            },
-
-            _ => {
-                reports.push(Report::error("invalid pattern").primary(
-                    self.span(),
-                    format!("{kind} is not a valid pattern element", kind = self.kind()),
-                ));
-            },
         }
     }
 
@@ -524,10 +400,6 @@ impl AttributeList {
                     );
                 },
 
-                ExpressionRef::InfixOperation(operation) if let InfixOperator::Bind = operation.operator() => {
-                    operation.validate(to);
-                },
-
                 ExpressionRef::Identifier(identifier) => {
                     identifier.validate(to);
                 },
@@ -571,9 +443,9 @@ impl PrefixOperator {
     /// Returns the binding power of this operator.
     pub fn binding_power(self) -> ((), u16) {
         match self {
-            Self::Swwallation | Self::Negation => ((), 165),
-            Self::Not => ((), 145),
-            Self::Try => ((), 125),
+            Self::Swwallation | Self::Negation => ((), 145),
+            Self::Not => ((), 125),
+            Self::Try => ((), 105),
         }
     }
 }
@@ -586,7 +458,7 @@ impl PrefixOperation {
     /// Returns the operator token of this operation.
     pub fn operator_token(&self) -> &red::Token {
         self.children_with_tokens()
-            .filter_map(|child| child.into_token())
+            .filter_map(red::ElementRef::into_token)
             .find(|token| PrefixOperator::try_from(token.kind()).is_ok())
             .unwrap()
     }
@@ -594,7 +466,7 @@ impl PrefixOperation {
     /// Returns the operator of this operation.
     pub fn operator(&self) -> PrefixOperator {
         self.children_with_tokens()
-            .filter_map(|child| child.into_token())
+            .filter_map(red::ElementRef::into_token)
             .find_map(|token| PrefixOperator::try_from(token.kind()).ok())
             .unwrap()
     }
@@ -642,9 +514,7 @@ pub enum InfixOperator {
     Power,
     Division,
 
-    This,
     Lambda,
-    Bind,
 }
 
 impl TryFrom<Kind> for InfixOperator {
@@ -670,7 +540,7 @@ impl TryFrom<Kind> for InfixOperator {
             TOKEN_MORE_EQUAL => Self::MoreOrEqual,
             TOKEN_MORE => Self::More,
 
-            TOKEN_EQUAL_EQUAL => Self::Equal,
+            TOKEN_EQUAL => Self::Equal,
             TOKEN_EXCLAMATION_EQUAL => Self::NotEqual,
 
             TOKEN_AMPERSAND_AMPERSAND => Self::And,
@@ -686,9 +556,7 @@ impl TryFrom<Kind> for InfixOperator {
             TOKEN_CARET => Self::Power,
             TOKEN_SLASH => Self::Division,
 
-            TOKEN_AT => Self::This,
             TOKEN_EQUAL_GREATER => Self::Lambda,
-            TOKEN_COLON_EQUAL => Self::Bind,
 
             _ => return Err(()),
         })
@@ -699,37 +567,35 @@ impl InfixOperator {
     /// Returns the binding power of this operator.
     pub fn binding_power(self) -> (u16, u16) {
         match self {
-            Self::Select => (205, 200),
-            Self::ImplicitApply => (190, 195),
+            Self::Select => (185, 180),
+            Self::ImplicitApply => (170, 175),
 
-            Self::Concat => (180, 185),
+            Self::Concat => (160, 165),
 
-            Self::Multiplication | Self::Division => (170, 175),
-            Self::Power => (175, 170),
+            Self::Multiplication | Self::Division => (150, 155),
+            Self::Power => (155, 150),
 
             // PrefixOperator::Swallation | PrefixOperator::Negation
-            Self::Addition | Self::Subtraction => (150, 155),
+            Self::Addition | Self::Subtraction => (130, 135),
             // PrefixOperator::Not
-            Self::Update => (130, 135),
+            Self::Update => (110, 115),
 
             Self::LessOrEqual | Self::Less | Self::MoreOrEqual | Self::More /* | PrefixOperator::Try */ => {
-                (120, 125)
+                (100, 105)
             },
 
-            Self::Construct => (115, 110),
+            Self::Construct => (95, 90),
 
-            Self::Equal | Self::NotEqual => (105, 100),
+            Self::Equal | Self::NotEqual => (85, 80),
 
-            Self::And | Self::All => (95, 90),
-            Self::Or | Self::Any => (85, 80),
-            Self::Implication => (75, 70),
+            Self::And | Self::All => (75, 70),
+            Self::Or | Self::Any => (65, 60),
+            Self::Implication => (55, 50),
 
-            Self::Pipe => (60, 65),
-            Self::Apply => (65, 60),
+            Self::Pipe => (40, 45),
+            Self::Apply => (45, 40),
 
-            Self::This => (55, 50),
-            Self::Lambda => (45, 40),
-            Self::Bind => (35, 30),
+            Self::Lambda => (35, 30),
 
             Self::Same => (25, 20),
             Self::Sequence => (15, 10),
@@ -753,104 +619,41 @@ impl InfixOperation {
     /// Returns the operator token of this operation.
     pub fn operator_token(&self) -> Option<&'_ red::Token> {
         self.children_with_tokens()
-            .filter_map(|child| child.into_token())
+            .filter_map(red::ElementRef::into_token)
             .find(|token| InfixOperator::try_from(token.kind()).is_ok())
     }
 
     /// Returns the operator of this operation.
     pub fn operator(&self) -> InfixOperator {
         self.children_with_tokens()
-            .filter_map(|child| child.into_token())
+            .filter_map(red::ElementRef::into_token)
             .find_map(|token| InfixOperator::try_from(token.kind()).ok())
             .unwrap_or(InfixOperator::ImplicitApply)
     }
 
     pub fn validate(&self, to: &mut Vec<Report>) {
-        match self.operator() {
-            InfixOperator::Same => {
-                let mut same_operator = None;
+        let expressions = &[self.left(), self.right()];
 
-                for item in ExpressionRef::InfixOperation(self).same_items() {
-                    if let ExpressionRef::InfixOperation(operation) = &item
-                        && let operator @ (InfixOperator::Lambda | InfixOperator::Bind) = operation.operator()
-                    {
-                        let same_operator = same_operator.get_or_insert(operator);
-
-                        if *same_operator != operator {
-                            to.push(
-                                Report::error("invalid same-operand")
-                                    .primary(item.span(), "operand")
-                                    .help(
-                                        "all same-operands must be of matching type: either all lambdas or all binds",
-                                    ),
-                            );
-                            continue;
-                        }
-
-                        operation.validate(to);
-                    } else {
-                        to.push(
-                            Report::error("invalid same-operand")
-                                .primary(item.span(), "operand")
-                                .help("all same-operands must either be lambdas or binds"),
-                        );
-                    }
-                }
-            },
-
-            InfixOperator::This => {
-                self.validate_left(to);
-                self.right().validate(to);
-            },
-
-            InfixOperator::Lambda | InfixOperator::Bind => {
-                self.left().validate_pattern(to);
-                self.right().validate(to);
-            },
-
-            operator => {
-                let expressions = &[self.left(), self.right()];
-
-                for expression in expressions {
-                    expression.validate(to);
-                }
-
-                let (InfixOperator::Apply | InfixOperator::Pipe) = operator else {
-                    return;
-                };
-
-                for expression in expressions {
-                    if let ExpressionRef::InfixOperation(operation) = expression
-                        && let child_operator @ (InfixOperator::Apply | InfixOperator::Pipe) = operation.operator()
-                        && child_operator != operator
-                    {
-                        to.push(
-                            Report::error("application and pipe operators do not associate")
-                                .secondary(self.span(), "this")
-                                .primary(operation.span(), "does not associate with this"),
-                        );
-                    }
-                }
-            },
+        for expression in expressions {
+            expression.validate(to);
         }
-    }
 
-    /// Asserts that this node is a this-expression and validates the left
-    /// expression.
-    pub fn validate_left(&self, to: &mut Vec<Report>) {
-        assert_eq!(self.operator(), InfixOperator::This);
+        let operator = self.operator();
+        let (InfixOperator::Apply | InfixOperator::Pipe) = operator else {
+            return;
+        };
 
-        match self.left() {
-            ExpressionRef::Identifier(identifier) => {
-                identifier.validate(to);
-            },
-
-            invalid => {
+        for expression in expressions {
+            if let ExpressionRef::InfixOperation(operation) = expression
+                && let child_operator @ (InfixOperator::Apply | InfixOperator::Pipe) = operation.operator()
+                && child_operator != operator
+            {
                 to.push(
-                    Report::error("left operand of a this-expression must be an identifier")
-                        .primary(invalid.span(), "left operand"),
+                    Report::error("application and pipe operators do not associate")
+                        .secondary(self.span(), "this")
+                        .primary(operation.span(), "does not associate with this"),
                 );
-            },
+            }
         }
     }
 }
@@ -884,7 +687,7 @@ impl SuffixOperation {
     /// Returns the operator token of this operation.
     pub fn operator_token(&self) -> &'_ red::Token {
         self.children_with_tokens()
-            .filter_map(|child| child.into_token())
+            .filter_map(red::ElementRef::into_token)
             .find(|token| SuffixOperator::try_from(token.kind()).is_ok())
             .unwrap()
     }
@@ -892,7 +695,7 @@ impl SuffixOperation {
     /// Returns the operator of this operation.
     pub fn operator(&self) -> SuffixOperator {
         self.children_with_tokens()
-            .filter_map(|child| child.into_token())
+            .filter_map(red::ElementRef::into_token)
             .find_map(|token| SuffixOperator::try_from(token.kind()).ok())
             .unwrap()
     }
@@ -983,6 +786,29 @@ impl Path {
     }
 }
 
+// BIND
+
+node! { #[from(NODE_BIND)] struct Bind; }
+
+impl Bind {
+    get_token! { at_token -> TOKEN_AT }
+
+    get_node! { identifier -> ExpressionRef<'_> }
+
+    pub fn validate(&self, to: &mut Vec<Report>) {
+        let identifier = self.identifier();
+
+        if let ExpressionRef::Identifier(identifier) = identifier {
+            identifier.validate(to);
+        } else {
+            to.push(Report::error("invalid bind").primary(
+                identifier.span(),
+                format!("expected an identifier, not {kind}", kind = identifier.kind()),
+            ));
+        }
+    }
+}
+
 // IDENTIFIER
 
 node! { #[from(NODE_IDENTIFIER)] struct IdentifierQuoted; }
@@ -1041,10 +867,13 @@ impl Identifier {
     /// Returns the value of this identifier. A value may either be a
     /// [`token::Identifier`] or a [`IdentifierQuoted`].
     pub fn value(&self) -> IdentifierValueRef<'_> {
-        if let Some(token) = self
-            .first_token()
-            .and_then(|token| <&token::Identifier>::try_from(token).ok())
-        {
+        let Some(first_token) = self.first_token() else {
+            unreachable!()
+        };
+
+        assert!(!first_token.kind().is_trivia());
+
+        if let Ok(token) = <&token::Identifier>::try_from(first_token) {
             return IdentifierValueRef::Plain(token);
         }
 
@@ -1323,17 +1152,17 @@ node! { #[from(NODE_NUMBER)] struct Number; }
 impl Number {
     /// Returns the underlying value of this number.
     pub fn value(&self) -> NumberValueRef<'_> {
-        if let Some(token) = self
-            .first_token()
-            .and_then(|token| <&token::Integer>::try_from(token).ok())
-        {
+        let Some(first_token) = self.first_token() else {
+            unreachable!()
+        };
+
+        assert!(!first_token.kind().is_trivia());
+
+        if let Ok(token) = <&token::Integer>::try_from(first_token) {
             return NumberValueRef::Integer(token);
         }
 
-        if let Some(token) = self
-            .first_token()
-            .and_then(|token| <&token::Float>::try_from(token).ok())
-        {
+        if let Ok(token) = <&token::Float>::try_from(first_token) {
             return NumberValueRef::Float(token);
         }
 
@@ -1344,11 +1173,11 @@ impl Number {
     pub fn validate(&self, _to: &mut Vec<Report>) {}
 }
 
-// IF THEN
+// IF
 
-node! { #[from(NODE_IF_THEN)] struct IfThen; }
+node! { #[from(NODE_IF)] struct If; }
 
-impl IfThen {
+impl If {
     get_token! { if_token -> TOKEN_LITERAL_IF }
 
     get_node! { condition -> 0 @ ExpressionRef<'_> }
@@ -1359,51 +1188,11 @@ impl IfThen {
 
     get_token! { else_token -> Option<TOKEN_LITERAL_ELSE> }
 
-    get_node! { alternative -> 2 @ Option<ExpressionRef<'_>> }
+    get_node! { alternative -> 2 @ ExpressionRef<'_> }
 
     pub fn validate(&self, to: &mut Vec<Report>) {
         self.condition().validate(to);
         self.consequence().validate(to);
-
-        if let Some(alternative) = self.alternative() {
-            alternative.validate(to);
-        }
-    }
-}
-
-// IF IS
-
-node! { #[from(NODE_IF_IS)] struct IfIs; }
-
-impl IfIs {
-    get_token! { if_token -> TOKEN_LITERAL_IF }
-
-    get_node! { expression -> 0 @ ExpressionRef<'_> }
-
-    get_token! { is_token -> TOKEN_LITERAL_IS }
-
-    get_node! { patterns -> 1 @ ExpressionRef<'_> }
-
-    pub fn validate(&self, to: &mut Vec<Report>) {
-        let mut report = Report::error("invalid if-is");
-
-        self.expression().validate(to);
-
-        for item in self.patterns().same_items() {
-            match item {
-                ExpressionRef::InfixOperation(operation) if let InfixOperator::Lambda = operation.operator() => {
-                    operation.validate(to);
-                },
-
-                invalid => {
-                    report.push_primary(invalid.span(), "invalid branch");
-                    report.push_help("all if-is branches must be lambdas");
-                },
-            }
-        }
-
-        if !report.is_empty() {
-            to.push(report);
-        }
+        self.alternative().validate(to);
     }
 }

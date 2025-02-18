@@ -123,18 +123,12 @@ pub enum Kind {
     #[static_text(")")]
     TOKEN_INTERPOLATION_END,
 
-    #[display("'@'")]
-    #[static_text("@")]
-    TOKEN_AT,
-    #[display("'=>'")]
-    #[static_text("=>")]
-    TOKEN_EQUAL_GREATER,
-    #[display("':='")]
-    #[static_text(":=")]
-    TOKEN_COLON_EQUAL,
     #[display("','")]
     #[static_text(",")]
     TOKEN_COMMA,
+    #[display("'=>'")]
+    #[static_text("=>")]
+    TOKEN_EQUAL_GREATER,
 
     #[display("':'")]
     #[static_text(":")]
@@ -165,9 +159,9 @@ pub enum Kind {
     #[display("'!='")]
     #[static_text("!=")]
     TOKEN_EXCLAMATION_EQUAL,
-    #[display("'=='")]
-    #[static_text("==")]
-    TOKEN_EQUAL_EQUAL,
+    #[display("'='")]
+    #[static_text("=")]
+    TOKEN_EQUAL,
     #[display("'<='")]
     #[static_text("<=")]
     TOKEN_LESS_EQUAL,
@@ -230,8 +224,6 @@ pub enum Kind {
     TOKEN_LITERAL_IF,
     #[display("the keyword 'then'")]
     TOKEN_LITERAL_THEN,
-    #[display("the keyword 'is'")]
-    TOKEN_LITERAL_IS,
     #[display("the keyword 'else'")]
     TOKEN_LITERAL_ELSE,
 
@@ -266,6 +258,9 @@ pub enum Kind {
     #[display("an identifier")]
     TOKEN_IDENTIFIER,
 
+    #[display("'@'")]
+    #[static_text("@")]
+    TOKEN_AT,
     #[display("an identifier")]
     TOKEN_IDENTIFIER_START,
     #[display("the closing delimiter of an identifier")]
@@ -318,6 +313,11 @@ pub enum Kind {
     #[display("a path")]
     NODE_PATH,
 
+    /// A node that starts with a [`TOKEN_AT`] and has a [`NODE_IDENTIFIER`] as
+    /// a child, used for binding expressions to identifiers.
+    #[display("a bind")]
+    NODE_BIND,
+
     /// A stringlike that is delimited by a single backtick. See [`NODE_STRING`]
     /// for the definition of stringlike.
     #[display("an identifier")]
@@ -350,10 +350,8 @@ pub enum Kind {
     #[display("a number")]
     NODE_NUMBER,
 
-    #[display("an if then")]
-    NODE_IF_THEN,
-    #[display("an if is")]
-    NODE_IF_IS,
+    #[display("an if")]
+    NODE_IF,
 }
 
 use Kind::*;
@@ -368,6 +366,7 @@ impl Kind {
             | TOKEN_FLOAT
             | TOKEN_LITERAL_IF
             | TOKEN_PATH_CONTENT
+            | TOKEN_AT
             | TOKEN_IDENTIFIER
             | TOKEN_IDENTIFIER_START
             | TOKEN_STRING_START
@@ -404,7 +403,7 @@ impl Kind {
     }
 
     /// Returns the node and closing kinds of this kind.
-    pub fn try_to_node_and_closing(self) -> Option<(Kind, Kind)> {
+    pub fn as_node_and_closing(self) -> Option<(Kind, Kind)> {
         Some(match self {
             TOKEN_IDENTIFIER_START => (NODE_IDENTIFIER, TOKEN_IDENTIFIER_END),
             TOKEN_STRING_START => (NODE_STRING, TOKEN_STRING_END),

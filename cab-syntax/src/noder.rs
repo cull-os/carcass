@@ -102,8 +102,8 @@ impl Oracle {
 
 fn unexpected(got: Option<Kind>, mut expected: EnumSet<Kind>, span: Span) -> Report {
     let report = match got {
-        Some(kind) => Report::error(format!("unexpected {kind}")),
-        None => Report::error("unexpected end of file"),
+        Some(kind) => Report::error(format!("didn't expect {kind}")),
+        None => Report::error("didn't expect end of file"),
     };
 
     let mut reason = if expected.is_empty() {
@@ -255,6 +255,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
         self.next_direct()
     }
 
+    #[allow(dead_code)]
     fn next_if(&mut self, expected: Kind) -> bool {
         let condition = self.peek() == Some(expected);
 
@@ -362,6 +363,15 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
         });
     }
 
+    fn node_bind(&mut self, until: EnumSet<Kind>) {
+        self.node(NODE_BIND, |this| {
+            this.next_expect(TOKEN_AT.into(), Kind::IDENTIFIERS);
+
+            this.next_while_trivia();
+            this.node_expression_single(until);
+        });
+    }
+
     fn node_identifier(&mut self, until: EnumSet<Kind>) {
         if self.peek() == Some(TOKEN_IDENTIFIER_START) {
             self.node_delimited();
@@ -375,7 +385,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
     fn node_delimited(&mut self) {
         let start_of_delimited = self.checkpoint();
 
-        let (node, end) = self.next().unwrap().try_to_node_and_closing().unwrap();
+        let (node, end) = self.next().unwrap().as_node_and_closing().unwrap();
 
         self.node_from(start_of_delimited, node, |this| {
             loop {
@@ -438,43 +448,24 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
 
     fn node_if(&mut self, until: EnumSet<Kind>) {
         let then_else_binding_power = node::InfixOperator::Same.binding_power().0 + 1;
-        let is_binding_power = node::InfixOperator::Sequence.binding_power().0 + 1;
 
-        let start_of_if = self.checkpoint();
+        self.node(NODE_IF, |this| {
+            this.next_expect(
+                TOKEN_LITERAL_IF.into(),
+                until | Kind::EXPRESSIONS | TOKEN_LITERAL_THEN | TOKEN_LITERAL_ELSE,
+            );
 
-        self.next_expect(
-            TOKEN_LITERAL_IF.into(),
-            until | Kind::EXPRESSIONS | TOKEN_LITERAL_THEN | TOKEN_LITERAL_IS | TOKEN_LITERAL_ELSE,
-        );
+            this.node_expression_binding_power(
+                then_else_binding_power,
+                until | TOKEN_LITERAL_THEN | TOKEN_LITERAL_ELSE,
+            );
 
-        self.node_expression_binding_power(
-            then_else_binding_power,
-            until | TOKEN_LITERAL_THEN | TOKEN_LITERAL_IS | TOKEN_LITERAL_ELSE,
-        );
+            this.next_expect(TOKEN_LITERAL_THEN.into(), until | TOKEN_LITERAL_ELSE);
 
-        match self.next_expect(TOKEN_LITERAL_THEN | TOKEN_LITERAL_IS, until | TOKEN_LITERAL_ELSE) {
-            Some(TOKEN_LITERAL_THEN) => {
-                self.node_from(start_of_if, NODE_IF_THEN, |this| {
-                    this.node_expression_binding_power(then_else_binding_power, until | TOKEN_LITERAL_ELSE);
+            this.node_expression_binding_power(then_else_binding_power, until | TOKEN_LITERAL_ELSE);
 
-                    if this.next_if(TOKEN_LITERAL_ELSE) {
-                        this.node_expression_binding_power(then_else_binding_power, until);
-                    }
-                });
-            },
-
-            Some(TOKEN_LITERAL_IS) => {
-                self.node_from(start_of_if, NODE_IF_IS, |this| {
-                    this.node_expression_binding_power(is_binding_power, until)
-                })
-            },
-
-            None => {
-                self.node_from(start_of_if, NODE_ERROR, |_| {});
-            },
-
-            _ => unreachable!(),
-        }
+            this.node_expression_binding_power(then_else_binding_power, until);
+        });
     }
 
     fn node_expression_single(&mut self, until: EnumSet<Kind>) {
@@ -488,6 +479,8 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
             Some(TOKEN_LEFT_CURLYBRACE) => self.node_attribute_list(until),
 
             Some(TOKEN_PATH_CONTENT) => self.node_path(),
+
+            Some(TOKEN_AT) => self.node_bind(until),
 
             Some(next) if Kind::IDENTIFIERS.contains(next) => self.node_identifier(until),
 

@@ -188,9 +188,7 @@ impl<'write, W: io::Write> Formatter<'write, W> {
                     node::InfixOperator::All => Some("&"),
                     node::InfixOperator::Any => Some("|"),
 
-                    node::InfixOperator::This => Some("@"),
                     node::InfixOperator::Lambda => Some("=>"),
-                    node::InfixOperator::Bind => Some(":="),
                 };
 
                 self.parenthesize(operation.left())?;
@@ -221,6 +219,11 @@ impl<'write, W: io::Write> Formatter<'write, W> {
 
             node::ExpressionRef::Path(path) => self.parenthesize_parted(path.parts()),
 
+            node::ExpressionRef::Bind(bind) => {
+                self.write("@")?;
+                self.parenthesize(bind.identifier())
+            },
+
             node::ExpressionRef::Identifier(identifier) => {
                 match identifier.value() {
                     node::IdentifierValueRef::Plain(token) => {
@@ -249,29 +252,15 @@ impl<'write, W: io::Write> Formatter<'write, W> {
                 }
             },
 
-            node::ExpressionRef::IfThen(if_then) => {
+            node::ExpressionRef::If(if_) => {
                 self.bracket_start("(")?;
 
                 self.write("if ".red().bold())?;
-                self.parenthesize(if_then.condition())?;
+                self.parenthesize(if_.condition())?;
                 self.write(" then ".red().bold())?;
-                self.parenthesize(if_then.consequence())?;
-
-                if let Some(alternative) = if_then.alternative() {
-                    self.write(" else ".red().bold())?;
-                    self.parenthesize(alternative)?;
-                }
-
-                self.bracket_end(")")
-            },
-
-            node::ExpressionRef::IfIs(if_is) => {
-                self.bracket_start("(")?;
-
-                self.write("if ".red().bold())?;
-                self.parenthesize(if_is.expression())?;
-                self.write(" is ".red().bold())?;
-                self.parenthesize(if_is.patterns())?;
+                self.parenthesize(if_.consequence())?;
+                self.write(" else ".red().bold())?;
+                self.parenthesize(if_.alternative())?;
 
                 self.bracket_end(")")
             },
