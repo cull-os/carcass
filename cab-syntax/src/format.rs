@@ -172,7 +172,7 @@ impl<'write, W: io::Write> Formatter<'write, W> {
                     node::InfixOperator::MoreOrEqual => Some(">="),
                     node::InfixOperator::More => Some(">"),
 
-                    node::InfixOperator::Equal => Some("=="),
+                    node::InfixOperator::Equal => Some("="),
                     node::InfixOperator::NotEqual => Some("!="),
 
                     node::InfixOperator::Addition => Some("+"),
