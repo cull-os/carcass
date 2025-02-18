@@ -1,4 +1,4 @@
-#![feature(trait_alias, try_trait_v2)]
+#![feature(let_chains, trait_alias, try_trait_v2)]
 
 // ERROR
 
@@ -18,7 +18,7 @@ use std::{
     sync::Arc,
 };
 
-use yansi::Paint as _;
+use yansi::Paint;
 
 #[doc(hidden)]
 pub mod __private {
@@ -35,22 +35,34 @@ pub type Result<T> = result::Result<T, Error>;
 
 impl fmt::Debug for Error {
     fn fmt(&self, writer: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let header = "error:".red().bold();
+        let mut chain = self.0.chain();
 
-        for (index, error) in self.0.chain().enumerate() {
-            if index == 0 {
-                write!(writer, "{header} {error}")?;
+        if let Some(error) = chain.next() {
+            writeln!(writer, "{header} {error}", header = "error:".red().bold())?;
+        }
+
+        let mut cause = String::new();
+
+        for error in chain {
+            write!(writer, "{header} ", header = "cause:".red().bold())?;
+
+            cause.drain(..); // TODO: Replace with .clear() when yansi removes the method that shadows.
+            write!(cause, "{error}")?;
+
+            let mut chars = cause.char_indices();
+
+            if let Some((_, first)) = chars.next()
+                && let Some((second_start, second)) = chars.next()
+                && second.is_lowercase()
+            {
+                writeln!(
+                    writer,
+                    "{first_lowercase}{rest}",
+                    first_lowercase = first.to_lowercase(),
+                    rest = &cause[second_start..],
+                )?;
             } else {
-                writeln!(writer)?;
-
-                let mut cause = String::new();
-                write!(cause, "{error}").ok();
-
-                if cause.chars().nth(1).is_some_and(|c| c.is_lowercase()) {
-                    cause.replace_range(..1, &cause.chars().next().unwrap().to_lowercase().to_string());
-                }
-
-                write!(writer, "{header} caused by: {cause}")?;
+                writeln!(writer, "{cause}")?;
             }
         }
 
@@ -74,7 +86,7 @@ impl ops::Try for Termination {
     fn branch(self) -> ops::ControlFlow<Self::Residual, Self::Output> {
         match self.0 {
             None => ops::ControlFlow::Continue(()),
-            Some(e) => ops::ControlFlow::Break(Self(Some(e))),
+            Some(error) => ops::ControlFlow::Break(Self(Some(error))),
         }
     }
 }
@@ -83,7 +95,7 @@ impl<T, E: Into<Error>> ops::FromResidual<result::Result<T, E>> for Termination 
     fn from_residual(result: result::Result<T, E>) -> Self {
         match result {
             Ok(_) => Self::success(),
-            Err(e) => Self(Some(e.into())),
+            Err(error) => Self(Some(error.into())),
         }
     }
 }
