@@ -564,6 +564,7 @@ impl TryFrom<Kind> for InfixOperator {
 }
 
 impl InfixOperator {
+    // TODO: Fix this to work with bind-as-expr.
     /// Returns the binding power of this operator.
     pub fn binding_power(self) -> (u16, u16) {
         match self {
