@@ -564,7 +564,6 @@ impl TryFrom<Kind> for InfixOperator {
 }
 
 impl InfixOperator {
-    // TODO: Fix this to work with bind-as-expr.
     /// Returns the binding power of this operator.
     pub fn binding_power(self) -> (u16, u16) {
         match self {
@@ -587,16 +586,16 @@ impl InfixOperator {
 
             Self::Construct => (95, 90),
 
-            Self::Equal | Self::NotEqual => (85, 80),
+            Self::And | Self::All => (85, 80),
+            Self::Or | Self::Any => (75, 70),
+            Self::Implication => (65, 60),
 
-            Self::And | Self::All => (75, 70),
-            Self::Or | Self::Any => (65, 60),
-            Self::Implication => (55, 50),
+            Self::Pipe => (50, 55),
+            Self::Apply => (55, 50),
 
-            Self::Pipe => (40, 45),
-            Self::Apply => (45, 40),
+            Self::Lambda => (45, 40),
 
-            Self::Lambda => (35, 30),
+            Self::Equal | Self::NotEqual => (35, 30),
 
             Self::Same => (25, 20),
             Self::Sequence => (15, 10),
