@@ -3,7 +3,7 @@ use std::num;
 use cab_text::Span;
 use unicode_segmentation::UnicodeSegmentation as _;
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Position {
     pub line: num::NonZeroU32,
     pub column: u32,
@@ -24,7 +24,7 @@ impl Position {
                 break;
             }
 
-            if index == range.start {
+            if index + 1 == range.start {
                 start.line = line;
                 start.column = column;
             }
