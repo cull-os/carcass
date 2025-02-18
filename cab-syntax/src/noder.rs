@@ -90,6 +90,23 @@ impl Oracle {
             .and_then(|node| node::Expression::try_from(node.clone()).ok())
             .unwrap();
 
+        noder.reports.retain({
+            let mut last_span = None;
+
+            move |report| {
+                let Some(start) = report.labels.iter().map(|label| label.span.start).min() else {
+                    return true;
+                };
+
+                if last_span != Some(start) {
+                    last_span = Some(start);
+                    true
+                } else {
+                    false
+                }
+            }
+        });
+
         expression.as_ref().validate(&mut noder.reports);
 
         Parse {
