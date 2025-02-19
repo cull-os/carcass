@@ -9,7 +9,7 @@ description = "A reproducible contextful-expression language"
 edition     = "2024"
 license     = "MIT"
 publish     = false
-repository  = "https://github.com/cull-os/cab"
+repository  = "https://github.com/cull-os/carcass/tree/master/cab"
 version     = "0.0.1"
 
 [workspace.dependencies]
