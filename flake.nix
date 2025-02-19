@@ -2,6 +2,14 @@
   description = "The monorepository of the Cull Organization.";
 
   nixConfig = {
+    builders-use-substitutes = true;
+    flake-registry           = "";
+    show-trace               = true;
+
+    experimental-features = [
+      "pipe-operators"
+    ];
+
     extra-substituters = [
       "https://cache.garnix.io/"
       "https://nix-community.cachix.org/"
