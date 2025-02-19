@@ -19,6 +19,12 @@
 
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
 
+    devshell = {
+      url = "github:numtide/devshell";
+
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     crane.url = "github:ipetkov/crane";
 
     fenix = {
@@ -28,14 +34,9 @@
     };
 
     advisory-db = {
-      url   = "github:rustsec/advisory-db";
+      url = "github:rustsec/advisory-db";
+
       flake = false;
-    };
-
-    devshell = {
-      url = "github:numtide/devshell";
-
-      inputs.nixpkgs.follows = "nixpkgs";
     };
   };
 
