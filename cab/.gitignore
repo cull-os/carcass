@@ -2,6 +2,15 @@
 
 !.gitignore
 
+# NIX
+!flake.lock
+!flake.nix
+
+# BUILD SYSTEMS
+!Cargo.lock
+!Cargo.toml
+
+# SOURCES
 !cab/
 !cab/src/
 
@@ -26,9 +35,7 @@
 !task/
 !task/src/
 
-!Cargo.lock
-!Cargo.toml
-
-!README.md
-
 !*.rs
+
+# DOCUMENTATION
+!*.md

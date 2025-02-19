@@ -2,11 +2,12 @@
 
 !.gitignore
 
-# BUILD SYSTEMS
-!.cargo/config.toml
-
+# NIX
 !flake.lock
 !flake.nix
+
+# BUILD SYSTEMS
+!.cargo/config.toml
 
 # FORMATTERS
 !.rustfmt.toml
