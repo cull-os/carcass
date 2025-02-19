@@ -1,3 +1,3 @@
 # Cab
 
-A pure, reproducible contextful-expression language.
+A reproducible contextful-expression language.

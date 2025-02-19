@@ -3,8 +3,7 @@
 !.gitignore
 
 # NIX
-!flake.lock
-!flake.nix
+!default.nix
 
 # BUILD SYSTEMS
 !Cargo.lock
