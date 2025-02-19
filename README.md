@@ -1,6 +1,6 @@
 # The Cull Corpus
 
-A monorepository for the Cull Organization.
+The monorepository of the Cull Organization.
 
 ## Projects
 

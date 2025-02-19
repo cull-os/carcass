@@ -1,5 +1,5 @@
 {
-  description = "A monorepository for the Cull organization";
+  description = "The monorepository of the Cull Organization.";
 
   nixConfig = {
     extra-substituters = [
