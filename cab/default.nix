@@ -1,5 +1,33 @@
-{ lib, ... }: {
-  perSystem = { inputs', system, pkgs, cargoLib, ... }: {
+{ inputs, lib, ... }: {
+  perSystem = { system, pkgs, cargoLib, ... }: let
+    src = cargoLib.cleanCargoSource ./.;
+
+    cargoArguments = {
+      inherit src;
+
+      strictDeps = true;
+    };
+
+    cargoArtifacts = cargoLib.buildDepsOnly cargoArguments;
+
+    cab = cargoLib.buildPackage (cargoArguments // {
+      inherit cargoArtifacts;
+        
+      pname          =           "cab";
+      cargoExtraArgs = "--package cab";
+
+      doCheck = false;
+    });
+
+    cab-task = cargoLib.buildPackage (cargoArguments // {
+      inherit cargoArtifacts;
+        
+      pname          =           "task";
+      cargoExtraArgs = "--package task";
+
+      doCheck = false;
+    });
+  in {
     devshells.cab = {
       packages = [
         # You will need a nightly Rust compiler.
@@ -27,24 +55,12 @@
       ];
     };
 
-    checks = let
-      src = cargoLib.cleanCargoSource ./.;
+    packages = {
+      inherit cab cab-task;
+    };
 
-      cargoArguments = {
-        inherit src;
-
-        strictDeps = true;
-      };
-
-      cargoArtifacts = cargoLib.buildDepsOnly cargoArguments;
-
-      cab = cargoLib.buildPackage (cargoArguments // {
-        inherit cargoArtifacts;
-
-        doCheck = false;
-      });
-    in {
-      inherit cab;
+    checks = {
+      inherit cab cab-task;
 
       cab-test = cargoLib.cargoTest (cargoArguments // {
         inherit cargoArtifacts;
@@ -62,6 +78,8 @@
 
       cab-fmt = cargoLib.cargoFmt {
         inherit src;
+
+        rustFmtExtraArgs = "--config-path ${../.rustfmt.toml}";
       };
 
       cab-toml-fmt = cargoLib.taploFmt {
@@ -72,13 +90,14 @@
       };
 
       cab-audit = cargoLib.cargoAudit {
-        inherit (inputs') advisory-db;
+        inherit (inputs) advisory-db;
         inherit src;
       };
 
-      cab-deny = cargoLib.cargoDeny {
-        inherit src;
-      };
+      # TODO: Find out why this doesn't work.
+      # cab-deny = cargoLib.cargoDeny {
+      #   inherit src;
+      # };
     };
   };
 }

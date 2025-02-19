@@ -475,13 +475,13 @@ mod tests {
     #[test]
     fn no_empty_tokens() {
         assert_token_matches!(
-            r"'foo \(bar)'",
-            (TOKEN_STRING_START, "'"),
+            r#""foo \(bar)""#,
+            (TOKEN_STRING_START, r#"""#),
             (TOKEN_CONTENT, "foo "),
             (TOKEN_INTERPOLATION_START, r"\("),
             (TOKEN_IDENTIFIER, "bar"),
             (TOKEN_INTERPOLATION_END, ")"),
-            (TOKEN_STRING_END, "'"),
+            (TOKEN_STRING_END, r#"""#),
         );
     }
 

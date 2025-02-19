@@ -2,6 +2,8 @@
 members  = [ "cab*", "fuzz", "task" ]
 resolver = "3"
 
+metadata.crane.name = "cab"
+
 [workspace.package]
 description = "A reproducible contextful-expression language"
 edition     = "2024"

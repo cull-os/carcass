@@ -16,6 +16,21 @@
         "type": "github"
       }
     },
+    "crane": {
+      "locked": {
+        "lastModified": 1739936662,
+        "narHash": "sha256-x4syUjNUuRblR07nDPeLDP7DpphaBVbUaSoeZkFbGSk=",
+        "owner": "ipetkov",
+        "repo": "crane",
+        "rev": "19de14aaeb869287647d9461cbd389187d8ecdb7",
+        "type": "github"
+      },
+      "original": {
+        "owner": "ipetkov",
+        "repo": "crane",
+        "type": "github"
+      }
+    },
     "devshell": {
       "inputs": {
         "nixpkgs": [
@@ -106,6 +121,7 @@
     "root": {
       "inputs": {
         "advisory-db": "advisory-db",
+        "crane": "crane",
         "devshell": "devshell",
         "fenix": "fenix",
         "flake-parts": "flake-parts",
