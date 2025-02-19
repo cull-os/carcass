@@ -53,7 +53,7 @@ struct FsEntry {
 impl fmt::Display for FsEntry {
     fn fmt(&self, writer: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.location {
-            FsEntryLocation::Root { path } => write!(writer, "fs:{path}", path = path.to_str().ok_or(fmt::Error)?),
+            FsEntryLocation::Root { path } => write!(writer, "fs::{path}", path = path.to_str().ok_or(fmt::Error)?),
             FsEntryLocation::Child { name, .. } => write!(writer, "{name}"),
         }
     }
