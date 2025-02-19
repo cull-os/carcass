@@ -1,4 +1,4 @@
-## Code of Conduct
+# Code of Conduct
 
 This document provides community guidelines for a safe,
 respectful, productive, and collaborative place for any
@@ -15,7 +15,7 @@ mailing lists, submitted patches, commit comments, etc.).
 - Behaviour which can be reasonably considered harassment
   will not be tolerated.
 
-## Apolitical Stance
+# Apolitical Stance
 
 Politics not directly relevant to the project or community
 should not be discussed or mentioned in project spaces.
@@ -23,7 +23,7 @@ We are here to enjoy working together on creating software
 (with equity and parity, regardless of our background or
 identity) not to push personal politics onto others.
 
-## Affective Stance
+# Affective Stance
 
 Ultimately, a "code" of conduct is only a guideline.
 Participants are encouraged to become harmless (i.e., being

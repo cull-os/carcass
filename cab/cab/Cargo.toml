@@ -1,0 +1,19 @@
+[package]
+name                  = "cab"
+description.workspace = true
+edition.workspace     = true
+license.workspace     = true
+publish.workspace     = true
+repository.workspace  = true
+version.workspace     = true
+
+[dependencies]
+cab-error.path  = "../cab-error"
+cab-island.path = "../cab-island"
+cab-report.path = "../cab-report"
+cab-syntax.path = "../cab-syntax"
+cab-text.path   = "../cab-text"
+
+clap.workspace  = true
+tokio.workspace = true
+yansi.workspace = true

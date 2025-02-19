@@ -1,19 +1,40 @@
-[package]
-name                  = "cab"
-description.workspace = true
-edition.workspace     = true
-license.workspace     = true
-publish.workspace     = true
-repository.workspace  = true
-version.workspace     = true
+[workspace]
+members  = [ "cab*", "fuzz", "task" ]
+resolver = "3"
 
-[dependencies]
-cab-error.path  = "../cab-error"
-cab-island.path = "../cab-island"
-cab-report.path = "../cab-report"
-cab-syntax.path = "../cab-syntax"
-cab-text.path   = "../cab-text"
+[workspace.package]
+description = "A reproducible contextful-expression language"
+edition     = "2024"
+license     = "MIT"
+publish     = false
+repository  = "https://github.com/cull-os/cab"
+version     = "0.0.1"
 
-clap.workspace  = true
-tokio.workspace = true
-yansi.workspace = true
+[workspace.dependencies]
+anyhow = "1.0.95"
+async-once-cell = "0.5.4"
+async-trait = "0.1.86"
+bytes = "1.10.0"
+clap = { version = "4.5.4", features = [ "derive" ] }
+const-str = "0.6.2"
+cstree = { git = "https://github.com/cull-os/cstree", features = [
+  "derive",
+  "lasso_compat",
+  "multi_threaded_interning",
+] }
+derive_more = { version = "2.0.1", features = [ "full" ] }
+enumset = "1.1.3"
+libfuzzer-sys = "0.4"
+num = "0.4.3"
+paste = "1.0.15"
+peekmore = "1.3.0"
+phf = { version = "0.11.3", features = [ "macros" ] }
+scopeguard = "1.2.0"
+smallvec = "2.0.0-alpha.10"
+terminal_size = "0.4.1"
+thiserror = "2.0.11"
+tokio = { version = "1.37.0", features = [ "full" ] }
+unicode-segmentation = "1.12.0"
+unicode-width = "0.2.0"
+which = "7.0.1"
+yansi = { version = "1.0.1", features = [ "detect-env", "detect-tty", "hyperlink" ] }

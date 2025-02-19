@@ -1,38 +1,19 @@
 *
 
-!.cargo/
-
-!cab/
-!cab/src/
-
-!cab-error/
-!cab-error/src/
-
-!cab-island/
-!cab-island/src/
-
-!cab-report/
-!cab-report/src/
-
-!cab-syntax/
-!cab-syntax/src/
-
-!cab-text/
-!cab-text/src/
-
-!docs/
-
-!fuzz/
-!fuzz/fuzz_targets/
-
-!task/
-!task/src/
-
 !.gitignore
 
-!*.cab
-!*.lock
+# BUILD SYSTEMS
+!.cargo/config.toml
+
+!flake.lock
+!flake.nix
+
+# FORMATTERS
+!.rustfmt.toml
+!.taplo.toml
+
+# DOCUMENTATION
 !*.md
-!*.nix
-!*.rs
-!*.toml
+
+# PROJECTS
+!cab/
