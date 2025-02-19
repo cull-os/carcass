@@ -1,0 +1,15 @@
+*
+!.gitignore
+
+# DOCUMENTATION
+!*.md
+
+# ASSETS
+!png/
+!png/*.png
+
+!svg/
+!svg/*.svg
+
+!webp/
+!webp/*.webp

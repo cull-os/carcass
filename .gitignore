@@ -1,6 +1,8 @@
 *
-
 !.gitignore
+
+# DOCUMENTATION
+!*.md
 
 # NIX
 !flake.nix
@@ -13,8 +15,8 @@
 !.rustfmt.toml
 !.taplo.toml
 
-# DOCUMENTATION
-!*.md
-
 # PROJECTS
 !cab/
+
+# BRANDING
+!brand/

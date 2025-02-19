@@ -1,6 +1,8 @@
 *
-
 !.gitignore
+
+# DOCUMENTATION
+!*.md
 
 # NIX
 !default.nix
@@ -35,6 +37,3 @@
 !task/src/
 
 !*.rs
-
-# DOCUMENTATION
-!*.md
