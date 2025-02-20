@@ -1,6 +1,6 @@
 # The Carcass <!-- thank alcuin for the name -->
 
-The monorepository of the Cull Organization.
+The Cull monorepository.
 
 ## Projects
 
