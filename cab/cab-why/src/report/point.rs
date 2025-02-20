@@ -1,10 +1,8 @@
 use std::borrow::Cow;
 
-use cab_text::{
-    into,
-    paint,
-};
 use yansi::Paint as _;
+
+use crate::into;
 
 #[derive(Debug, Clone)]
 pub struct Point {
@@ -14,10 +12,12 @@ pub struct Point {
 
 impl Point {
     pub fn new(title: yansi::Painted<impl Into<Cow<'static, str>>>, text: impl Into<Cow<'static, str>>) -> Self {
-        let title = paint(title.value.into(), title.style);
+        let mut title2 = title.value.into().new();
+        title2.style = title.style;
+
         into!(text);
 
-        Self { title, text }
+        Self { title: title2, text }
     }
 
     pub fn tip(text: impl Into<Cow<'static, str>>) -> Self {

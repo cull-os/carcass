@@ -10,7 +10,7 @@ use std::{
 use async_once_cell::OnceCell;
 use async_trait::async_trait;
 use bytes::Bytes;
-use cab_error::{
+use cab_why::{
     Contextful as _,
     bail,
 };

@@ -5,11 +5,11 @@ use std::{
 };
 
 use cab::{
-    error::{
+    syntax,
+    why::{
         self,
         Contextful as _,
     },
-    syntax,
 };
 use clap::Parser as _;
 use which::which;
@@ -46,7 +46,7 @@ enum Check {
 }
 
 #[tokio::main]
-async fn main() -> error::Termination {
+async fn main() -> why::Termination {
     let cli = Cli::parse();
 
     yansi::whenever(yansi::Condition::TTY_AND_COLOR);
@@ -128,7 +128,7 @@ async fn main() -> error::Termination {
                     fail_count += 1;
 
                     if fail_fast {
-                        error::bail!("failed fast");
+                        why::bail!("failed fast");
                     }
 
                     Ok(())
@@ -144,5 +144,5 @@ async fn main() -> error::Termination {
         },
     }
 
-    error::Termination::success()
+    why::Termination::success()
 }

@@ -157,22 +157,11 @@ checksum = "f61dac84819c6588b558454b194026eb1f09c293b9036ae9b159e74e73ab6cf9"
 name = "cab"
 version = "0.0.1"
 dependencies = [
- "cab-error",
  "cab-island",
- "cab-report",
  "cab-syntax",
- "cab-text",
+ "cab-why",
  "clap",
  "tokio",
- "yansi",
-]
-
-[[package]]
-name = "cab-error"
-version = "0.0.1"
-dependencies = [
- "anyhow",
- "thiserror",
  "yansi",
 ]
 
@@ -183,31 +172,15 @@ dependencies = [
  "async-once-cell",
  "async-trait",
  "bytes",
- "cab-error",
+ "cab-why",
  "tokio",
-]
-
-[[package]]
-name = "cab-report"
-version = "0.0.1"
-dependencies = [
- "cab-error",
- "cab-island",
- "cab-text",
- "const-str",
- "cstree",
- "smallvec 2.0.0-alpha.10",
- "unicode-segmentation",
- "unicode-width",
- "yansi",
 ]
 
 [[package]]
 name = "cab-syntax"
 version = "0.0.1"
 dependencies = [
- "cab-report",
- "cab-text",
+ "cab-why",
  "cstree",
  "derive_more",
  "enumset",
@@ -220,12 +193,16 @@ dependencies = [
 ]
 
 [[package]]
-name = "cab-text"
+name = "cab-why"
 version = "0.0.1"
 dependencies = [
+ "anyhow",
+ "const-str",
  "cstree",
  "scopeguard",
+ "smallvec 2.0.0-alpha.10",
  "terminal_size",
+ "thiserror",
  "unicode-segmentation",
  "unicode-width",
  "yansi",
@@ -470,7 +447,6 @@ version = "0.0.1"
 dependencies = [
  "cab",
  "libfuzzer-sys",
- "tokio",
  "yansi",
 ]
 

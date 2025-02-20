@@ -6,7 +6,7 @@ use std::{
 use async_once_cell::OnceCell;
 use async_trait::async_trait;
 use bytes::Bytes;
-use cab_error::Contextful as _;
+use cab_why::Contextful as _;
 use tokio::io::{
     self,
     AsyncReadExt as _,

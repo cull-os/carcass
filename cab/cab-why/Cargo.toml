@@ -1,5 +1,5 @@
 [package]
-name                  = "cab-text"
+name                  = "cab-why"
 description.workspace = true
 edition.workspace     = true
 license.workspace     = true
@@ -8,9 +8,13 @@ repository.workspace  = true
 version.workspace     = true
 
 [dependencies]
+anyhow.workspace               = true
+const-str.workspace            = true
 cstree.workspace               = true
 scopeguard.workspace           = true
+smallvec.workspace             = true
 terminal_size.workspace        = true
+thiserror.workspace            = true
 unicode-segmentation.workspace = true
 unicode-width.workspace        = true
 yansi.workspace                = true

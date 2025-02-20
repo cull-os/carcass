@@ -1,7 +1,8 @@
 use std::num;
 
-use cab_text::Span;
 use unicode_segmentation::UnicodeSegmentation as _;
+
+use crate::Span;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Position {

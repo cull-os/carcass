@@ -7,9 +7,9 @@ use std::{
     ops,
 };
 
-use cab_report::Report;
-use cab_text::{
+use cab_why::{
     IntoSpan,
+    Report,
     Span,
 };
 use paste::paste;

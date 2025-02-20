@@ -7,8 +7,7 @@ repository.workspace = true
 version.workspace    = true
 
 [dependencies]
-cab-report.path = "../cab-report"
-cab-text.path   = "../cab-text"
+cab-why.path   = "../cab-why"
 
 cstree.workspace      = true
 derive_more.workspace = true

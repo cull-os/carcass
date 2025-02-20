@@ -1,17 +1,24 @@
 use std::fmt;
 
-use crate::__private::LINE_WIDTH;
+use crate::__private::{
+    line_width_load,
+    line_width_store,
+};
 
 #[doc(hidden)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum __IndentPlace {
+pub enum IndentPlace {
     Start,
     Middle,
     End,
 }
 
-type IndentWith<'a> = &'a mut dyn FnMut(&mut dyn fmt::Write) -> Result<u16, fmt::Error>;
+/// The type that is accepted by [`indent_with`] to print prefix indents.
+pub type IndentWith<'a> = &'a mut dyn FnMut(&mut dyn fmt::Write) -> Result<u16, fmt::Error>;
 
+/// An indent writer.
+///
+/// TODO: Explain how it behaves properly.
 pub struct IndentWriter<'a> {
     #[doc(hidden)]
     pub __writer: &'a mut dyn fmt::Write,
@@ -20,12 +27,12 @@ pub struct IndentWriter<'a> {
     #[doc(hidden)]
     pub __count: u16,
     #[doc(hidden)]
-    pub __place: __IndentPlace,
+    pub __place: IndentPlace,
 }
 
 impl Drop for IndentWriter<'_> {
     fn drop(&mut self) {
-        LINE_WIDTH.set(LINE_WIDTH.get().saturating_sub(self.__count));
+        line_width_store(line_width_load().saturating_sub(self.__count));
     }
 }
 
@@ -36,23 +43,23 @@ impl fmt::Write for IndentWriter<'_> {
 
         for line in s.split('\n').map(Line).intersperse(New) {
             match self.__place {
-                __IndentPlace::Start
+                IndentPlace::Start
                     if let Line(line) = line
                         && !line.is_empty() =>
                 {
                     self.write_indent()?;
                 },
 
-                __IndentPlace::End => {
+                IndentPlace::End => {
                     writeln!(self.__writer)?;
-                    self.__place = __IndentPlace::Start;
+                    self.__place = IndentPlace::Start;
                 },
 
                 _ => {},
             }
 
             match line {
-                New => self.__place = __IndentPlace::End,
+                New => self.__place = IndentPlace::End,
 
                 Line(line) => {
                     write!(self.__writer, "{line}")?;
@@ -65,8 +72,9 @@ impl fmt::Write for IndentWriter<'_> {
 }
 
 impl IndentWriter<'_> {
+    /// Asserts that it is at the start of the line and writes the indent.
     pub fn write_indent(&mut self) -> fmt::Result {
-        assert_eq!(self.__place, __IndentPlace::Start);
+        assert_eq!(self.__place, IndentPlace::Start);
 
         let wrote = (self.__with)(self.__writer)?;
 
@@ -78,7 +86,7 @@ impl IndentWriter<'_> {
         }
 
         write!(self.__writer, "{:>count$}", "", count = (self.__count - wrote) as usize)?;
-        self.__place = __IndentPlace::Middle;
+        self.__place = IndentPlace::Middle;
 
         Ok(())
     }
@@ -87,7 +95,7 @@ impl IndentWriter<'_> {
 pub fn indent(writer: &mut dyn fmt::Write, count: u16) -> IndentWriter<'_> {
     static mut ZERO_INDENTER: IndentWith<'static> = &mut |_| Ok(0);
 
-    LINE_WIDTH.set(LINE_WIDTH.get() + count);
+    line_width_store(line_width_load() + count);
 
     IndentWriter {
         __writer: writer,
@@ -96,18 +104,18 @@ pub fn indent(writer: &mut dyn fmt::Write, count: u16) -> IndentWriter<'_> {
         // race conditions.
         __with: unsafe { ZERO_INDENTER },
         __count: count,
-        __place: __IndentPlace::Start,
+        __place: IndentPlace::Start,
     }
 }
 
 pub fn indent_with<'a>(writer: &'a mut dyn fmt::Write, count: u16, with: IndentWith<'a>) -> IndentWriter<'a> {
-    LINE_WIDTH.set(LINE_WIDTH.get() + count);
+    line_width_store(line_width_load() + count);
 
     IndentWriter {
         __writer: writer,
         __with: with,
         __count: count,
-        __place: __IndentPlace::Start,
+        __place: IndentPlace::Start,
     }
 }
 
@@ -117,6 +125,8 @@ macro_rules! indent {
         let header = $header;
 
         let header_width: u16 = {
+            use $crate::__private::unicode_width::UnicodeWidthStr as _;
+
             trait ToStr {
                 fn to_str(&self) -> &str;
             }
@@ -145,9 +155,7 @@ macro_rules! indent {
                 }
             }
 
-            $crate::__private::unicode_width::UnicodeWidthStr::width(header.to_str())
-                .try_into()
-                .expect("header too big")
+            header.to_str().width().try_into().expect("header too big")
         };
 
         let mut wrote = false;
@@ -189,12 +197,18 @@ macro_rules! dedent {
     };
 
     ($writer:ident, $dedent:expr,discard = $discard:literal) => {
-        let dedent = $dedent as u16;
-        let old_count = $crate::__private::LINE_WIDTH.get();
+        use $crate::__private::{
+            line_width_load,
+            line_width_store,
+            scopeguard,
+        };
 
-        $crate::__private::LINE_WIDTH.set(old_count.saturating_sub(dedent));
-        let _guard = $crate::__private::scopeguard::guard((), |_| {
-            $crate::__private::LINE_WIDTH.set(old_count);
+        let dedent = $dedent as u16;
+        let old_count = line_width_load();
+
+        line_width_store(old_count.saturating_sub(dedent));
+        let _guard = scopeguard::guard((), |_| {
+            line_width_store(old_count);
         });
 
         let $writer = &mut $crate::IndentWriter {

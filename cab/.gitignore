@@ -15,20 +15,17 @@
 !cab/
 !cab/src/
 
-!cab-error/
-!cab-error/src/
+!cab-why/
+!cab-why/src/
+!cab-why/src/print/
+!cab-why/src/report/
+!cab-why/src/text/
 
 !cab-island/
 !cab-island/src/
 
-!cab-report/
-!cab-report/src/
-
 !cab-syntax/
 !cab-syntax/src/
-
-!cab-text/
-!cab-text/src/
 
 !fuzz/
 !fuzz/fuzz_targets/

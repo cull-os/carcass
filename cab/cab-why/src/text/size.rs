@@ -2,17 +2,18 @@ use std::ops;
 
 use crate::into;
 
+/// Byte length of a source code element.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Size(u32);
 
 impl Size {
+    // Creates a new [`Size`].
+    #[inline]
     pub fn new(size: impl Into<Size>) -> Self {
         into!(size);
         size
     }
 }
-
-// OPERATIONS
 
 impl<I: Into<Self>> ops::Add<I> for Size {
     type Output = Self;
@@ -48,8 +49,6 @@ where
     }
 }
 
-// U32 CONVERSIONS
-
 impl ops::Deref for Size {
     type Target = u32;
 
@@ -70,8 +69,6 @@ impl From<u32> for Size {
     }
 }
 
-// USIZE CONVERSIONS
-
 impl From<Size> for usize {
     fn from(this: Size) -> Self {
         *this as usize
@@ -83,8 +80,6 @@ impl From<usize> for Size {
         Self(that.try_into().expect("size too big"))
     }
 }
-
-// TEXTSIZE CONVERSIONS
 
 impl From<Size> for cstree::text::TextSize {
     fn from(this: Size) -> Self {
@@ -98,8 +93,8 @@ impl From<cstree::text::TextSize> for Size {
     }
 }
 
-// INTO SIZE
-
+/// A trait to extract [`Size`] from types that relate to source code and have
+/// sizes.
 pub trait IntoSize {
     fn size(&self) -> Size;
 }

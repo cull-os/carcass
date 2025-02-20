@@ -4,12 +4,10 @@ use std::{
     sync::Arc,
 };
 
-use cab_report::{
+use cab_why::{
+    IntoSize,
     Report,
     ReportSeverity,
-};
-use cab_text::{
-    IntoSize,
     Size,
     Span,
 };

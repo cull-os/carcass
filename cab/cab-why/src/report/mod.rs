@@ -1,24 +1,28 @@
+mod label;
+mod point;
+mod position;
+
 use std::{
     borrow::Cow,
     cell::RefCell,
+    cmp,
     fmt::{
         self,
         Write as _,
     },
     iter,
     ops,
-    sync::Arc,
 };
 
-use cab_error::{
-    Contextful,
-    Result,
+use smallvec::SmallVec;
+use yansi::Paint;
+
+pub use self::{
+    label::*,
+    point::*,
+    position::*,
 };
-use cab_island::{
-    Leaf,
-    display,
-};
-use cab_text::{
+use crate::{
     Size,
     Span,
     dedent,
@@ -26,10 +30,6 @@ use cab_text::{
     into,
     wrapln,
 };
-use smallvec::SmallVec;
-use yansi::Paint;
-
-use crate::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ReportSeverity {
@@ -135,29 +135,20 @@ impl Report {
         self.point(Point::help(text))
     }
 
-    // TODO: Use SyntaxText rather than a leaf.
-    pub async fn with(&self, leaf: Arc<dyn Leaf>) -> Result<impl fmt::Display> {
-        let bytes = leaf.clone().read().await?;
-
-        Ok(ReportDisplay {
+    // TODO: Use SyntaxText.
+    pub fn with<'a>(&'a self, location: impl fmt::Display + 'a, source: &'a str) -> impl fmt::Display + 'a {
+        ReportDisplay {
             report: self,
-
-            source: String::from_utf8(bytes.to_vec()).with_context(|| {
-                format!(
-                    "failed to convert the contents of {leaf} to valid UTF-8",
-                    leaf = display!(leaf)
-                )
-            })?,
-
-            leaf,
-        })
+            location,
+            source,
+        }
     }
 }
 
-struct ReportDisplay<'a> {
+struct ReportDisplay<'a, L: fmt::Display> {
     report: &'a Report,
-    source: String,
-    leaf: Arc<dyn Leaf>,
+    location: L,
+    source: &'a str,
 }
 
 fn number_width(number: u32) -> usize {
@@ -258,7 +249,7 @@ pub(crate) fn resolve_style<'a>(
         }
     }
 }
-impl fmt::Display for ReportDisplay<'_> {
+impl<L: fmt::Display> fmt::Display for ReportDisplay<'_, L> {
     fn fmt(&self, writer: &mut fmt::Formatter<'_>) -> fmt::Result {
         const BOTTOM_TO_RIGHT: char = '┏';
         const TOP_TO_BOTTOM: char = '┃';
@@ -273,7 +264,11 @@ impl fmt::Display for ReportDisplay<'_> {
         const STYLE_HEADER_PATH: yansi::Style = yansi::Style::new().green();
         const STYLE_HEADER_POSITION: yansi::Style = yansi::Style::new().blue();
 
-        let Self { report, leaf, source } = self;
+        let Self {
+            report,
+            location: file,
+            source,
+        } = self;
 
         #[derive(Debug, Clone, Copy, PartialEq, Eq)]
         struct StrikeId(u8);
@@ -494,7 +489,7 @@ impl fmt::Display for ReportDisplay<'_> {
             );
 
             STYLE_HEADER_PATH.fmt_prefix(writer)?;
-            write!(writer, "{leaf}", leaf = display!(leaf))?;
+            write!(writer, "{file}")?;
             STYLE_HEADER_PATH.fmt_suffix(writer)?;
 
             let line_number = label_start.line.paint(STYLE_HEADER_POSITION);

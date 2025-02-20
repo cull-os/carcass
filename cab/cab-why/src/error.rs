@@ -1,5 +1,3 @@
-#![feature(let_chains, trait_alias, try_trait_v2)]
-
 // ERROR
 
 use std::{
@@ -20,18 +18,14 @@ use std::{
 
 use yansi::Paint;
 
-#[doc(hidden)]
-pub mod __private {
-    pub use anyhow;
-}
+/// A type alias for consice use of [`Error`].
+pub type Result<T> = result::Result<T, Error>;
 
-// ERROR
-
+/// The error type. Stores an error chain that can be appended to with
+/// [`Contextful`]. Can be formatted to show the chain with [`fmt::Debug`].
 #[derive(thiserror::Error, Clone)]
 #[error(transparent)]
 pub struct Error(#[doc(hidden)] pub Arc<anyhow::Error>);
-
-pub type Result<T> = result::Result<T, Error>;
 
 impl fmt::Debug for Error {
     fn fmt(&self, writer: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -70,8 +64,11 @@ impl fmt::Debug for Error {
     }
 }
 
-// TERMINATION
-
+/// The termination type. Meant to be used as the return type of the main
+/// function.
+///
+/// Can be created directly or from an `Error` with the `?` operator. Will
+/// pretty print the error.
 #[derive(Clone)]
 pub struct Termination(Option<Error>);
 
@@ -120,17 +117,28 @@ impl process::Termination for Termination {
 }
 
 impl Termination {
+    /// Creates a [`Termination`] from the provided [`Error`].
     pub fn error(error: Error) -> Self {
         Self(Some(error))
     }
 
+    /// Creates a successful [`Termination`] that returns success.
     pub fn success() -> Self {
         Self(None)
     }
 }
 
-// MACROS
-
+/// Creates an [`Error`] from the provided string literal.
+///
+/// # Example
+///
+/// ```rs
+/// fn get_result() -> Result<()> {
+///     todo!()
+/// }
+///
+/// get_result().map_err(|error| error!("found error: {error}"))
+/// ```
 #[macro_export]
 macro_rules! error {
     ($($t:tt)*) => {
@@ -138,6 +146,11 @@ macro_rules! error {
     };
 }
 
+/// A macro that boils down to:
+///
+/// ```rs
+/// return Err(error!(arguments));
+/// ```
 #[macro_export]
 macro_rules! bail {
     ($($t:tt)*) => {
@@ -145,13 +158,15 @@ macro_rules! bail {
     };
 }
 
-// CONTEXT
-
+/// The type of the context accepted by [`Contextful`].
 pub trait Context = fmt::Display + Send + Sync + 'static;
 
+/// A trait to add context to [`Error`].
 pub trait Contextful<T> {
+    /// Appends the context to the error chain.
     fn context(self, context: impl Context) -> Result<T>;
 
+    /// Appends the context to the error chain, lazily.
     fn with_context<C: Context>(self, context: impl FnOnce() -> C) -> Result<T>;
 }
 

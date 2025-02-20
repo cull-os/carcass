@@ -1,11 +1,10 @@
 use std::borrow::Cow;
 
-use cab_text::{
+use crate::{
+    ReportSeverity,
     Span,
     into,
 };
-
-use crate::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LabelSeverity {

@@ -11,12 +11,12 @@ use std::{
 };
 
 use cab::{
-    error::{
+    island,
+    syntax,
+    why::{
         self,
         Contextful as _,
     },
-    island,
-    syntax,
 };
 use clap::Parser as _;
 use yansi::Paint as _;
@@ -58,7 +58,7 @@ enum Dump {
 }
 
 #[tokio::main]
-async fn main() -> error::Termination {
+async fn main() -> why::Termination {
     let cli = Cli::parse();
 
     yansi::whenever(yansi::Condition::TTY_AND_COLOR);
@@ -101,7 +101,7 @@ async fn main() -> error::Termination {
                     let parse = oracle.parse(syntax::tokenize(&source));
 
                     for report in parse.reports {
-                        writeln!(err, "{report}", report = report.with(leaf.clone()).await?).ok();
+                        writeln!(err, "{report}", report = report.with(island::display!(leaf), &source)).ok();
                     }
 
                     if let Dump::Syntax = command {
@@ -115,5 +115,5 @@ async fn main() -> error::Termination {
         },
     }
 
-    error::Termination::success()
+    why::Termination::success()
 }

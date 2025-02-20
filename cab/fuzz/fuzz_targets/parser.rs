@@ -9,10 +9,7 @@ use std::{
         Hasher as _,
     },
     path::Path,
-    sync::{
-        Arc,
-        LazyLock,
-    },
+    sync::Arc,
 };
 
 use cab::{
@@ -25,9 +22,6 @@ use libfuzzer_sys::{
 };
 use yansi::Paint as _;
 
-static RUNTIME: LazyLock<tokio::runtime::Runtime> =
-    LazyLock::new(|| tokio::runtime::Builder::new_current_thread().build().unwrap());
-
 fuzz_target!(|source: &str| -> Corpus {
     let oracle = syntax::oracle();
     let parse = oracle.parse(syntax::tokenize(source));
@@ -35,10 +29,7 @@ fuzz_target!(|source: &str| -> Corpus {
     let island: Arc<dyn island::Leaf> = Arc::new(island::blob(source.to_owned()));
 
     for report in &parse.reports {
-        println!(
-            "{report}",
-            report = RUNTIME.block_on(report.with(island.clone())).unwrap()
-        );
+        println!("{report}", report = report.with(island::display!(island), source));
     }
 
     let Ok("true" | "1") = env::var("FUZZ_PARSER_SAVE_VALID").as_deref() else {

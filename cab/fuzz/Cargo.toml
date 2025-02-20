@@ -13,7 +13,6 @@ cargo-fuzz = true
 cab.path = "../cab"
 
 libfuzzer-sys.workspace = true
-tokio.workspace         = true
 yansi.workspace         = true
 
 [[bin]]

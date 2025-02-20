@@ -7,12 +7,10 @@ use std::{
     ops,
 };
 
-use cab_report::{
+use cab_why::{
+    IntoSpan,
     Label,
     Report,
-};
-use cab_text::{
-    IntoSpan,
     Span,
 };
 use num::Num as _;
