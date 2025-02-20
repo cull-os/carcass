@@ -83,7 +83,13 @@ impl<'write, W: io::Write> Formatter<'write, W> {
         match expression {
             node::ExpressionRef::Error(_error) => self.write("error".red().bold()),
 
-            node::ExpressionRef::Parenthesis(parenthesis) => self.parenthesize(parenthesis.expression()),
+            node::ExpressionRef::Parenthesis(parenthesis) => {
+                if let Some(expression) = parenthesis.expression() {
+                    self.parenthesize(expression)?;
+                }
+
+                Ok(())
+            },
 
             node::ExpressionRef::List(list) => {
                 self.bracket_start("[")?;

@@ -272,7 +272,6 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
         self.next_direct()
     }
 
-    #[allow(dead_code)]
     fn next_if(&mut self, expected: Kind) -> bool {
         let condition = self.peek() == Some(expected);
 
@@ -326,9 +325,11 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
                 until | Kind::EXPRESSIONS | TOKEN_RIGHT_PARENTHESIS,
             );
 
-            this.node_expression(until | TOKEN_RIGHT_PARENTHESIS);
+            if this.peek().is_some_and(|kind| kind != TOKEN_RIGHT_PARENTHESIS) {
+                this.node_expression(until | TOKEN_RIGHT_PARENTHESIS);
+            }
 
-            this.next_expect(TOKEN_RIGHT_PARENTHESIS.into(), until);
+            this.next_if(TOKEN_RIGHT_PARENTHESIS);
         });
     }
 
@@ -339,11 +340,11 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
                 until | Kind::EXPRESSIONS | TOKEN_RIGHT_BRACKET,
             );
 
-            if this.peek() != Some(TOKEN_RIGHT_BRACKET) {
+            if this.peek().is_some_and(|kind| kind != TOKEN_RIGHT_BRACKET) {
                 this.node_expression(until | TOKEN_RIGHT_BRACKET);
             }
 
-            this.next_expect(TOKEN_RIGHT_BRACKET.into(), until);
+            this.next_if(TOKEN_RIGHT_BRACKET);
         });
     }
 
@@ -354,11 +355,11 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
                 until | Kind::EXPRESSIONS | TOKEN_RIGHT_CURLYBRACE,
             );
 
-            if this.peek() != Some(TOKEN_RIGHT_CURLYBRACE) {
+            if this.peek().is_some_and(|kind| kind != TOKEN_RIGHT_CURLYBRACE) {
                 this.node_expression(until | TOKEN_RIGHT_CURLYBRACE);
             }
 
-            this.next_expect(TOKEN_RIGHT_CURLYBRACE.into(), until);
+            this.next_if(TOKEN_RIGHT_CURLYBRACE);
         });
     }
 

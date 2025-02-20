@@ -329,14 +329,33 @@ node! { #[from(NODE_ERROR)] struct Error; }
 node! { #[from(NODE_PARENTHESIS)] struct Parenthesis; }
 
 impl Parenthesis {
-    get_token! { token_left_parenthesis -> TOKEN_LEFT_PARENTHESIS }
+    get_token! { token_parenthesis_left -> TOKEN_LEFT_PARENTHESIS }
 
-    get_node! { expression -> ExpressionRef<'_> }
+    get_node! { expression -> Option<ExpressionRef<'_>> }
 
-    get_token! { token_right_parenthesis -> Option<TOKEN_RIGHT_PARENTHESIS> }
+    get_token! { token_parenthesis_right -> Option<TOKEN_RIGHT_PARENTHESIS> }
 
     pub fn validate(&self, to: &mut Vec<Report>) {
-        self.expression().validate(to);
+        match self.expression() {
+            Some(expression) => {
+                expression.validate(to);
+            },
+
+            None => {
+                to.push(Report::error("parenthesis without inner expression").primary(
+                    Span::empty(self.token_parenthesis_left().span().end),
+                    "expeted an expression here",
+                ))
+            },
+        }
+
+        if self.token_parenthesis_right().is_none() {
+            to.push(
+                Report::error("unclosed parenthesis")
+                    .primary(Span::empty(self.span().end), "expected ')' here")
+                    .secondary(self.token_parenthesis_left().span(), "unclosed '(' here"),
+            );
+        }
     }
 }
 
@@ -345,11 +364,11 @@ impl Parenthesis {
 node! { #[from(NODE_LIST)] struct List; }
 
 impl List {
-    get_token! { token_left_bracket -> TOKEN_LEFT_BRACKET }
+    get_token! { token_bracket_left -> TOKEN_LEFT_BRACKET }
 
     get_node! { expression -> Option<ExpressionRef<'_>> }
 
-    get_token! { token_right_bracket -> Option<TOKEN_RIGHT_BRACKET> }
+    get_token! { token_bracket_right -> Option<TOKEN_RIGHT_BRACKET> }
 
     /// Returns all items of the list.
     pub fn items(&self) -> impl Iterator<Item = ExpressionRef<'_>> {
@@ -369,6 +388,14 @@ impl List {
         for item in self.items() {
             item.validate(to);
         }
+
+        if self.token_bracket_right().is_none() {
+            to.push(
+                Report::error("unclosed list")
+                    .primary(Span::empty(self.span().end), "expected ']' here")
+                    .secondary(self.token_bracket_left().span(), "unclosed '[' here"),
+            );
+        }
     }
 }
 
@@ -377,11 +404,11 @@ impl List {
 node! { #[from(NODE_ATTRIBUTE_LIST)] struct AttributeList; }
 
 impl AttributeList {
-    get_token! { left_curlybrace_token -> TOKEN_LEFT_CURLYBRACE }
+    get_token! { token_curlybrace_left -> TOKEN_LEFT_CURLYBRACE }
 
     get_node! { expression -> Option<ExpressionRef<'_>> }
 
-    get_token! { right_curlybrace_token -> Option<TOKEN_RIGHT_CURLYBRACE> }
+    get_token! { token_curlybrace_right -> Option<TOKEN_RIGHT_CURLYBRACE> }
 
     /// Returns all entries of the attribute list.
     pub fn entries(&self) -> impl Iterator<Item = ExpressionRef<'_>> {
@@ -406,6 +433,14 @@ impl AttributeList {
 
                 invalid => to.push(Report::error("invalid attribute").primary(invalid.span(), "here")),
             }
+        }
+
+        if self.token_curlybrace_right().is_none() {
+            to.push(
+                Report::error("unclosed attribute list")
+                    .primary(Span::empty(self.span().end), "expected '}' here")
+                    .secondary(self.token_curlybrace_left().span(), "unclosed '{' here"),
+            );
         }
     }
 }
@@ -734,11 +769,11 @@ impl<T: Token> InterpolatedPartRef<'_, T> {
 node! { #[from(NODE_INTERPOLATION)] struct Interpolation; }
 
 impl Interpolation {
-    get_token! { interpolation_start_token -> TOKEN_INTERPOLATION_START }
+    get_token! { interpolation_token_start -> TOKEN_INTERPOLATION_START }
 
     get_node! { expression -> 0 @ ExpressionRef<'_> }
 
-    get_token! { interpolation_end_token -> Option<TOKEN_INTERPOLATION_END> }
+    get_token! { interpolation_token_end -> Option<TOKEN_INTERPOLATION_END> }
 
     pub fn validate(&self, to: &mut Vec<Report>) {
         self.expression().validate(to);
@@ -791,7 +826,7 @@ impl Path {
 node! { #[from(NODE_BIND)] struct Bind; }
 
 impl Bind {
-    get_token! { at_token -> TOKEN_AT }
+    get_token! { token_at -> TOKEN_AT }
 
     get_node! { identifier -> ExpressionRef<'_> }
 
@@ -1178,15 +1213,15 @@ impl Number {
 node! { #[from(NODE_IF)] struct If; }
 
 impl If {
-    get_token! { if_token -> TOKEN_LITERAL_IF }
+    get_token! { token_if -> TOKEN_LITERAL_IF }
 
     get_node! { condition -> 0 @ ExpressionRef<'_> }
 
-    get_token! { then_token -> TOKEN_LITERAL_THEN }
+    get_token! { token_then -> TOKEN_LITERAL_THEN }
 
     get_node! { consequence -> 1 @ ExpressionRef<'_> }
 
-    get_token! { else_token -> Option<TOKEN_LITERAL_ELSE> }
+    get_token! { token_else -> Option<TOKEN_LITERAL_ELSE> }
 
     get_node! { alternative -> 2 @ ExpressionRef<'_> }
 
