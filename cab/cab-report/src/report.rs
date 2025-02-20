@@ -262,6 +262,7 @@ impl fmt::Display for ReportDisplay<'_> {
     fn fmt(&self, writer: &mut fmt::Formatter<'_>) -> fmt::Result {
         const BOTTOM_TO_RIGHT: char = '┏';
         const TOP_TO_BOTTOM: char = '┃';
+        const TOP_TO_BOTTOM_PARTIAL: char = '┇';
         const TOP_TO_RIGHT: char = '┗';
         const TOP_LEFT_TO_RIGHT: char = '╲';
         const LEFT_TO_RIGHT: char = '━';
@@ -450,6 +451,7 @@ impl fmt::Display for ReportDisplay<'_> {
                 if !should_write_number {
                     write!(writer, "{:>line_number_width$}", "")?;
                 } else if line_number_previous == Some(line_number) {
+                    // Continuation line.
                     let dot_width = number_width(line_number);
 
                     write!(
@@ -463,6 +465,12 @@ impl fmt::Display for ReportDisplay<'_> {
                         write!(writer, "{DOT}")?;
                     }
                 } else {
+                    // New line.
+                    if line_number_previous.map(|n| n + 1) != Some(line_number) {
+                        // Non-incremental jump.
+                        writeln!(writer, "{:>line_number_width$} {TOP_TO_BOTTOM_PARTIAL} ", "")?;
+                    }
+
                     write!(writer, "{line_number:>line_number_width$}", line_number = line_number)?;
                 }
 
