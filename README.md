@@ -1,4 +1,4 @@
-# The Carcass <!-- thank alcuin for the name -->
+# Carcass <!-- thank alcuin for the name -->
 
 The Cull monorepository.
 
