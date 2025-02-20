@@ -251,12 +251,8 @@ impl<'write, W: io::Write> Formatter<'write, W> {
 
             node::ExpressionRef::Island(island) => self.parenthesize_parted(island.parts()),
 
-            node::ExpressionRef::Number(number) => {
-                match number.value() {
-                    node::NumberValueRef::Integer(token) => self.write(token.value().blue().bold()),
-                    node::NumberValueRef::Float(token) => self.write(token.value().blue().bold()),
-                }
-            },
+            node::ExpressionRef::Integer(integer) => self.write(integer.value().blue().bold()),
+            node::ExpressionRef::Float(float) => self.write(float.value().blue().bold()),
 
             node::ExpressionRef::If(if_) => {
                 self.bracket_start("(")?;

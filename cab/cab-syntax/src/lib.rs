@@ -342,13 +342,13 @@ pub enum Kind {
 
     /// A stringlike that is delimited by `<` and `>`. See [`NODE_STRING`] for
     /// the definition of stringlike.
-    #[display("a number")]
+    #[display("an island")]
     NODE_ISLAND,
 
-    /// A node containing a single token, which can be either a
-    /// [`TOKEN_INTEGER`] or [`TOKEN_FLOAT`].
-    #[display("a number")]
-    NODE_NUMBER,
+    #[display("an integer")]
+    NODE_INTEGER,
+    #[display("a float")]
+    NODE_FLOAT,
 
     #[display("an if")]
     NODE_IF,

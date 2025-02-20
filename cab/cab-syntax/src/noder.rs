@@ -458,9 +458,15 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
         });
     }
 
-    fn node_number(&mut self, until: EnumSet<Kind>) {
-        self.node(NODE_NUMBER, |this| {
-            this.next_expect(TOKEN_INTEGER | TOKEN_FLOAT, until);
+    fn node_integer(&mut self, until: EnumSet<Kind>) {
+        self.node(NODE_INTEGER, |this| {
+            this.next_expect(TOKEN_INTEGER.into(), until);
+        });
+    }
+
+    fn node_float(&mut self, until: EnumSet<Kind>) {
+        self.node(NODE_FLOAT, |this| {
+            this.next_expect(TOKEN_FLOAT.into(), until);
         });
     }
 
@@ -504,7 +510,8 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
 
             Some(TOKEN_STRING_START | TOKEN_RUNE_START | TOKEN_ISLAND_START) => self.node_delimited(),
 
-            Some(TOKEN_INTEGER | TOKEN_FLOAT) => self.node_number(until),
+            Some(TOKEN_INTEGER) => self.node_integer(until),
+            Some(TOKEN_FLOAT) => self.node_float(until),
 
             Some(TOKEN_LITERAL_IF) => self.node_if(until),
 

@@ -232,6 +232,25 @@ macro_rules! get_token {
                 .expect("node must have a token child")
         }
     };
+
+    ($name:ident -> $($skip:literal @)? Option<$type:ty>) => {
+        pub fn $name(&self) -> $type {
+            self.children_with_tokens()
+                .filter_map(red::ElementRef::into_token)
+                $(.skip($skip))?
+                .find_map(|token| <$type>::try_from(token).ok())
+        }
+    };
+
+    ($name:ident -> $($skip:literal @)? $type:ty) => {
+        pub fn $name(&self) -> $type {
+            self.children_with_tokens()
+                .filter_map(red::ElementRef::into_token)
+                $(.skip($skip))?
+                .find_map(|token| <$type>::try_from(token).ok())
+                .expect("node must have a token child")
+        }
+    };
 }
 
 macro_rules! get_node {
@@ -272,7 +291,8 @@ node! {
         SString,
         Rune,
         Island,
-        Number,
+        Integer,
+        Float,
         If,
     )] enum Expression;
 }
@@ -294,7 +314,7 @@ impl<'a> ExpressionRef<'a> {
             Self::Island(island) => island.validate(to),
             Self::If(if_else) => if_else.validate(to),
 
-            Self::Error(_) | Self::Number(_) => {},
+            Self::Error(_) | Self::Integer(_) | Self::Float(_) => {},
         }
     }
 
@@ -1171,41 +1191,28 @@ impl Island {
     }
 }
 
-// NUMBER
+// INTEGER
 
-reffed! {
-    /// A Number value. May either be a [`token::Integer`] or a [`token::Float`].
-    #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-    pub enum NumberValue {
-        Integer(token::Integer),
-        Float(token::Float),
+node! { #[from(NODE_INTEGER)] struct Integer; }
+
+impl Integer {
+    get_token! { token_integer -> &token::Integer }
+
+    pub fn value(&self) -> num::BigInt {
+        self.token_integer().value()
     }
 }
 
-node! { #[from(NODE_NUMBER)] struct Number; }
+// FLOAT
 
-impl Number {
-    /// Returns the underlying value of this number.
-    pub fn value(&self) -> NumberValueRef<'_> {
-        let Some(first_token) = self.first_token() else {
-            unreachable!()
-        };
+node! { #[from(NODE_FLOAT)] struct Float; }
 
-        assert!(!first_token.kind().is_trivia());
+impl Float {
+    get_token! { token_float -> &token::Float }
 
-        if let Ok(token) = <&token::Integer>::try_from(first_token) {
-            return NumberValueRef::Integer(token);
-        }
-
-        if let Ok(token) = <&token::Float>::try_from(first_token) {
-            return NumberValueRef::Float(token);
-        }
-
-        unreachable!()
+    pub fn value(&self) -> f64 {
+        self.token_float().value()
     }
-
-    #[allow(clippy::ptr_arg)]
-    pub fn validate(&self, _to: &mut Vec<Report>) {}
 }
 
 // IF
