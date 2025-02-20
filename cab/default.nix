@@ -28,7 +28,7 @@
       doCheck = false;
     });
   in {
-    devshells.cab = {
+    devShells.cab = cargoLib.devShell {
       packages = [
         # You will need a nightly Rust compiler.
         pkgs.fenix.complete.toolchain
@@ -40,19 +40,11 @@
         pkgs.cargo-fuzz
       ];
 
-      env = [
-        (lib.mkIf pkgs.stdenv.hostPlatform.isLinux {
-          name  = "LD_LIBRARY_PATH";
-          value = lib.makeLibraryPath [
-            pkgs.stdenv.cc.cc.lib
-          ];
-        })
-
-        {
-          name   = "PATH";
-          prefix = "target/debug";
-        }
-      ];
+      shellHook = ''
+        # So we can do `{bin}` instead of `./target/{optimization}/{bin}`
+        root=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+        export PATH="$PATH":"$root/cab/target/debug"
+      '';
     };
 
     packages = {

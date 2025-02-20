@@ -7,6 +7,8 @@
     show-trace               = true;
 
     experimental-features = [
+      "flakes"
+      "nix-command"
       "pipe-operators"
     ];
 
@@ -26,12 +28,6 @@
     flake-parts.url = "github:hercules-ci/flake-parts";
 
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
-
-    devshell = {
-      url = "github:numtide/devshell";
-
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
 
     crane.url = "github:ipetkov/crane";
 
