@@ -13,7 +13,13 @@ pub enum IndentPlace {
     End,
 }
 
-/// The type that is accepted by [`indent_with`] to print prefix indents.
+/// The type that is accepted by [`indent_with`] to print indent prefixes.
+///
+/// Returns a number, which is the amount of spaces (indents) it has written.
+/// If the number is smaller than the [`IndentWriter`] count, the difference
+/// will be printed as spaces.
+///
+/// If it is higher than that number, the [`IndentWriter`] will panic.
 pub type IndentWith<'a> = &'a mut dyn FnMut(&mut dyn fmt::Write) -> Result<u16, fmt::Error>;
 
 /// An indent writer.
@@ -92,6 +98,7 @@ impl IndentWriter<'_> {
     }
 }
 
+/// Creates an [`IndentWriter`] with the given [`fmt::Write`] and indent count.
 pub fn indent(writer: &mut dyn fmt::Write, count: u16) -> IndentWriter<'_> {
     static mut ZERO_INDENTER: IndentWith<'static> = &mut |_| Ok(0);
 
@@ -108,6 +115,10 @@ pub fn indent(writer: &mut dyn fmt::Write, count: u16) -> IndentWriter<'_> {
     }
 }
 
+/// Creates an [`IndentWriter`] with the given [`fmt::Write`], indent count and
+/// [`IndentWith`].
+///
+/// Consult the documentation on [`IndentWith`] to learn what it is used for.
 pub fn indent_with<'a>(writer: &'a mut dyn fmt::Write, count: u16, with: IndentWith<'a>) -> IndentWriter<'a> {
     line_width_store(line_width_load() + count);
 

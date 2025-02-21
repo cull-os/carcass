@@ -1,3 +1,5 @@
+//! Text and report formatting utilities and data types.
+
 #![feature(gen_blocks, if_let_guard, iter_intersperse, let_chains, trait_alias, try_trait_v2)]
 
 mod error;
@@ -7,7 +9,14 @@ mod text;
 
 pub use self::{
     error::*,
-    print::*,
+    print::{
+        IndentWith,
+        IndentWriter,
+        indent,
+        indent_with,
+        wrap,
+        wrapln,
+    },
     report::*,
     text::*,
 };
@@ -68,7 +77,7 @@ pub mod __private {
     pub use unicode_width;
     pub use yansi;
 
-    pub use crate::IndentPlace;
+    pub use crate::print::IndentPlace;
 
     static LINE_WIDTH: atomic::AtomicU16 = atomic::AtomicU16::new(0);
 
