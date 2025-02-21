@@ -10,6 +10,7 @@ use crate::{
     Leaf,
 };
 
+/// Creates a leaf from the given content.
 pub fn blob(content: impl Into<Bytes>) -> impl Leaf {
     Blob {
         content: content.into(),

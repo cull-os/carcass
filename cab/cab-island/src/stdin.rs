@@ -19,6 +19,7 @@ use crate::{
     display,
 };
 
+/// Creates a leaf that reads from stdin.
 pub fn stdin() -> impl Leaf {
     Stdin {
         content: OnceCell::new(),
