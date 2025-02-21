@@ -12,20 +12,12 @@
 !Cargo.toml
 
 # SOURCES
-!cab/
-!cab/src/
+!cab*/
+!cab*/src/
 
-!cab-why/
-!cab-why/src/
 !cab-why/src/print/
 !cab-why/src/report/
 !cab-why/src/text/
-
-!cab-island/
-!cab-island/src/
-
-!cab-syntax/
-!cab-syntax/src/
 
 !fuzz/
 !fuzz/fuzz_targets/
