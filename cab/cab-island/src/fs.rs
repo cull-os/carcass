@@ -18,14 +18,15 @@ use tokio::fs;
 
 use crate::{
     Collection,
-    CollectionPeek,
+    CollectionList,
     Entry,
     Leaf,
     Result,
     display,
 };
 
-pub fn fs(path: PathBuf) -> impl Leaf + CollectionPeek {
+/// Creates an entry from a given fs path.
+pub fn fs(path: PathBuf) -> impl Leaf + CollectionList {
     FsEntry {
         location: FsEntryLocation::Root { path },
 
@@ -36,7 +37,7 @@ pub fn fs(path: PathBuf) -> impl Leaf + CollectionPeek {
 #[derive(Clone)]
 enum FsEntryContent {
     Leaf(Bytes),
-    CollectionPeek(Arc<[Arc<dyn Entry>]>),
+    CollectionList(Arc<[Arc<dyn Entry>]>),
 }
 
 enum FsEntryLocation {
@@ -84,7 +85,7 @@ impl Entry for FsEntry {
         Some(self)
     }
 
-    async fn as_collection_peek(self: Arc<Self>) -> Option<Arc<dyn CollectionPeek>> {
+    async fn as_collection_list(self: Arc<Self>) -> Option<Arc<dyn CollectionList>> {
         Some(self)
     }
 }
@@ -95,7 +96,7 @@ impl Leaf for FsEntry {
         match self.content().await? {
             FsEntryContent::Leaf(bytes) => Ok(bytes),
 
-            FsEntryContent::CollectionPeek(_) => {
+            FsEntryContent::CollectionList(_) => {
                 bail!("failed to read {this} as it is a directory", this = display!(self))
             },
         }
@@ -115,10 +116,10 @@ impl Collection for FsEntry {
 }
 
 #[async_trait]
-impl CollectionPeek for FsEntry {
+impl CollectionList for FsEntry {
     async fn list(self: Arc<Self>) -> Result<Arc<[Arc<dyn Entry>]>> {
         match self.content().await? {
-            FsEntryContent::CollectionPeek(entries) => Ok(entries),
+            FsEntryContent::CollectionList(entries) => Ok(entries),
 
             FsEntryContent::Leaf(_) => {
                 bail!("failed to list {this} as it is a file", this = display!(self))
@@ -210,6 +211,6 @@ impl FsEntry {
             }))
         }
 
-        Ok(FsEntryContent::CollectionPeek(entries.into()))
+        Ok(FsEntryContent::CollectionList(entries.into()))
     }
 }
