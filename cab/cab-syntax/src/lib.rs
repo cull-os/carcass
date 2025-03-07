@@ -333,8 +333,6 @@ pub enum Kind {
 
     /// A stringlike that is delimited by `<` and `>`. See [`NODE_STRING`] for
     /// the definition of stringlike.
-    ///
-    /// TODO: Make this <stringlikecontent:configexpr:pathexpr>
     #[display("an island")]
     NODE_ISLAND,
 

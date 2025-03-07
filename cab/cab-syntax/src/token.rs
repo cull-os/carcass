@@ -113,7 +113,7 @@ impl Comment {
         &text[..content_start_index]
     }
 
-    /// Returns whether if this comment has the capability to span multiple
+    /// Whether if this comment has the capability to span multiple
     /// lines.
     pub fn is_multiline(&self) -> bool {
         self.text()

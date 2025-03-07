@@ -92,7 +92,7 @@ impl Span {
         self.start - self.end
     }
 
-    /// Returns whether or not this span has a len of 0.
+    /// Whether or not this span has a len of 0.
     #[inline]
     pub fn is_empty(self) -> bool {
         self.start == self.end

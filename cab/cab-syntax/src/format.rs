@@ -8,7 +8,6 @@ use yansi::Paint as _;
 
 use crate::{
     COLORS,
-    Token,
     node::{
         self,
         Parted as _,
@@ -57,9 +56,9 @@ impl<'write, W: io::Write> Formatter<'write, W> {
         write!(self.inner, "{painted}")
     }
 
-    fn parenthesize_parted<'part, T: Token + 'part>(
+    fn parenthesize_parted<'part>(
         &mut self,
-        parts: impl Iterator<Item = node::InterpolatedPartRef<'part, T>>,
+        parts: impl Iterator<Item = node::InterpolatedPartRef<'part>>,
     ) -> io::Result<()> {
         for part in parts {
             match part {
@@ -118,18 +117,9 @@ impl<'write, W: io::Write> Formatter<'write, W> {
             node::ExpressionRef::AttributeList(attribute_list) => {
                 self.bracket_start("{")?;
 
-                let mut entries = attribute_list.entries().peekable();
-                if entries.peek().is_some() {
+                if let Some(expression) = attribute_list.expression() {
                     self.write(" ")?;
-                }
-
-                while let Some(entry) = entries.next() {
-                    self.parenthesize(entry)?;
-
-                    if entries.peek().is_some() {
-                        self.write(",")?;
-                    }
-
+                    self.parenthesize(expression)?;
                     self.write(" ")?;
                 }
 
