@@ -92,9 +92,10 @@ macro_rules! node {
                     return Err(());
                 }
 
-                // SAFETY: `node` is an immutable reference and Self is a &red::Node with
-                // #[repr(transparent)].
-                Ok(unsafe { &*(node as *const _ as *const Self) })
+                // SAFETY: node is &red::Node and we are casting it to $name.
+                // $name holds red::Node with #[repr(transparent)], so the layout
+                // is the exact same for &red::Node and &$name.
+                Ok(unsafe { &*(node as *const _ as *const $name) })
             }
         }
 
