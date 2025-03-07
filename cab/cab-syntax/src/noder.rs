@@ -361,24 +361,6 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
         });
     }
 
-    fn node_path(&mut self) {
-        self.node(NODE_PATH, |this| {
-            loop {
-                match this.peek_direct() {
-                    Some(TOKEN_PATH_CONTENT) => {
-                        this.next_direct().unwrap();
-                    },
-
-                    Some(TOKEN_INTERPOLATION_START) => {
-                        this.node_interpolation();
-                    },
-
-                    _ => break,
-                }
-            }
-        });
-    }
-
     fn node_bind(&mut self, until: EnumSet<Kind>) {
         self.node(NODE_BIND, |this| {
             this.next_expect(TOKEN_AT.into(), Kind::IDENTIFIERS);
@@ -439,9 +421,9 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
         // special case on island<->path applications that contain literals to be path
         // accesses as islands are just virtual path roots anyway. Normally you cannot
         // use an island as a functor, I must say. That will be a hard error.
-        if node == NODE_ISLAND && self.peek_direct() == Some(TOKEN_PATH_CONTENT) {
+        if node == NODE_ISLAND && self.peek_direct() == Some(TOKEN_PATH_START) {
             self.node_from(start_of_delimited, NODE_INFIX_OPERATION, |this| {
-                this.node_path();
+                this.node_delimited();
             });
         }
     }
@@ -500,13 +482,13 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
 
             Some(TOKEN_LEFT_CURLYBRACE) => self.node_attribute_list(until),
 
-            Some(TOKEN_PATH_CONTENT) => self.node_path(),
-
             Some(TOKEN_AT) => self.node_bind(until),
 
             Some(next) if Kind::IDENTIFIERS.contains(next) => self.node_identifier(until),
 
-            Some(TOKEN_STRING_START | TOKEN_RUNE_START | TOKEN_ISLAND_START) => self.node_delimited(),
+            Some(TOKEN_PATH_START | TOKEN_STRING_START | TOKEN_RUNE_START | TOKEN_ISLAND_START) => {
+                self.node_delimited()
+            },
 
             Some(TOKEN_INTEGER) => self.node_integer(until),
             Some(TOKEN_FLOAT) => self.node_float(until),

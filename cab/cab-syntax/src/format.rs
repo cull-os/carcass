@@ -9,7 +9,10 @@ use yansi::Paint as _;
 use crate::{
     COLORS,
     Token,
-    node,
+    node::{
+        self,
+        Parted as _,
+    },
 };
 
 /// Formats the given node with parentheses to disambiguate.
