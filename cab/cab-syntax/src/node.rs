@@ -18,7 +18,6 @@ use crate::{
         self,
         *,
     },
-    Token,
     red,
     token::{
         self,
@@ -29,7 +28,7 @@ use crate::{
 macro_rules! reffed {
     (
         $(#[$attribute:meta])*
-        pub enum $name:ident $(<$($ident:ident $(: $bound:path)?),+>)? {
+        pub enum $name:ident {
             $(
                 $(#[$variant_attribute:meta])*
                 $variant:ident($type:ty)
@@ -38,30 +37,28 @@ macro_rules! reffed {
     ) => {
         paste! {
             $(#[$attribute])*
-            pub enum $name $(<$($ident $(: $bound)?),+>)? {
+            pub enum $name {
                 $(
                     $(#[$variant_attribute])*
-                    $variant($type)
-                ),*
+                    $variant($type),
+                )*
             }
 
-            impl$(<$($ident $(: $bound)?),+>)? $name $(<$($ident),+>)? {
-                pub fn as_ref(&self) -> [<$name Ref>]<'_$(, $($ident),+)?> {
+            impl $name {
+                pub fn as_ref(&self) -> [<$name Ref>]<'_> {
                     match self {
-                        $(
-                            Self::$variant(v) => [<$name Ref>]::$variant(v)
-                        ),*
+                        $(Self::$variant(v) => [<$name Ref>]::$variant(v),)*
                     }
                 }
             }
 
             $(#[$attribute])*
             #[derive(Copy)]
-            pub enum [<$name Ref>]<'a $(, $($ident $(: $bound)?),+)?> {
+            pub enum [<$name Ref>]<'a> {
                 $(
                     $(#[$variant_attribute])*
-                    $variant(&'a $type)
-                ),*
+                    $variant(&'a $type),
+                )*
             }
         }
     };
@@ -70,8 +67,10 @@ macro_rules! reffed {
 macro_rules! node {
     (
         #[from($kind:ident)]
+        $(#[$attribute:meta])*
         struct $name:ident;
     ) => {
+        $(#[$attribute])*
         #[derive(Debug, Clone, PartialEq, Eq, Hash)]
         #[repr(transparent)]
         pub struct $name(red::Node);
@@ -118,9 +117,11 @@ macro_rules! node {
 
     (
         #[from($($variant:ident),* $(,)?)]
+        $(#[$attribute:meta])*
         enum $name:ident;
     ) => {
         reffed! {
+            $(#[$attribute])*
             #[derive(Debug, Clone, PartialEq, Eq, Hash)]
             pub enum $name {
                 $($variant($variant),)*
@@ -294,7 +295,9 @@ node! {
         Integer,
         Float,
         If,
-    )] enum Expression;
+    )]
+    /// An expression. Everything is an expression.
+    enum Expression;
 }
 
 impl<'a> ExpressionRef<'a> {
@@ -318,6 +321,7 @@ impl<'a> ExpressionRef<'a> {
         }
     }
 
+    /// Iterates over all subexpressions delimited with the same operator.
     pub fn same_items(self) -> impl Iterator<Item = ExpressionRef<'a>> {
         gen move {
             let mut expressions = VecDeque::from([self]);
@@ -342,11 +346,19 @@ impl<'a> ExpressionRef<'a> {
 
 // ERROR
 
-node! { #[from(NODE_ERROR)] struct Error; }
+node! {
+    #[from(NODE_ERROR)]
+    /// An error node. Also a valid expression.
+    struct Error;
+}
 
 // PARENTHESIS
 
-node! { #[from(NODE_PARENTHESIS)] struct Parenthesis; }
+node! {
+    #[from(NODE_PARENTHESIS)]
+    /// A parenthesis. Contains a single expression.
+    struct Parenthesis;
+}
 
 impl Parenthesis {
     get_token! { token_parenthesis_left -> TOKEN_LEFT_PARENTHESIS }
@@ -381,7 +393,11 @@ impl Parenthesis {
 
 // LIST
 
-node! { #[from(NODE_LIST)] struct List; }
+node! {
+    #[from(NODE_LIST)]
+    /// A list. Contains a list of expressions delimited by the same operator.
+    struct List;
+}
 
 impl List {
     get_token! { token_bracket_left -> TOKEN_LEFT_BRACKET }
@@ -390,7 +406,7 @@ impl List {
 
     get_token! { token_bracket_right -> Option<TOKEN_RIGHT_BRACKET> }
 
-    /// Returns all items of the list.
+    /// Iterates over all the items of the list.
     pub fn items(&self) -> impl Iterator<Item = ExpressionRef<'_>> {
         self.expression().into_iter().flat_map(ExpressionRef::same_items)
     }
@@ -421,7 +437,11 @@ impl List {
 
 // ATTRIBUTE LIST
 
-node! { #[from(NODE_ATTRIBUTE_LIST)] struct AttributeList; }
+node! {
+    #[from(NODE_ATTRIBUTE_LIST)]
+    /// An attribute list. May contain an expression that contains binds, which get appended to its scope.
+    struct AttributeList;
+}
 
 impl AttributeList {
     get_token! { token_curlybrace_left -> TOKEN_LEFT_CURLYBRACE }
@@ -430,30 +450,8 @@ impl AttributeList {
 
     get_token! { token_curlybrace_right -> Option<TOKEN_RIGHT_CURLYBRACE> }
 
-    /// Returns all entries of the attribute list.
-    pub fn entries(&self) -> impl Iterator<Item = ExpressionRef<'_>> {
-        self.expression().into_iter().flat_map(ExpressionRef::same_items)
-    }
-
     pub fn validate(&self, to: &mut Vec<Report>) {
-        for entry in self.entries() {
-            match entry {
-                ExpressionRef::InfixOperation(operation) if let InfixOperator::Sequence = operation.operator() => {
-                    to.push(
-                        Report::error("unexpected sequence operator inside attribute list").primary(
-                            operation.span(),
-                            "sequence operator has lower binding power and will consume everything",
-                        ),
-                    );
-                },
-
-                ExpressionRef::Identifier(identifier) => {
-                    identifier.validate(to);
-                },
-
-                invalid => to.push(Report::error("invalid attribute").primary(invalid.span(), "here")),
-            }
-        }
+        // TODO: Warn for non-binding children.
 
         if self.token_curlybrace_right().is_none() {
             to.push(
@@ -467,6 +465,7 @@ impl AttributeList {
 
 // PREFIX OPERATION
 
+/// A prefix operator.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PrefixOperator {
     Swwallation, // Get it?
@@ -505,7 +504,11 @@ impl PrefixOperator {
     }
 }
 
-node! { #[from(NODE_PREFIX_OPERATION)] struct PrefixOperation; }
+node! {
+    #[from(NODE_PREFIX_OPERATION)]
+    /// A prefix operation.
+    struct PrefixOperation;
+}
 
 impl PrefixOperation {
     get_node! { right -> 0 @ ExpressionRef<'_> }
@@ -533,6 +536,7 @@ impl PrefixOperation {
 
 // INFIX OPERATION
 
+/// An infix operator.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum InfixOperator {
     Same,
@@ -664,7 +668,11 @@ impl InfixOperator {
     }
 }
 
-node! { #[from(NODE_INFIX_OPERATION)] struct InfixOperation; }
+node! {
+    #[from(NODE_INFIX_OPERATION)]
+    /// An infix operation.
+    struct InfixOperation;
+}
 
 impl InfixOperation {
     get_node! { left -> 0 @ ExpressionRef<'_> }
@@ -715,6 +723,7 @@ impl InfixOperation {
 
 // SUFFIX OPERATION
 
+/// A suffix operator.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SuffixOperator {
     Same,
@@ -734,7 +743,11 @@ impl TryFrom<Kind> for SuffixOperator {
     }
 }
 
-node! { #[from(NODE_SUFFIX_OPERATION)] struct SuffixOperation; }
+node! {
+    #[from(NODE_SUFFIX_OPERATION)]
+    /// A suffix operation.
+    struct SuffixOperation;
+}
 
 impl SuffixOperation {
     get_node! { left -> 0 @ ExpressionRef<'_> }
@@ -763,21 +776,24 @@ impl SuffixOperation {
 // INTERPOLATION
 
 reffed! {
+    /// An interpolatied stringlike part.
     #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-    pub enum InterpolatedPart<T: Token> {
+    pub enum InterpolatedPart {
+        /// The start or end delimiter.
         Delimiter(red::Token),
-        Content(T),
+        /// Content.
+        Content(token::Content),
         Interpolation(Interpolation),
     }
 }
 
-// TODO: Find ouy why the hell s/&self/self/ doesn't work. This should be Copy.
-impl<T: Token> InterpolatedPartRef<'_, T> {
-    pub fn is_delimiter(&self) -> bool {
+impl InterpolatedPartRef<'_> {
+    /// Whether or not this part is a delimiter.
+    pub fn is_delimiter(self) -> bool {
         matches!(self, Self::Delimiter(_))
     }
 
-    pub fn span(&self) -> Span {
+    pub fn span(self) -> Span {
         match self {
             Self::Delimiter(delimiter) => delimiter.span(),
             Self::Content(content) => content.span(),
@@ -786,7 +802,11 @@ impl<T: Token> InterpolatedPartRef<'_, T> {
     }
 }
 
-node! { #[from(NODE_INTERPOLATION)] struct Interpolation; }
+node! {
+    #[from(NODE_INTERPOLATION)]
+    /// Interpolation. Is a content part that has a single expression within.
+    struct Interpolation;
+}
 
 impl Interpolation {
     get_token! { interpolation_token_start -> TOKEN_INTERPOLATION_START }
@@ -800,8 +820,11 @@ impl Interpolation {
     }
 }
 
+/// A trait that can be implemented on any node that iterates over interpolated
+/// parts.
 pub trait Parted: ops::Deref<Target = red::Node> {
-    fn parts(&self) -> impl Iterator<Item = InterpolatedPartRef<'_, token::Content>> {
+    /// Iterates over interpolated parts.
+    fn parts(&self) -> impl Iterator<Item = InterpolatedPartRef<'_>> {
         self.children_with_tokens().map(|child| {
             match child {
                 red::ElementRef::Token(token) => {
@@ -825,7 +848,11 @@ pub trait Parted: ops::Deref<Target = red::Node> {
 
 // PATH
 
-node! { #[from(NODE_PATH)] struct Path; }
+node! {
+    #[from(NODE_PATH)]
+    /// A path.
+    struct Path;
+}
 
 impl Parted for Path {}
 
@@ -841,7 +868,11 @@ impl Path {
 
 // BIND
 
-node! { #[from(NODE_BIND)] struct Bind; }
+node! {
+    #[from(NODE_BIND)]
+    /// A bind. Contains an identifier to bind to when compared with a value.
+    struct Bind;
+}
 
 impl Bind {
     get_token! { token_at -> TOKEN_AT }
@@ -864,7 +895,11 @@ impl Bind {
 
 // IDENTIFIER
 
-node! { #[from(NODE_IDENTIFIER)] struct IdentifierQuoted; }
+node! {
+    #[from(NODE_IDENTIFIER)]
+    /// A quoted identifier.
+    struct IdentifierQuoted;
+}
 
 impl Parted for IdentifierQuoted {}
 
@@ -914,7 +949,11 @@ reffed! {
     }
 }
 
-node! { #[from(NODE_IDENTIFIER)] struct Identifier; }
+node! {
+    #[from(NODE_IDENTIFIER)]
+    /// An identifier. Can either be a raw identifier token or a quoted identifier.
+    struct Identifier;
+}
 
 impl Identifier {
     /// Returns the value of this identifier. A value may either be a
@@ -946,7 +985,11 @@ impl Identifier {
 
 // STRING
 
-node! { #[from(NODE_STRING)] struct SString; }
+node! {
+    #[from(NODE_STRING)]
+    /// A string.
+    struct SString;
+}
 
 impl Parted for SString {}
 
@@ -1082,7 +1125,11 @@ impl SString {
 
 // RUNE
 
-node! { #[from(NODE_RUNE)] struct Rune; }
+node! {
+    #[from(NODE_RUNE)]
+    /// A rune. Also known as a character.
+    struct Rune;
+}
 
 impl Parted for Rune {}
 
@@ -1146,7 +1193,13 @@ impl Rune {
 
 // ISLAND
 
-node! { #[from(NODE_ISLAND)] struct Island; }
+node! {
+    #[from(NODE_ISLAND)]
+    /// An island.
+    ///
+    /// TODO: Make this <stringlikecontent:configexpr:pathexpr>.
+    struct Island;
+}
 
 impl Parted for Island {}
 
@@ -1185,7 +1238,11 @@ impl Island {
 
 // INTEGER
 
-node! { #[from(NODE_INTEGER)] struct Integer; }
+node! {
+    #[from(NODE_INTEGER)]
+    /// An integer.
+    struct Integer;
+}
 
 impl Integer {
     get_token! { token_integer -> &token::Integer }
@@ -1197,7 +1254,11 @@ impl Integer {
 
 // FLOAT
 
-node! { #[from(NODE_FLOAT)] struct Float; }
+node! {
+    #[from(NODE_FLOAT)]
+    /// A float.
+    struct Float;
+}
 
 impl Float {
     get_token! { token_float -> &token::Float }
@@ -1209,7 +1270,11 @@ impl Float {
 
 // IF
 
-node! { #[from(NODE_IF)] struct If; }
+node! {
+    #[from(NODE_IF)]
+    /// An if-else.
+    struct If;
+}
 
 impl If {
     get_token! { token_if -> TOKEN_LITERAL_IF }
