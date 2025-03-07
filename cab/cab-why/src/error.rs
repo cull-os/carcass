@@ -134,7 +134,7 @@ impl Termination {
 ///
 /// ```rs
 /// fn get_result() -> Result<()> {
-///     todo!()
+///     unimplemented!()
 /// }
 ///
 /// get_result().map_err(|error| error!("found error: {error}"))

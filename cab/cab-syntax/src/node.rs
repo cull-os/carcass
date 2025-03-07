@@ -800,38 +800,36 @@ impl Interpolation {
     }
 }
 
-macro_rules! parted {
-    ($content_type:ty) => {
-        pub fn parts(&self) -> impl Iterator<Item = InterpolatedPartRef<'_, $content_type>> {
-            self.children_with_tokens().map(|child| {
-                match child {
-                    red::ElementRef::Token(token) => {
-                        if let Ok(token) = <&$content_type>::try_from(token) {
-                            InterpolatedPartRef::Content(token)
-                        } else {
-                            InterpolatedPartRef::Delimiter(token)
-                        }
-                    },
+pub trait Parted: ops::Deref<Target = red::Node> {
+    fn parts(&self) -> impl Iterator<Item = InterpolatedPartRef<'_, token::Content>> {
+        self.children_with_tokens().map(|child| {
+            match child {
+                red::ElementRef::Token(token) => {
+                    if let Ok(token) = <&token::Content>::try_from(token) {
+                        InterpolatedPartRef::Content(token)
+                    } else {
+                        InterpolatedPartRef::Delimiter(token)
+                    }
+                },
 
-                    red::ElementRef::Node(node) => {
-                        InterpolatedPartRef::Interpolation(
-                            <&Interpolation>::try_from(node)
-                                .expect("child node of a parted element wasn't an interpolation"),
-                        )
-                    },
-                }
-            })
-        }
-    };
+                red::ElementRef::Node(node) => {
+                    InterpolatedPartRef::Interpolation(
+                        <&Interpolation>::try_from(node)
+                            .expect("child node of a parted element wasn't an interpolation"),
+                    )
+                },
+            }
+        })
+    }
 }
 
 // PATH
 
 node! { #[from(NODE_PATH)] struct Path; }
 
-impl Path {
-    parted!(token::PathContent);
+impl Parted for Path {}
 
+impl Path {
     pub fn validate(&self, to: &mut Vec<Report>) {
         for part in self.parts() {
             if let InterpolatedPartRef::Interpolation(interpolation) = part {
@@ -868,9 +866,9 @@ impl Bind {
 
 node! { #[from(NODE_IDENTIFIER)] struct IdentifierQuoted; }
 
-impl IdentifierQuoted {
-    parted!(token::Content);
+impl Parted for IdentifierQuoted {}
 
+impl IdentifierQuoted {
     pub fn validate(&self, to: &mut Vec<Report>) {
         let mut report = Report::error("invalid identifier");
         let mut reported_control_character = false;
@@ -950,9 +948,9 @@ impl Identifier {
 
 node! { #[from(NODE_STRING)] struct SString; }
 
-impl SString {
-    parted!(token::Content);
+impl Parted for SString {}
 
+impl SString {
     // What a behemoth. And the sad part is I can't figure out a way to make this
     // simpler.
     pub fn validate(&self, to: &mut Vec<Report>) {
@@ -1092,9 +1090,9 @@ impl SString {
 
 node! { #[from(NODE_RUNE)] struct Rune; }
 
-impl Rune {
-    parted!(token::Content);
+impl Parted for Rune {}
 
+impl Rune {
     pub fn validate(&self, to: &mut Vec<Report>) {
         let mut report = Report::error("invalid rune");
         let mut reported_invalid_length = false;
@@ -1156,9 +1154,9 @@ impl Rune {
 
 node! { #[from(NODE_ISLAND)] struct Island; }
 
-impl Island {
-    parted!(token::Content);
+impl Parted for Island {}
 
+impl Island {
     pub fn validate(&self, to: &mut Vec<Report>) {
         let mut report = Report::error("invalid island");
         let mut reported_control_character = false;

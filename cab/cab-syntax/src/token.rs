@@ -111,51 +111,6 @@ impl Comment {
     }
 }
 
-// INTEGER
-
-token! { #[from(TOKEN_INTEGER)] struct Integer; }
-
-impl Integer {
-    /// Returns the value of this integer, after resolving binary,
-    /// octadecimal and hexadecimal notation if it exists.
-    ///
-    /// Will panic if the underlying token is not valid.
-    pub fn value(&self) -> num::BigInt {
-        let text = self.text();
-
-        match text.as_bytes().get(1).copied() {
-            Some(b'b' | b'B') => num::BigInt::from_str_radix(text.get(2..).unwrap(), 2),
-            Some(b'o' | b'O') => num::BigInt::from_str_radix(text.get(2..).unwrap(), 8),
-            Some(b'x' | b'X') => num::BigInt::from_str_radix(text.get(2..).unwrap(), 16),
-            _ => num::BigInt::from_str_radix(text, 10),
-        }
-        .expect("invalid interger token")
-    }
-}
-
-// FLOAT
-
-token! { #[from(TOKEN_FLOAT)] struct Float; }
-
-impl Float {
-    /// Returns the value of the float by parsing the underlying slice.
-    pub fn value(&self) -> f64 {
-        let text = self.text();
-
-        match text.as_bytes().get(1).copied() {
-            Some(b'b' | b'B') => f64::from_str_radix(text.get(2..).unwrap(), 2),
-            Some(b'o' | b'O') => f64::from_str_radix(text.get(2..).unwrap(), 8),
-            Some(b'x' | b'X') => f64::from_str_radix(text.get(2..).unwrap(), 16),
-            _ => f64::from_str_radix(text, 10),
-        }
-        .expect("invalid float token")
-    }
-}
-
-// PATH CONTENT
-
-token! { #[from(TOKEN_PATH_CONTENT)] struct PathContent; }
-
 // IDENTIFIER
 
 token! { #[from(TOKEN_IDENTIFIER)] struct Identifier; }
@@ -221,5 +176,46 @@ impl Content {
                 });
             }
         }
+    }
+}
+
+// INTEGER
+
+token! { #[from(TOKEN_INTEGER)] struct Integer; }
+
+impl Integer {
+    /// Returns the value of this integer, after resolving binary,
+    /// octadecimal and hexadecimal notation if it exists.
+    ///
+    /// Will panic if the underlying token is not valid.
+    pub fn value(&self) -> num::BigInt {
+        let text = self.text();
+
+        match text.as_bytes().get(1).copied() {
+            Some(b'b' | b'B') => num::BigInt::from_str_radix(text.get(2..).unwrap(), 2),
+            Some(b'o' | b'O') => num::BigInt::from_str_radix(text.get(2..).unwrap(), 8),
+            Some(b'x' | b'X') => num::BigInt::from_str_radix(text.get(2..).unwrap(), 16),
+            _ => num::BigInt::from_str_radix(text, 10),
+        }
+        .expect("invalid interger token")
+    }
+}
+
+// FLOAT
+
+token! { #[from(TOKEN_FLOAT)] struct Float; }
+
+impl Float {
+    /// Returns the value of the float by parsing the underlying slice.
+    pub fn value(&self) -> f64 {
+        let text = self.text();
+
+        match text.as_bytes().get(1).copied() {
+            Some(b'b' | b'B') => f64::from_str_radix(text.get(2..).unwrap(), 2),
+            Some(b'o' | b'O') => f64::from_str_radix(text.get(2..).unwrap(), 8),
+            Some(b'x' | b'X') => f64::from_str_radix(text.get(2..).unwrap(), 16),
+            _ => f64::from_str_radix(text, 10),
+        }
+        .expect("invalid float token")
     }
 }

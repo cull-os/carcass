@@ -27,8 +27,11 @@ fn is_valid_path_character(c: char) -> bool {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Context<'a> {
     Path,
+    PathEnd,
+
     Delimited { before: Option<&'a str>, end: char },
     DelimitedEnd { before: Option<&'a str>, end: char },
+
     InterpolationStart,
     Interpolation { parentheses: usize },
 }
@@ -45,14 +48,16 @@ impl<'a> Iterator for Tokenizer<'a> {
     type Item = (Kind, &'a str);
 
     fn next(&mut self) -> Option<Self::Item> {
-        let start_offset = self.offset;
+        let start = self.offset;
 
-        self.consume_kind().and_then(|kind| {
-            match self.consumed_since(start_offset) {
-                "" => self.next(),
-                slice => Some((kind, slice)),
-            }
-        })
+        let kind = self.consume_kind();
+        let slice = self.consumed_since(start);
+
+        if kind == Some(TOKEN_CONTENT) && slice.is_empty() {
+            return self.next();
+        }
+
+        kind.map(|kind| (kind, slice))
     }
 }
 
@@ -187,15 +192,16 @@ impl<'a> Tokenizer<'a> {
         loop {
             if self.peek_character().is_none_or(|c| !is_valid_path_character(c)) {
                 self.context_pop(Context::Path);
+                self.context_push(Context::PathEnd);
 
-                return Some(TOKEN_PATH_CONTENT);
+                return Some(TOKEN_CONTENT);
             }
 
             match self.peek_character().unwrap() {
                 '\\' if self.peek_character_nth(1) == Some('(') => {
                     self.context_push(Context::InterpolationStart);
 
-                    return Some(TOKEN_PATH_CONTENT);
+                    return Some(TOKEN_CONTENT);
                 },
 
                 '\\' => {
@@ -211,11 +217,16 @@ impl<'a> Tokenizer<'a> {
     }
 
     fn consume_kind(&mut self) -> Option<Kind> {
-        let start_offset = self.offset;
+        let start = self.offset;
 
         match self.context.last().copied() {
             Some(Context::Path) => {
                 return self.consume_path();
+            },
+            Some(Context::PathEnd) => {
+                self.context_pop(Context::PathEnd);
+
+                return Some(TOKEN_PATH_END);
             },
 
             Some(Context::Delimited { before, end }) => {
@@ -245,8 +256,9 @@ impl<'a> Tokenizer<'a> {
                 self.context_push(Context::Interpolation { parentheses: 0 });
                 return Some(TOKEN_INTERPOLATION_START);
             },
+            Some(Context::Interpolation { .. }) => {},
 
-            Some(Context::Interpolation { .. }) | None => {},
+            None => {},
         }
 
         Some(match self.consume_character()? {
@@ -402,22 +414,29 @@ impl<'a> Tokenizer<'a> {
                 };
 
                 KEYWORDS
-                    .get(self.consumed_since(start_offset))
+                    .get(self.consumed_since(start))
                     .copied()
                     .unwrap_or(TOKEN_IDENTIFIER)
             },
 
+            // \(foo)/bar/baz.txt
+            start @ '\\' => {
+                self.offset -= start.len_utf8();
+                self.context_push(Context::Path);
+
+                TOKEN_PATH_START
+            },
             start @ '.' if let Some('.' | '/') = self.peek_character() => {
                 self.offset -= start.len_utf8();
                 self.context_push(Context::Path);
 
-                return self.consume_kind();
+                TOKEN_PATH_START
             },
             start @ '/' if self.peek_character().is_some_and(is_valid_path_character) => {
                 self.offset -= start.len_utf8();
                 self.context_push(Context::Path);
 
-                return self.consume_kind();
+                TOKEN_PATH_START
             },
 
             '@' => TOKEN_AT,
@@ -504,11 +523,13 @@ mod tests {
     fn path() {
         assert_token_matches!(
             r"../foo\(𓃰)///baz",
-            (TOKEN_PATH_CONTENT, "../foo"),
+            (TOKEN_PATH_START, ""),
+            (TOKEN_CONTENT, "../foo"),
             (TOKEN_INTERPOLATION_START, r"\("),
             (TOKEN_IDENTIFIER, "𓃰"),
             (TOKEN_INTERPOLATION_END, ")"),
-            (TOKEN_PATH_CONTENT, "///baz"),
+            (TOKEN_CONTENT, "///baz"),
+            (TOKEN_PATH_END, ""),
         );
     }
 

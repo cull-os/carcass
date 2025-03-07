@@ -227,30 +227,18 @@ pub enum Kind {
     #[display("the keyword 'else'")]
     TOKEN_LITERAL_ELSE,
 
-    /// A path content. Valid paths start with contents that start with `./`,
-    /// `..` or `/`, followed by characters that are either
-    /// [alphanumeric](char::is_alphanumeric) or are any of the following
-    /// characters: `.`, `/`, `_`, `-`, `\`.
-    ///
-    /// The `\` character can be used to escape characters that are normally
-    /// not allowed in paths, like spaces and other weird characters.
-    ///
-    /// Every path content will be represented using this kind, so a path node
-    /// with interpolation will be represented as the following:
-    ///
-    /// ```txt
-    /// ./foo\(bar)baz -- TOKEN_PATH_CONTENT
-    /// +---/\|\|/\-- TOKEN_INTERPOLATION_END
-    /// |     | +-- TOKEN_IDENTIFIER
-    /// |     +-- TOKEN_INTERPOLATION_START
-    /// +-- TOKEN_PATH_CONTENT
-    /// ```
-    #[display("a path")]
-    TOKEN_PATH_CONTENT,
-
     /// See [`NODE_STRING`].
     #[display("content")]
     TOKEN_CONTENT,
+
+    /// A zero width token for the start of a path. Has no content.
+    #[display("a path")]
+    #[static_text("")]
+    TOKEN_PATH_START,
+    /// A zero width token for the end of a path. Has no content.
+    #[display("the closing delimiter of a path")]
+    #[static_text("")]
+    TOKEN_PATH_END,
 
     /// A normal non-quoted identifier. All characters must be either
     /// [`char::is_alphanumeric`], `_`, `-` or `'`. The initial character must
@@ -308,8 +296,9 @@ pub enum Kind {
     #[display("{}", unreachable())]
     NODE_INTERPOLATION,
 
-    /// A node that only has [`TOKEN_PATH_CONTENT`]s and [`NODE_INTERPOLATION`]s
-    /// as its direct children without any delimiters or whitespace.
+    /// A stringlike that is delimited by zero width [`TOKEN_PATH_START`] and
+    /// [`TOKEN_PATH_END`] tokens. See [`NODE_STRING`] for the definition of
+    /// stringlike.
     #[display("a path")]
     NODE_PATH,
 
@@ -342,6 +331,8 @@ pub enum Kind {
 
     /// A stringlike that is delimited by `<` and `>`. See [`NODE_STRING`] for
     /// the definition of stringlike.
+    ///
+    /// TODO: Make this <stringlikecontent:configexpr:pathexpr>
     #[display("an island")]
     NODE_ISLAND,
 
@@ -365,7 +356,7 @@ impl Kind {
             | TOKEN_INTEGER
             | TOKEN_FLOAT
             | TOKEN_LITERAL_IF
-            | TOKEN_PATH_CONTENT
+            | TOKEN_PATH_START
             | TOKEN_AT
             | TOKEN_IDENTIFIER
             | TOKEN_IDENTIFIER_START
@@ -405,6 +396,7 @@ impl Kind {
     /// Returns the node and closing kinds of this kind.
     pub fn as_node_and_closing(self) -> Option<(Kind, Kind)> {
         Some(match self {
+            TOKEN_PATH_START => (NODE_PATH, TOKEN_PATH_END),
             TOKEN_IDENTIFIER_START => (NODE_IDENTIFIER, TOKEN_IDENTIFIER_END),
             TOKEN_STRING_START => (NODE_STRING, TOKEN_STRING_END),
             TOKEN_RUNE_START => (NODE_RUNE, TOKEN_RUNE_END),
