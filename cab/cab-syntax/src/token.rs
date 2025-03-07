@@ -20,7 +20,12 @@ use crate::{
 };
 
 macro_rules! token {
-    (#[from($kind:ident)]struct $name:ident;) => {
+    (
+        #[from($kind:ident)]
+        $(#[$attribute:meta])*
+        struct $name:ident;
+    ) => {
+        $(#[$attribute])*
         #[derive(Debug, Clone, PartialEq, Eq, Hash)]
         #[repr(transparent)]
         pub struct $name(red::Token);
@@ -70,7 +75,11 @@ macro_rules! token {
 
 // WHITESPACE
 
-token! { #[from(TOKEN_WHITESPACE)] struct Whitespace; }
+token! {
+    #[from(TOKEN_WHITESPACE)]
+    /// Whitespace. Anything that matches [`char::is_whitespace`].
+    struct Whitespace;
+}
 
 impl Whitespace {
     /// Returns the amount of lines this whitespace.
@@ -81,7 +90,11 @@ impl Whitespace {
 
 // COMMENT
 
-token! { #[from(TOKEN_COMMENT)] struct Comment; }
+token! {
+    #[from(TOKEN_COMMENT)]
+    /// A multiline or singleline comment.
+    struct Comment;
+}
 
 impl Comment {
     const START_HASHTAG_LEN: usize = 1;
@@ -113,19 +126,32 @@ impl Comment {
 
 // IDENTIFIER
 
-token! { #[from(TOKEN_IDENTIFIER)] struct Identifier; }
+token! {
+    #[from(TOKEN_IDENTIFIER)]
+    /// A non-quoted raw identifier.
+    struct Identifier;
+}
 
 // CONTENT
 
+/// A part of a content. Can either be a literal or an escape.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ContentPart<'a> {
+    /// A literal. Exactly the same as the source code.
     Literal(&'a str),
+    /// An escape. Encoded by the source code.
     Escape(char),
 }
 
-token! { #[from(TOKEN_CONTENT)] struct Content; }
+token! {
+    #[from(TOKEN_CONTENT)]
+    /// Content of a delimited stringlike.
+    struct Content;
+}
 
 impl Content {
+    /// Iterates over the parts of this content, yielding either literals or
+    /// escapes.
     pub fn parts(&self, report: &mut Report) -> impl Iterator<Item = ContentPart<'_>> {
         gen {
             let mut reported = false;
@@ -181,7 +207,11 @@ impl Content {
 
 // INTEGER
 
-token! { #[from(TOKEN_INTEGER)] struct Integer; }
+token! {
+    #[from(TOKEN_INTEGER)]
+    /// An integer.
+    struct Integer;
+}
 
 impl Integer {
     /// Returns the value of this integer, after resolving binary,
@@ -203,7 +233,11 @@ impl Integer {
 
 // FLOAT
 
-token! { #[from(TOKEN_FLOAT)] struct Float; }
+token! {
+    #[from(TOKEN_FLOAT)]
+    /// A float.
+    struct Float;
+}
 
 impl Float {
     /// Returns the value of the float by parsing the underlying slice.

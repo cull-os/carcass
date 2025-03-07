@@ -1025,9 +1025,9 @@ impl SString {
                             }
                         } else if line_is_lastest {
                             if !line.trim().is_empty() {
-                                let last_line_length = line.trim_start().len();
+                                let last_line_len = line.trim_start().len();
 
-                                string_last_line_span = Some(Span::at_end(content.span().end, last_line_length));
+                                string_last_line_span = Some(Span::at_end(content.span().end, last_line_len));
                             } else if !part_is_multiline && let Some(span) = previous_span {
                                 string_last_line_span = Some(span);
                             }
@@ -1095,7 +1095,7 @@ impl Parted for Rune {}
 impl Rune {
     pub fn validate(&self, to: &mut Vec<Report>) {
         let mut report = Report::error("invalid rune");
-        let mut reported_invalid_length = false;
+        let mut reported_invalid_len = false;
         let mut reported_control_character = false;
         let mut reported_interpolation = false;
 
@@ -1106,7 +1106,7 @@ impl Rune {
                 InterpolatedPartRef::Content(content) => {
                     let text = content.text();
 
-                    if !reported_invalid_length && {
+                    if !reported_invalid_len && {
                         let mut parts = content.parts(&mut report);
 
                         match (parts.next(), parts.next()) {
@@ -1116,8 +1116,8 @@ impl Rune {
                             _ => true,
                         }
                     } {
-                        reported_invalid_length = true;
-                        report.push_primary(content.span(), "invalid rune literal length");
+                        reported_invalid_len = true;
+                        report.push_primary(content.span(), "invalid rune literal len");
                     }
 
                     if !reported_control_character && text.chars().any(char::is_control) {
