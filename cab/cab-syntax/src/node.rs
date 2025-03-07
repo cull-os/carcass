@@ -962,11 +962,7 @@ impl SString {
             .scan(0, |index, part| {
                 let value = *index;
 
-                match part {
-                    InterpolatedPartRef::Delimiter(_) => {},
-
-                    _ => *index += 1,
-                }
+                *index += !part.is_delimiter() as usize;
 
                 Some((value, part))
             })
@@ -980,7 +976,7 @@ impl SString {
 
         let mut previous_span = None;
         while let Some((part_index, part)) = parts.next() {
-            let mut part_is_multiline = true;
+            let mut part_is_multiline = false;
             let part_is_first = part_index == 0;
             let part_is_last = parts.peek().is_none_or(|(_, part)| part.is_delimiter());
 
@@ -1010,8 +1006,8 @@ impl SString {
                         let line_is_firstest = part_is_first && line_is_first;
                         let line_is_lastest = part_is_last && line_is_last;
 
-                        if line_is_first && line_is_last {
-                            part_is_multiline = false;
+                        if line_is_first && !line_is_last {
+                            part_is_multiline = true;
                         }
 
                         if line_is_firstest {
@@ -1062,12 +1058,10 @@ impl SString {
                     }
                 },
 
-                _ => {},
+                InterpolatedPartRef::Delimiter(_) => continue,
             }
 
-            if !part.is_delimiter() {
-                previous_span = Some(part.span());
-            }
+            previous_span = Some(part.span());
 
             if part_is_multiline {
                 string_is_multiline = true;
