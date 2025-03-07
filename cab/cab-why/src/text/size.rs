@@ -2,7 +2,7 @@ use std::ops;
 
 use crate::into;
 
-/// Byte length of a source code element.
+/// Byte len of a source code element.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Size(u32);
 
