@@ -47,9 +47,10 @@ macro_rules! token {
                     return Err(());
                 }
 
-                // SAFETY: `token` is an immutable reference and Self is a &red::Token with
-                // #[repr(transparent)].
-                Ok(unsafe { &*(token as *const _ as *const Self) })
+                // SAFETY: token is &red::Token and we are casting it to $name.
+                // $name holds red::Token with #[repr(transparent)], so the layout
+                // is the exact same for &red::Token and &$name.
+                Ok(unsafe { &*(token as *const _ as *const $name) })
             }
         }
 
