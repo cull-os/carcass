@@ -1,3 +1,5 @@
+//! Token, tokenizer, node, noder, parser implementations.
+
 #![feature(gen_blocks, if_let_guard, let_chains, trait_alias)]
 
 mod color;

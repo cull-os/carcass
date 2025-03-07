@@ -3,7 +3,6 @@
 //! [`Token`]: crate::Token
 use std::{
     fmt,
-    mem,
     ops,
 };
 
@@ -50,7 +49,7 @@ macro_rules! token {
 
                 // SAFETY: `token` is an immutable reference and Self is a &red::Token with
                 // #[repr(transparent)].
-                Ok(unsafe { mem::transmute::<&red::Token, Self>(token) })
+                Ok(unsafe { &*(token as *const _ as *const Self) })
             }
         }
 

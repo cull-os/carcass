@@ -3,7 +3,6 @@
 //! [`Node`]: crate::Node
 use std::{
     collections::VecDeque,
-    mem,
     ops,
 };
 
@@ -95,7 +94,7 @@ macro_rules! node {
 
                 // SAFETY: `node` is an immutable reference and Self is a &red::Node with
                 // #[repr(transparent)].
-                Ok(unsafe { mem::transmute::<&red::Node, Self>(node) })
+                Ok(unsafe { &*(node as *const _ as *const Self) })
             }
         }
 
