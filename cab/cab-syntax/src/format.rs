@@ -114,10 +114,10 @@ impl<'write, W: io::Write> Formatter<'write, W> {
                 self.bracket_end("]")
             },
 
-            node::ExpressionRef::AttributeList(attribute_list) => {
+            node::ExpressionRef::Attributes(attributes) => {
                 self.bracket_start("{")?;
 
-                if let Some(expression) = attribute_list.expression() {
+                if let Some(expression) = attributes.expression() {
                     self.write(" ")?;
                     self.parenthesize(expression)?;
                     self.write(" ")?;

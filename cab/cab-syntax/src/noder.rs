@@ -346,8 +346,8 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
         });
     }
 
-    fn node_attribute_list(&mut self, until: EnumSet<Kind>) {
-        self.node(NODE_ATTRIBUTE_LIST, |this| {
+    fn node_attributes(&mut self, until: EnumSet<Kind>) {
+        self.node(NODE_ATTRIBUTES, |this| {
             this.next_expect(
                 TOKEN_LEFT_CURLYBRACE.into(),
                 until | Kind::EXPRESSIONS | TOKEN_RIGHT_CURLYBRACE,
@@ -480,7 +480,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
 
             Some(TOKEN_LEFT_BRACKET) => self.node_list(until),
 
-            Some(TOKEN_LEFT_CURLYBRACE) => self.node_attribute_list(until),
+            Some(TOKEN_LEFT_CURLYBRACE) => self.node_attributes(until),
 
             Some(TOKEN_AT) => self.node_bind(until),
 

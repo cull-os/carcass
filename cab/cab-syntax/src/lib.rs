@@ -289,8 +289,8 @@ pub enum Kind {
     #[display("a list")]
     NODE_LIST,
 
-    #[display("an attribute list")]
-    NODE_ATTRIBUTE_LIST,
+    #[display("attributes")]
+    NODE_ATTRIBUTES,
 
     /// A node which starts with a [`TOKEN_INTERPOLATION_START`], ends with a
     /// [`TOKEN_INTERPOLATION_END`] while having a node at the middle that can
