@@ -19,7 +19,7 @@ async-trait = "0.1.86"
 bytes = "1.10.0"
 clap = { version = "4.5.4", features = [ "derive" ] }
 const-str = "0.6.2"
-cstree = { git = "https://github.com/cull-os/cstree", features = [
+cstree = { git = "https://github.com/cull-os/cstree", branch = "cab-branch", features = [
   "derive",
   "lasso_compat",
   "multi_threaded_interning",
