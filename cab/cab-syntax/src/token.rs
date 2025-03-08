@@ -182,7 +182,6 @@ impl Content {
                     Some((_, '`')) => '`',
                     Some((_, '"')) => '"',
                     Some((_, '\'')) => '\'',
-                    Some((_, '>')) => '>',
                     Some((_, '\\')) => '\\',
 
                     next @ (Some(_) | None) if !reported => {

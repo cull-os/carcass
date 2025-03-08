@@ -242,7 +242,10 @@ impl<'write, W: io::Write> Formatter<'write, W> {
 
             node::ExpressionRef::Rune(rune) => self.parenthesize_parted(rune.parts()),
 
-            node::ExpressionRef::Island(island) => self.parenthesize_parted(island.parts()),
+            node::ExpressionRef::Island(_island) => {
+                todo!();
+                // self.parenthesize_parted(island.parts())
+            },
 
             node::ExpressionRef::Integer(integer) => self.write(integer.value().blue().bold()),
             node::ExpressionRef::Float(float) => self.write(float.value().blue().bold()),

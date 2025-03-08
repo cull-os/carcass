@@ -280,20 +280,26 @@ macro_rules! get_node {
 node! {
     #[from(
         Error,
+
         Parenthesis,
         List,
         Attributes,
+
         PrefixOperation,
         InfixOperation,
         SuffixOperation,
+
+        Island,
         Path,
+
         Bind,
         Identifier,
         SString,
         Rune,
-        Island,
+
         Integer,
         Float,
+
         If,
     )]
     /// An expression. Everything is an expression.
@@ -361,11 +367,11 @@ node! {
 }
 
 impl Parenthesis {
-    get_token! { token_parenthesis_left -> TOKEN_LEFT_PARENTHESIS }
+    get_token! { token_parenthesis_left -> TOKEN_PARENTHESIS_LEFT }
 
     get_node! { expression -> Option<ExpressionRef<'_>> }
 
-    get_token! { token_parenthesis_right -> Option<TOKEN_RIGHT_PARENTHESIS> }
+    get_token! { token_parenthesis_right -> Option<TOKEN_PARENTHESIS_RIGHT> }
 
     pub fn validate(&self, to: &mut Vec<Report>) {
         match self.expression() {
@@ -400,11 +406,11 @@ node! {
 }
 
 impl List {
-    get_token! { token_bracket_left -> TOKEN_LEFT_BRACKET }
+    get_token! { token_bracket_left -> TOKEN_BRACKET_LEFT }
 
     get_node! { expression -> Option<ExpressionRef<'_>> }
 
-    get_token! { token_bracket_right -> Option<TOKEN_RIGHT_BRACKET> }
+    get_token! { token_bracket_right -> Option<TOKEN_BRACKET_RIGHT> }
 
     /// Iterates over all the items of the list.
     pub fn items(&self) -> impl Iterator<Item = ExpressionRef<'_>> {
@@ -444,11 +450,11 @@ node! {
 }
 
 impl Attributes {
-    get_token! { token_curlybrace_left -> TOKEN_LEFT_CURLYBRACE }
+    get_token! { token_curlybrace_left -> TOKEN_CURLYBRACE_LEFT }
 
     get_node! { expression -> Option<ExpressionRef<'_>> }
 
-    get_token! { token_curlybrace_right -> Option<TOKEN_RIGHT_CURLYBRACE> }
+    get_token! { token_curlybrace_right -> Option<TOKEN_CURLYBRACE_RIGHT> }
 
     pub fn validate(&self, to: &mut Vec<Report>) {
         // TODO: Warn for non-binding children.
@@ -846,6 +852,59 @@ pub trait Parted: ops::Deref<Target = red::Node> {
     }
 }
 
+// ISLAND
+
+node! {
+    #[from(NODE_ISLAND_HEADER)]
+    /// An island header.
+    struct IslandHeader;
+}
+
+impl Parted for IslandHeader {}
+
+node! {
+    #[from(NODE_ISLAND)]
+    /// An island.
+    struct Island;
+}
+
+impl Island {
+    get_node! { header -> &IslandHeader }
+
+    pub fn validate(&self, to: &mut Vec<Report>) {
+        let mut report = Report::error("invalid island");
+        let mut reported_control_character = false;
+
+        for part in self.header().parts() {
+            match part {
+                InterpolatedPartRef::Content(content) => {
+                    content.parts(&mut report).count();
+
+                    let text = content.text();
+
+                    if !reported_control_character && text.chars().any(char::is_control) {
+                        reported_control_character = true;
+                        report.push_primary(content.span(), "here");
+                        report.push_tip("islands cannot contain control characters (non-escaped newlines, tabs, ...)");
+                    }
+                },
+
+                InterpolatedPartRef::Interpolation(interpolation) => {
+                    interpolation.validate(to);
+                },
+
+                _ => {},
+            }
+        }
+
+        // TODO: Add config & path querying.
+
+        if !report.is_empty() {
+            to.push(report)
+        }
+    }
+}
+
 // PATH
 
 node! {
@@ -1191,51 +1250,6 @@ impl Rune {
     }
 }
 
-// ISLAND
-
-node! {
-    #[from(NODE_ISLAND)]
-    /// An island.
-    ///
-    /// TODO: Make this <stringlikecontent:configexpr:pathexpr>.
-    struct Island;
-}
-
-impl Parted for Island {}
-
-impl Island {
-    pub fn validate(&self, to: &mut Vec<Report>) {
-        let mut report = Report::error("invalid island");
-        let mut reported_control_character = false;
-
-        for part in self.parts() {
-            match part {
-                InterpolatedPartRef::Content(content) => {
-                    content.parts(&mut report).count();
-
-                    let text = content.text();
-
-                    if !reported_control_character && text.chars().any(char::is_control) {
-                        reported_control_character = true;
-                        report.push_primary(content.span(), "here");
-                        report.push_tip("islands cannot contain control characters (non-escaped newlines, tabs, ...)");
-                    }
-                },
-
-                InterpolatedPartRef::Interpolation(interpolation) => {
-                    interpolation.validate(to);
-                },
-
-                _ => {},
-            }
-        }
-
-        if !report.is_empty() {
-            to.push(report)
-        }
-    }
-}
-
 // INTEGER
 
 node! {
@@ -1277,15 +1291,15 @@ node! {
 }
 
 impl If {
-    get_token! { token_if -> TOKEN_LITERAL_IF }
+    get_token! { token_if -> TOKEN_KEYWORD_IF }
 
     get_node! { condition -> 0 @ ExpressionRef<'_> }
 
-    get_token! { token_then -> TOKEN_LITERAL_THEN }
+    get_token! { token_then -> TOKEN_KEYWORD_THEN }
 
     get_node! { consequence -> 1 @ ExpressionRef<'_> }
 
-    get_token! { token_else -> Option<TOKEN_LITERAL_ELSE> }
+    get_token! { token_else -> Option<TOKEN_KEYWORD_ELSE> }
 
     get_node! { alternative -> 2 @ ExpressionRef<'_> }
 
