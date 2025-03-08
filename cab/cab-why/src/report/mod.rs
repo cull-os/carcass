@@ -432,7 +432,7 @@ impl<L: fmt::Display> fmt::Display for ReportDisplay<'_, L> {
 
         // INDENT: "123 | "
         let line_number = RefCell::new(None::<(u32, bool)>);
-        let mut line_number_previous = None;
+        let line_number_previous = RefCell::new(None::<u32>);
         indent!(
             writer,
             line_number_width + 3,
@@ -440,12 +440,13 @@ impl<L: fmt::Display> fmt::Display for ReportDisplay<'_, L> {
                 let Some((line_number, should_write_number)) = *line_number.borrow() else {
                     return Ok(0);
                 };
+                let mut line_number_previous = line_number_previous.borrow_mut();
 
                 STYLE_GUTTER.fmt_prefix(writer)?;
 
                 if !should_write_number {
                     write!(writer, "{:>line_number_width$}", "")?;
-                } else if line_number_previous == Some(line_number) {
+                } else if *line_number_previous == Some(line_number) {
                     // Continuation line.
                     let dot_width = number_width(line_number);
 
@@ -461,7 +462,8 @@ impl<L: fmt::Display> fmt::Display for ReportDisplay<'_, L> {
                     }
                 } else {
                     // New line.
-                    if line_number_previous.map(|n| n + 1) != Some(line_number) {
+
+                    if line_number_previous.is_some_and(|number| number + 1 != line_number) {
                         // Non-incremental jump.
                         writeln!(writer, "{:>line_number_width$} {TOP_TO_BOTTOM_PARTIAL} ", "")?;
                     }
@@ -472,7 +474,7 @@ impl<L: fmt::Display> fmt::Display for ReportDisplay<'_, L> {
                 write!(writer, " {TOP_TO_BOTTOM} ")?;
                 STYLE_GUTTER.fmt_suffix(writer)?;
 
-                line_number_previous = Some(line_number);
+                *line_number_previous = Some(line_number);
                 Ok(line_number_width + 3)
             }
         );
@@ -555,6 +557,8 @@ impl<L: fmt::Display> fmt::Display for ReportDisplay<'_, L> {
 
                     writer.write_indent()?;
                     writeln!(writer)?;
+
+                    *line_number_previous.borrow_mut() = None;
                 }
 
                 {
