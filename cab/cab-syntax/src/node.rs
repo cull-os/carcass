@@ -282,7 +282,7 @@ node! {
         Error,
         Parenthesis,
         List,
-        AttributeList,
+        Attributes,
         PrefixOperation,
         InfixOperation,
         SuffixOperation,
@@ -305,7 +305,7 @@ impl<'a> ExpressionRef<'a> {
         match self {
             Self::Parenthesis(parenthesis) => parenthesis.validate(to),
             Self::List(list) => list.validate(to),
-            Self::AttributeList(attribute_list) => attribute_list.validate(to),
+            Self::Attributes(attributes) => attributes.validate(to),
             Self::PrefixOperation(operation) => operation.validate(to),
             Self::InfixOperation(operation) => operation.validate(to),
             Self::SuffixOperation(operation) => operation.validate(to),
@@ -435,15 +435,15 @@ impl List {
     }
 }
 
-// ATTRIBUTE LIST
+// ATTRIBUTES
 
 node! {
-    #[from(NODE_ATTRIBUTE_LIST)]
-    /// An attribute list. May contain an expression that contains binds, which get appended to its scope.
-    struct AttributeList;
+    #[from(NODE_ATTRIBUTES)]
+    /// Attributes. May contain an expression that contains binds, which get appended to its scope.
+    struct Attributes;
 }
 
-impl AttributeList {
+impl Attributes {
     get_token! { token_curlybrace_left -> TOKEN_LEFT_CURLYBRACE }
 
     get_node! { expression -> Option<ExpressionRef<'_>> }
@@ -455,7 +455,7 @@ impl AttributeList {
 
         if self.token_curlybrace_right().is_none() {
             to.push(
-                Report::error("unclosed attribute list")
+                Report::error("unclosed attributes")
                     .primary(Span::empty(self.span().end), "expected '}' here")
                     .secondary(self.token_curlybrace_left().span(), "unclosed '{' here"),
             );
