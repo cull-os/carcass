@@ -1,3 +1,5 @@
+use std::assert_matches::assert_matches;
+
 use smallvec::SmallVec;
 
 use crate::Kind::{
@@ -26,6 +28,9 @@ fn is_valid_path_character(c: char) -> bool {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Context<'a> {
+    IslandHeader,
+    IslandHeaderEnd,
+
     Path,
     PathEnd,
 
@@ -133,6 +138,92 @@ impl<'a> Tokenizer<'a> {
         Some(next)
     }
 
+    fn consume_delimited_part(&mut self) -> Option<Kind> {
+        match self.peek_character().unwrap() {
+            '\\' if self.peek_character_nth(1) == Some('(') => {
+                self.context_push(Context::InterpolationStart);
+
+                Some(TOKEN_CONTENT)
+            },
+
+            '\\' => {
+                self.consume_character();
+                self.consume_character();
+
+                None
+            },
+
+            _ => {
+                self.consume_character();
+
+                None
+            },
+        }
+    }
+
+    fn consume_island_header(&mut self) -> Kind {
+        loop {
+            if let Some('>' | ':') = self.peek_character() {
+                self.context_pop(Context::IslandHeader);
+                self.context_push(Context::IslandHeaderEnd);
+
+                return TOKEN_CONTENT;
+            }
+
+            if self.peek_character().is_none() {
+                self.context_pop(Context::IslandHeader);
+
+                return TOKEN_CONTENT;
+            }
+
+            if let Some(kind) = self.consume_delimited_part() {
+                return kind;
+            }
+        }
+    }
+
+    fn consume_delimited(&mut self, before: Option<&'a str>, end: char) -> Kind {
+        loop {
+            let remaining = self.remaining();
+
+            if before.is_none_or(|before| remaining.starts_with(before))
+                && remaining
+                    .get(before.map(str::len).unwrap_or(0)..)
+                    .is_some_and(|remaining| remaining.starts_with(end))
+            {
+                self.context_pop(Context::Delimited { before, end });
+                self.context_push(Context::DelimitedEnd { before, end });
+
+                return TOKEN_CONTENT;
+            }
+
+            if self.peek_character().is_none() {
+                self.context_pop(Context::Delimited { before, end });
+
+                return TOKEN_CONTENT;
+            };
+
+            if let Some(kind) = self.consume_delimited_part() {
+                return kind;
+            }
+        }
+    }
+
+    fn consume_path(&mut self) -> Kind {
+        loop {
+            if self.peek_character().is_none_or(|c| !is_valid_path_character(c)) {
+                self.context_pop(Context::Path);
+                self.context_push(Context::PathEnd);
+
+                return TOKEN_CONTENT;
+            }
+
+            if let Some(kind) = self.consume_delimited_part() {
+                return kind;
+            }
+        }
+    }
+
     fn consume_scientific(&mut self) -> Kind {
         if self.try_consume_character('e') || self.try_consume_character('E') {
             let _ = self.try_consume_character('+') || self.try_consume_character('-');
@@ -149,79 +240,22 @@ impl<'a> Tokenizer<'a> {
         }
     }
 
-    fn consume_delimited(&mut self, before: Option<&'a str>, end: char) -> Option<Kind> {
-        loop {
-            let remaining = self.remaining();
-
-            if before.is_none_or(|before| remaining.starts_with(before))
-                && remaining
-                    .get(before.map(str::len).unwrap_or(0)..)
-                    .is_some_and(|remaining| remaining.starts_with(end))
-            {
-                self.context_pop(Context::Delimited { before, end });
-                self.context_push(Context::DelimitedEnd { before, end });
-
-                return Some(TOKEN_CONTENT);
-            }
-
-            match self.peek_character() {
-                Some('\\') if self.peek_character_nth(1) == Some('(') => {
-                    self.context_push(Context::InterpolationStart);
-
-                    return Some(TOKEN_CONTENT);
-                },
-
-                Some('\\') => {
-                    self.consume_character();
-                    self.consume_character();
-                },
-
-                Some(_) => {
-                    self.consume_character();
-                },
-
-                None => {
-                    self.context_pop(Context::Delimited { before, end });
-                    return Some(TOKEN_CONTENT);
-                },
-            }
-        }
-    }
-
-    fn consume_path(&mut self) -> Option<Kind> {
-        loop {
-            if self.peek_character().is_none_or(|c| !is_valid_path_character(c)) {
-                self.context_pop(Context::Path);
-                self.context_push(Context::PathEnd);
-
-                return Some(TOKEN_CONTENT);
-            }
-
-            match self.peek_character().unwrap() {
-                '\\' if self.peek_character_nth(1) == Some('(') => {
-                    self.context_push(Context::InterpolationStart);
-
-                    return Some(TOKEN_CONTENT);
-                },
-
-                '\\' => {
-                    self.consume_character();
-                    self.consume_character();
-                },
-
-                _ => {
-                    self.consume_character();
-                },
-            }
-        }
-    }
-
     fn consume_kind(&mut self) -> Option<Kind> {
         let start = self.offset;
 
         match self.context.last().copied() {
+            Some(Context::IslandHeader) => {
+                return Some(self.consume_island_header());
+            },
+            Some(Context::IslandHeaderEnd) => {
+                assert_matches!(self.consume_character(), Some('>' | ':'));
+                self.context_pop(Context::IslandHeaderEnd);
+
+                return Some(TOKEN_ISLAND_HEADER_END);
+            },
+
             Some(Context::Path) => {
-                return self.consume_path();
+                return Some(self.consume_path());
             },
             Some(Context::PathEnd) => {
                 self.context_pop(Context::PathEnd);
@@ -230,7 +264,7 @@ impl<'a> Tokenizer<'a> {
             },
 
             Some(Context::Delimited { before, end }) => {
-                return self.consume_delimited(before, end);
+                return Some(self.consume_delimited(before, end));
             },
             Some(Context::DelimitedEnd { before, end }) => {
                 if let Some(before) = before {
@@ -242,7 +276,6 @@ impl<'a> Tokenizer<'a> {
 
                 return Some(match end {
                     '`' => TOKEN_IDENTIFIER_END,
-                    '>' => TOKEN_ISLAND_END,
                     '"' => TOKEN_STRING_END,
                     '\'' => TOKEN_RUNE_END,
                     _ => unreachable!(),
@@ -317,38 +350,38 @@ impl<'a> Tokenizer<'a> {
             '<' if self.try_consume_character('|') => TOKEN_LESS_PIPE,
             '|' if self.try_consume_character('>') => TOKEN_PIPE_MORE,
 
-            '(' => {
-                if let Some(Context::Interpolation { parentheses }) = self.context.last_mut() {
-                    *parentheses += 1;
-                }
-
-                TOKEN_LEFT_PARENTHESIS
+            '(' if let Some(Context::Interpolation { parentheses }) = self.context.last_mut() => {
+                *parentheses += 1;
+                TOKEN_PARENTHESIS_LEFT
             },
-            ')' => {
-                if let Some(Context::Interpolation { parentheses }) = self.context.last_mut() {
-                    match parentheses.checked_sub(1) {
-                        Some(new) => *parentheses = new,
-                        None => {
-                            self.context_pop(Context::Interpolation { parentheses: 0 });
-                            return Some(TOKEN_INTERPOLATION_END);
-                        },
-                    }
-                }
+            ')' if let Some(Context::Interpolation { parentheses }) = self.context.last_mut() => {
+                match parentheses.checked_sub(1) {
+                    Some(new) => {
+                        *parentheses = new;
+                        TOKEN_PARENTHESIS_RIGHT
+                    },
 
-                TOKEN_RIGHT_PARENTHESIS
+                    None => {
+                        self.context_pop(Context::Interpolation { parentheses: 0 });
+                        TOKEN_INTERPOLATION_END
+                    },
+                }
             },
+
+            '(' => TOKEN_PARENTHESIS_LEFT,
+            ')' => TOKEN_PARENTHESIS_RIGHT,
 
             '=' if self.try_consume_character('>') => TOKEN_EQUAL_GREATER,
             ',' => TOKEN_COMMA,
 
             ':' => TOKEN_COLON,
             '+' if self.try_consume_character('+') => TOKEN_PLUS_PLUS,
-            '[' => TOKEN_LEFT_BRACKET,
-            ']' => TOKEN_RIGHT_BRACKET,
+            '[' => TOKEN_BRACKET_LEFT,
+            ']' => TOKEN_BRACKET_RIGHT,
 
             '/' if self.try_consume_character('/') => TOKEN_SLASH_SLASH,
-            '{' => TOKEN_LEFT_CURLYBRACE,
-            '}' => TOKEN_RIGHT_CURLYBRACE,
+            '{' => TOKEN_CURLYBRACE_LEFT,
+            '}' => TOKEN_CURLYBRACE_RIGHT,
 
             '!' if self.try_consume_character('=') => TOKEN_EXCLAMATION_EQUAL,
             '=' => TOKEN_EQUAL,
@@ -408,9 +441,9 @@ impl<'a> Tokenizer<'a> {
                 self.consume_while(is_valid_identifier_character);
 
                 const KEYWORDS: phf::Map<&'static str, Kind> = phf::phf_map! {
-                    "if" => TOKEN_LITERAL_IF,
-                    "then" => TOKEN_LITERAL_THEN,
-                    "else" => TOKEN_LITERAL_ELSE,
+                    "if" => TOKEN_KEYWORD_IF,
+                    "then" => TOKEN_KEYWORD_THEN,
+                    "else" => TOKEN_KEYWORD_ELSE,
                 };
 
                 KEYWORDS
@@ -440,6 +473,7 @@ impl<'a> Tokenizer<'a> {
             },
 
             '@' => TOKEN_AT,
+
             start @ ('`' | '"' | '\'') => {
                 let equals_len = self.consume_while(|c| c == '=');
                 let equals = self.consumed_since(self.offset - equals_len);
@@ -464,9 +498,9 @@ impl<'a> Tokenizer<'a> {
                 .peek_character()
                 .is_some_and(|c| is_valid_initial_identifier_character(c) || c == '\\') =>
             {
-                self.context_push(Context::Delimited { before: None, end: '>' });
+                self.context_push(Context::IslandHeader);
 
-                TOKEN_ISLAND_START
+                TOKEN_ISLAND_HEADER_START
             },
 
             '<' if self.try_consume_character('=') => TOKEN_LESS_EQUAL,
@@ -485,9 +519,9 @@ mod tests {
         ($string:literal, $($pattern:pat),* $(,)?) => {{
             let mut tokens = tokenize($string);
 
-            $(assert!(matches!(tokens.next(), Some($pattern)));)*
+            $(assert_matches!(tokens.next(), Some($pattern));)*
 
-            assert_eq!(tokens.next(), None);
+            assert_matches!(tokens.next(), None);
         }};
     }
 

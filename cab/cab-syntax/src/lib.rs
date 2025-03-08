@@ -1,6 +1,6 @@
 //! Token, tokenizer, node, noder, parser implementations.
 
-#![feature(gen_blocks, if_let_guard, let_chains, trait_alias)]
+#![feature(assert_matches, gen_blocks, if_let_guard, let_chains, trait_alias)]
 
 mod color;
 pub mod format;
@@ -114,10 +114,10 @@ pub enum Kind {
 
     #[display("'('")]
     #[static_text("(")]
-    TOKEN_LEFT_PARENTHESIS,
+    TOKEN_PARENTHESIS_LEFT,
     #[display("')'")]
     #[static_text(")")]
-    TOKEN_RIGHT_PARENTHESIS,
+    TOKEN_PARENTHESIS_RIGHT,
 
     #[display(r"'\('")]
     TOKEN_INTERPOLATION_START,
@@ -140,10 +140,10 @@ pub enum Kind {
     TOKEN_PLUS_PLUS,
     #[display("'['")]
     #[static_text("[")]
-    TOKEN_LEFT_BRACKET,
+    TOKEN_BRACKET_LEFT,
     #[display("']'")]
     #[static_text("]")]
-    TOKEN_RIGHT_BRACKET,
+    TOKEN_BRACKET_RIGHT,
 
     #[display("'//'")]
     #[static_text("//")]
@@ -153,10 +153,10 @@ pub enum Kind {
     TOKEN_PERIOD,
     #[display("'{{'")]
     #[static_text("{")]
-    TOKEN_LEFT_CURLYBRACE,
+    TOKEN_CURLYBRACE_LEFT,
     #[display("'}}'")]
     #[static_text("}")]
-    TOKEN_RIGHT_CURLYBRACE,
+    TOKEN_CURLYBRACE_RIGHT,
 
     #[display("'!='")]
     #[static_text("!=")]
@@ -223,11 +223,14 @@ pub enum Kind {
     TOKEN_ERROR_FLOAT_NO_EXPONENT,
 
     #[display("the keyword 'if'")]
-    TOKEN_LITERAL_IF,
+    #[static_text("if")]
+    TOKEN_KEYWORD_IF,
     #[display("the keyword 'then'")]
-    TOKEN_LITERAL_THEN,
+    #[static_text("then")]
+    TOKEN_KEYWORD_THEN,
     #[display("the keyword 'else'")]
-    TOKEN_LITERAL_ELSE,
+    #[static_text("else")]
+    TOKEN_KEYWORD_ELSE,
 
     /// See [`NODE_STRING`].
     #[display("content")]
@@ -267,9 +270,10 @@ pub enum Kind {
     TOKEN_RUNE_END,
 
     #[display("an island")]
-    TOKEN_ISLAND_START,
+    #[static_text("<")]
+    TOKEN_ISLAND_HEADER_START,
     #[display("the closing delimiter of an island")]
-    TOKEN_ISLAND_END,
+    TOKEN_ISLAND_HEADER_END,
 
     #[display("{}", unreachable())]
     NODE_ROOT,
@@ -297,6 +301,12 @@ pub enum Kind {
     /// be cast to an [Expression](crate::node::Expression).
     #[display("{}", unreachable())]
     NODE_INTERPOLATION,
+
+    // TODO: Document.
+    #[display("{}", unreachable())]
+    NODE_ISLAND_HEADER,
+    #[display("an island")]
+    NODE_ISLAND,
 
     /// A stringlike that is delimited by zero width [`TOKEN_PATH_START`] and
     /// [`TOKEN_PATH_END`] tokens. See [`NODE_STRING`] for the definition of
@@ -331,11 +341,6 @@ pub enum Kind {
     #[display("a rune")]
     NODE_RUNE,
 
-    /// A stringlike that is delimited by `<` and `>`. See [`NODE_STRING`] for
-    /// the definition of stringlike.
-    #[display("an island")]
-    NODE_ISLAND,
-
     #[display("an integer")]
     NODE_INTEGER,
     #[display("a float")]
@@ -350,19 +355,19 @@ use Kind::*;
 impl Kind {
     /// An enumset of all valid expression starter token kinds.
     pub const EXPRESSIONS: EnumSet<Kind> = enum_set!(
-        TOKEN_LEFT_PARENTHESIS
-            | TOKEN_LEFT_BRACKET
-            | TOKEN_LEFT_CURLYBRACE
+        TOKEN_PARENTHESIS_LEFT
+            | TOKEN_BRACKET_LEFT
+            | TOKEN_CURLYBRACE_LEFT
             | TOKEN_INTEGER
             | TOKEN_FLOAT
-            | TOKEN_LITERAL_IF
+            | TOKEN_KEYWORD_IF
             | TOKEN_PATH_START
             | TOKEN_AT
             | TOKEN_IDENTIFIER
             | TOKEN_IDENTIFIER_START
             | TOKEN_STRING_START
             | TOKEN_RUNE_START
-            | TOKEN_ISLAND_START
+            | TOKEN_ISLAND_HEADER_START
     );
     /// An enumset of all identifier starter token kinds.
     pub const IDENTIFIERS: EnumSet<Kind> = enum_set!(TOKEN_IDENTIFIER | TOKEN_IDENTIFIER_START);
@@ -375,7 +380,7 @@ impl Kind {
     /// ```
     pub fn is_argument(self) -> bool {
         let mut arguments = Self::EXPRESSIONS;
-        arguments.remove(TOKEN_LITERAL_IF);
+        arguments.remove(TOKEN_KEYWORD_IF);
 
         arguments.contains(self) || self.is_error() // Error nodes are expressions.
     }
@@ -400,7 +405,6 @@ impl Kind {
             TOKEN_IDENTIFIER_START => (NODE_IDENTIFIER, TOKEN_IDENTIFIER_END),
             TOKEN_STRING_START => (NODE_STRING, TOKEN_STRING_END),
             TOKEN_RUNE_START => (NODE_RUNE, TOKEN_RUNE_END),
-            TOKEN_ISLAND_START => (NODE_ISLAND, TOKEN_ISLAND_END),
             _ => return None,
         })
     }
