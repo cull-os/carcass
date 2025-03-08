@@ -62,11 +62,8 @@
     };
 
     imports = let
-      localModules = builtins.readDir ./.
-        |> lib.filterAttrs (_: type: type == "directory")
-        |> lib.attrNames
-        |> map (directory: ./${directory}/default.nix)
-        |> lib.filter lib.pathExists;
+      localModules = lib.filesystem.listFilesRecursive ./.
+        |> lib.filter (path: builtins.baseNameOf path == "_.nix");
 
       outerModules = lib.removeAttrs inputs [ "self" ]
         |> lib.attrValues 

@@ -5,7 +5,7 @@
 !*.md
 
 # NIX
-!default.nix
+!_.nix
 
 # BUILD SYSTEMS
 !Cargo.lock
