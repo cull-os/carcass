@@ -361,8 +361,39 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
         });
     }
 
-    fn node_island(&mut self, _until: EnumSet<Kind>) {
-        todo!();
+    fn node_island(&mut self, until: EnumSet<Kind>) {
+        self.node(NODE_ISLAND, |this| {
+            let end = this.node_delimited();
+
+            if end == Some(">") {
+                // DONE: <island>
+                return;
+            }
+
+            // DONE: <island:
+
+            if this.next_if(TOKEN_COLON) {
+                // DONE: :path
+                this.node_expression_single(until | TOKEN_MORE);
+            } else {
+                // DONE: config
+                this.node_expression_single(until | TOKEN_COLON | Kind::EXPRESSIONS | TOKEN_MORE);
+
+                // DONE: :path
+                if this.next_if(TOKEN_COLON) {
+                    this.node_expression_single(until | TOKEN_MORE);
+                }
+            }
+
+            // DONE: >
+            this.next_expect(TOKEN_MORE.into(), until);
+
+            // EITHER:
+            // <island>
+            // <island::path>
+            // <island:config>
+            // <island:config:path>
+        });
     }
 
     fn node_bind(&mut self, until: EnumSet<Kind>) {
@@ -384,10 +415,12 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
         }
     }
 
-    fn node_delimited(&mut self) {
+    fn node_delimited(&mut self) -> Option<&str> {
         let start_of_delimited = self.checkpoint();
 
         let (node, end) = self.next().unwrap().as_node_and_closing().unwrap();
+
+        let mut end_delimiter = None;
 
         self.node_from(start_of_delimited, node, |this| {
             loop {
@@ -401,6 +434,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
                     },
 
                     Some(other) if other == end => {
+                        end_delimiter = this.tokens.peek().map(|&(_, slice)| slice);
                         this.next_direct().unwrap();
                         break;
                     },
@@ -430,6 +464,8 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
                 this.node_delimited();
             });
         }
+
+        end_delimiter
     }
 
     fn node_interpolation(&mut self) {
@@ -492,7 +528,9 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
 
             Some(next) if Kind::IDENTIFIERS.contains(next) => self.node_identifier(until),
 
-            Some(TOKEN_PATH_START | TOKEN_STRING_START | TOKEN_RUNE_START) => self.node_delimited(),
+            Some(TOKEN_PATH_START | TOKEN_STRING_START | TOKEN_RUNE_START) => {
+                self.node_delimited();
+            },
 
             Some(TOKEN_INTEGER) => self.node_integer(until),
             Some(TOKEN_FLOAT) => self.node_float(until),
