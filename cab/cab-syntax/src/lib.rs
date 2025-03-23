@@ -130,7 +130,7 @@ pub enum Kind {
     TOKEN_COMMA,
     #[display("'=>'")]
     #[static_text("=>")]
-    TOKEN_EQUAL_GREATER,
+    TOKEN_EQUAL_MORE,
 
     #[display("':'")]
     #[static_text(":")]
