@@ -621,7 +621,7 @@ impl TryFrom<Kind> for InfixOperator {
             TOKEN_CARET => Self::Power,
             TOKEN_SLASH => Self::Division,
 
-            TOKEN_EQUAL_GREATER => Self::Lambda,
+            TOKEN_EQUAL_MORE => Self::Lambda,
 
             _ => return Err(()),
         })

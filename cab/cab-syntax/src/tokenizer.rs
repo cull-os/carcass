@@ -371,7 +371,7 @@ impl<'a> Tokenizer<'a> {
             '(' => TOKEN_PARENTHESIS_LEFT,
             ')' => TOKEN_PARENTHESIS_RIGHT,
 
-            '=' if self.try_consume_character('>') => TOKEN_EQUAL_GREATER,
+            '=' if self.try_consume_character('>') => TOKEN_EQUAL_MORE,
             ',' => TOKEN_COMMA,
 
             ':' => TOKEN_COLON,
