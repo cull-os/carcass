@@ -282,10 +282,26 @@ impl<L: fmt::Display> fmt::Display for ReportDisplay<'_, L> {
 
         type Strike = (StrikeId, StrikeStatus, LabelSeverity);
 
-        #[derive(Debug, Clone, PartialEq, Eq)]
+        #[derive(Debug, Clone, Copy, PartialEq, Eq)]
         enum LabelSpan {
             FromStart(ops::RangeTo<Size>),
             Inline(Span),
+        }
+
+        impl LabelSpan {
+            fn start(self) -> Option<Size> {
+                match self {
+                    LabelSpan::FromStart(_) => None,
+                    LabelSpan::Inline(span) => Some(span.start),
+                }
+            }
+
+            fn end(self) -> Size {
+                match self {
+                    LabelSpan::FromStart(span) => span.end,
+                    LabelSpan::Inline(span) => span.end,
+                }
+            }
         }
 
         type LabelDynamic<'a> = (LabelSpan, &'a Cow<'static, str>, LabelSeverity);
@@ -584,12 +600,7 @@ impl<L: fmt::Display> fmt::Display for ReportDisplay<'_, L> {
                     *line_number.borrow_mut() = Some((line.number, false));
                 }
 
-                line.labels.sort_by_key(|(span, ..)| {
-                    match span {
-                        LabelSpan::FromStart(span) => span.end,
-                        LabelSpan::Inline(span) => span.end,
-                    }
-                });
+                line.labels.sort_by_key(|(span, ..)| span.end());
 
                 for (label_span, label_text, label_severity) in line.labels.iter().rev() {
                     match label_span {
@@ -664,14 +675,21 @@ impl<L: fmt::Display> fmt::Display for ReportDisplay<'_, L> {
                                 writer,
                                 label_span_end + 1,
                                 with = |writer: &mut dyn fmt::Write| {
-                                    for _ in 0..label_span_end {
-                                        // TODO: Right here. Write
-                                        write!(
-                                            writer,
-                                            "{symbol}",
-                                            symbol = if !wrote { LEFT_TO_RIGHT } else { ' ' }
-                                                .paint(label_severity.style_in(report.severity))
-                                        )?;
+                                    for index in 0..label_span_end {
+                                        let symbol = if let Some((.., severity)) =
+                                            line.labels.iter().find(|(span, ..)| {
+                                                span.end() == index.into()
+                                                    || (span.start().is_some_and(|start| start + 1u32 == index.into())
+                                                        && span.end() < label_span_end.into())
+                                            }) {
+                                            TOP_TO_BOTTOM.paint(severity.style_in(report.severity))
+                                        } else if !wrote {
+                                            LEFT_TO_RIGHT.paint(label_severity.style_in(report.severity))
+                                        } else {
+                                            ' '.paint(label_severity.style_in(report.severity))
+                                        };
+
+                                        write!(writer, "{symbol}")?;
                                     }
 
                                     write!(
@@ -733,18 +751,20 @@ impl<L: fmt::Display> fmt::Display for ReportDisplay<'_, L> {
                                 underline_width.max(1) + 1,
                                 with = |writer: &mut dyn fmt::Write| {
                                     for index in 0..underline_width.saturating_sub(1) {
-                                        write!(
-                                            writer,
-                                            "{symbol}",
-                                            symbol = if wrote {
-                                                ' '
-                                            } else if index == 0 {
-                                                TOP_TO_RIGHT
-                                            } else {
-                                                LEFT_TO_RIGHT
-                                            }
-                                            .paint(label_severity.style_in(report.severity)),
-                                        )?;
+                                        let symbol = if index == 0 {
+                                            TOP_TO_RIGHT.paint(label_severity.style_in(report.severity))
+                                        } else if let Some((.., severity)) = line.labels.iter().find(|(span, ..)| {
+                                            span.end() == label_span.start + 1u32 + index
+                                                || span.start().is_some_and(|start| start == label_span.start + index)
+                                        }) {
+                                            TOP_TO_BOTTOM.paint(severity.style_in(report.severity))
+                                        } else if !wrote {
+                                            LEFT_TO_RIGHT.paint(label_severity.style_in(report.severity))
+                                        } else {
+                                            ' '.paint(label_severity.style_in(report.severity))
+                                        };
+
+                                        write!(writer, "{symbol}")?;
                                     }
 
                                     write!(
