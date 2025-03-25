@@ -20,7 +20,7 @@
     cargoArtifacts = pkgs.crane.buildDepsOnly cargoArguments;
 
     packages = projectConfig.packages
-      |> map (packageName: lib.nameValuePair "${projectName}-${packageName}" <| pkgs.crane.buildPackage <| cargoArguments // {
+      |> map (packageName: lib.nameValuePair "${projectName}${lib.optionalString (packageName != projectName)  "-${packageName}"}" <| pkgs.crane.buildPackage <| cargoArguments // {
         inherit cargoArtifacts;
 
         pname          =              packageName;
