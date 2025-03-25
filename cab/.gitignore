@@ -15,10 +15,6 @@
 !cab*/src/
 !cab*/src/**/
 
-!fuzz/
-!fuzz/fuzz_targets/
-!fuzz/fuzz_targets/**/
-
 !task/
 !task/src/
 !task/src/**/
