@@ -500,7 +500,7 @@ impl<L: fmt::Display> fmt::Display for ReportDisplay<'_, L> {
         }
 
         {
-            // INDENT: "<strikes-prefix> "
+            // INDENT: "<strike-prefix> "
             indent!(
                 writer,
                 strike_prefix_width + 1,
@@ -584,6 +584,13 @@ impl<L: fmt::Display> fmt::Display for ReportDisplay<'_, L> {
                     *line_number.borrow_mut() = Some((line.number, false));
                 }
 
+                line.labels.sort_by_key(|(span, ..)| {
+                    match span {
+                        LabelSpan::FromStart(span) => span.end,
+                        LabelSpan::Inline(span) => span.end,
+                    }
+                });
+
                 for (label_span, label_text, label_severity) in line.labels.iter().rev() {
                     match label_span {
                         LabelSpan::FromStart(label_span) => {
@@ -609,18 +616,13 @@ impl<L: fmt::Display> fmt::Display for ReportDisplay<'_, L> {
                             // DEDENT: "<strike-prefix> "
                             dedent!(writer);
 
-                            // INDENT: "<strike-prefix><horizontal><left-to-bottom> "
-                            // INDENT: "<strike-prefix>            <top--to-bottom> "
+                            // INDENT: "<strike-prefix>"
                             let mut wrote = false;
                             indent!(
                                 writer,
-                                strike_prefix_width + 1 + label_span_end + 1,
+                                strike_prefix_width,
                                 with = |writer: &mut dyn fmt::Write| {
-                                    for strike in strike_prefix.borrow().iter().take(if !wrote {
-                                        strike_index
-                                    } else {
-                                        usize::MAX
-                                    }) {
+                                    for strike in strike_prefix.borrow().iter().take(strike_index) {
                                         write!(
                                             writer,
                                             "{symbol}",
@@ -632,20 +634,38 @@ impl<L: fmt::Display> fmt::Display for ReportDisplay<'_, L> {
                                         )?;
                                     }
 
-                                    if !wrote {
+                                    if wrote {
+                                        return Ok(strike_index);
+                                    }
+
+                                    write!(
+                                        writer,
+                                        "{symbol}",
+                                        symbol = TOP_TO_RIGHT.paint(strike_severity.style_in(report.severity))
+                                    )?;
+
+                                    for _ in 0..strike_prefix_width - strike_index - 1 {
                                         write!(
                                             writer,
                                             "{symbol}",
-                                            symbol = TOP_TO_RIGHT.paint(strike_severity.style_in(report.severity))
+                                            symbol = LEFT_TO_RIGHT.paint(label_severity.style_in(report.severity))
                                         )?;
                                     }
 
-                                    for _ in 0..if !wrote {
-                                        strike_prefix_width - strike_index - 1
-                                    } else {
-                                        0
-                                    } + label_span_end
-                                    {
+                                    wrote = true;
+                                    Ok(strike_prefix_width)
+                                }
+                            );
+
+                            // INDENT: "<horizontal><left-to-bottom> "
+                            // INDENT: "            <top--to-bottom> "
+                            let mut wrote = false;
+                            indent!(
+                                writer,
+                                label_span_end + 1,
+                                with = |writer: &mut dyn fmt::Write| {
+                                    for _ in 0..label_span_end {
+                                        // TODO: Right here. Write
                                         write!(
                                             writer,
                                             "{symbol}",
@@ -664,7 +684,7 @@ impl<L: fmt::Display> fmt::Display for ReportDisplay<'_, L> {
                                     wrote = true;
                                     strike_prefix.borrow_mut()[strike_index] = None;
 
-                                    Ok(strike_prefix_width + 1 + label_span_end)
+                                    Ok(label_span_end)
                                 }
                             );
 
@@ -680,7 +700,7 @@ impl<L: fmt::Display> fmt::Display for ReportDisplay<'_, L> {
                             // DEDENT: "<strike-prefix> "
                             dedent!(writer);
 
-                            // INDENT: "<strike-prefix>"
+                            // INDENT: "<strike-prefix> "
                             indent!(
                                 writer,
                                 strike_prefix_width + 1,
