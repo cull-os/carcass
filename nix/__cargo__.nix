@@ -47,7 +47,7 @@
       shellHook = ''
         # So we can do `{bin}` instead of `./target/{optimization}/{bin}`
         root=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
-        export PATH="$PATH":"$root/cab/target/debug"
+        export PATH="$PATH":"$root/target/debug"
 
         ${projectConfig.shell.hook}
       '';
