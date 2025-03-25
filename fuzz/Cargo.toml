@@ -1,0 +1,30 @@
+[package]
+name                 = "fuzz"
+edition.workspace    = true
+license.workspace    = true
+publish.workspace    = true
+repository.workspace = true
+version.workspace    = true
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+cab.path = "../cab/cab"
+
+libfuzzer-sys.workspace = true
+yansi.workspace         = true
+
+[[bin]]
+bench = false
+doc   = false
+name  = "cab-tokenizer"
+path  = "fuzz_targets/cab/tokenizer.rs"
+test  = false
+
+[[bin]]
+bench = false
+doc   = false
+name  = "cab-parser"
+path  = "fuzz_targets/cab/parser.rs"
+test  = false
