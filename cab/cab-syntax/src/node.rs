@@ -943,7 +943,7 @@ impl Bind {
 
         if let ExpressionRef::Identifier(identifier) = identifier {
             identifier.validate(to);
-        } else {
+        } else if identifier.kind() != NODE_ERROR {
             to.push(Report::error("invalid bind").primary(
                 identifier.span(),
                 format!("expected an identifier, not {kind}", kind = identifier.kind()),
