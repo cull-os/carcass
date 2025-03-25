@@ -740,7 +740,28 @@ impl<L: fmt::Display> fmt::Display for ReportDisplay<'_, L> {
                             );
 
                             // INDENT: "<prefix-spaces>"
-                            indent!(writer, *label_span.start as u16);
+                            indent!(
+                                writer,
+                                *label_span.start as u16,
+                                with = |writer: &mut dyn fmt::Write| {
+                                    for index in 0..*label_span.start {
+                                        let symbol = if let Some((.., severity)) =
+                                            line.labels.iter().find(|(span, ..)| {
+                                                (span.end() == Size::new(index) + 1u32
+                                                    || span.start().is_some_and(|start| start == index.into()))
+                                                    && span.start().is_none_or(|start| start != span.end())
+                                            }) {
+                                            TOP_TO_BOTTOM.paint(severity.style_in(report.severity))
+                                        } else {
+                                            ' '.paint(label_severity.style_in(report.severity))
+                                        };
+
+                                        write!(writer, "{symbol}")?;
+                                    }
+
+                                    Ok(*label_span.start)
+                                }
+                            );
 
                             // INDENT: "<horizontal><left-to-bottom> "
                             // INDENT: "            <top--to-bottom> "
