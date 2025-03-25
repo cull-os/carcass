@@ -26,6 +26,7 @@ impl<I: Into<Self>> ops::Add<I> for Size {
 impl<I: Into<Self>> ops::Sub<I> for Size {
     type Output = Self;
 
+    #[track_caller]
     fn sub(self, that: I) -> Self::Output {
         Self(*self - *that.into())
     }
@@ -44,6 +45,7 @@ impl<I> ops::SubAssign<I> for Size
 where
     Self: ops::Sub<I, Output = Self>,
 {
+    #[track_caller]
     fn sub_assign(&mut self, rhs: I) {
         *self = *self - rhs
     }
