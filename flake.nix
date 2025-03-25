@@ -29,46 +29,25 @@
 
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
 
-    crane.url = "github:ipetkov/crane";
-
-    fenix = {
-      url = "github:nix-community/fenix";
-
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-
-    advisory-db = {
-      url = "github:rustsec/advisory-db";
-
-      flake = false;
-    };
+    # RUST
+    crane.url   = "github:ipetkov/crane";
+    fenix       = { url = "github:nix-community/fenix"; inputs.nixpkgs.follows = "nixpkgs"; };
+    advisory-db = { url = "github:rustsec/advisory-db"; flake = false; };
   };
 
   outputs = inputs @ { systems, flake-parts, ... }: flake-parts.lib.mkFlake { inherit inputs; } ({ lib, ... }: {
     systems = import systems;
 
-    perSystem = { system, pkgs, ... }: {
-      _module.args.pkgs = import inputs.nixpkgs {
-        inherit system;
-
-        overlays = lib.attrValues inputs
-          |> lib.filter (flake: flake ? overlays.default)
-          |> map        (flake: flake.overlays.default);
-      };
-
-      _module.args.cargoLib = let
-        cargoLib = inputs.crane.mkLib pkgs;
-      in cargoLib.overrideToolchain pkgs.fenix.complete.toolchain;
-    };
-
     imports = let
       localModules = lib.filesystem.listFilesRecursive ./.
-        |> lib.filter (path: builtins.baseNameOf path == "_.nix");
+        |> lib.filter (absolutePath: let
+            path = builtins.baseNameOf absolutePath;
+          in lib.hasPrefix "__" path && lib.hasSuffix "__" (lib.removeSuffix ".nix" path));
 
       outerModules = lib.removeAttrs inputs [ "self" ]
         |> lib.attrValues 
         |> lib.filter (flake: flake ? flakeModule)
-        |> map        (flake: flake.flakeModule);
+        |> map        (flake: flake . flakeModule);
     in localModules ++ outerModules;
   });
 }

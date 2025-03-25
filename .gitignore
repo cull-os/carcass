@@ -5,7 +5,8 @@
 !*.md
 
 # NIX
-!flake.nix
+!nix/
+!*.nix
 !flake.lock
 
 # BUILD SYSTEMS
