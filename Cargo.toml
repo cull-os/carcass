@@ -1,16 +1,15 @@
 [workspace]
-members  = [ "cab*", "fuzz", "task" ]
+members  = [ "cab/cab*", "cab/fuzz", "cab/task" ]
 resolver = "3"
 
 metadata.crane.name = "cab"
 
 [workspace.package]
-description = "A reproducible contextful-expression language"
-edition     = "2024"
-license     = "MIT"
-publish     = false
-repository  = "https://github.com/cull-os/carcass/tree/master/cab"
-version     = "0.0.1"
+edition    = "2024"
+license    = "MIT"
+publish    = false
+repository = "https://github.com/cull-os/carcass"
+version    = "0.0.1"
 
 [workspace.dependencies]
 anyhow = "1.0.95"
@@ -19,7 +18,7 @@ async-trait = "0.1.86"
 bytes = "1.10.0"
 clap = { version = "4.5.4", features = [ "derive" ] }
 const-str = "0.6.2"
-cstree = { git = "https://github.com/cull-os/cstree", branch = "cab-branch", features = [
+cstree = { git = "https://github.com/domenicquirl/cstree", features = [
   "derive",
   "lasso_compat",
   "multi_threaded_interning",
