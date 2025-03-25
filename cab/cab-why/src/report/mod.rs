@@ -713,6 +713,7 @@ impl<L: fmt::Display> fmt::Display for ReportDisplay<'_, L> {
                         },
 
                         LabelSpan::Inline(label_span) => {
+                            let label_span_start = *label_span.start as usize;
                             let label_span_end = (*label_span.end).min(60) as usize;
 
                             // DEDENT: "<strike-prefix> "
@@ -739,47 +740,25 @@ impl<L: fmt::Display> fmt::Display for ReportDisplay<'_, L> {
                                 }
                             );
 
-                            // INDENT: "<prefix-spaces>"
-                            indent!(
-                                writer,
-                                *label_span.start as u16,
-                                with = |writer: &mut dyn fmt::Write| {
-                                    for index in 0..*label_span.start {
-                                        let symbol = if let Some((.., severity)) =
-                                            line.labels.iter().find(|(span, ..)| {
-                                                (span.end() == Size::new(index) + 1u32
-                                                    || span.start().is_some_and(|start| start == index.into()))
-                                                    && span.start().is_none_or(|start| start != span.end())
-                                            }) {
-                                            TOP_TO_BOTTOM.paint(severity.style_in(report.severity))
-                                        } else {
-                                            ' '.paint(label_severity.style_in(report.severity))
-                                        };
-
-                                        write!(writer, "{symbol}")?;
-                                    }
-
-                                    Ok(*label_span.start)
-                                }
-                            );
-
-                            // INDENT: "<horizontal><left-to-bottom> "
-                            // INDENT: "            <top--to-bottom> "
-                            let underline_width = label_span_end - *label_span.start as usize;
+                            // INDENT: "<prefix-spaces><top-to-right><horizontal><left-to-bottom> "
+                            // INDENT: "<prefix-spaces>                          <top--to-bottom> "
                             let mut wrote = false;
                             indent!(
                                 writer,
-                                underline_width.max(1) + 1,
+                                label_span_end + 1,
                                 with = |writer: &mut dyn fmt::Write| {
-                                    for index in 0..underline_width.saturating_sub(1) {
-                                        let symbol = if index == 0 {
+                                    for index in
+                                        0..label_span_end - if label_span_start == label_span_end { 0 } else { 1 }
+                                    {
+                                        let symbol = if index == label_span_start {
                                             TOP_TO_RIGHT.paint(label_severity.style_in(report.severity))
                                         } else if let Some((.., severity)) = line.labels.iter().find(|(span, ..)| {
-                                            span.end() == label_span.start + 1u32 + index
-                                                || span.start().is_some_and(|start| start == label_span.start + index)
+                                            (span.end() == Size::new(index) + 1u32
+                                                || span.start().is_some_and(|start| start == index.into()))
+                                                && span.start().is_none_or(|start| start != span.end())
                                         }) {
                                             TOP_TO_BOTTOM.paint(severity.style_in(report.severity))
-                                        } else if !wrote {
+                                        } else if !wrote && index > label_span_start {
                                             LEFT_TO_RIGHT.paint(label_severity.style_in(report.severity))
                                         } else {
                                             ' '.paint(label_severity.style_in(report.severity))
@@ -791,7 +770,7 @@ impl<L: fmt::Display> fmt::Display for ReportDisplay<'_, L> {
                                     write!(
                                         writer,
                                         "{symbol}",
-                                        symbol = match underline_width {
+                                        symbol = match label_span_end - label_span_start {
                                             _ if wrote => TOP_TO_BOTTOM,
                                             0 => TOP_LEFT_TO_RIGHT,
                                             1 => TOP_TO_BOTTOM,
@@ -801,7 +780,7 @@ impl<L: fmt::Display> fmt::Display for ReportDisplay<'_, L> {
                                     )?;
 
                                     wrote = true;
-                                    Ok(underline_width.max(1))
+                                    Ok(label_span_end)
                                 }
                             );
 
