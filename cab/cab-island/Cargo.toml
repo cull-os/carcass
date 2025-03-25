@@ -1,11 +1,10 @@
 [package]
-name                  = "cab-island"
-description.workspace = true
-edition.workspace     = true
-license.workspace     = true
-publish.workspace     = true
-repository.workspace  = true
-version.workspace     = true
+name                 = "cab-island"
+edition.workspace    = true
+license.workspace    = true
+publish.workspace    = true
+repository.workspace = true
+version.workspace    = true
 
 [dependencies]
 cab-why.path = "../cab-why"

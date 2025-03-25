@@ -11,6 +11,8 @@
 
 # BUILD SYSTEMS
 !.cargo/config.toml
+!Cargo.toml
+!Cargo.lock
 
 # FORMATTERS
 !.rustfmt.toml

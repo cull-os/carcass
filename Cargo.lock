@@ -289,7 +289,7 @@ checksum = "d0a5c400df2834b80a4c3327b3aad3a4c4cd4de0629063962b03235697506a28"
 [[package]]
 name = "cstree"
 version = "0.12.2"
-source = "git+https://github.com/cull-os/cstree?branch=cab-branch#401167249aafde59d79f0530f7204bd2470f08e6"
+source = "git+https://github.com/domenicquirl/cstree#fb8cc54104cd73ac21aa1c44b89570b4b93a0ef9"
 dependencies = [
  "cstree_derive",
  "indexmap",
@@ -303,7 +303,7 @@ dependencies = [
 [[package]]
 name = "cstree_derive"
 version = "0.12.2"
-source = "git+https://github.com/cull-os/cstree?branch=cab-branch#401167249aafde59d79f0530f7204bd2470f08e6"
+source = "git+https://github.com/domenicquirl/cstree#fb8cc54104cd73ac21aa1c44b89570b4b93a0ef9"
 dependencies = [
  "proc-macro2",
  "quote",

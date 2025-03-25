@@ -8,21 +8,19 @@
 !*.nix
 
 # BUILD SYSTEMS
-!Cargo.lock
 !Cargo.toml
 
 # SOURCES
 !cab*/
 !cab*/src/
-
-!cab-why/src/print/
-!cab-why/src/report/
-!cab-why/src/text/
+!cab*/src/**/
 
 !fuzz/
 !fuzz/fuzz_targets/
+!fuzz/fuzz_targets/**/
 
 !task/
 !task/src/
+!task/src/**/
 
 !*.rs
