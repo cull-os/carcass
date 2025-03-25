@@ -19,29 +19,6 @@
 
     cargoArtifacts = pkgs.crane.buildDepsOnly cargoArguments;
 
-    devShells = projectConfig.packages
-      |> map (packageName: lib.nameValuePair "${projectName}-${packageName}" <| pkgs.crane.devShell {
-        packages = projectConfig.shell.packages ++ [
-          # You will need a nightly Rust compiler.
-          pkgs.fenix.complete.toolchain
-
-          # TOML formatting.
-          pkgs.taplo
-
-          # Fuzzing.
-          pkgs.cargo-fuzz
-        ];
-
-        shellHook = ''
-          # So we can do `{bin}` instead of `./target/{optimization}/{bin}`
-          root=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
-          export PATH="$PATH":"$root/cab/target/debug"
-
-          ${projectConfig.shell.hook}
-        '';
-      })
-      |> lib.listToAttrs;
-
     packages = projectConfig.packages
       |> map (packageName: lib.nameValuePair "${projectName}-${packageName}" <| pkgs.crane.buildPackage <| cargoArguments // {
         inherit cargoArtifacts;
@@ -53,7 +30,28 @@
       })
       |> lib.listToAttrs;
   in {
-    inherit devShells packages;
+    inherit packages;
+
+    devShells.${projectName} = pkgs.crane.devShell {
+      packages = projectConfig.shell.packages ++ [
+        # You will need a nightly Rust compiler.
+        pkgs.fenix.complete.toolchain
+
+        # TOML formatting.
+        pkgs.taplo
+
+        # Fuzzing.
+        pkgs.cargo-fuzz
+      ];
+
+      shellHook = ''
+        # So we can do `{bin}` instead of `./target/{optimization}/{bin}`
+        root=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+        export PATH="$PATH":"$root/cab/target/debug"
+
+        ${projectConfig.shell.hook}
+      '';
+    };
 
     checks = lib.mapAttrs' (name: lib.nameValuePair "package-${name}") packages // {
       "${projectName}-test" = pkgs.crane.cargoTest (cargoArguments // {
