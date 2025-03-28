@@ -43,7 +43,7 @@ pub struct Parse {
 
 impl Parse {
     /// Returns [`Ok`] with the [`node::Expression`] if there are no error
-    /// level or above reports, returns [`Err`] with the list of reports
+    /// severity or above reports, returns [`Err`] with the list of reports
     /// otherwise.
     pub fn result(self) -> result::Result<node::Expression, Vec<Report>> {
         if self

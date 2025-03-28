@@ -42,7 +42,7 @@ pub struct Label {
     /// The span.
     pub span: Span,
     /// The label severity.
-    pub level: LabelSeverity,
+    pub severity: LabelSeverity,
     /// The text that will be displayed at the end of the label.
     pub text: Cow<'static, str>,
 }
@@ -50,10 +50,10 @@ pub struct Label {
 impl Label {
     /// Creates a new [`Label`].
     #[inline]
-    pub fn new(span: impl Into<Span>, text: impl Into<Cow<'static, str>>, level: LabelSeverity) -> Self {
+    pub fn new(span: impl Into<Span>, text: impl Into<Cow<'static, str>>, severity: LabelSeverity) -> Self {
         into!(span, text);
 
-        Self { span, text, level }
+        Self { span, text, severity }
     }
 
     /// Creates a new primary [`Label`].
