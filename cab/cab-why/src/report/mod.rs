@@ -14,7 +14,9 @@ use std::{
     ops,
 };
 
+use scopeguard::guard;
 use smallvec::SmallVec;
+use unicode_segmentation::UnicodeSegmentation;
 use yansi::Paint;
 
 pub use self::{
@@ -23,6 +25,7 @@ pub use self::{
     position::*,
 };
 use crate::{
+    IntoSize,
     Size,
     Span,
     dedent,
@@ -177,8 +180,8 @@ fn extend_to_line_boundaries(source: &str, mut span: Span) -> Span {
 }
 
 /// Given a list of spans which refer to the given content and their associated
-/// levels (primary and secondary), resolves the colors for every part, giving
-/// the primary color precedence over the secondary color in an overlap.
+/// severities (primary and secondary), resolves the colors for every part,
+/// giving the primary color precedence over the secondary color in an overlap.
 pub(crate) fn resolve_style<'a>(
     content: &'a str,
     styles: &'a mut [(Span, LabelSeverity)],
@@ -203,10 +206,10 @@ pub(crate) fn resolve_style<'a>(
                 .find(|(_, (span, _))| span.start <= offset && offset < span.end);
 
             match current_style {
-                Some((relative_offset, (span, level))) => {
+                Some((relative_offset, (span, label_severity))) => {
                     style_offset += relative_offset;
 
-                    let next_primary = (*level == LabelSeverity::Secondary)
+                    let next_primary = (*label_severity == LabelSeverity::Secondary)
                         .then(|| {
                             styles[style_offset..]
                                 .iter()
@@ -220,12 +223,12 @@ pub(crate) fn resolve_style<'a>(
                         Some((relative_offset, (span, ..))) => {
                             style_offset += relative_offset;
 
-                            yield content[Span::std(offset, span.start)].paint(level.style_in(severity));
+                            yield content[Span::std(offset, span.start)].paint(label_severity.style_in(severity));
                             offset = span.start;
                         },
 
                         None => {
-                            yield content[Span::std(offset, span.end)].paint(level.style_in(severity));
+                            yield content[Span::std(offset, span.end)].paint(label_severity.style_in(severity));
                             offset = span.end;
                         },
                     }
@@ -366,9 +369,9 @@ impl<L: fmt::Display> fmt::Display for ReportDisplay<'_, L> {
 
                     let span = Span::new(start - left, end - left);
 
-                    line.labels.push((LabelSpan::Inline(span), &label.text, label.level));
+                    line.labels.push((LabelSpan::Inline(span), &label.text, label.severity));
 
-                    line.styles.push((span, label.level));
+                    line.styles.push((span, label.severity));
 
                     continue;
                 }
@@ -382,7 +385,7 @@ impl<L: fmt::Display> fmt::Display for ReportDisplay<'_, L> {
                 line.strikes.push((
                     StrikeId(label_index.try_into().expect("too many overlapping multiline labels")),
                     strike_status,
-                    label.level,
+                    label.severity,
                 ));
 
                 let line_is_first = line_number == label_start.line.get();
@@ -399,11 +402,11 @@ impl<L: fmt::Display> fmt::Display for ReportDisplay<'_, L> {
 
                         let span = Span::new(start - left, end - left);
 
-                        line.styles.push((span, label.level));
+                        line.styles.push((span, label.severity));
                     },
 
                     (false, false) => {
-                        line.styles.push((Span::up_to(line.content.len()), label.level));
+                        line.styles.push((Span::up_to(line.content.len()), label.severity));
                     },
 
                     (false, true) => {
@@ -415,9 +418,9 @@ impl<L: fmt::Display> fmt::Display for ReportDisplay<'_, L> {
                         let span = Span::new(start, end);
 
                         line.labels
-                            .push((LabelSpan::FromStart(..span.end), &label.text, label.level));
+                            .push((LabelSpan::FromStart(..span.end), &label.text, label.severity));
 
-                        line.styles.push((span, label.level));
+                        line.styles.push((span, label.severity));
                     },
 
                     _ => unreachable!(),
@@ -813,6 +816,444 @@ impl<L: fmt::Display> fmt::Display for ReportDisplay<'_, L> {
 
                 wrapln(writer, [point.text.as_ref().new()].into_iter())?;
             }
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct LineStrikeId(u8);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LineStrikeStatus {
+    Start,
+    Continue,
+    End,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct LineStrike {
+    id: LineStrikeId,
+    status: LineStrikeStatus,
+    severity: LabelSeverity,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct LineStyle {
+    span: Span,
+    severity: LabelSeverity,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LineLabelSpan {
+    /// Guaranteed to start at 0.
+    UpTo(Span),
+    Inline(Span),
+}
+
+impl LineLabelSpan {
+    fn start(self) -> Option<Size> {
+        match self {
+            LineLabelSpan::UpTo(_) => None,
+            LineLabelSpan::Inline(span) => Some(span.start),
+        }
+    }
+
+    fn end(self) -> Size {
+        match self {
+            LineLabelSpan::UpTo(span) => span.end,
+            LineLabelSpan::Inline(span) => span.end,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct LineLabel<'a> {
+    span: LineLabelSpan,
+    text: &'a str,
+    severity: LabelSeverity,
+}
+
+#[derive(Debug, Clone)]
+struct Line<'a> {
+    number: u32,
+
+    strikes: SmallVec<LineStrike, 3>,
+
+    content: &'a str,
+    styles: SmallVec<LineStyle, 4>,
+
+    labels: RefCell<SmallVec<LineLabel<'a>, 2>>,
+}
+
+struct ReportDisplay2<'a, Location: fmt::Display> {
+    severity: ReportSeverity,
+    title: &'a str,
+
+    location: Location,
+
+    lines: SmallVec<Line<'a>, 10>,
+
+    points: &'a [Point],
+}
+
+impl<'a, Location: fmt::Display> ReportDisplay2<'a, Location> {
+    fn from(report: &'a Report, source: &'a str, location: Location) -> Self {
+        let mut labels: SmallVec<_, 2> = report
+            .labels
+            .iter()
+            .map(|label| (Position::of(label.span, source), label))
+            .collect();
+
+        // Sort by line, and when labels are on the same line, sort by column. The one
+        // that ends the last will be the last.
+        labels.sort_by(|((a_start, a_end), _), ((b_start, b_end), _)| {
+            a_start
+                .line
+                .cmp(&b_start.line)
+                .then_with(|| a_end.column.cmp(&b_end.column))
+        });
+
+        let mut lines = SmallVec::<Line, 10>::new();
+
+        for (label_index, ((label_start, label_end), label)) in labels.iter().enumerate() {
+            let label_span_extended = extend_to_line_boundaries(source, label.span);
+
+            for (line_number, line_content) in
+                (label_start.line.get()..).zip(source[label_span_extended.as_std()].split('\n'))
+            {
+                let line = match lines.iter_mut().find(|line| line.number == line_number) {
+                    Some(item) => item,
+
+                    None => {
+                        lines.push(Line {
+                            number: line_number,
+
+                            strikes: SmallVec::new(),
+
+                            content: line_content,
+                            styles: SmallVec::new(),
+
+                            labels: RefCell::new(SmallVec::new()),
+                        });
+
+                        lines.last_mut().expect("we just pushed a line")
+                    },
+                };
+
+                let line_is_first = line_number == label_start.line.get();
+                let line_is_last = line_number == label_end.line.get();
+
+                // Not in a single line label.
+                if !(line_is_first && line_is_last) {
+                    line.strikes.push(LineStrike {
+                        id: LineStrikeId(label_index.try_into().expect("too many (>128) overlapping labels")),
+
+                        status: match () {
+                            _ if line_is_first => LineStrikeStatus::Start,
+                            _ if line_is_last => LineStrikeStatus::End,
+                            _ => LineStrikeStatus::Continue,
+                        },
+
+                        severity: label.severity,
+                    });
+                }
+
+                match (line_is_first, line_is_last) {
+                    // Single line label.
+                    (true, true) => {
+                        let base = label_span_extended.start;
+
+                        let Span { start, end } = label.span;
+                        let span = Span::new(start - base, end - base);
+
+                        line.styles.push(LineStyle {
+                            span,
+                            severity: label.severity,
+                        });
+
+                        let up_to_start_width = line_content[..*span.start as usize].graphemes(true).count();
+                        let rest_width = line_content[*span.end as usize..].graphemes(true).count();
+
+                        line.labels.borrow_mut().push(LineLabel {
+                            span: LineLabelSpan::Inline(Span::at(up_to_start_width, rest_width)),
+                            text: &label.text,
+                            severity: label.severity,
+                        });
+                    },
+
+                    // Multiline label's first line.
+                    (true, false) => {
+                        let base = label_span_extended.start;
+
+                        let Span { start, .. } = label.span;
+                        let end = source[*start as usize..]
+                            .find('\n')
+                            .map_or(source.size(), |index| start + index);
+
+                        let span = Span::new(start - base, end - base);
+
+                        line.styles.push(LineStyle {
+                            span,
+                            severity: label.severity,
+                        })
+                    },
+
+                    // Multiline label's intermediary line.
+                    (false, false) => {
+                        line.styles.push(LineStyle {
+                            span: Span::up_to(line.content.len()),
+                            severity: label.severity,
+                        });
+                    },
+
+                    // Multiline label's last line.
+                    (false, true) => {
+                        let roof = label_span_extended.end;
+
+                        // Line being:
+                        // <<<pointed-at>>><<<rest>>>
+                        //                 ^^^^^^^^^^ length of this
+                        let rest = roof - label.span.end;
+
+                        let end = line.content.size() - rest;
+
+                        let span = Span::up_to(end);
+
+                        line.styles.push(LineStyle {
+                            span,
+                            severity: label.severity,
+                        });
+
+                        let up_to_end_width = line_content[..*end as usize].graphemes(true).count();
+
+                        line.labels.borrow_mut().push(LineLabel {
+                            span: LineLabelSpan::UpTo(Span::up_to(up_to_end_width)),
+                            text: &label.text,
+                            severity: label.severity,
+                        });
+                    },
+                }
+            }
+        }
+
+        Self {
+            severity: report.severity,
+            title: &report.title,
+
+            location,
+
+            lines,
+
+            points: &report.points,
+        }
+    }
+}
+
+const RIGHT_TO_BOTTOM: char = '┏';
+const TOP_TO_BOTTOM: char = '┃';
+const TOP_TO_BOTTOM_PARTIAL: char = '┇';
+const TOP_TO_RIGHT: char = '┗';
+const TOP_LEFT_TO_RIGHT: char = '╲';
+const LEFT_TO_RIGHT: char = '━';
+const LEFT_TO_TOP_BOTTOM: char = '┫';
+const DOT: char = '·';
+
+const STYLE_GUTTER: yansi::Style = yansi::Style::new().blue();
+const STYLE_HEADER_PATH: yansi::Style = yansi::Style::new().green();
+const STYLE_HEADER_POSITION: yansi::Style = yansi::Style::new().blue();
+
+impl<Location: fmt::Display> fmt::Display for ReportDisplay2<'_, Location> {
+    fn fmt(&self, writer: &mut fmt::Formatter<'_>) -> fmt::Result {
+        {
+            // INDENT: "<note|warn|error|bug>: "
+            indent!(writer, header = self.severity.header());
+
+            wrapln(writer, [self.title.bold()].into_iter())?;
+        }
+
+        let line_number_width = self.lines.last().map_or(0, |line| number_width(line.number));
+
+        // INDENT: "123 | "
+        let line_number = RefCell::new(None::<u32>);
+        let line_number_should_write = RefCell::new(false);
+        let line_number_previous = RefCell::new(None::<u32>);
+        indent!(
+            writer,
+            line_number_width,
+            with = |writer: &mut dyn fmt::Write| {
+                let Some(line_number) = *line_number.borrow() else {
+                    return Ok(0);
+                };
+
+                let mut line_number_previous = line_number_previous.borrow_mut();
+
+                STYLE_GUTTER.fmt_prefix(writer)?;
+                match () {
+                    // Don't write the current line number, just print spaces instead.
+                    _ if !*line_number_should_write.borrow() => {
+                        write!(writer, "{:>line_number_width$}", "")?;
+                    },
+
+                    // Continuation line. Use dots instead of the number.
+                    _ if *line_number_previous == Some(line_number) => {
+                        let dot_width = number_width(line_number);
+                        let space_width = line_number_width - dot_width;
+
+                        write!(writer, "{:>space_width$}", "")?;
+
+                        for _ in 0..dot_width {
+                            write!(writer, "{DOT}")?;
+                        }
+                    },
+
+                    // New line, but not right after the previous line. Also known as a non-incremental jump.
+                    _ if line_number_previous
+                        .is_some_and(|line_number_previous| line_number > line_number_previous + 1) =>
+                    {
+                        writeln!(writer, "{:>line_number_width$} {TOP_TO_BOTTOM_PARTIAL} ", "")?;
+                        write!(writer, "{line_number:>line_number_width$}")?;
+                    },
+
+                    // New line.
+                    _ => {
+                        write!(writer, "{line_number:>line_number_width$}")?;
+                    },
+                }
+
+                write!(writer, " {TOP_TO_BOTTOM} ")?;
+                STYLE_GUTTER.fmt_suffix(writer)?;
+
+                *line_number_previous = Some(line_number);
+                Ok(line_number + 3)
+            }
+        );
+
+        if let Some(line) = self.lines.first() {
+            // DEDENT: "| "
+            dedent!(writer, 2);
+
+            // INDENT: "┏━━━ ".
+            indent!(
+                writer,
+                header = const_str::concat!(RIGHT_TO_BOTTOM, LEFT_TO_RIGHT, LEFT_TO_RIGHT, LEFT_TO_RIGHT)
+                    .paint(STYLE_GUTTER)
+            );
+
+            STYLE_HEADER_PATH.fmt_prefix(writer)?;
+            write!(writer, "{location}", location = self.location)?;
+            STYLE_HEADER_PATH.fmt_suffix(writer)?;
+
+            let line_number = line.number.paint(STYLE_HEADER_POSITION);
+            let column_number = *line.styles.first().unwrap().span.start + 1;
+            let column_number = column_number.paint(STYLE_HEADER_POSITION);
+            writeln!(writer, ":{line_number}:{column_number}")?;
+        }
+
+        let strike_prefix_width = self.lines.iter().map(|line| line.strikes.len()).max().unwrap_or(0);
+
+        // INDENT: "<strike-prefix> "
+        let strike_prefix = RefCell::new(SmallVec::<_, 3>::from_iter(iter::repeat_n(
+            None::<LineStrike>,
+            strike_prefix_width,
+        )));
+        indent!(
+            writer,
+            strike_prefix_width + 1,
+            with = |writer: &mut dyn fmt::Write| {
+                const STRIKE_OVERRIDE_DEFAULT: yansi::Painted<&char> = yansi::Painted::new(&' ');
+
+                let mut strike_override = None::<yansi::Painted<&char>>;
+
+                for strike_slot in &*strike_prefix.borrow() {
+                    let Some(strike) = *strike_slot else {
+                        write!(
+                            writer,
+                            "{symbol}",
+                            symbol = strike_override.unwrap_or(STRIKE_OVERRIDE_DEFAULT)
+                        )?;
+                        continue;
+                    };
+
+                    match strike.status {
+                        LineStrikeStatus::Start => {
+                            write!(
+                                writer,
+                                "{symbol}",
+                                symbol = RIGHT_TO_BOTTOM.paint(strike.severity.style_in(self.severity))
+                            )?;
+
+                            strike_override = Some(LEFT_TO_RIGHT.paint(strike.severity.style_in(self.severity)));
+                        },
+
+                        LineStrikeStatus::Continue | LineStrikeStatus::End if let Some(strike) = strike_override => {
+                            write!(writer, "{strike}")?;
+                        },
+
+                        LineStrikeStatus::Continue | LineStrikeStatus::End => {
+                            write!(
+                                writer,
+                                "{symbol}",
+                                symbol = TOP_TO_BOTTOM.paint(strike.severity.style_in(self.severity))
+                            )?;
+                        },
+                    }
+                }
+
+                write!(
+                    writer,
+                    "{symbol}",
+                    symbol = strike_override.unwrap_or(STRIKE_OVERRIDE_DEFAULT)
+                )?;
+
+                Ok(strike_prefix_width + 1)
+            }
+        );
+
+        for (line_index, line) in self.lines.iter().enumerate() {
+            *line_number.borrow_mut() = Some(line.number);
+
+            // Write an empty line at the start.
+            if line_index == 0 {
+                *line_number_should_write.borrow_mut() = false;
+
+                writer.write_indent()?;
+                writeln!(writer)?;
+
+                *line_number_previous.borrow_mut() = None;
+            }
+
+            // Patch strike prefix and keep track of positions of strikes with their IDs.
+            {
+                let mut strike_prefix = strike_prefix.borrow_mut();
+
+                for strike @ &LineStrike { id, .. } in &line.strikes {
+                    match strike_prefix.iter_mut().flatten().find(|strike| strike.id == id) {
+                        Some(strike) => *strike = *strike,
+
+                        None => {
+                            *strike_prefix.iter_mut().find(|slot| slot.is_none()).unwrap() = Some(*strike);
+                        },
+                    }
+                }
+            }
+
+            // Write the line.
+            {
+                *line_number_should_write.borrow_mut() = true;
+
+                // Explicitly write the indent because the line may be empty.
+                writer.write_indent()?;
+                wrapln(writer, resolve_style(line.content, &line.styles, self.severity))?;
+
+                *line_number_should_write.borrow_mut() = false;
+            }
+
+            line.labels.borrow_mut().sort_by_key(|style| style.span.end());
+
+            // Reverse, because we want to print the labels that end the last first.
+            for label in line.labels.borrow().iter().rev() {}
         }
 
         Ok(())
