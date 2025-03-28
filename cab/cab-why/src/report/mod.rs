@@ -1128,7 +1128,7 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay2<'_, Location> {
                 write!(writer, " {TOP_TO_BOTTOM} ")?;
                 STYLE_GUTTER.fmt_suffix(writer)?;
 
-                *line_number_previous = Some(line_number);
+                line_number_previous.replace(line_number);
                 Ok(line_number + 3)
             }
         );
@@ -1215,7 +1215,7 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay2<'_, Location> {
         );
 
         for (line_index, line) in self.lines.iter().enumerate() {
-            *line_number.borrow_mut() = Some(line.number);
+            line_number.borrow_mut().replace(line.number);
 
             // Write an empty line at the start.
             if line_index == 0 {
@@ -1236,7 +1236,11 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay2<'_, Location> {
                         Some(strike) => *strike = *strike,
 
                         None => {
-                            *strike_prefix.iter_mut().find(|slot| slot.is_none()).unwrap() = Some(*strike);
+                            strike_prefix
+                                .iter_mut()
+                                .find(|slot| slot.is_none())
+                                .unwrap()
+                                .replace(*strike);
                         },
                     }
                 }
