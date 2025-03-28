@@ -14,7 +14,6 @@ use std::{
     ops,
 };
 
-use scopeguard::guard;
 use smallvec::SmallVec;
 use unicode_segmentation::UnicodeSegmentation;
 use yansi::Paint;
@@ -884,7 +883,7 @@ struct Line<'a> {
     content: &'a str,
     styles: SmallVec<LineStyle, 4>,
 
-    labels: RefCell<SmallVec<LineLabel<'a>, 2>>,
+    labels: SmallVec<LineLabel<'a>, 2>,
 }
 
 struct ReportDisplay2<'a, Location: fmt::Display> {
@@ -935,7 +934,7 @@ impl<'a, Location: fmt::Display> ReportDisplay2<'a, Location> {
                             content: line_content,
                             styles: SmallVec::new(),
 
-                            labels: RefCell::new(SmallVec::new()),
+                            labels: SmallVec::new(),
                         });
 
                         lines.last_mut().expect("we just pushed a line")
@@ -976,7 +975,7 @@ impl<'a, Location: fmt::Display> ReportDisplay2<'a, Location> {
                         let up_to_start_width = line_content[..*span.start as usize].graphemes(true).count();
                         let rest_width = line_content[*span.end as usize..].graphemes(true).count();
 
-                        line.labels.borrow_mut().push(LineLabel {
+                        line.labels.push(LineLabel {
                             span: LineLabelSpan::Inline(Span::at(up_to_start_width, rest_width)),
                             text: &label.text,
                             severity: label.severity,
@@ -1028,7 +1027,7 @@ impl<'a, Location: fmt::Display> ReportDisplay2<'a, Location> {
 
                         let up_to_end_width = line_content[..*end as usize].graphemes(true).count();
 
-                        line.labels.borrow_mut().push(LineLabel {
+                        line.labels.push(LineLabel {
                             span: LineLabelSpan::UpTo(Span::up_to(up_to_end_width)),
                             text: &label.text,
                             severity: label.severity,
@@ -1036,6 +1035,10 @@ impl<'a, Location: fmt::Display> ReportDisplay2<'a, Location> {
                     },
                 }
             }
+        }
+
+        for line in &mut lines {
+            line.labels.sort_by_key(|style| style.span.end());
         }
 
         Self {
@@ -1250,10 +1253,8 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay2<'_, Location> {
                 *line_number_should_write.borrow_mut() = false;
             }
 
-            line.labels.borrow_mut().sort_by_key(|style| style.span.end());
-
             // Reverse, because we want to print the labels that end the last first.
-            for label in line.labels.borrow().iter().rev() {}
+            for label in line.labels.iter().rev() {}
         }
 
         Ok(())
