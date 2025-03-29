@@ -19,12 +19,12 @@ yansi.workspace         = true
 bench = false
 doc   = false
 name  = "cab-tokenizer"
-path  = "fuzz_targets/cab/tokenizer.rs"
+path  = "../cab/fuzz/tokenizer.rs"
 test  = false
 
 [[bin]]
 bench = false
 doc   = false
 name  = "cab-parser"
-path  = "fuzz_targets/cab/parser.rs"
+path  = "../cab/fuzz/parser.rs"
 test  = false

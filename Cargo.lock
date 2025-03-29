@@ -187,6 +187,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "cab-task"
+version = "0.0.1"
+dependencies = [
+ "cab",
+ "clap",
+ "tokio",
+ "which",
+ "yansi",
+]
+
+[[package]]
 name = "cab-why"
 version = "0.0.1"
 dependencies = [
@@ -915,17 +926,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "unicode-ident",
-]
-
-[[package]]
-name = "task"
-version = "0.0.1"
-dependencies = [
- "cab",
- "clap",
- "tokio",
- "which",
- "yansi",
 ]
 
 [[package]]
