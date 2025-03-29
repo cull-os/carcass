@@ -31,10 +31,6 @@ impl Position {
         let mut index = 0;
 
         for grapheme in source.graphemes(true) {
-            if index > range.end {
-                break;
-            }
-
             index += grapheme.len();
 
             if grapheme == "\n" {
@@ -49,9 +45,11 @@ impl Position {
                 start.column = column;
             }
 
-            if index == range.end {
+            if index >= range.end {
                 end.line = line;
                 end.column = column;
+
+                break;
             }
         }
 
