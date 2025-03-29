@@ -201,7 +201,7 @@ fn resolve_style(
                 Some((style_offset_diff, style)) => {
                     style_offset += style_offset_diff;
 
-                    let next_primary = (style.severity == LabelSeverity::Secondary)
+                    let contained_primary = (style.severity == LabelSeverity::Secondary)
                         .then(|| {
                             styles[style_offset..]
                                 .iter()
@@ -214,23 +214,27 @@ fn resolve_style(
                         })
                         .flatten();
 
-                    match next_primary {
-                        Some((style_offset_diff, next_style)) => {
+                    match contained_primary {
+                        Some((style_offset_diff, contained_style)) => {
                             style_offset += style_offset_diff;
 
-                            yield content[Span::std(content_offset, next_style.span.start)]
+                            yield content[Span::std(content_offset, contained_style.span.start)]
                                 .paint(style.severity.style_in(severity));
 
-                            content_offset = next_style.span.start;
+                            yield content[contained_style.span.as_std()]
+                                .paint(contained_style.severity.style_in(severity));
+
+                            yield content[Span::std(contained_style.span.end, style.span.end)]
+                                .paint(style.severity.style_in(severity));
                         },
 
                         None => {
                             yield content[Span::std(content_offset, style.span.end)]
                                 .paint(style.severity.style_in(severity));
-
-                            content_offset = style.span.end;
                         },
                     }
+
+                    content_offset = style.span.end;
                 },
 
                 None => {
