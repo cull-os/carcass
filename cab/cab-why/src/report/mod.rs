@@ -18,9 +18,12 @@ use unicode_segmentation::UnicodeSegmentation;
 use yansi::Paint;
 
 pub use self::{
-    label::*,
-    point::*,
-    position::*,
+    label::{
+        Label,
+        LabelSeverity,
+    },
+    point::Point,
+    position::Position,
 };
 use crate::{
     IntoSize,

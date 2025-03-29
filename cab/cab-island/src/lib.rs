@@ -13,13 +13,13 @@ use bytes::Bytes;
 use cab_why::Result;
 
 mod blob;
-pub use blob::*;
+pub use blob::blob;
 
 mod fs;
-pub use fs::*;
+pub use fs::fs;
 
 mod stdin;
-pub use stdin::*;
+pub use stdin::stdin;
 
 /// An island entry. Entries which don't have parents are roots. Roots are not
 /// guaranteed to be collections, as things like `<fs::/etc/resolv.conf>` are

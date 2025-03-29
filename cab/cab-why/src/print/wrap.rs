@@ -1,15 +1,18 @@
-use std::fmt;
+use std::{
+    fmt,
+    sync::atomic,
+};
 
 use unicode_segmentation::UnicodeSegmentation as _;
 use unicode_width::UnicodeWidthStr as _;
 use yansi::Paint as _;
 
 use crate::{
-    __private::{
-        LINE_WIDTH_MAX,
-        line_width_load,
-    },
     call,
+    text::{
+        LINE_WIDTH,
+        LINE_WIDTH_MAX,
+    },
 };
 
 /// [`wrap`], but with a newline after the text.
@@ -29,7 +32,7 @@ pub fn wrap<'a>(writer: &mut dyn fmt::Write, parts: impl IntoIterator<Item = yan
 
     call!(into_iter; parts);
 
-    let line_width_start = line_width_load();
+    let line_width_start = LINE_WIDTH.load(atomic::Ordering::Acquire);
     let mut line_width = line_width_start;
 
     let line_width_max = if line_width_start < *LINE_WIDTH_MAX {
