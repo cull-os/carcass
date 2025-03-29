@@ -4,22 +4,30 @@ use unicode_segmentation::UnicodeSegmentation as _;
 use unicode_width::UnicodeWidthStr as _;
 use yansi::Paint as _;
 
-use crate::__private::{
-    LINE_WIDTH_MAX,
-    line_width_load,
+use crate::{
+    __private::{
+        LINE_WIDTH_MAX,
+        line_width_load,
+    },
+    call,
 };
 
 /// [`wrap`], but with a newline after the text.
-pub fn wrapln<'a>(writer: &mut dyn fmt::Write, parts: impl Iterator<Item = yansi::Painted<&'a str>>) -> fmt::Result {
+pub fn wrapln<'a>(
+    writer: &mut dyn fmt::Write,
+    parts: impl IntoIterator<Item = yansi::Painted<&'a str>>,
+) -> fmt::Result {
     wrap(writer, parts)?;
     writeln!(writer)
 }
 
 /// Writes the given iterator of colored words into the writer, splicing and
 /// wrapping at the max line width.
-pub fn wrap<'a>(writer: &mut dyn fmt::Write, parts: impl Iterator<Item = yansi::Painted<&'a str>>) -> fmt::Result {
+pub fn wrap<'a>(writer: &mut dyn fmt::Write, parts: impl IntoIterator<Item = yansi::Painted<&'a str>>) -> fmt::Result {
     use None as Space;
     use Some as Word;
+
+    call!(into_iter; parts);
 
     let line_width_start = line_width_load();
     let mut line_width = line_width_start;

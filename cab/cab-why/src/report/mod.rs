@@ -514,7 +514,7 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<'_, Location> {
             // INDENT: "<note|warn|error|bug>: "
             indent!(writer, header = self.severity.header());
 
-            wrapln(writer, [self.title.bold()].into_iter())?;
+            wrapln(writer, [self.title.bold()])?;
         }
 
         let line_number_width = self.lines.last().map_or(0, |line| number_width(line.number));
@@ -829,10 +829,7 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<'_, Location> {
                                 }
                             );
 
-                            wrapln(
-                                writer,
-                                [label.text.paint(self.style(top_to_right.severity))].into_iter(),
-                            )?;
+                            wrapln(writer, [label.text.paint(self.style(top_to_right.severity))])?;
                         },
 
                         LineLabelSpan::Inline(_) => {
@@ -911,7 +908,7 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<'_, Location> {
                                 }
                             );
 
-                            wrapln(writer, [label.text.paint(self.style(label.severity))].into_iter())?;
+                            wrapln(writer, [label.text.paint(self.style(label.severity))])?;
                         },
                     }
                 }
@@ -935,7 +932,7 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<'_, Location> {
                 // INDENT: "<tip|help|...>: "
                 indent!(writer, header = &point.title);
 
-                wrapln(writer, [point.text.as_ref().new()].into_iter())?;
+                wrapln(writer, [point.text.as_ref().new()])?;
             }
         }
 
