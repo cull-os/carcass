@@ -187,19 +187,19 @@ fn resolve_style(
     });
 
     gen move {
-        let mut offset = Size::new(0u32);
+        let mut content_offset = Size::new(0u32);
         let mut style_offset: usize = 0;
 
-        while offset < content.len().into() {
+        while content_offset < content.len().into() {
             let current_style = styles[style_offset..]
                 .iter()
                 .copied()
                 .enumerate()
-                .find(|(_, style)| style.span.start <= offset && offset < style.span.end);
+                .find(|(_, style)| style.span.start <= content_offset && content_offset < style.span.end);
 
             match current_style {
-                Some((relative_offset, style)) => {
-                    style_offset += relative_offset;
+                Some((style_offset_diff, style)) => {
+                    style_offset += style_offset_diff;
 
                     let next_primary = (style.severity == LabelSeverity::Secondary)
                         .then(|| {
@@ -207,24 +207,28 @@ fn resolve_style(
                                 .iter()
                                 .copied()
                                 .enumerate()
-                                .take_while(|(_, style2)| style2.span.start <= style.span.end)
-                                .find(|(_, style2)| {
-                                    style2.severity == LabelSeverity::Primary && style2.span.start > offset
+                                .take_while(|(_, other)| other.span.start <= style.span.end)
+                                .find(|(_, other)| {
+                                    other.severity == LabelSeverity::Primary && other.span.start > content_offset
                                 })
                         })
                         .flatten();
 
                     match next_primary {
-                        Some((relative_offset, style)) => {
-                            style_offset += relative_offset;
+                        Some((style_offset_diff, next_style)) => {
+                            style_offset += style_offset_diff;
 
-                            yield content[Span::std(offset, style.span.start)].paint(style.severity.style_in(severity));
-                            offset = style.span.start;
+                            yield content[Span::std(content_offset, next_style.span.start)]
+                                .paint(style.severity.style_in(severity));
+
+                            content_offset = next_style.span.start;
                         },
 
                         None => {
-                            yield content[Span::std(offset, style.span.end)].paint(style.severity.style_in(severity));
-                            offset = style.span.end;
+                            yield content[Span::std(content_offset, style.span.end)]
+                                .paint(style.severity.style_in(severity));
+
+                            content_offset = style.span.end;
                         },
                     }
                 },
@@ -233,15 +237,15 @@ fn resolve_style(
                     let (relative_offset, next_offset) = styles[style_offset..]
                         .iter()
                         .enumerate()
-                        .filter(|(_, style)| style.span.start > offset)
+                        .filter(|(_, style)| style.span.start > content_offset)
                         .map(|(relative_offset, style)| (relative_offset, style.span.start))
                         .next()
                         .unwrap_or((styles.len() - style_offset, content.len().into()));
 
                     style_offset += relative_offset;
 
-                    yield (&content[Span::std(offset, next_offset)]).new();
-                    offset = next_offset;
+                    yield (&content[Span::std(content_offset, next_offset)]).new();
+                    content_offset = next_offset;
                 },
             }
         }

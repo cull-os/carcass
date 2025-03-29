@@ -16,7 +16,7 @@ pub enum IndentPlace {
 /// The type that is accepted by [`indent_with`] to print indent prefixes.
 ///
 /// Returns a number, which is the amount of spaces (indents) it has written.
-/// If the number is smaller than the [`IndentWriter`] count, the difference
+/// If the number is smaller than the [`IndentWriter`] count, the diff
 /// will be printed as spaces.
 ///
 /// If it is higher than that number, the [`IndentWriter`] will panic.
