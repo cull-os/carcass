@@ -1,9 +1,9 @@
-use std::fmt;
-
-use crate::__private::{
-    line_width_load,
-    line_width_store,
+use std::{
+    fmt,
+    sync::atomic,
 };
+
+use crate::text::LINE_WIDTH;
 
 #[doc(hidden)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -38,7 +38,8 @@ pub struct IndentWriter<'a> {
 
 impl Drop for IndentWriter<'_> {
     fn drop(&mut self) {
-        line_width_store(line_width_load().saturating_sub(self.__count));
+        let width = LINE_WIDTH.load(atomic::Ordering::Acquire);
+        LINE_WIDTH.store(width.saturating_sub(self.__count), atomic::Ordering::Release);
     }
 }
 
@@ -102,7 +103,7 @@ impl IndentWriter<'_> {
 pub fn indent(writer: &mut dyn fmt::Write, count: u16) -> IndentWriter<'_> {
     static mut ZERO_INDENTER: IndentWith<'static> = &mut |_| Ok(0);
 
-    line_width_store(line_width_load() + count);
+    LINE_WIDTH.fetch_add(count, atomic::Ordering::Acquire);
 
     IndentWriter {
         __writer: writer,
@@ -120,7 +121,7 @@ pub fn indent(writer: &mut dyn fmt::Write, count: u16) -> IndentWriter<'_> {
 ///
 /// Consult the documentation on [`IndentWith`] to learn what it is used for.
 pub fn indent_with<'a>(writer: &'a mut dyn fmt::Write, count: u16, with: IndentWith<'a>) -> IndentWriter<'a> {
-    line_width_store(line_width_load() + count);
+    LINE_WIDTH.fetch_add(count, atomic::Ordering::Acquire);
 
     IndentWriter {
         __writer: writer,
@@ -208,18 +209,20 @@ macro_rules! dedent {
     };
 
     ($writer:ident, $dedent:expr,discard = $discard:literal) => {
+        use std::sync::atomic;
+
         use $crate::__private::{
-            line_width_load,
-            line_width_store,
+            LINE_WIDTH,
             scopeguard,
         };
 
         let dedent = $dedent as u16;
-        let old_count = line_width_load();
 
-        line_width_store(old_count.saturating_sub(dedent));
+        let old_count = LINE_WIDTH.load(atomic::Ordering::Acquire);
+        LINE_WIDTH.store(old_count.saturating_sub(dedent), atomic::Ordering::Release);
+
         let _guard = scopeguard::guard((), |_| {
-            line_width_store(old_count);
+            LINE_WIDTH.store(old_count, atomic::Ordering::Release);
         });
 
         let $writer = &mut $crate::IndentWriter {

@@ -13,9 +13,13 @@ use enumset::{
 };
 
 pub use self::{
-    color::*,
-    noder::*,
-    tokenizer::*,
+    color::COLORS,
+    noder::{
+        Oracle,
+        Parse,
+        oracle,
+    },
+    tokenizer::tokenize,
 };
 
 pub mod node;
@@ -26,7 +30,7 @@ mod tokenizer;
 
 #[allow(dead_code)]
 mod red {
-    use crate::*;
+    use super::*;
 
     pub type Node = cstree::syntax::ResolvedNode<Kind>;
     pub type ResolvedNode = cstree::syntax::SyntaxNode<Kind>;
@@ -51,7 +55,7 @@ pub trait TokenRef<'a> = TryFrom<&'a red::Token> + ops::Deref<Target: ops::Deref
 mod green {
     use std::sync::Arc;
 
-    use crate::*;
+    use super::*;
 
     pub type Interner = Arc<cstree::interning::MultiThreadedTokenInterner>;
 

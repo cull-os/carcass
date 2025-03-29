@@ -8,7 +8,13 @@ mod report;
 mod text;
 
 pub use self::{
-    error::*,
+    error::{
+        Context,
+        Contextful,
+        Error,
+        Result,
+        Termination,
+    },
     print::{
         IndentWith,
         IndentWriter,
@@ -17,8 +23,20 @@ pub use self::{
         wrap,
         wrapln,
     },
-    report::*,
-    text::*,
+    report::{
+        Label,
+        LabelSeverity,
+        Point,
+        Position,
+        Report,
+        ReportSeverity,
+    },
+    text::{
+        IntoSize,
+        IntoSpan,
+        Size,
+        Span,
+    },
 };
 
 /// A macro to make mass redeclarations of a collection of identifiers using a
@@ -67,31 +85,16 @@ macro_rules! into {
 
 #[doc(hidden)]
 pub mod __private {
-    use std::sync::{
-        LazyLock,
-        atomic,
-    };
-
     pub use anyhow;
     pub use scopeguard;
     pub use unicode_width;
     pub use yansi;
 
-    pub use crate::print::IndentPlace;
-
-    static LINE_WIDTH: atomic::AtomicU16 = atomic::AtomicU16::new(0);
-
-    pub fn line_width_load() -> u16 {
-        LINE_WIDTH.load(atomic::Ordering::SeqCst)
-    }
-
-    pub fn line_width_store(value: u16) {
-        LINE_WIDTH.store(value, atomic::Ordering::SeqCst);
-    }
-
-    pub static LINE_WIDTH_MAX: LazyLock<u16> = LazyLock::new(|| {
-        let width = terminal_size::terminal_size().map(|(width, _)| width.0);
-
-        width.unwrap_or(120)
-    });
+    pub use crate::{
+        print::IndentPlace,
+        text::{
+            LINE_WIDTH,
+            LINE_WIDTH_MAX,
+        },
+    };
 }
