@@ -296,6 +296,10 @@ impl LineLabelSpan {
             LineLabelSpan::Inline(span) => span.end,
         }
     }
+
+    fn is_empty(self) -> bool {
+        self.start().is_some_and(|start| start == self.end())
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -470,11 +474,9 @@ impl<'a, Location: fmt::Display> ReportDisplay<'a, Location> {
 
         for line in &mut lines {
             line.labels.sort_by_key(|style| {
-                let is_empty = style.span.start() == Some(style.span.end());
-
                 // Empty labels are printed offset one column to the right, so treat them like
                 // it.
-                style.span.end() + if is_empty { 1u32 } else { 0u32 }
+                style.span.end() + if style.span.is_empty() { 1u32 } else { 0u32 }
             });
         }
 
@@ -497,6 +499,7 @@ impl<'a, Location: fmt::Display> ReportDisplay<'a, Location> {
 
 const RIGHT_TO_BOTTOM: char = '┏';
 const TOP_TO_BOTTOM: char = '┃';
+const TOP_TO_BOTTOM_LEFT_ALIGNED: char = '▏';
 const TOP_TO_BOTTOM_PARTIAL: char = '┇';
 const TOP_TO_RIGHT: char = '┗';
 const TOP_LEFT_TO_RIGHT: char = '╲';
@@ -796,14 +799,18 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<'_, Location> {
                                                 // current index, write it instead of out <left-to-right>
                                                 _ if let Some(label) =
                                                     line.labels[..label_index].iter().rev().find(|label| {
-                                                        *label.span.end() == index
+                                                        *label.span.end() == index && !label.span.is_empty()
                                                             || label
                                                                 .span
                                                                 .start()
                                                                 .is_some_and(|start| *start + 1 == index)
                                                     }) =>
                                                 {
-                                                    TOP_TO_BOTTOM.paint(self.style(label.severity))
+                                                    if label.span.is_empty() {
+                                                        TOP_TO_BOTTOM_LEFT_ALIGNED.paint(self.style(label.severity))
+                                                    } else {
+                                                        TOP_TO_BOTTOM.paint(self.style(label.severity))
+                                                    }
                                                 },
 
                                                 _ if !wrote => LEFT_TO_RIGHT.paint(self.style(top_to_right.severity)),
@@ -875,11 +882,15 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<'_, Location> {
 
                                                 _ if let Some(label) =
                                                     line.labels[..label_index].iter().rev().find(|label| {
-                                                        *label.span.end() == index + 1
+                                                        *label.span.end() == index + 1 && !label.span.is_empty()
                                                             || label.span.start().is_some_and(|start| *start == index)
                                                     }) =>
                                                 {
-                                                    TOP_TO_BOTTOM.paint(self.style(label.severity))
+                                                    if label.span.is_empty() {
+                                                        TOP_TO_BOTTOM_LEFT_ALIGNED.paint(self.style(label.severity))
+                                                    } else {
+                                                        TOP_TO_BOTTOM.paint(self.style(label.severity))
+                                                    }
                                                 },
 
                                                 _ if !wrote && index > *span_start => {
