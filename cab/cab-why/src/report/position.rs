@@ -28,24 +28,28 @@ impl Position {
         let mut start = Position { line, column };
         let mut end = Position { line, column };
 
-        for (index, c) in source.grapheme_indices(true) {
+        let mut index = 0;
+
+        for grapheme in source.graphemes(true) {
             if index > range.end {
                 break;
             }
 
-            if c == "\n" {
+            index += grapheme.len();
+
+            if grapheme == "\n" {
                 line = line.saturating_add(1);
                 column = 0;
             } else {
                 column += 1;
             }
 
-            if index + 1 == range.start {
+            if index == range.start {
                 start.line = line;
                 start.column = column;
             }
 
-            if index + 1 == range.end {
+            if index == range.end {
                 end.line = line;
                 end.column = column;
             }
