@@ -404,9 +404,7 @@ impl<'a, Location: fmt::Display> ReportDisplay<'a, Location> {
                         });
 
                         let up_to_start_width = line_content[..*span.start as usize].graphemes(true).count();
-                        let label_width = line_content[*span.start as usize..*span.end as usize]
-                            .graphemes(true)
-                            .count();
+                        let label_width = line_content[span.as_std()].graphemes(true).count();
 
                         line.labels.push(LineLabel {
                             span: LineLabelSpan::Inline(Span::at(up_to_start_width, label_width)),
