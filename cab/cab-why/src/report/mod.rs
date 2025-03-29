@@ -503,7 +503,8 @@ impl<'a, Location: fmt::Display> ReportDisplay<'a, Location> {
 
 const RIGHT_TO_BOTTOM: char = '┏';
 const TOP_TO_BOTTOM: char = '┃';
-const TOP_TO_BOTTOM_LEFT_ALIGNED: char = '▏';
+const TOP_TO_BOTTOM_LEFT: char = '▏';
+const TOP_TO_BOTTOM_RIGHT: char = '▕';
 const TOP_TO_BOTTOM_PARTIAL: char = '┇';
 const TOP_TO_RIGHT: char = '┗';
 const TOP_LEFT_TO_RIGHT: char = '╲';
@@ -811,7 +812,7 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<'_, Location> {
                                                     }) =>
                                                 {
                                                     if label.span.is_empty() {
-                                                        TOP_TO_BOTTOM_LEFT_ALIGNED.paint(self.style(label.severity))
+                                                        TOP_TO_BOTTOM_LEFT.paint(self.style(label.severity))
                                                     } else {
                                                         TOP_TO_BOTTOM.paint(self.style(label.severity))
                                                     }
@@ -891,7 +892,7 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<'_, Location> {
                                                     }) =>
                                                 {
                                                     if label.span.is_empty() {
-                                                        TOP_TO_BOTTOM_LEFT_ALIGNED.paint(self.style(label.severity))
+                                                        TOP_TO_BOTTOM_LEFT.paint(self.style(label.severity))
                                                     } else {
                                                         TOP_TO_BOTTOM.paint(self.style(label.severity))
                                                     }
@@ -910,9 +911,12 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<'_, Location> {
                                         writer,
                                         "{symbol}",
                                         symbol = match *span_end - *span_start {
+                                            0 if wrote => TOP_TO_BOTTOM_RIGHT,
                                             _ if wrote => TOP_TO_BOTTOM,
+
                                             0 => TOP_LEFT_TO_RIGHT,
                                             1 => TOP_TO_BOTTOM,
+
                                             _ => LEFT_TO_TOP_BOTTOM,
                                         }
                                         .paint(self.style(label.severity))
