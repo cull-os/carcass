@@ -1052,6 +1052,10 @@ impl<'a, Location: fmt::Display> ReportDisplay2<'a, Location> {
             points: &report.points,
         }
     }
+
+    fn style(&self, severity: LabelSeverity) -> yansi::Style {
+        severity.style_in(self.severity)
+    }
 }
 
 const RIGHT_TO_BOTTOM: char = '┏';
@@ -1184,10 +1188,10 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay2<'_, Location> {
                             write!(
                                 writer,
                                 "{symbol}",
-                                symbol = RIGHT_TO_BOTTOM.paint(strike.severity.style_in(self.severity))
+                                symbol = RIGHT_TO_BOTTOM.paint(self.style(strike.severity))
                             )?;
 
-                            strike_override = Some(LEFT_TO_RIGHT.paint(strike.severity.style_in(self.severity)));
+                            strike_override = Some(LEFT_TO_RIGHT.paint(self.style(strike.severity)));
                         },
 
                         LineStrikeStatus::Continue | LineStrikeStatus::End if let Some(strike) = strike_override => {
@@ -1198,7 +1202,7 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay2<'_, Location> {
                             write!(
                                 writer,
                                 "{symbol}",
-                                symbol = TOP_TO_BOTTOM.paint(strike.severity.style_in(self.severity))
+                                symbol = TOP_TO_BOTTOM.paint(self.style(strike.severity))
                             )?;
                         },
                     }
@@ -1258,7 +1262,134 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay2<'_, Location> {
             }
 
             // Reverse, because we want to print the labels that end the last first.
-            for label in line.labels.iter().rev() {}
+            for (label_index, label) in line.labels.iter().enumerate().rev() {
+                match label.span {
+                    LineLabelSpan::UpTo(span) => {
+                        // HACK: wrapln may split the current line into multiple
+                        // lines, so the label pointer may be too far left.
+                        // Just max it to 60 for now.
+                        let span_end = span.end.min(60.into());
+
+                        let (top_to_right_index, top_to_right) = strike_prefix
+                            .borrow()
+                            .iter()
+                            .enumerate()
+                            .rev()
+                            .find_map(|(index, strike)| {
+                                match strike {
+                                    Some(strike) if strike.status == LineStrikeStatus::End => Some((index, strike)),
+
+                                    _ => None,
+                                }
+                            })
+                            .unwrap();
+
+                        assert_eq!(top_to_right.severity, label.severity);
+
+                        // DEDENT: "<strike-prefix> "
+                        dedent!(writer);
+
+                        // INDENT: "<strike-prefix>"
+                        let mut wrote = false;
+                        indent!(
+                            writer,
+                            strike_prefix_width,
+                            with = |writer: &mut dyn fmt::Write| {
+                                // Write all strikes up to the index of the one we are going to redirect to the
+                                // right.
+                                for strike in strike_prefix.borrow().iter().take(top_to_right_index) {
+                                    write!(
+                                        writer,
+                                        "{symbol}",
+                                        symbol = match strike {
+                                            Some(strike) => TOP_TO_BOTTOM.paint(self.style(strike.severity)),
+                                            None => (&' ').new(),
+                                        }
+                                    )?;
+                                }
+
+                                if wrote {
+                                    return Ok(top_to_right_index);
+                                }
+
+                                write!(
+                                    writer,
+                                    "{symbol}",
+                                    symbol = TOP_TO_RIGHT.paint(self.style(top_to_right.severity))
+                                )?;
+
+                                for _ in 0..strike_prefix_width - top_to_right_index - 1 {
+                                    write!(
+                                        writer,
+                                        "{symbol}",
+                                        symbol = LEFT_TO_RIGHT.paint(self.style(top_to_right.severity))
+                                    )?;
+                                }
+
+                                wrote = true;
+                                Ok(strike_prefix_width)
+                            }
+                        );
+
+                        // INDENT: "<left-to-right><left-to-bottom>"
+                        // INDENT: "               <top--to-bottom>"
+                        let mut wrote = false;
+                        indent!(
+                            writer,
+                            // + 1 because the span is zero-indexed and we didn't indent the space after
+                            //   <strike-prefix> before.
+                            //
+                            // + 1 because we want a space after the <top-to-bottom>.
+                            *span.end + 2,
+                            with = |writer: &mut dyn fmt::Write| {
+                                for index in 0..*span.end {
+                                    write!(
+                                        writer,
+                                        "{symbol}",
+                                        symbol = match () {
+                                            // If there is a label on the current line after this label that has a start
+                                            // or end at the current index, write it instead of out <left-to-right>
+                                            _ if let Some(label) =
+                                                line.labels[..label_index].iter().rev().find(|label| {
+                                                    *label.span.end() == index
+                                                        || label.span.start().is_some_and(|start| *start + 1 == index)
+                                                }) =>
+                                            {
+                                                TOP_TO_BOTTOM.paint(self.style(label.severity))
+                                            },
+
+                                            _ if !wrote => LEFT_TO_RIGHT.paint(self.style(top_to_right.severity)),
+
+                                            _ => (&' ').new(),
+                                        }
+                                    )?;
+                                }
+
+                                write!(
+                                    writer,
+                                    "{symbol}",
+                                    symbol = match () {
+                                        _ if !wrote => LEFT_TO_TOP_BOTTOM,
+                                        _ => TOP_TO_BOTTOM,
+                                    }
+                                    .paint(self.style(top_to_right.severity))
+                                )?;
+
+                                wrote = true;
+                                strike_prefix.borrow_mut()[top_to_right_index] = None;
+                                Ok(*span.end + 1)
+                            }
+                        );
+
+                        wrapln(
+                            writer,
+                            [label.text.paint(self.style(top_to_right.severity))].into_iter(),
+                        )?;
+                    },
+
+                    LineLabelSpan::Inline(span) => todo!(),
+                }
+            }
         }
 
         Ok(())
