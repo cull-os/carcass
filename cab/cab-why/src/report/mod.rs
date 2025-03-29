@@ -931,7 +931,7 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<'_, Location> {
                 indent!(writer, header = "=".paint(STYLE_GUTTER));
 
                 // INDENT: "<tip|help|...>: "
-                // TODO: indent!(writer, header = point.title);
+                indent!(writer, header = &point.title);
 
                 wrapln(writer, [point.text.as_ref().new()].into_iter())?;
             }
