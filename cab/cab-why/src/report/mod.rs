@@ -362,7 +362,7 @@ impl<'a, Location: fmt::Display> ReportDisplay<'a, Location> {
             let label_span_extended = extend_to_line_boundaries(source, label.span);
 
             for (line_number, line_content) in
-                (label_start.line.get()..).zip(source[label_span_extended.as_std()].split('\n'))
+                (label_start.line..).zip(source[label_span_extended.as_std()].split('\n'))
             {
                 let line = match lines.iter_mut().find(|line| line.number == line_number) {
                     Some(item) => item,
@@ -383,8 +383,8 @@ impl<'a, Location: fmt::Display> ReportDisplay<'a, Location> {
                     },
                 };
 
-                let line_is_first = line_number == label_start.line.get();
-                let line_is_last = line_number == label_end.line.get();
+                let line_is_first = line_number == label_start.line;
+                let line_is_last = line_number == label_end.line;
 
                 // Not in a single line label.
                 if !(line_is_first && line_is_last) {
