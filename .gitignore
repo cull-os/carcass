@@ -10,15 +10,13 @@
 !flake.lock
 
 # BUILD SYSTEMS
+!.cargo/
 !.cargo/config.toml
 !Cargo.toml
 !Cargo.lock
 
 # FUZZING
 !fuzz/
-!fuzz/fuzz_targets/
-!fuzz/fuzz_targets/**/
-!fuzz/fuzz_targets/**/*.rs
 
 # FORMATTERS
 !.rustfmt.toml

@@ -15,8 +15,7 @@
 !cab*/src/
 !cab*/src/**/
 
-!task/
-!task/src/
-!task/src/**/
+!fuzz/
+!fuzz/**/
 
 !*.rs

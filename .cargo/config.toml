@@ -1,6 +1,2 @@
-[alias]
-task         = "run --package task --"
-task-release = "run --release --package task --"
-
 [build]
 incremental = true

@@ -1,5 +1,5 @@
 [package]
-name                 = "task"
+name                 = "cab-task"
 edition.workspace    = true
 license.workspace    = true
 publish.workspace    = true
@@ -13,9 +13,3 @@ clap.workspace  = true
 tokio.workspace = true
 which.workspace = true
 yansi.workspace = true
-
-[[bin]]
-bench = false
-doc   = false
-name  = "task"
-test  = false

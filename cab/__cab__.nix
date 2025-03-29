@@ -3,6 +3,6 @@
     source = ./.;
     type   = "cargo";
 
-    packages = [ "cab" "task" ];
+    packages = [ "cab" "cab-task" ];
   };
 }
