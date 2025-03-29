@@ -467,7 +467,13 @@ impl<'a, Location: fmt::Display> ReportDisplay<'a, Location> {
         }
 
         for line in &mut lines {
-            line.labels.sort_by_key(|style| style.span.end());
+            line.labels.sort_by_key(|style| {
+                let is_empty = style.span.start() == Some(style.span.end());
+
+                // Empty labels are printed offset one column to the right, so treat them like
+                // it.
+                style.span.end() + if is_empty { 1u32 } else { 0u32 }
+            });
         }
 
         Self {
