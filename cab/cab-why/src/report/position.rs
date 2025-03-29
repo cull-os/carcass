@@ -1,14 +1,10 @@
-use std::num;
-
-use unicode_segmentation::UnicodeSegmentation as _;
-
 use crate::Span;
 
 /// A position in a source file.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Position {
     /// The line number. One indexed.
-    pub line: num::NonZeroU32,
+    pub line: u32,
     /// The column. One indexed, but zero means we are at the newline.
     ///
     /// The column is not a raw byte index, but a grapheme index.
@@ -22,7 +18,7 @@ impl Position {
     pub fn of(span: Span, source: &str) -> (Position, Position) {
         let range: std::ops::Range<usize> = span.into();
 
-        let mut line = num::NonZeroU32::MIN;
+        let mut line = 1;
         let mut column = 1;
 
         let mut start = Position { line, column };
@@ -30,11 +26,11 @@ impl Position {
 
         let mut index = 0;
 
-        for grapheme in source.graphemes(true) {
-            index += grapheme.len();
+        for c in source.chars() {
+            index += c.len_utf8();
 
-            if grapheme == "\n" {
-                line = line.saturating_add(1);
+            if c == '\n' {
+                line += 1;
                 column = 0;
             } else {
                 column += 1;
@@ -54,5 +50,42 @@ impl Position {
         }
 
         (start, end)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_position() {
+        let source = "foo\nbar";
+        assert_eq!(&source[0..5], "foo\nb");
+        assert_eq!(
+            Position::of(Span::new(0u32, 5u32), source),
+            (Position { line: 1, column: 1 }, Position { line: 2, column: 1 })
+        );
+
+        let source = "foo\næ";
+        assert_eq!(&source[0..6], "foo\næ");
+        assert_eq!(
+            Position::of(Span::new(0u32, 6u32), source),
+            (Position { line: 1, column: 1 }, Position { line: 2, column: 1 })
+        );
+
+        let source = "foo\næb";
+        assert_eq!(&source[0..6], "foo\næ");
+        assert_eq!(
+            Position::of(Span::new(0u32, 5u32), source),
+            (Position { line: 1, column: 1 }, Position { line: 2, column: 1 })
+        );
+        assert_eq!(
+            Position::of(Span::new(0u32, 6u32), source),
+            (Position { line: 1, column: 1 }, Position { line: 2, column: 1 })
+        );
+        assert_eq!(
+            Position::of(Span::new(0u32, 7u32), source),
+            (Position { line: 1, column: 1 }, Position { line: 2, column: 2 })
+        );
     }
 }
