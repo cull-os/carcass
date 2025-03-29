@@ -11,7 +11,6 @@ use std::{
         Write as _,
     },
     iter,
-    ops,
 };
 
 use smallvec::SmallVec;
@@ -137,20 +136,9 @@ impl Report {
         self.point(Point::help(text))
     }
 
-    // TODO: Use SyntaxText.
     pub fn with<'a>(&'a self, location: impl fmt::Display + 'a, source: &'a str) -> impl fmt::Display + 'a {
-        ReportDisplay {
-            report: self,
-            location,
-            source,
-        }
+        ReportDisplay::from(self, source, location)
     }
-}
-
-struct ReportDisplay<'a, L: fmt::Display> {
-    report: &'a Report,
-    location: L,
-    source: &'a str,
 }
 
 fn number_width(number: u32) -> usize {
@@ -181,13 +169,17 @@ fn extend_to_line_boundaries(source: &str, mut span: Span) -> Span {
 /// Given a list of spans which refer to the given content and their associated
 /// severities (primary and secondary), resolves the colors for every part,
 /// giving the primary color precedence over the secondary color in an overlap.
-pub(crate) fn resolve_style<'a>(
-    content: &'a str,
-    styles: &'a mut [(Span, LabelSeverity)],
+fn resolve_style(
+    content: &str,
+    mut styles: SmallVec<LineStyle, 4>,
     severity: ReportSeverity,
-) -> impl Iterator<Item = yansi::Painted<&'a str>> + 'a {
-    styles.sort_by(|(a_span, a_severity), (b_span, b_severity)| {
-        match (a_span.start.cmp(&b_span.start), a_severity, b_severity) {
+) -> impl Iterator<Item = yansi::Painted<&str>> + '_ {
+    styles.sort_by(|a_style, b_style| {
+        match (
+            a_style.span.start.cmp(&b_style.span.start),
+            a_style.severity,
+            b_style.severity,
+        ) {
             (cmp::Ordering::Equal, LabelSeverity::Primary, LabelSeverity::Secondary) => cmp::Ordering::Less,
             (cmp::Ordering::Equal, LabelSeverity::Secondary, LabelSeverity::Primary) => cmp::Ordering::Greater,
             (ordering, ..) => ordering,
@@ -201,34 +193,38 @@ pub(crate) fn resolve_style<'a>(
         while offset < content.len().into() {
             let current_style = styles[style_offset..]
                 .iter()
+                .copied()
                 .enumerate()
-                .find(|(_, (span, _))| span.start <= offset && offset < span.end);
+                .find(|(_, style)| style.span.start <= offset && offset < style.span.end);
 
             match current_style {
-                Some((relative_offset, (span, label_severity))) => {
+                Some((relative_offset, style)) => {
                     style_offset += relative_offset;
 
-                    let next_primary = (*label_severity == LabelSeverity::Secondary)
+                    let next_primary = (style.severity == LabelSeverity::Secondary)
                         .then(|| {
                             styles[style_offset..]
                                 .iter()
+                                .copied()
                                 .enumerate()
-                                .take_while(|(_, (r, _))| r.start <= span.end)
-                                .find(|(_, (r, label))| *label == LabelSeverity::Primary && r.start > offset)
+                                .take_while(|(_, style2)| style2.span.start <= style.span.end)
+                                .find(|(_, style2)| {
+                                    style2.severity == LabelSeverity::Primary && style2.span.start > offset
+                                })
                         })
                         .flatten();
 
                     match next_primary {
-                        Some((relative_offset, (span, ..))) => {
+                        Some((relative_offset, style)) => {
                             style_offset += relative_offset;
 
-                            yield content[Span::std(offset, span.start)].paint(label_severity.style_in(severity));
-                            offset = span.start;
+                            yield content[Span::std(offset, style.span.start)].paint(style.severity.style_in(severity));
+                            offset = style.span.start;
                         },
 
                         None => {
-                            yield content[Span::std(offset, span.end)].paint(label_severity.style_in(severity));
-                            offset = span.end;
+                            yield content[Span::std(offset, style.span.end)].paint(style.severity.style_in(severity));
+                            offset = style.span.end;
                         },
                     }
                 },
@@ -237,8 +233,8 @@ pub(crate) fn resolve_style<'a>(
                     let (relative_offset, next_offset) = styles[style_offset..]
                         .iter()
                         .enumerate()
-                        .filter(|(_, (span, _))| span.start > offset)
-                        .map(|(relative_offset, (span, ..))| (relative_offset, span.start))
+                        .filter(|(_, style)| style.span.start > offset)
+                        .map(|(relative_offset, style)| (relative_offset, style.span.start))
                         .next()
                         .unwrap_or((styles.len() - style_offset, content.len().into()));
 
@@ -249,575 +245,6 @@ pub(crate) fn resolve_style<'a>(
                 },
             }
         }
-    }
-}
-impl<L: fmt::Display> fmt::Display for ReportDisplay<'_, L> {
-    fn fmt(&self, writer: &mut fmt::Formatter<'_>) -> fmt::Result {
-        const BOTTOM_TO_RIGHT: char = '┏';
-        const TOP_TO_BOTTOM: char = '┃';
-        const TOP_TO_BOTTOM_PARTIAL: char = '┇';
-        const TOP_TO_RIGHT: char = '┗';
-        const TOP_LEFT_TO_RIGHT: char = '╲';
-        const LEFT_TO_RIGHT: char = '━';
-        const LEFT_TO_TOP_BOTTOM: char = '┫';
-        const DOT: char = '·';
-
-        const STYLE_GUTTER: yansi::Style = yansi::Style::new().blue();
-        const STYLE_HEADER_PATH: yansi::Style = yansi::Style::new().green();
-        const STYLE_HEADER_POSITION: yansi::Style = yansi::Style::new().blue();
-
-        let Self {
-            report,
-            location: file,
-            source,
-        } = self;
-
-        #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-        struct StrikeId(u8);
-
-        #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-        enum StrikeStatus {
-            Start,
-            Continue,
-            End,
-        }
-
-        type Strike = (StrikeId, StrikeStatus, LabelSeverity);
-
-        #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-        enum LabelSpan {
-            FromStart(ops::RangeTo<Size>),
-            Inline(Span),
-        }
-
-        impl LabelSpan {
-            fn start(self) -> Option<Size> {
-                match self {
-                    LabelSpan::FromStart(_) => None,
-                    LabelSpan::Inline(span) => Some(span.start),
-                }
-            }
-
-            fn end(self) -> Size {
-                match self {
-                    LabelSpan::FromStart(span) => span.end,
-                    LabelSpan::Inline(span) => span.end,
-                }
-            }
-        }
-
-        type LabelDynamic<'a> = (LabelSpan, &'a Cow<'static, str>, LabelSeverity);
-
-        #[derive(Debug, Clone)]
-        struct Line<'a> {
-            number: u32,
-
-            content: &'a str,
-            styles: SmallVec<(Span, LabelSeverity), 4>,
-
-            strikes: SmallVec<Strike, 3>,
-            labels: SmallVec<LabelDynamic<'a>, 2>,
-        }
-
-        let mut labels: SmallVec<_, 2> = report
-            .labels
-            .clone()
-            .into_iter()
-            .map(|label| (Position::of(label.span, source), label))
-            .collect();
-
-        labels.sort_by(|((a_start, a_end), _), ((b_start, b_end), _)| {
-            a_start
-                .line
-                .cmp(&b_start.line)
-                .then_with(|| a_end.column.cmp(&b_end.column))
-        });
-
-        let mut lines: SmallVec<Line, 2> = SmallVec::new();
-
-        for (label_index, ((label_start, label_end), label)) in labels.iter().enumerate() {
-            let label_is_multiline = label_start.line != label_end.line;
-
-            let label_span_extended = extend_to_line_boundaries(source, label.span);
-
-            for (line_number, line) in (label_start.line.get()..).zip(source[label_span_extended.as_std()].split('\n'))
-            {
-                let line = match lines.iter_mut().find(|line| line.number == line_number) {
-                    Some(item) => item,
-
-                    None => {
-                        lines.push(Line {
-                            number: line_number,
-
-                            content: line,
-                            styles: SmallVec::new(),
-
-                            strikes: SmallVec::new(),
-                            labels: SmallVec::new(),
-                        });
-
-                        lines.last_mut().expect("we just pushed a line")
-                    },
-                };
-
-                if !label_is_multiline {
-                    let left = label_span_extended.start;
-
-                    let start = label.span.start;
-                    let end = label.span.end;
-
-                    let span = Span::new(start - left, end - left);
-
-                    line.labels.push((LabelSpan::Inline(span), &label.text, label.severity));
-
-                    line.styles.push((span, label.severity));
-
-                    continue;
-                }
-
-                let strike_status = match line_number {
-                    n if n == label_start.line.get() => StrikeStatus::Start,
-                    n if n == label_end.line.get() => StrikeStatus::End,
-                    _ => StrikeStatus::Continue,
-                };
-
-                line.strikes.push((
-                    StrikeId(label_index.try_into().expect("too many overlapping multiline labels")),
-                    strike_status,
-                    label.severity,
-                ));
-
-                let line_is_first = line_number == label_start.line.get();
-                let line_is_last = line_number == label_end.line.get();
-
-                match (line_is_first, line_is_last) {
-                    (true, false) => {
-                        let left = label_span_extended.start;
-
-                        let start = label.span.start;
-                        let end = source[start.into()..]
-                            .find('\n')
-                            .map_or(source.len().into(), |index| start + index);
-
-                        let span = Span::new(start - left, end - left);
-
-                        line.styles.push((span, label.severity));
-                    },
-
-                    (false, false) => {
-                        line.styles.push((Span::up_to(line.content.len()), label.severity));
-                    },
-
-                    (false, true) => {
-                        let right = label_span_extended.end;
-
-                        let start = Size::new(0u32);
-                        let end = Size::new(line.content.len()) - (right - label.span.end);
-
-                        let span = Span::new(start, end);
-
-                        line.labels
-                            .push((LabelSpan::FromStart(..span.end), &label.text, label.severity));
-
-                        line.styles.push((span, label.severity));
-                    },
-
-                    _ => unreachable!(),
-                }
-            }
-        }
-
-        let line_number_width = lines
-            .iter()
-            .map(|line| line.number)
-            .max()
-            .map(number_width)
-            .unwrap_or(0);
-
-        let strike_prefix_width = lines.iter().map(|line| line.strikes.len()).max().unwrap_or(0);
-
-        let strike_prefix = RefCell::new(SmallVec::<_, 3>::from_iter(iter::repeat_n(
-            None::<Strike>,
-            strike_prefix_width,
-        )));
-
-        {
-            // INDENT: "note: "
-            indent!(writer, header = report.severity.header());
-
-            wrapln(writer, [report.title.as_ref().bold()].into_iter())?;
-        }
-
-        // INDENT: "123 | "
-        let line_number = RefCell::new(None::<(u32, bool)>);
-        let line_number_previous = RefCell::new(None::<u32>);
-        indent!(
-            writer,
-            line_number_width + 3,
-            with = |writer: &mut dyn fmt::Write| {
-                let Some((line_number, should_write_number)) = *line_number.borrow() else {
-                    return Ok(0);
-                };
-                let mut line_number_previous = line_number_previous.borrow_mut();
-
-                STYLE_GUTTER.fmt_prefix(writer)?;
-
-                if !should_write_number {
-                    write!(writer, "{:>line_number_width$}", "")?;
-                } else if *line_number_previous == Some(line_number) {
-                    // Continuation line.
-                    let dot_width = number_width(line_number);
-
-                    write!(
-                        writer,
-                        "{:>space_width$}",
-                        "",
-                        space_width = line_number_width - dot_width
-                    )?;
-
-                    for _ in 0..dot_width {
-                        write!(writer, "{DOT}")?;
-                    }
-                } else {
-                    // New line.
-
-                    if line_number_previous.is_some_and(|number| number + 1 != line_number) {
-                        // Non-incremental jump.
-                        writeln!(writer, "{:>line_number_width$} {TOP_TO_BOTTOM_PARTIAL} ", "")?;
-                    }
-
-                    write!(writer, "{line_number:>line_number_width$}", line_number = line_number)?;
-                }
-
-                write!(writer, " {TOP_TO_BOTTOM} ")?;
-                STYLE_GUTTER.fmt_suffix(writer)?;
-
-                *line_number_previous = Some(line_number);
-                Ok(line_number_width + 3)
-            }
-        );
-
-        if let Some(((label_start, _), _)) = labels.first() {
-            // DEDENT: "| "
-            dedent!(writer, 2);
-
-            // INDENT: "┏━━━ ".
-            indent!(
-                writer,
-                header = const_str::concat!(BOTTOM_TO_RIGHT, LEFT_TO_RIGHT, LEFT_TO_RIGHT, LEFT_TO_RIGHT)
-                    .paint(STYLE_GUTTER)
-            );
-
-            STYLE_HEADER_PATH.fmt_prefix(writer)?;
-            write!(writer, "{file}")?;
-            STYLE_HEADER_PATH.fmt_suffix(writer)?;
-
-            let line_number = label_start.line.paint(STYLE_HEADER_POSITION);
-            let column_number = label_start.column.paint(STYLE_HEADER_POSITION);
-            writeln!(writer, ":{line_number}:{column_number}")?;
-        }
-
-        {
-            // INDENT: "<strike-prefix> "
-            indent!(
-                writer,
-                strike_prefix_width + 1,
-                with = |writer: &mut dyn fmt::Write| {
-                    let mut strike_override = None::<yansi::Painted<&char>>;
-
-                    for strike_slot in &*strike_prefix.borrow() {
-                        let Some((_, strike_status, strike_severity)) = *strike_slot else {
-                            match strike_override {
-                                Some(strike) => write!(writer, "{strike}")?,
-                                None => write!(writer, " ")?,
-                            }
-                            continue;
-                        };
-
-                        match strike_status {
-                            StrikeStatus::Start => {
-                                write!(
-                                    writer,
-                                    "{symbol}",
-                                    symbol = BOTTOM_TO_RIGHT.paint(strike_severity.style_in(report.severity))
-                                )?;
-
-                                strike_override = Some(LEFT_TO_RIGHT.paint(strike_severity.style_in(report.severity)));
-                            },
-
-                            StrikeStatus::Continue | StrikeStatus::End if let Some(strike) = strike_override => {
-                                write!(writer, "{strike}")?;
-                            },
-
-                            StrikeStatus::Continue | StrikeStatus::End => {
-                                write!(
-                                    writer,
-                                    "{symbol}",
-                                    symbol = TOP_TO_BOTTOM.paint(strike_severity.style_in(report.severity))
-                                )?;
-                            },
-                        }
-                    }
-
-                    if let Some(strike) = strike_override {
-                        write!(writer, "{strike}")?;
-
-                        Ok(strike_prefix_width + 1)
-                    } else {
-                        Ok(strike_prefix_width)
-                    }
-                }
-            );
-
-            for (line_index, line) in lines.iter_mut().enumerate() {
-                if line_index == 0 {
-                    *line_number.borrow_mut() = Some((0, false));
-
-                    writer.write_indent()?;
-                    writeln!(writer)?;
-
-                    *line_number_previous.borrow_mut() = None;
-                }
-
-                {
-                    let mut strike_prefix = strike_prefix.borrow_mut();
-
-                    for strike_new @ (strike_id, ..) in &line.strikes {
-                        match strike_prefix.iter_mut().flatten().find(|(id, ..)| id == strike_id) {
-                            Some(strike) => *strike = *strike_new,
-
-                            None => {
-                                *strike_prefix.iter_mut().find(|slot| slot.is_none()).unwrap() = Some(*strike_new);
-                            },
-                        }
-                    }
-                }
-
-                {
-                    *line_number.borrow_mut() = Some((line.number, true));
-
-                    writer.write_indent()?;
-                    wrapln(writer, resolve_style(line.content, &mut line.styles, report.severity))?;
-
-                    *line_number.borrow_mut() = Some((line.number, false));
-                }
-
-                line.labels.sort_by_key(|(span, ..)| span.end());
-
-                for (label_span, label_text, label_severity) in line.labels.iter().rev() {
-                    match label_span {
-                        LabelSpan::FromStart(label_span) => {
-                            let label_span_end = (*label_span.end).min(60) as usize;
-
-                            let &(strike_id, _, strike_severity) = strike_prefix
-                                .borrow()
-                                .iter()
-                                .flatten()
-                                .rev()
-                                .find(|(_, status, _)| *status == StrikeStatus::End)
-                                .unwrap();
-
-                            let strike_index = strike_prefix
-                                .borrow()
-                                .iter()
-                                .enumerate()
-                                .find_map(|(index, strike)| {
-                                    strike.is_some_and(|(id, ..)| id == strike_id).then_some(index)
-                                })
-                                .unwrap();
-
-                            // DEDENT: "<strike-prefix> "
-                            dedent!(writer);
-
-                            // INDENT: "<strike-prefix>"
-                            let mut wrote = false;
-                            indent!(
-                                writer,
-                                strike_prefix_width,
-                                with = |writer: &mut dyn fmt::Write| {
-                                    for strike in strike_prefix.borrow().iter().take(strike_index) {
-                                        write!(
-                                            writer,
-                                            "{symbol}",
-                                            symbol = match strike {
-                                                Some((.., severity)) =>
-                                                    TOP_TO_BOTTOM.paint(severity.style_in(report.severity)),
-                                                None => (&' ').new(),
-                                            }
-                                        )?;
-                                    }
-
-                                    if wrote {
-                                        return Ok(strike_index);
-                                    }
-
-                                    write!(
-                                        writer,
-                                        "{symbol}",
-                                        symbol = TOP_TO_RIGHT.paint(strike_severity.style_in(report.severity))
-                                    )?;
-
-                                    for _ in 0..strike_prefix_width - strike_index - 1 {
-                                        write!(
-                                            writer,
-                                            "{symbol}",
-                                            symbol = LEFT_TO_RIGHT.paint(label_severity.style_in(report.severity))
-                                        )?;
-                                    }
-
-                                    wrote = true;
-                                    Ok(strike_prefix_width)
-                                }
-                            );
-
-                            // INDENT: "<horizontal><left-to-bottom> "
-                            // INDENT: "            <top--to-bottom> "
-                            let mut wrote = false;
-                            indent!(
-                                writer,
-                                label_span_end + 1,
-                                with = |writer: &mut dyn fmt::Write| {
-                                    for index in 0..label_span_end {
-                                        let symbol = if let Some((.., severity)) =
-                                            line.labels.iter().find(|(span, ..)| {
-                                                span.end() == index.into()
-                                                    || (span.start().is_some_and(|start| start + 1u32 == index.into())
-                                                        && span.end() < label_span_end.into())
-                                            }) {
-                                            TOP_TO_BOTTOM.paint(severity.style_in(report.severity))
-                                        } else if !wrote {
-                                            LEFT_TO_RIGHT.paint(label_severity.style_in(report.severity))
-                                        } else {
-                                            ' '.paint(label_severity.style_in(report.severity))
-                                        };
-
-                                        write!(writer, "{symbol}")?;
-                                    }
-
-                                    write!(
-                                        writer,
-                                        "{symbol}",
-                                        symbol = if !wrote { LEFT_TO_TOP_BOTTOM } else { TOP_TO_BOTTOM }
-                                            .paint(label_severity.style_in(report.severity))
-                                    )?;
-
-                                    wrote = true;
-                                    strike_prefix.borrow_mut()[strike_index] = None;
-
-                                    Ok(label_span_end)
-                                }
-                            );
-
-                            wrapln(
-                                writer,
-                                [label_text.as_ref().paint(label_severity.style_in(report.severity))].into_iter(),
-                            )?;
-                        },
-
-                        LabelSpan::Inline(label_span) => {
-                            let label_span_start = *label_span.start as usize;
-                            let label_span_end = (*label_span.end).min(60) as usize;
-
-                            // DEDENT: "<strike-prefix> "
-                            dedent!(writer);
-
-                            // INDENT: "<strike-prefix> "
-                            indent!(
-                                writer,
-                                strike_prefix_width + 1,
-                                with = |writer: &mut dyn fmt::Write| {
-                                    for strike in &*strike_prefix.borrow() {
-                                        write!(
-                                            writer,
-                                            "{symbol}",
-                                            symbol = match strike {
-                                                Some((.., severity)) =>
-                                                    TOP_TO_BOTTOM.paint(severity.style_in(report.severity)),
-                                                None => (&' ').new(),
-                                            }
-                                        )?;
-                                    }
-
-                                    Ok(strike_prefix_width)
-                                }
-                            );
-
-                            // INDENT: "<prefix-spaces><top-to-right><horizontal><left-to-bottom> "
-                            // INDENT: "<prefix-spaces>                          <top--to-bottom> "
-                            let mut wrote = false;
-                            indent!(
-                                writer,
-                                label_span_end + 1,
-                                with = |writer: &mut dyn fmt::Write| {
-                                    for index in
-                                        0..label_span_end - if label_span_start == label_span_end { 0 } else { 1 }
-                                    {
-                                        let symbol = if index == label_span_start {
-                                            TOP_TO_RIGHT.paint(label_severity.style_in(report.severity))
-                                        } else if let Some((.., severity)) = line.labels.iter().find(|(span, ..)| {
-                                            (span.end() == Size::new(index) + 1u32
-                                                || span.start().is_some_and(|start| start == index.into()))
-                                                && span.start().is_none_or(|start| start != span.end())
-                                        }) {
-                                            TOP_TO_BOTTOM.paint(severity.style_in(report.severity))
-                                        } else if !wrote && index > label_span_start {
-                                            LEFT_TO_RIGHT.paint(label_severity.style_in(report.severity))
-                                        } else {
-                                            ' '.paint(label_severity.style_in(report.severity))
-                                        };
-
-                                        write!(writer, "{symbol}")?;
-                                    }
-
-                                    write!(
-                                        writer,
-                                        "{symbol}",
-                                        symbol = match label_span_end - label_span_start {
-                                            _ if wrote => TOP_TO_BOTTOM,
-                                            0 => TOP_LEFT_TO_RIGHT,
-                                            1 => TOP_TO_BOTTOM,
-                                            _ => LEFT_TO_TOP_BOTTOM,
-                                        }
-                                        .paint(label_severity.style_in(report.severity)),
-                                    )?;
-
-                                    wrote = true;
-                                    Ok(label_span_end)
-                                }
-                            );
-
-                            wrapln(
-                                writer,
-                                [label_text.as_ref().paint(label_severity.style_in(report.severity))].into_iter(),
-                            )?;
-                        },
-                    }
-                }
-            }
-        }
-
-        // = help: foo bar
-        {
-            if !report.points.is_empty() {
-                writer.write_indent()?;
-                writeln!(writer)?;
-            }
-
-            // DEDENT: "| "
-            dedent!(writer, 2);
-
-            for point in &report.points {
-                // INDENT: "= "
-                indent!(writer, header = "=".paint(STYLE_GUTTER));
-
-                // INDENT: "note: "
-                indent!(writer, header = &point.title);
-
-                wrapln(writer, [point.text.as_ref().new()].into_iter())?;
-            }
-        }
-
-        Ok(())
     }
 }
 
@@ -886,7 +313,7 @@ struct Line<'a> {
     labels: SmallVec<LineLabel<'a>, 2>,
 }
 
-struct ReportDisplay2<'a, Location: fmt::Display> {
+struct ReportDisplay<'a, Location: fmt::Display> {
     severity: ReportSeverity,
     title: &'a str,
 
@@ -897,7 +324,7 @@ struct ReportDisplay2<'a, Location: fmt::Display> {
     points: &'a [Point],
 }
 
-impl<'a, Location: fmt::Display> ReportDisplay2<'a, Location> {
+impl<'a, Location: fmt::Display> ReportDisplay<'a, Location> {
     fn from(report: &'a Report, source: &'a str, location: Location) -> Self {
         let mut labels: SmallVec<_, 2> = report
             .labels
@@ -973,10 +400,12 @@ impl<'a, Location: fmt::Display> ReportDisplay2<'a, Location> {
                         });
 
                         let up_to_start_width = line_content[..*span.start as usize].graphemes(true).count();
-                        let rest_width = line_content[*span.end as usize..].graphemes(true).count();
+                        let label_width = line_content[*span.start as usize..*span.end as usize]
+                            .graphemes(true)
+                            .count();
 
                         line.labels.push(LineLabel {
-                            span: LineLabelSpan::Inline(Span::at(up_to_start_width, rest_width)),
+                            span: LineLabelSpan::Inline(Span::at(up_to_start_width, label_width)),
                             text: &label.text,
                             severity: label.severity,
                         });
@@ -1071,7 +500,7 @@ const STYLE_GUTTER: yansi::Style = yansi::Style::new().blue();
 const STYLE_HEADER_PATH: yansi::Style = yansi::Style::new().green();
 const STYLE_HEADER_POSITION: yansi::Style = yansi::Style::new().blue();
 
-impl<Location: fmt::Display> fmt::Display for ReportDisplay2<'_, Location> {
+impl<Location: fmt::Display> fmt::Display for ReportDisplay<'_, Location> {
     fn fmt(&self, writer: &mut fmt::Formatter<'_>) -> fmt::Result {
         {
             // INDENT: "<note|warn|error|bug>: "
@@ -1088,7 +517,7 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay2<'_, Location> {
         let line_number_previous = RefCell::new(None::<u32>);
         indent!(
             writer,
-            line_number_width,
+            line_number_width + 3,
             with = |writer: &mut dyn fmt::Write| {
                 let Some(line_number) = *line_number.borrow() else {
                     return Ok(0);
@@ -1133,7 +562,7 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay2<'_, Location> {
                 STYLE_GUTTER.fmt_suffix(writer)?;
 
                 line_number_previous.replace(line_number);
-                Ok(line_number + 3)
+                Ok(line_number_width + 3)
             }
         );
 
@@ -1160,235 +589,345 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay2<'_, Location> {
 
         let strike_prefix_width = self.lines.iter().map(|line| line.strikes.len()).max().unwrap_or(0);
 
-        // INDENT: "<strike-prefix> "
-        let strike_prefix = RefCell::new(SmallVec::<_, 3>::from_iter(iter::repeat_n(
-            None::<LineStrike>,
-            strike_prefix_width,
-        )));
-        indent!(
-            writer,
-            strike_prefix_width + 1,
-            with = |writer: &mut dyn fmt::Write| {
-                const STRIKE_OVERRIDE_DEFAULT: yansi::Painted<&char> = yansi::Painted::new(&' ');
+        {
+            // INDENT: "<strike-prefix> "
+            let strike_prefix = RefCell::new(SmallVec::<_, 3>::from_iter(iter::repeat_n(
+                None::<LineStrike>,
+                strike_prefix_width,
+            )));
+            indent!(
+                writer,
+                strike_prefix_width + 1,
+                with = |writer: &mut dyn fmt::Write| {
+                    const STRIKE_OVERRIDE_DEFAULT: yansi::Painted<&char> = yansi::Painted::new(&' ');
 
-                let mut strike_override = None::<yansi::Painted<&char>>;
+                    let mut strike_override = None::<yansi::Painted<&char>>;
 
-                for strike_slot in &*strike_prefix.borrow() {
-                    let Some(strike) = *strike_slot else {
-                        write!(
-                            writer,
-                            "{symbol}",
-                            symbol = strike_override.unwrap_or(STRIKE_OVERRIDE_DEFAULT)
-                        )?;
-                        continue;
-                    };
-
-                    match strike.status {
-                        LineStrikeStatus::Start => {
+                    for slot in &*strike_prefix.borrow() {
+                        let Some(strike) = *slot else {
                             write!(
                                 writer,
                                 "{symbol}",
-                                symbol = RIGHT_TO_BOTTOM.paint(self.style(strike.severity))
+                                symbol = strike_override.unwrap_or(STRIKE_OVERRIDE_DEFAULT)
                             )?;
+                            continue;
+                        };
 
-                            strike_override = Some(LEFT_TO_RIGHT.paint(self.style(strike.severity)));
-                        },
-
-                        LineStrikeStatus::Continue | LineStrikeStatus::End if let Some(strike) = strike_override => {
-                            write!(writer, "{strike}")?;
-                        },
-
-                        LineStrikeStatus::Continue | LineStrikeStatus::End => {
-                            write!(
-                                writer,
-                                "{symbol}",
-                                symbol = TOP_TO_BOTTOM.paint(self.style(strike.severity))
-                            )?;
-                        },
-                    }
-                }
-
-                write!(
-                    writer,
-                    "{symbol}",
-                    symbol = strike_override.unwrap_or(STRIKE_OVERRIDE_DEFAULT)
-                )?;
-
-                Ok(strike_prefix_width + 1)
-            }
-        );
-
-        for (line_index, line) in self.lines.iter().enumerate() {
-            line_number.borrow_mut().replace(line.number);
-
-            // Write an empty line at the start.
-            if line_index == 0 {
-                *line_number_should_write.borrow_mut() = false;
-
-                writer.write_indent()?;
-                writeln!(writer)?;
-
-                *line_number_previous.borrow_mut() = None;
-            }
-
-            // Patch strike prefix and keep track of positions of strikes with their IDs.
-            {
-                let mut strike_prefix = strike_prefix.borrow_mut();
-
-                for strike @ &LineStrike { id, .. } in &line.strikes {
-                    match strike_prefix.iter_mut().flatten().find(|strike| strike.id == id) {
-                        Some(strike) => *strike = *strike,
-
-                        None => {
-                            strike_prefix
-                                .iter_mut()
-                                .find(|slot| slot.is_none())
-                                .unwrap()
-                                .replace(*strike);
-                        },
-                    }
-                }
-            }
-
-            // Write the line.
-            {
-                *line_number_should_write.borrow_mut() = true;
-
-                // Explicitly write the indent because the line may be empty.
-                writer.write_indent()?;
-                wrapln(writer, resolve_style(line.content, &line.styles, self.severity))?;
-
-                *line_number_should_write.borrow_mut() = false;
-            }
-
-            // Reverse, because we want to print the labels that end the last first.
-            for (label_index, label) in line.labels.iter().enumerate().rev() {
-                match label.span {
-                    LineLabelSpan::UpTo(span) => {
-                        // HACK: wrapln may split the current line into multiple
-                        // lines, so the label pointer may be too far left.
-                        // Just max it to 60 for now.
-                        let span_end = span.end.min(60.into());
-
-                        let (top_to_right_index, top_to_right) = strike_prefix
-                            .borrow()
-                            .iter()
-                            .enumerate()
-                            .rev()
-                            .find_map(|(index, strike)| {
-                                match strike {
-                                    Some(strike) if strike.status == LineStrikeStatus::End => Some((index, strike)),
-
-                                    _ => None,
-                                }
-                            })
-                            .unwrap();
-
-                        assert_eq!(top_to_right.severity, label.severity);
-
-                        // DEDENT: "<strike-prefix> "
-                        dedent!(writer);
-
-                        // INDENT: "<strike-prefix>"
-                        let mut wrote = false;
-                        indent!(
-                            writer,
-                            strike_prefix_width,
-                            with = |writer: &mut dyn fmt::Write| {
-                                // Write all strikes up to the index of the one we are going to redirect to the
-                                // right.
-                                for strike in strike_prefix.borrow().iter().take(top_to_right_index) {
-                                    write!(
-                                        writer,
-                                        "{symbol}",
-                                        symbol = match strike {
-                                            Some(strike) => TOP_TO_BOTTOM.paint(self.style(strike.severity)),
-                                            None => (&' ').new(),
-                                        }
-                                    )?;
-                                }
-
-                                if wrote {
-                                    return Ok(top_to_right_index);
-                                }
-
+                        match strike.status {
+                            LineStrikeStatus::Start => {
                                 write!(
                                     writer,
                                     "{symbol}",
-                                    symbol = TOP_TO_RIGHT.paint(self.style(top_to_right.severity))
+                                    symbol = RIGHT_TO_BOTTOM.paint(self.style(strike.severity))
                                 )?;
 
-                                for _ in 0..strike_prefix_width - top_to_right_index - 1 {
+                                strike_override = Some(LEFT_TO_RIGHT.paint(self.style(strike.severity)));
+                            },
+
+                            LineStrikeStatus::Continue | LineStrikeStatus::End
+                                if let Some(strike) = strike_override =>
+                            {
+                                write!(writer, "{strike}")?;
+                            },
+
+                            LineStrikeStatus::Continue | LineStrikeStatus::End => {
+                                write!(
+                                    writer,
+                                    "{symbol}",
+                                    symbol = TOP_TO_BOTTOM.paint(self.style(strike.severity))
+                                )?;
+                            },
+                        }
+                    }
+
+                    write!(
+                        writer,
+                        "{symbol}",
+                        symbol = strike_override.unwrap_or(STRIKE_OVERRIDE_DEFAULT)
+                    )?;
+
+                    Ok(strike_prefix_width + 1)
+                }
+            );
+
+            for (line_index, line) in self.lines.iter().enumerate() {
+                line_number.borrow_mut().replace(line.number);
+
+                // Write an empty line at the start.
+                if line_index == 0 {
+                    *line_number_should_write.borrow_mut() = false;
+
+                    writer.write_indent()?;
+                    writeln!(writer)?;
+
+                    *line_number_previous.borrow_mut() = None;
+                }
+
+                // Patch strike prefix and keep track of positions of strikes with their IDs.
+                {
+                    let mut strike_prefix = strike_prefix.borrow_mut();
+
+                    for strike_new @ LineStrike { id, .. } in line.strikes.iter().copied() {
+                        match strike_prefix.iter_mut().flatten().find(|strike| strike.id == id) {
+                            Some(strike) => *strike = strike_new,
+
+                            None => {
+                                strike_prefix
+                                    .iter_mut()
+                                    .find(|slot| slot.is_none())
+                                    .unwrap()
+                                    .replace(strike_new);
+                            },
+                        }
+                    }
+                }
+
+                // Write the line.
+                {
+                    *line_number_should_write.borrow_mut() = true;
+
+                    // Explicitly write the indent because the line may be empty.
+                    writer.write_indent()?;
+                    wrapln(writer, resolve_style(line.content, line.styles.clone(), self.severity))?;
+
+                    *line_number_should_write.borrow_mut() = false;
+                }
+
+                // Write the line labels.
+                // Reverse, because we want to print the labels that end the last first.
+                for (label_index, label) in line.labels.iter().enumerate().rev() {
+                    // HACK: wrapln may split the current line into multiple
+                    // lines, so the label pointer may be too far left.
+                    // Just max it to 60 for now.
+                    let span_start = label.span.start().min(Some(60u32.into()));
+                    let span_end = label.span.end().min(60u32.into());
+
+                    // DEDENT: "<strike-prefix> "
+                    dedent!(writer);
+
+                    match label.span {
+                        LineLabelSpan::UpTo(_) => {
+                            let (top_to_right_index, top_to_right) = strike_prefix
+                                .borrow()
+                                .iter()
+                                .enumerate()
+                                .rev()
+                                .find_map(|(index, strike)| {
+                                    match strike {
+                                        Some(strike) if strike.status == LineStrikeStatus::End => {
+                                            Some((index, *strike))
+                                        },
+
+                                        _ => None,
+                                    }
+                                })
+                                .unwrap();
+
+                            assert_eq!(top_to_right.severity, label.severity);
+
+                            // INDENT: "<strike-prefix>"
+                            let mut wrote = false;
+                            indent!(
+                                writer,
+                                strike_prefix_width,
+                                with = |writer: &mut dyn fmt::Write| {
+                                    // Write all strikes up to the index of the one we are going to redirect to the
+                                    // right.
+                                    for slot in strike_prefix.borrow().iter().take(top_to_right_index) {
+                                        write!(
+                                            writer,
+                                            "{symbol}",
+                                            symbol = match slot {
+                                                Some(strike) => TOP_TO_BOTTOM.paint(self.style(strike.severity)),
+                                                None => (&' ').new(),
+                                            }
+                                        )?;
+                                    }
+
+                                    if wrote {
+                                        return Ok(top_to_right_index);
+                                    }
+
                                     write!(
                                         writer,
                                         "{symbol}",
-                                        symbol = LEFT_TO_RIGHT.paint(self.style(top_to_right.severity))
+                                        symbol = TOP_TO_RIGHT.paint(self.style(top_to_right.severity))
                                     )?;
+
+                                    for _ in 0..strike_prefix_width - top_to_right_index - 1 {
+                                        write!(
+                                            writer,
+                                            "{symbol}",
+                                            symbol = LEFT_TO_RIGHT.paint(self.style(top_to_right.severity))
+                                        )?;
+                                    }
+
+                                    wrote = true;
+                                    Ok(strike_prefix_width)
                                 }
+                            );
 
-                                wrote = true;
-                                Ok(strike_prefix_width)
-                            }
-                        );
+                            // INDENT: "<left-to-right><left-to-bottom>"
+                            // INDENT: "               <top--to-bottom>"
+                            let mut wrote = false;
+                            indent!(
+                                writer,
+                                // + 1 because the span is zero-indexed and we didn't indent the space after
+                                //   <strike-prefix> before.
+                                //
+                                // + 1 because we want a space after the <top-to-bottom>.
+                                *span_end + 2,
+                                with = |writer: &mut dyn fmt::Write| {
+                                    for index in 0..*span_end {
+                                        write!(
+                                            writer,
+                                            "{symbol}",
+                                            symbol = match () {
+                                                // If there is a label on the current line after this label that has a
+                                                // start or end at the
+                                                // current index, write it instead of out <left-to-right>
+                                                _ if let Some(label) =
+                                                    line.labels[..label_index].iter().rev().find(|label| {
+                                                        *label.span.end() == index
+                                                            || label
+                                                                .span
+                                                                .start()
+                                                                .is_some_and(|start| *start + 1 == index)
+                                                    }) =>
+                                                {
+                                                    TOP_TO_BOTTOM.paint(self.style(label.severity))
+                                                },
 
-                        // INDENT: "<left-to-right><left-to-bottom>"
-                        // INDENT: "               <top--to-bottom>"
-                        let mut wrote = false;
-                        indent!(
-                            writer,
-                            // + 1 because the span is zero-indexed and we didn't indent the space after
-                            //   <strike-prefix> before.
-                            //
-                            // + 1 because we want a space after the <top-to-bottom>.
-                            *span.end + 2,
-                            with = |writer: &mut dyn fmt::Write| {
-                                for index in 0..*span.end {
+                                                _ if !wrote => LEFT_TO_RIGHT.paint(self.style(top_to_right.severity)),
+
+                                                _ => (&' ').new(),
+                                            }
+                                        )?;
+                                    }
+
                                     write!(
                                         writer,
                                         "{symbol}",
                                         symbol = match () {
-                                            // If there is a label on the current line after this label that has a start
-                                            // or end at the current index, write it instead of out <left-to-right>
-                                            _ if let Some(label) =
-                                                line.labels[..label_index].iter().rev().find(|label| {
-                                                    *label.span.end() == index
-                                                        || label.span.start().is_some_and(|start| *start + 1 == index)
-                                                }) =>
-                                            {
-                                                TOP_TO_BOTTOM.paint(self.style(label.severity))
-                                            },
-
-                                            _ if !wrote => LEFT_TO_RIGHT.paint(self.style(top_to_right.severity)),
-
-                                            _ => (&' ').new(),
+                                            _ if !wrote => LEFT_TO_TOP_BOTTOM,
+                                            _ => TOP_TO_BOTTOM,
                                         }
+                                        .paint(self.style(top_to_right.severity))
                                     )?;
+
+                                    wrote = true;
+                                    strike_prefix.borrow_mut()[top_to_right_index] = None;
+                                    Ok(*span_end + 1)
                                 }
+                            );
 
-                                write!(
-                                    writer,
-                                    "{symbol}",
-                                    symbol = match () {
-                                        _ if !wrote => LEFT_TO_TOP_BOTTOM,
-                                        _ => TOP_TO_BOTTOM,
+                            wrapln(
+                                writer,
+                                [label.text.paint(self.style(top_to_right.severity))].into_iter(),
+                            )?;
+                        },
+
+                        LineLabelSpan::Inline(_) => {
+                            let span_start = span_start.unwrap();
+
+                            // INDENT: "<strike-prefix> "
+                            indent!(
+                                writer,
+                                strike_prefix_width + 1,
+                                with = |writer: &mut dyn fmt::Write| {
+                                    for slot in &*strike_prefix.borrow() {
+                                        write!(
+                                            writer,
+                                            "{symbol}",
+                                            symbol = match slot {
+                                                Some(strike) => TOP_TO_BOTTOM.paint(self.style(strike.severity)),
+                                                None => (&' ').new(),
+                                            }
+                                        )?;
                                     }
-                                    .paint(self.style(top_to_right.severity))
-                                )?;
 
-                                wrote = true;
-                                strike_prefix.borrow_mut()[top_to_right_index] = None;
-                                Ok(*span.end + 1)
-                            }
-                        );
+                                    Ok(strike_prefix_width)
+                                }
+                            );
 
-                        wrapln(
-                            writer,
-                            [label.text.paint(self.style(top_to_right.severity))].into_iter(),
-                        )?;
-                    },
+                            // INDENT: "               <top-to-right><left-to-right><left-to-bottom> "
+                            // INDENT: "                                            <top--to-bottom> "
+                            let mut wrote = false;
+                            indent!(
+                                writer,
+                                // + 1 for extra space.
+                                // + 1 if the label is zero-width. The <top-left-to-right> will be placed after the
+                                //   span.
+                                *span_end + if span_start == span_end { 1 } else { 0 } + 1,
+                                with = |writer: &mut dyn fmt::Write| {
+                                    for index in 0..*span_end - if span_start == span_end { 0 } else { 1 } {
+                                        write!(
+                                            writer,
+                                            "{symbol}",
+                                            symbol = match () {
+                                                _ if index == *span_start =>
+                                                    TOP_TO_RIGHT.paint(self.style(label.severity)),
 
-                    LineLabelSpan::Inline(span) => todo!(),
+                                                _ if let Some(label) =
+                                                    line.labels[..label_index].iter().rev().find(|label| {
+                                                        *label.span.end() == index + 1
+                                                            || label.span.start().is_some_and(|start| *start == index)
+                                                    }) =>
+                                                {
+                                                    TOP_TO_BOTTOM.paint(self.style(label.severity))
+                                                },
+
+                                                _ if !wrote && index > *span_start => {
+                                                    LEFT_TO_RIGHT.paint(self.style(label.severity))
+                                                },
+
+                                                _ => (&' ').new(),
+                                            }
+                                        )?;
+                                    }
+
+                                    write!(
+                                        writer,
+                                        "{symbol}",
+                                        symbol = match *span_end - *span_start {
+                                            _ if wrote => TOP_TO_BOTTOM,
+                                            0 => TOP_LEFT_TO_RIGHT,
+                                            1 => TOP_TO_BOTTOM,
+                                            _ => LEFT_TO_TOP_BOTTOM,
+                                        }
+                                        .paint(self.style(label.severity))
+                                    )?;
+
+                                    wrote = true;
+                                    Ok(*span_end + if span_start == span_end { 1 } else { 0 })
+                                }
+                            );
+
+                            wrapln(writer, [label.text.paint(self.style(label.severity))].into_iter())?;
+                        },
+                    }
                 }
+            }
+        }
+
+        // Write the points.
+        {
+            if !self.points.is_empty() {
+                writer.write_indent()?;
+                writeln!(writer)?;
+            }
+
+            // DEDENT: "| "
+            dedent!(writer, 2);
+
+            for point in self.points {
+                // INDENT: "= "
+                indent!(writer, header = "=".paint(STYLE_GUTTER));
+
+                // INDENT: "<tip|help|...>: "
+                // TODO: indent!(writer, header = point.title);
+
+                wrapln(writer, [point.text.as_ref().new()].into_iter())?;
             }
         }
 
