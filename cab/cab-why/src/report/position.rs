@@ -7,7 +7,7 @@ pub struct Position {
     pub line: u32,
     /// The column. One indexed, but zero means we are at the newline.
     ///
-    /// The column is not a raw byte index, but a grapheme index.
+    /// The column is not a raw byte index, but a char index.
     ///
     /// The newline in the following string is at line 2, column 0: `"foo\nbar"`
     pub column: u32,
