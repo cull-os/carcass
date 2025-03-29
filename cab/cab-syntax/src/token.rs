@@ -159,9 +159,9 @@ impl Content {
             let mut literal_start_offset = 0;
 
             let text = self.text();
-            let mut bytes = text.char_indices();
 
-            while let Some((offset, c)) = bytes.next() {
+            let mut chars = text.char_indices();
+            while let Some((offset, c)) = chars.next() {
                 if c != '\\' {
                     let literal = &text[literal_start_offset..offset + c.len_utf8()];
 
@@ -174,7 +174,7 @@ impl Content {
 
                 literal_start_offset = offset;
 
-                yield ContentPart::Escape(match bytes.next() {
+                yield ContentPart::Escape(match chars.next() {
                     Some((_, '0')) => '\0',
                     Some((_, 't')) => '\t',
                     Some((_, 'n')) => '\n',
@@ -188,7 +188,7 @@ impl Content {
                         reported = true;
 
                         report.push_label(Label::primary(
-                            Span::at(self.span().start + offset, 1 + next.is_some() as u32),
+                            Span::at(self.span().start + offset, 1 + next.map_or(0, |(_, c)| c.len_utf8())),
                             "invalid escape",
                         ));
 
