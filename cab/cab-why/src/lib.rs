@@ -92,7 +92,7 @@ pub mod __private {
     pub use unicode_width;
     pub use yansi;
 
-    pub use crate::{
+    pub use super::{
         print::IndentPlace,
         text::{
             LINE_WIDTH,
