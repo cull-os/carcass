@@ -1,6 +1,6 @@
 {
   projects.cab = {
-    source = ./.;
+    source = ./..;
     type   = "cargo";
 
     packages = [ "cab" "cab-task" ];
