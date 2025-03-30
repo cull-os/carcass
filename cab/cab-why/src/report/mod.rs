@@ -340,181 +340,17 @@ struct ReportDisplay<'a, Location: fmt::Display> {
     points: &'a [Point],
 }
 
-impl<'a, Location: fmt::Display> ReportDisplay<'a, Location> {
-    fn from(report: &'a Report, source: &'a str, location: Location) -> Self {
-        let mut labels: SmallVec<_, 2> = report
-            .labels
-            .iter()
-            .map(|label| (Position::of(label.span, source), label))
-            .collect();
-
-        // Sort by line, and when labels are on the same line, sort by column. The one
-        // that ends the last will be the last.
-        labels.sort_by(|((a_start, a_end), _), ((b_start, b_end), _)| {
-            a_start
-                .line
-                .cmp(&b_start.line)
-                .then_with(|| a_end.column.cmp(&b_end.column))
-        });
-
-        let mut lines = SmallVec::<Line, 10>::new();
-
-        for (label_index, ((label_start, label_end), label)) in labels.iter().enumerate() {
-            let label_span_extended = extend_to_line_boundaries(source, label.span);
-
-            for (line_number, line_content) in
-                (label_start.line..).zip(source[label_span_extended.as_std()].split('\n'))
-            {
-                let line = match lines.iter_mut().find(|line| line.number == line_number) {
-                    Some(item) => item,
-
-                    None => {
-                        lines.push(Line {
-                            number: line_number,
-
-                            strikes: SmallVec::new(),
-
-                            content: line_content,
-                            styles: SmallVec::new(),
-
-                            labels: SmallVec::new(),
-                        });
-
-                        lines.last_mut().expect("we just pushed a line")
-                    },
-                };
-
-                let line_is_first = line_number == label_start.line;
-                let line_is_last = line_number == label_end.line;
-
-                // Not in a single line label.
-                if !(line_is_first && line_is_last) {
-                    line.strikes.push(LineStrike {
-                        id: LineStrikeId(label_index.try_into().expect("too many (>128) overlapping labels")),
-
-                        status: match () {
-                            _ if line_is_first => LineStrikeStatus::Start,
-                            _ if line_is_last => LineStrikeStatus::End,
-                            _ => LineStrikeStatus::Continue,
-                        },
-
-                        severity: label.severity,
-                    });
-                }
-
-                match (line_is_first, line_is_last) {
-                    // Single line label.
-                    (true, true) => {
-                        let base = label_span_extended.start;
-
-                        let Span { start, end } = label.span;
-                        let span = Span::new(start - base, end - base);
-
-                        line.styles.push(LineStyle {
-                            span,
-                            severity: label.severity,
-                        });
-
-                        let up_to_start_width = line_content[..*span.start as usize].graphemes(true).count();
-                        let label_width = line_content[span.as_std()].graphemes(true).count();
-
-                        line.labels.push(LineLabel {
-                            span: LineLabelSpan::Inline(Span::at(up_to_start_width, label_width)),
-                            text: &label.text,
-                            severity: label.severity,
-                        });
-                    },
-
-                    // Multiline label's first line.
-                    (true, false) => {
-                        let base = label_span_extended.start;
-
-                        let Span { start, .. } = label.span;
-                        let end = source[*start as usize..]
-                            .find('\n')
-                            .map_or(source.size(), |index| start + index);
-
-                        let span = Span::new(start - base, end - base);
-
-                        line.styles.push(LineStyle {
-                            span,
-                            severity: label.severity,
-                        })
-                    },
-
-                    // Multiline label's intermediary line.
-                    (false, false) => {
-                        line.styles.push(LineStyle {
-                            span: Span::up_to(line.content.len()),
-                            severity: label.severity,
-                        });
-                    },
-
-                    // Multiline label's last line.
-                    (false, true) => {
-                        let roof = label_span_extended.end;
-
-                        // Line being:
-                        // <<<pointed-at>>><<<rest>>>
-                        //                 ^^^^^^^^^^ length of this
-                        let rest = roof - label.span.end;
-
-                        let end = line.content.size() - rest;
-
-                        let span = Span::up_to(end);
-
-                        line.styles.push(LineStyle {
-                            span,
-                            severity: label.severity,
-                        });
-
-                        let up_to_end_width = line_content[..*end as usize].graphemes(true).count();
-
-                        line.labels.push(LineLabel {
-                            span: LineLabelSpan::UpTo(Span::up_to(up_to_end_width)),
-                            text: &label.text,
-                            severity: label.severity,
-                        });
-                    },
-                }
-            }
-        }
-
-        for line in &mut lines {
-            line.labels.sort_by_key(|style| {
-                // Empty labels are printed offset one column to the right, so treat them like
-                // it.
-                style.span.end() + if style.span.is_empty() { 1u32 } else { 0u32 }
-            });
-        }
-
-        Self {
-            severity: report.severity,
-            title: &report.title,
-
-            location,
-
-            lines,
-
-            points: &report.points,
-        }
-    }
-
-    fn style(&self, severity: LabelSeverity) -> yansi::Style {
-        severity.style_in(self.severity)
-    }
-}
-
 const RIGHT_TO_BOTTOM: char = '┏';
 const TOP_TO_BOTTOM: char = '┃';
-const TOP_TO_BOTTOM_LEFT: char = '▏';
-const TOP_TO_BOTTOM_RIGHT: char = '▕';
 const TOP_TO_BOTTOM_PARTIAL: char = '┇';
+const DOT: char = '·';
 const TOP_TO_RIGHT: char = '┗';
-const TOP_LEFT_TO_RIGHT: char = '╲';
 const LEFT_TO_RIGHT: char = '━';
 const LEFT_TO_TOP_BOTTOM: char = '┫';
-const DOT: char = '·';
+
+const TOP_TO_BOTTOM_LEFT: char = '▏';
+const TOP_LEFT_TO_RIGHT: char = '╲';
+const TOP_TO_BOTTOM_RIGHT: char = '▕';
 
 const STYLE_GUTTER: yansi::Style = yansi::Style::new().blue();
 const STYLE_HEADER_PATH: yansi::Style = yansi::Style::new().green();
@@ -970,3 +806,168 @@ impl<Location: fmt::Display> fmt::Debug for ReportDisplay<'_, Location> {
 }
 
 impl<Location: fmt::Display> error::Error for ReportDisplay<'_, Location> {}
+
+impl<'a, Location: fmt::Display> ReportDisplay<'a, Location> {
+    fn from(report: &'a Report, source: &'a str, location: Location) -> Self {
+        let mut labels: SmallVec<_, 2> = report
+            .labels
+            .iter()
+            .map(|label| (Position::of(label.span, source), label))
+            .collect();
+
+        // Sort by line, and when labels are on the same line, sort by column. The one
+        // that ends the last will be the last.
+        labels.sort_by(|((a_start, a_end), _), ((b_start, b_end), _)| {
+            a_start
+                .line
+                .cmp(&b_start.line)
+                .then_with(|| a_end.column.cmp(&b_end.column))
+        });
+
+        let mut lines = SmallVec::<Line, 10>::new();
+
+        for (label_index, ((label_start, label_end), label)) in labels.iter().enumerate() {
+            let label_span_extended = extend_to_line_boundaries(source, label.span);
+
+            for (line_number, line_content) in
+                (label_start.line..).zip(source[label_span_extended.as_std()].split('\n'))
+            {
+                let line = match lines.iter_mut().find(|line| line.number == line_number) {
+                    Some(item) => item,
+
+                    None => {
+                        lines.push(Line {
+                            number: line_number,
+
+                            strikes: SmallVec::new(),
+
+                            content: line_content,
+                            styles: SmallVec::new(),
+
+                            labels: SmallVec::new(),
+                        });
+
+                        lines.last_mut().expect("we just pushed a line")
+                    },
+                };
+
+                let line_is_first = line_number == label_start.line;
+                let line_is_last = line_number == label_end.line;
+
+                // Not in a single line label.
+                if !(line_is_first && line_is_last) {
+                    line.strikes.push(LineStrike {
+                        id: LineStrikeId(label_index.try_into().expect("too many (>128) overlapping labels")),
+
+                        status: match () {
+                            _ if line_is_first => LineStrikeStatus::Start,
+                            _ if line_is_last => LineStrikeStatus::End,
+                            _ => LineStrikeStatus::Continue,
+                        },
+
+                        severity: label.severity,
+                    });
+                }
+
+                match (line_is_first, line_is_last) {
+                    // Single line label.
+                    (true, true) => {
+                        let base = label_span_extended.start;
+
+                        let Span { start, end } = label.span;
+                        let span = Span::new(start - base, end - base);
+
+                        line.styles.push(LineStyle {
+                            span,
+                            severity: label.severity,
+                        });
+
+                        let up_to_start_width = line_content[..*span.start as usize].graphemes(true).count();
+                        let label_width = line_content[span.as_std()].graphemes(true).count();
+
+                        line.labels.push(LineLabel {
+                            span: LineLabelSpan::Inline(Span::at(up_to_start_width, label_width)),
+                            text: &label.text,
+                            severity: label.severity,
+                        });
+                    },
+
+                    // Multiline label's first line.
+                    (true, false) => {
+                        let base = label_span_extended.start;
+
+                        let Span { start, .. } = label.span;
+                        let end = source[*start as usize..]
+                            .find('\n')
+                            .map_or(source.size(), |index| start + index);
+
+                        let span = Span::new(start - base, end - base);
+
+                        line.styles.push(LineStyle {
+                            span,
+                            severity: label.severity,
+                        })
+                    },
+
+                    // Multiline label's intermediary line.
+                    (false, false) => {
+                        line.styles.push(LineStyle {
+                            span: Span::up_to(line.content.len()),
+                            severity: label.severity,
+                        });
+                    },
+
+                    // Multiline label's last line.
+                    (false, true) => {
+                        let roof = label_span_extended.end;
+
+                        // Line being:
+                        // <<<pointed-at>>><<<rest>>>
+                        //                 ^^^^^^^^^^ length of this
+                        let rest = roof - label.span.end;
+
+                        let end = line.content.size() - rest;
+
+                        let span = Span::up_to(end);
+
+                        line.styles.push(LineStyle {
+                            span,
+                            severity: label.severity,
+                        });
+
+                        let up_to_end_width = line_content[..*end as usize].graphemes(true).count();
+
+                        line.labels.push(LineLabel {
+                            span: LineLabelSpan::UpTo(Span::up_to(up_to_end_width)),
+                            text: &label.text,
+                            severity: label.severity,
+                        });
+                    },
+                }
+            }
+        }
+
+        for line in &mut lines {
+            line.labels.sort_by_key(|style| {
+                // Empty labels are printed offset one column to the right, so treat them like
+                // it.
+                style.span.end() + if style.span.is_empty() { 1u32 } else { 0u32 }
+            });
+        }
+
+        Self {
+            severity: report.severity,
+            title: &report.title,
+
+            location,
+
+            lines,
+
+            points: &report.points,
+        }
+    }
+
+    fn style(&self, severity: LabelSeverity) -> yansi::Style {
+        severity.style_in(self.severity)
+    }
+}
