@@ -7,17 +7,20 @@ repository.workspace = true
 version.workspace    = true
 
 [features]
-default = [ "error" ]
+cstree  = [ "dep:cstree" ]
+default = [ "cstree", "error" ]
 error   = [ "dep:anyhow", "dep:thiserror" ]
 
 [dependencies]
+cstree.optional  = true
+cstree.workspace = true
+
 anyhow.optional     = true
 anyhow.workspace    = true
 thiserror.optional  = true
 thiserror.workspace = true
 
 const-str.workspace            = true
-cstree.workspace               = true
 scopeguard.workspace           = true
 smallvec.workspace             = true
 terminal_size.workspace        = true
