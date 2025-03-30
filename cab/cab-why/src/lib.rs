@@ -2,19 +2,21 @@
 
 #![feature(gen_blocks, if_let_guard, iter_intersperse, let_chains, trait_alias, try_trait_v2)]
 
+#[cfg(feature = "error")]
 mod error;
 mod print;
 mod report;
 mod text;
 
+#[cfg(feature = "error")]
+pub use self::error::{
+    Context,
+    Contextful,
+    Error,
+    Result,
+    Termination,
+};
 pub use self::{
-    error::{
-        Context,
-        Contextful,
-        Error,
-        Result,
-        Termination,
-    },
     print::{
         IndentWith,
         IndentWriter,

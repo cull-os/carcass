@@ -6,6 +6,7 @@ use std::{
     borrow::Cow,
     cell::RefCell,
     cmp,
+    error,
     fmt::{
         self,
         Write as _,
@@ -961,3 +962,11 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<'_, Location> {
         Ok(())
     }
 }
+
+impl<Location: fmt::Display> fmt::Debug for ReportDisplay<'_, Location> {
+    fn fmt(&self, writer: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(self, writer)
+    }
+}
+
+impl<Location: fmt::Display> error::Error for ReportDisplay<'_, Location> {}
