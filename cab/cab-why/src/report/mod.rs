@@ -140,7 +140,7 @@ impl Report {
         self.point(Point::help(text))
     }
 
-    pub fn with<'a>(&'a self, location: impl fmt::Display + 'a, source: &'a str) -> impl fmt::Display + 'a {
+    pub fn with<Location: fmt::Display>(self, location: Location, source: &str) -> ReportDisplay<Location> {
         ReportDisplay::from(self, source, location)
     }
 }
@@ -310,34 +310,35 @@ impl LineLabelSpan {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct LineLabel<'a> {
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct LineLabel {
     span: LineLabelSpan,
-    text: &'a str,
+    text: Cow<'static, str>,
     severity: LabelSeverity,
 }
 
 #[derive(Debug, Clone)]
-struct Line<'a> {
+struct Line {
     number: u32,
 
     strikes: SmallVec<LineStrike, 3>,
 
-    content: &'a str,
+    content: String,
     styles: SmallVec<LineStyle, 4>,
 
-    labels: SmallVec<LineLabel<'a>, 2>,
+    labels: SmallVec<LineLabel, 2>,
 }
 
-struct ReportDisplay<'a, Location: fmt::Display> {
+#[derive(Clone)]
+pub struct ReportDisplay<Location: fmt::Display> {
     severity: ReportSeverity,
-    title: &'a str,
+    title: Cow<'static, str>,
 
     location: Location,
 
-    lines: SmallVec<Line<'a>, 10>,
+    lines: SmallVec<Line, 10>,
 
-    points: &'a [Point],
+    points: SmallVec<Point, 2>,
 }
 
 const RIGHT_TO_BOTTOM: char = '┏';
@@ -356,13 +357,13 @@ const STYLE_GUTTER: yansi::Style = yansi::Style::new().blue();
 const STYLE_HEADER_PATH: yansi::Style = yansi::Style::new().green();
 const STYLE_HEADER_POSITION: yansi::Style = yansi::Style::new().blue();
 
-impl<Location: fmt::Display> fmt::Display for ReportDisplay<'_, Location> {
+impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
     fn fmt(&self, writer: &mut fmt::Formatter<'_>) -> fmt::Result {
         {
             // INDENT: "<note|warn|error|bug>: "
             indent!(writer, header = self.severity.header());
 
-            wrapln(writer, [self.title.bold()])?;
+            wrapln(writer, [self.title.as_ref().bold()])?;
         }
 
         let line_number_width = self.lines.last().map_or(0, |line| number_width(line.number));
@@ -544,7 +545,7 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<'_, Location> {
 
                     // Explicitly write the indent because the line may be empty.
                     writer.write_indent()?;
-                    wrapln(writer, resolve_style(line.content, line.styles.clone(), self.severity))?;
+                    wrapln(writer, resolve_style(&line.content, line.styles.clone(), self.severity))?;
 
                     *line_number_should_write.borrow_mut() = false;
                 }
@@ -681,7 +682,7 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<'_, Location> {
                                 }
                             );
 
-                            wrapln(writer, [label.text.paint(self.style(top_to_right.severity))])?;
+                            wrapln(writer, [label.text.as_ref().paint(self.style(top_to_right.severity))])?;
                         },
 
                         LineLabelSpan::Inline(_) => {
@@ -767,7 +768,7 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<'_, Location> {
                                 }
                             );
 
-                            wrapln(writer, [label.text.paint(self.style(label.severity))])?;
+                            wrapln(writer, [label.text.as_ref().paint(self.style(label.severity))])?;
                         },
                     }
                 }
@@ -784,7 +785,7 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<'_, Location> {
             // DEDENT: "| "
             dedent!(writer, 2);
 
-            for point in self.points {
+            for point in &self.points {
                 // INDENT: "= "
                 indent!(writer, header = "=".paint(STYLE_GUTTER));
 
@@ -799,19 +800,19 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<'_, Location> {
     }
 }
 
-impl<Location: fmt::Display> fmt::Debug for ReportDisplay<'_, Location> {
+impl<Location: fmt::Display> fmt::Debug for ReportDisplay<Location> {
     fn fmt(&self, writer: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Display::fmt(self, writer)
     }
 }
 
-impl<Location: fmt::Display> error::Error for ReportDisplay<'_, Location> {}
+impl<Location: fmt::Display> error::Error for ReportDisplay<Location> {}
 
-impl<'a, Location: fmt::Display> ReportDisplay<'a, Location> {
-    fn from(report: &'a Report, source: &'a str, location: Location) -> Self {
+impl<Location: fmt::Display> ReportDisplay<Location> {
+    fn from(report: Report, source: &str, location: Location) -> Self {
         let mut labels: SmallVec<_, 2> = report
             .labels
-            .iter()
+            .into_iter()
             .map(|label| (Position::of(label.span, source), label))
             .collect();
 
@@ -826,7 +827,7 @@ impl<'a, Location: fmt::Display> ReportDisplay<'a, Location> {
 
         let mut lines = SmallVec::<Line, 10>::new();
 
-        for (label_index, ((label_start, label_end), label)) in labels.iter().enumerate() {
+        for (label_index, ((label_start, label_end), label)) in labels.into_iter().enumerate() {
             let label_span_extended = extend_to_line_boundaries(source, label.span);
 
             for (line_number, line_content) in
@@ -841,7 +842,7 @@ impl<'a, Location: fmt::Display> ReportDisplay<'a, Location> {
 
                             strikes: SmallVec::new(),
 
-                            content: line_content,
+                            content: line_content.to_owned(),
                             styles: SmallVec::new(),
 
                             labels: SmallVec::new(),
@@ -887,7 +888,7 @@ impl<'a, Location: fmt::Display> ReportDisplay<'a, Location> {
 
                         line.labels.push(LineLabel {
                             span: LineLabelSpan::Inline(Span::at(up_to_start_width, label_width)),
-                            text: &label.text,
+                            text: label.text.clone(), // TODO: Don't clone.
                             severity: label.severity,
                         });
                     },
@@ -926,7 +927,7 @@ impl<'a, Location: fmt::Display> ReportDisplay<'a, Location> {
                         //                 ^^^^^^^^^^ length of this
                         let rest = roof - label.span.end;
 
-                        let end = line.content.size() - rest;
+                        let end = line.content.as_str().size() - rest;
 
                         let span = Span::up_to(end);
 
@@ -939,7 +940,7 @@ impl<'a, Location: fmt::Display> ReportDisplay<'a, Location> {
 
                         line.labels.push(LineLabel {
                             span: LineLabelSpan::UpTo(Span::up_to(up_to_end_width)),
-                            text: &label.text,
+                            text: label.text.clone(), // TODO: Don't clone.
                             severity: label.severity,
                         });
                     },
@@ -957,13 +958,13 @@ impl<'a, Location: fmt::Display> ReportDisplay<'a, Location> {
 
         Self {
             severity: report.severity,
-            title: &report.title,
+            title: report.title,
 
             location,
 
             lines,
 
-            points: &report.points,
+            points: report.points,
         }
     }
 
