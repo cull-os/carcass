@@ -7,8 +7,8 @@ repository.workspace = true
 version.workspace    = true
 
 [features]
-default              = ["cstree"]
-cstree               = ["dep:cstree"]
+default = [ "cstree" ]
+cstree  = [ "dep:cstree" ]
 
 [dependencies]
 anyhow.workspace               = true
