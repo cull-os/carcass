@@ -6,10 +6,15 @@ publish.workspace    = true
 repository.workspace = true
 version.workspace    = true
 
+[features]
+default              = ["cstree"]
+cstree               = ["dep:cstree"]
+
 [dependencies]
 anyhow.workspace               = true
 const-str.workspace            = true
 cstree.workspace               = true
+cstree.optional                = true
 scopeguard.workspace           = true
 smallvec.workspace             = true
 terminal_size.workspace        = true
