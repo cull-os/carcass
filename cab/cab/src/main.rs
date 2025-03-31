@@ -63,9 +63,6 @@ async fn main() -> why::Termination {
 
     yansi::whenever(yansi::Condition::TTY_AND_COLOR);
 
-    let report = cab::why::Report::error("foo").primary(0u32..1u32, "bar");
-    Err(report.with("a", "b")).context("foo")?;
-
     let (mut out, mut err) = (io::stdout(), io::stderr());
 
     match cli.command {
