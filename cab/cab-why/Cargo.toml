@@ -7,9 +7,10 @@ repository.workspace = true
 version.workspace    = true
 
 [features]
-cstree  = [ "dep:cstree" ]
 default = [ "cstree", "error" ]
-error   = [ "dep:anyhow", "dep:thiserror" ]
+
+cstree = [ "dep:cstree" ]
+error  = [ "dep:anyhow", "dep:thiserror" ]
 
 [dependencies]
 cstree.optional  = true
