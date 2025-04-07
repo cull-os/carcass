@@ -943,12 +943,10 @@ impl Island {
     }
 
     pub fn token_delimiter_right(&self) -> Option<&red::Token> {
-        let header = self.header();
+        let header_delimiter_right = self.header().token_delimiter_right();
 
-        let token = if let Some(right) = header.token_delimiter_right()
-            && right.kind() == TOKEN_MORE
-        {
-            Some(right)
+        let token = if header_delimiter_right.is_none_or(|token| token.kind() == TOKEN_MORE) {
+            header_delimiter_right
         } else {
             self.children_with_tokens()
                 .filter_map(red::ElementRef::into_token)
