@@ -827,7 +827,7 @@ impl<Location: fmt::Display> ReportDisplay<Location> {
 
         let mut lines = SmallVec::<Line, 10>::new();
 
-        for (label_index, ((label_start, label_end), label)) in labels.into_iter().enumerate() {
+        'labels: for (label_index, ((label_start, label_end), label)) in labels.into_iter().enumerate() {
             let label_span_extended = extend_to_line_boundaries(source, label.span);
 
             for (line_number, line_content) in
@@ -888,9 +888,10 @@ impl<Location: fmt::Display> ReportDisplay<Location> {
 
                         line.labels.push(LineLabel {
                             span: LineLabelSpan::Inline(Span::at(up_to_start_width, label_width)),
-                            text: label.text.clone(), // TODO: Don't clone.
+                            text: label.text,
                             severity: label.severity,
                         });
+                        continue 'labels;
                     },
 
                     // Multiline label's first line.
@@ -940,9 +941,10 @@ impl<Location: fmt::Display> ReportDisplay<Location> {
 
                         line.labels.push(LineLabel {
                             span: LineLabelSpan::UpTo(Span::up_to(up_to_end_width)),
-                            text: label.text.clone(), // TODO: Don't clone.
+                            text: label.text,
                             severity: label.severity,
                         });
+                        continue 'labels;
                     },
                 }
             }
