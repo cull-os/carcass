@@ -1365,7 +1365,7 @@ impl If {
 
     get_node! { consequence -> 1 @ ExpressionRef<'_> }
 
-    get_token! { token_else -> Option<TOKEN_KEYWORD_ELSE> }
+    get_token! { token_else -> TOKEN_KEYWORD_ELSE }
 
     get_node! { alternative -> 2 @ ExpressionRef<'_> }
 

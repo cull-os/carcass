@@ -8,10 +8,8 @@ use yansi::Paint as _;
 
 use crate::{
     COLORS,
-    node::{
-        self,
-        Parted as _,
-    },
+    node,
+    red,
 };
 
 /// Formats the given node with parentheses to disambiguate.
@@ -56,11 +54,8 @@ impl<'write, W: io::Write> Formatter<'write, W> {
         write!(self.inner, "{painted}")
     }
 
-    fn parenthesize_parted<'part>(
-        &mut self,
-        parts: impl Iterator<Item = node::InterpolatedPartRef<'part>>,
-    ) -> io::Result<()> {
-        for part in parts {
+    fn write_parted(&mut self, parted: &impl node::Parted) -> io::Result<()> {
+        for part in parted.parts() {
             match part {
                 node::InterpolatedPartRef::Delimiter(token) => {
                     self.write(token.text().green().bold())?;
@@ -129,14 +124,7 @@ impl<'write, W: io::Write> Formatter<'write, W> {
             node::ExpressionRef::PrefixOperation(operation) => {
                 self.bracket_start("(")?;
 
-                self.write(match operation.operator() {
-                    node::PrefixOperator::Swwallation => "+",
-                    node::PrefixOperator::Negation => "-",
-
-                    node::PrefixOperator::Not => "!",
-
-                    node::PrefixOperator::Try => "?",
-                })?;
+                self.write(operation.operator_token().text())?;
                 self.write(" ")?;
                 self.parenthesize(operation.right())?;
 
@@ -147,11 +135,6 @@ impl<'write, W: io::Write> Formatter<'write, W> {
                 self.bracket_start("(")?;
 
                 let operator = match operation.operator() {
-                    node::InfixOperator::Select => Some("."),
-
-                    node::InfixOperator::Same => Some(","),
-                    node::InfixOperator::Sequence => Some(";"),
-
                     node::InfixOperator::ImplicitApply | node::InfixOperator::Apply => None,
                     node::InfixOperator::Pipe => {
                         self.parenthesize(operation.right())?;
@@ -161,33 +144,7 @@ impl<'write, W: io::Write> Formatter<'write, W> {
                         return self.bracket_end(")");
                     },
 
-                    node::InfixOperator::Concat => Some("++"),
-                    node::InfixOperator::Construct => Some(":"),
-
-                    node::InfixOperator::Update => Some("//"),
-
-                    node::InfixOperator::LessOrEqual => Some("<="),
-                    node::InfixOperator::Less => Some("<"),
-                    node::InfixOperator::MoreOrEqual => Some(">="),
-                    node::InfixOperator::More => Some(">"),
-
-                    node::InfixOperator::Equal => Some("="),
-                    node::InfixOperator::NotEqual => Some("!="),
-
-                    node::InfixOperator::Addition => Some("+"),
-                    node::InfixOperator::Subtraction => Some("-"),
-                    node::InfixOperator::Multiplication => Some("*"),
-                    node::InfixOperator::Power => Some("^"),
-                    node::InfixOperator::Division => Some("/"),
-
-                    node::InfixOperator::And => Some("&&"),
-                    node::InfixOperator::Or => Some("||"),
-                    node::InfixOperator::Implication => Some("->"),
-
-                    node::InfixOperator::All => Some("&"),
-                    node::InfixOperator::Any => Some("|"),
-
-                    node::InfixOperator::Lambda => Some("=>"),
+                    _ => operation.operator_token().map(|token| token.text()),
                 };
 
                 self.parenthesize(operation.left())?;
@@ -208,18 +165,15 @@ impl<'write, W: io::Write> Formatter<'write, W> {
 
                 self.parenthesize(operation.left())?;
                 self.write(" ")?;
-                self.write(match operation.operator() {
-                    node::SuffixOperator::Same => ",",
-                    node::SuffixOperator::Sequence => ";",
-                })?;
+                self.write(operation.operator_token().text())?;
 
                 self.bracket_end(")")
             },
 
-            node::ExpressionRef::Path(path) => self.parenthesize_parted(path.parts()),
+            node::ExpressionRef::Path(path) => self.write_parted(path),
 
             node::ExpressionRef::Bind(bind) => {
-                self.write("@")?;
+                self.write(bind.token_at().text())?;
                 self.parenthesize(bind.identifier())
             },
 
@@ -234,17 +188,29 @@ impl<'write, W: io::Write> Formatter<'write, W> {
                         })
                     },
 
-                    node::IdentifierValueRef::Quoted(quoted) => self.parenthesize_parted(quoted.parts()),
+                    node::IdentifierValueRef::Quoted(quoted) => self.write_parted(quoted),
                 }
             },
 
-            node::ExpressionRef::SString(string) => self.parenthesize_parted(string.parts()),
+            node::ExpressionRef::SString(string) => self.write_parted(string),
 
-            node::ExpressionRef::Rune(rune) => self.parenthesize_parted(rune.parts()),
+            node::ExpressionRef::Rune(rune) => self.write_parted(rune),
 
-            node::ExpressionRef::Island(_island) => {
-                todo!();
-                // self.parenthesize_parted(island.parts())
+            node::ExpressionRef::Island(island) => {
+                self.write_parted(island.header())?;
+
+                for element in island.children_with_tokens().skip(1) {
+                    match element {
+                        red::ElementRef::Node(node) => {
+                            self.parenthesize(node.try_into().unwrap())?;
+                        },
+                        red::ElementRef::Token(token) => {
+                            self.write(token.text().green())?;
+                        },
+                    }
+                }
+
+                Ok(())
             },
 
             node::ExpressionRef::Integer(integer) => self.write(integer.value().blue().bold()),
@@ -253,9 +219,11 @@ impl<'write, W: io::Write> Formatter<'write, W> {
             node::ExpressionRef::If(if_) => {
                 self.bracket_start("(")?;
 
-                self.write("if ".red().bold())?;
+                self.write(if_.token_if().text().red().bold())?;
+                self.write(" ")?;
                 self.parenthesize(if_.condition())?;
-                self.write(" then ".red().bold())?;
+                self.write(" ")?;
+                self.write(if_.token_then().text().red().bold())?;
                 self.parenthesize(if_.consequence())?;
                 self.write(" else ".red().bold())?;
                 self.parenthesize(if_.alternative())?;
