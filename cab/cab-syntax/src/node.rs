@@ -862,20 +862,27 @@ node! {
 
 impl Parted for IslandHeader {}
 
-node! {
-    #[from(NODE_ISLAND)]
-    /// An island.
-    struct Island;
-}
+impl IslandHeader {
+    get_token! { token_delimiter_left -> TOKEN_LESS }
 
-impl Island {
-    get_node! { header -> &IslandHeader }
+    pub fn token_delimiter_right(&self) -> Option<&red::Token> {
+        let token = self
+            .children_with_tokens()
+            .filter_map(red::ElementRef::into_token)
+            .last();
+
+        if let Some(token) = token {
+            assert!((TOKEN_MORE | TOKEN_COLON).contains(token.kind()));
+        }
+
+        token
+    }
 
     pub fn validate(&self, to: &mut Vec<Report>) {
         let mut report = Report::error("invalid island");
         let mut reported_control_character = false;
 
-        for part in self.header().parts() {
+        for part in self.parts() {
             match part {
                 InterpolatedPartRef::Content(content) => {
                     content.parts(&mut report).count();
@@ -897,10 +904,71 @@ impl Island {
             }
         }
 
-        // TODO: Add config & path querying.
-
         if !report.is_empty() {
             to.push(report)
+        }
+    }
+}
+
+node! {
+    #[from(NODE_ISLAND)]
+    /// An island.
+    struct Island;
+}
+
+#[rustfmt::skip]
+impl Island {
+    pub fn token_delimiter_left(&self) -> &red::Token {
+        self.header().token_delimiter_left()
+    }
+
+    get_node! { header -> &IslandHeader }
+
+    pub fn config(&self) -> Option<ExpressionRef<'_>> {
+        // Right after the header, must be a node.
+        self.children_with_tokens()
+            .nth(1)
+            .and_then(red::ElementRef::into_node)
+            .and_then(|node| ExpressionRef::try_from(node).ok())
+    }
+
+    get_token! { token_colon -> Option<TOKEN_COLON> }
+
+    pub fn path(&self) -> Option<ExpressionRef<'_>> {
+        self.children_with_tokens()
+            .skip_while(|element| element.into_token().is_none_or(|token| token.kind() != TOKEN_COLON))
+            .nth(1)
+            .and_then(red::ElementRef::into_node)
+            .and_then(|node| ExpressionRef::try_from(node).ok())
+    }
+
+    pub fn token_delimiter_right(&self) -> Option<&red::Token> {
+        let header = self.header();
+
+        let token = if let Some(right) = header.token_delimiter_right()
+            && right.kind() == TOKEN_MORE
+        {
+            Some(right)
+        } else {
+            self.children_with_tokens()
+                .filter_map(red::ElementRef::into_token)
+                .last()
+        };
+
+        if let Some(token) = token {
+            assert_eq!(token.kind(), TOKEN_MORE);
+        }
+
+        token
+    }
+
+    pub fn validate(&self, to: &mut Vec<Report>) {
+        if let Some(config) = self.config() {
+            config.validate(to);
+        }
+
+        if let Some(path) = self.path() {
+            path.validate(to);
         }
     }
 }
