@@ -140,7 +140,7 @@ impl Report {
         self.point(Point::help(text))
     }
 
-    pub fn with<Location: fmt::Display>(self, location: Location, source: &str) -> ReportDisplay<Location> {
+    pub fn with<Location: fmt::Display>(self, location: Location, source: &str) -> impl error::Error {
         ReportDisplay::from(self, source, location)
     }
 }
@@ -330,7 +330,7 @@ struct Line {
 }
 
 #[derive(Clone)]
-pub struct ReportDisplay<Location: fmt::Display> {
+struct ReportDisplay<Location: fmt::Display> {
     severity: ReportSeverity,
     title: Cow<'static, str>,
 

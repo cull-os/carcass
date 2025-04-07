@@ -28,18 +28,22 @@ fuzz_target!(|source: &str| -> Corpus {
 
     let island: Arc<dyn island::Leaf> = Arc::new(island::blob(source.to_owned()));
 
-    for report in &parse.reports {
-        println!("{report}", report = report.with(island::display!(island), source));
-    }
-
     let Ok("true" | "1") = env::var("FUZZ_PARSER_SAVE_VALID").as_deref() else {
         return Corpus::Keep;
     };
 
     yansi::whenever(yansi::Condition::TTY_AND_COLOR);
 
-    let Ok(node) = parse.result() else {
-        return Corpus::Reject;
+    let node = match parse.result() {
+        Ok(node) => node,
+
+        Err(reports) => {
+            for report in reports {
+                println!("{report}", report = report.with(island::display!(island), source));
+            }
+
+            return Corpus::Reject;
+        },
     };
 
     print!("found a valid parse!");
