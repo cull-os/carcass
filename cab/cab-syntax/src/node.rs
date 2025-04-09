@@ -885,7 +885,7 @@ impl IslandHeader {
         for part in self.parts() {
             match part {
                 InterpolatedPartRef::Content(content) => {
-                    content.parts(&mut report).count();
+                    content.parts(Some(&mut report)).count();
 
                     let text = content.text();
 
@@ -1036,7 +1036,7 @@ impl IdentifierQuoted {
         for part in self.parts() {
             match part {
                 InterpolatedPartRef::Content(content) => {
-                    content.parts(&mut report).count();
+                    content.parts(Some(&mut report)).count();
 
                     let text = content.text();
 
@@ -1162,7 +1162,7 @@ impl SString {
                 },
 
                 InterpolatedPartRef::Content(content) => {
-                    content.parts(&mut report).count();
+                    content.parts(Some(&mut report)).count();
 
                     let text = content.text();
 
@@ -1259,6 +1259,19 @@ node! {
 impl Parted for Rune {}
 
 impl Rune {
+    pub fn value(&self) -> char {
+        let InterpolatedPartRef::Content(content) = self.parts().next().unwrap() else {
+            unreachable!()
+        };
+
+        let part = content.parts(None).next().unwrap();
+
+        match part {
+            ContentPart::Literal(s) => s.chars().next().unwrap(),
+            ContentPart::Escape(c) => c,
+        }
+    }
+
     pub fn validate(&self, to: &mut Vec<Report>) {
         let mut report = Report::error("invalid rune");
         let mut reported_invalid_len = false;
@@ -1273,7 +1286,7 @@ impl Rune {
                     let text = content.text();
 
                     if !reported_invalid_len && {
-                        let mut parts = content.parts(&mut report);
+                        let mut parts = content.parts(Some(&mut report));
 
                         match (parts.next(), parts.next()) {
                             (Some(ContentPart::Literal(text)), None) if text.chars().count() == 1 => false,
