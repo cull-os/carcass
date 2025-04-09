@@ -160,16 +160,15 @@ impl Content {
 
             let text = self.text();
 
-            let mut chars = text.char_indices();
+            let mut chars = text.char_indices().peekable();
             while let Some((offset, c)) = chars.next() {
                 if c != '\\' {
-                    let literal = &text[literal_start_offset..offset + c.len_utf8()];
-
-                    if !literal.is_empty() {
-                        yield ContentPart::Literal(literal);
-                    }
-
                     continue;
+                }
+
+                let literal = &text[literal_start_offset..offset];
+                if !literal.is_empty() {
+                    yield ContentPart::Literal(literal);
                 }
 
                 literal_start_offset = offset;
@@ -199,6 +198,11 @@ impl Content {
 
                     _ => continue,
                 });
+            }
+
+            let literal = &text[literal_start_offset..text.len()];
+            if !literal.is_empty() {
+                yield ContentPart::Literal(literal);
             }
         }
     }
