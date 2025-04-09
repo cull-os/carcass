@@ -60,6 +60,14 @@ macro_rules! reffed {
                     $variant(&'a $type),
                 )*
             }
+
+            impl [<$name Ref>]<'_> {
+                pub fn to_owned(self) -> $name {
+                    match self {
+                        $(Self::$variant(v) => $name::$variant(v.clone()),)*
+                    }
+                }
+            }
         }
     };
 }
