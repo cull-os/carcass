@@ -173,23 +173,11 @@ fn extend_to_line_boundaries(source: &str, mut span: Span) -> Span {
 /// Given a list of spans which refer to the given content and their associated
 /// severities (primary and secondary), resolves the colors for every part,
 /// giving the primary color precedence over the secondary color in an overlap.
-fn resolve_style(
-    content: &str,
-    mut styles: SmallVec<LineStyle, 4>,
+fn resolve_style<'a>(
+    content: &'a str,
+    styles: &'a [LineStyle],
     severity: ReportSeverity,
-) -> impl Iterator<Item = yansi::Painted<&str>> + '_ {
-    styles.sort_by(|a_style, b_style| {
-        match (
-            a_style.span.start.cmp(&b_style.span.start),
-            a_style.severity,
-            b_style.severity,
-        ) {
-            (cmp::Ordering::Equal, LabelSeverity::Primary, LabelSeverity::Secondary) => cmp::Ordering::Less,
-            (cmp::Ordering::Equal, LabelSeverity::Secondary, LabelSeverity::Primary) => cmp::Ordering::Greater,
-            (ordering, ..) => ordering,
-        }
-    });
-
+) -> impl Iterator<Item = yansi::Painted<&'a str>> + 'a {
     gen move {
         let mut content_offset = Size::new(0u32);
         let mut style_offset: usize = 0;
@@ -545,7 +533,7 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
 
                     // Explicitly write the indent because the line may be empty.
                     writer.write_indent()?;
-                    wrapln(writer, resolve_style(&line.content, line.styles.clone(), self.severity))?;
+                    wrapln(writer, resolve_style(&line.content, &line.styles, self.severity))?;
 
                     *line_number_should_write.borrow_mut() = false;
                 }
@@ -951,6 +939,18 @@ impl<Location: fmt::Display> ReportDisplay<Location> {
         }
 
         for line in &mut lines {
+            line.styles.sort_by(|a_style, b_style| {
+                match (
+                    a_style.span.start.cmp(&b_style.span.start),
+                    a_style.severity,
+                    b_style.severity,
+                ) {
+                    (cmp::Ordering::Equal, LabelSeverity::Primary, LabelSeverity::Secondary) => cmp::Ordering::Less,
+                    (cmp::Ordering::Equal, LabelSeverity::Secondary, LabelSeverity::Primary) => cmp::Ordering::Greater,
+                    (ordering, ..) => ordering,
+                }
+            });
+
             line.labels.sort_by_key(|style| {
                 // Empty labels are printed offset one column to the right, so treat them like
                 // it.
