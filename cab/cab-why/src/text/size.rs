@@ -115,13 +115,13 @@ impl IntoSize for char {
     }
 }
 
-impl IntoSize for &'_ str {
+impl IntoSize for str {
     fn size(&self) -> Size {
         self.len().into()
     }
 }
 
-impl IntoSize for &'_ String {
+impl IntoSize for String {
     fn size(&self) -> Size {
         self.len().into()
     }

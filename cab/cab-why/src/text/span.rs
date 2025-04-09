@@ -199,9 +199,22 @@ impl<S: cstree::Syntax> IntoSpan for cstree::syntax::SyntaxToken<S> {
         self.text_range().into()
     }
 }
+#[cfg(feature = "cstree")]
+impl<S: cstree::Syntax> IntoSpan for cstree::syntax::ResolvedToken<S> {
+    fn span(&self) -> Span {
+        self.text_range().into()
+    }
+}
 
 #[cfg(feature = "cstree")]
 impl<S: cstree::Syntax> IntoSpan for cstree::syntax::SyntaxNode<S> {
+    fn span(&self) -> Span {
+        self.text_range().into()
+    }
+}
+
+#[cfg(feature = "cstree")]
+impl<S: cstree::Syntax> IntoSpan for cstree::syntax::ResolvedNode<S> {
     fn span(&self) -> Span {
         self.text_range().into()
     }
