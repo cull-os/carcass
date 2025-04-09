@@ -152,8 +152,8 @@ token! {
 impl Content {
     /// Iterates over the parts of this content, yielding either literals or
     /// escapes.
-    pub fn parts(&self, report: &mut Report) -> impl Iterator<Item = ContentPart<'_>> {
-        gen {
+    pub fn parts(&self, mut report: Option<&mut Report>) -> impl Iterator<Item = ContentPart<'_>> {
+        gen move {
             let mut reported = false;
 
             let mut literal_start_offset = 0;
@@ -183,7 +183,10 @@ impl Content {
                     Some((_, '\'')) => '\'',
                     Some((_, '\\')) => '\\',
 
-                    next @ (Some(_) | None) if !reported => {
+                    next @ (Some(_) | None)
+                        if let Some(report) = report.as_mut()
+                            && !reported =>
+                    {
                         reported = true;
 
                         report.push_label(Label::primary(
@@ -219,8 +222,6 @@ token! {
 impl Integer {
     /// Returns the value of this integer, after resolving binary,
     /// octadecimal and hexadecimal notation if it exists.
-    ///
-    /// Will panic if the underlying token is not valid.
     pub fn value(&self) -> num::BigInt {
         let text = self.text();
 
