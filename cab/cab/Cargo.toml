@@ -8,9 +8,10 @@ repository.workspace = true
 version.workspace    = true
 
 [dependencies]
-cab-island.path = "../cab-island"
-cab-syntax.path = "../cab-syntax"
-cab-why.path    = "../cab-why"
+cab-island.path  = "../cab-island"
+cab-runtime.path = "../cab-runtime"
+cab-syntax.path  = "../cab-syntax"
+cab-why.path     = "../cab-why"
 
 clap.workspace  = true
 tokio.workspace = true

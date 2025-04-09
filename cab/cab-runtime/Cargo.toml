@@ -1,0 +1,17 @@
+[package]
+name                 = "cab-runtime"
+edition.workspace    = true
+license.workspace    = true
+publish.workspace    = true
+repository.workspace = true
+version.workspace    = true
+
+[dependencies]
+cab-syntax.path = "../cab-syntax"
+cab-why.path    = "../cab-why"
+
+async-trait.workspace = true
+bytes.workspace       = true
+num.workspace         = true
+num_enum.workspace    = true
+vu128.workspace       = true
