@@ -87,6 +87,10 @@ impl Thunk {
         ConstantId(id)
     }
 
+    pub fn read_constant(&self, id: ConstantId) -> &Value {
+        self.constants.get(*id).expect("cab-runtime bug: invalid constant id")
+    }
+
     pub fn push_operation(&mut self, span: Span, operation: Operation) -> CodeId {
         let id = CodeId(self.code.len());
         self.code.push(operation as u8);
