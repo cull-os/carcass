@@ -49,7 +49,7 @@ impl Thunk {
         id
     }
 
-    pub fn read_u64(&mut self, id: CodeId) -> (u64, usize) {
+    pub fn read_u64(&self, id: CodeId) -> (u64, usize) {
         let encoded = match self.code.get(*id..*id + ENCODED_U64_SIZE) {
             Some(slice) => slice.try_into().expect("size statically checked"),
 
@@ -70,7 +70,7 @@ impl Thunk {
         id
     }
 
-    pub fn read_u16(&mut self, id: CodeId) -> (u16, usize) {
+    pub fn read_u16(&self, id: CodeId) -> (u16, usize) {
         let encoded = self
             .code
             .get(*id..*id + ENCODED_U16_SIZE)
@@ -100,7 +100,7 @@ impl Thunk {
         id
     }
 
-    pub fn read_operation(&mut self, id: CodeId) -> (Span, Operation) {
+    pub fn read_operation(&self, id: CodeId) -> (Span, Operation) {
         let position = self.spans.binary_search_by(|(id2, _)| id2.cmp(&id));
 
         let (id, span) = match position {
