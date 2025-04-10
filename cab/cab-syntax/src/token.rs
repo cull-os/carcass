@@ -231,7 +231,7 @@ impl Integer {
             Some(b'x' | b'X') => num::BigInt::from_str_radix(text.get(2..).unwrap(), 16),
             _ => num::BigInt::from_str_radix(text, 10),
         }
-        .expect("invalid interger token")
+        .expect("integer token must be valid")
     }
 }
 
@@ -254,6 +254,6 @@ impl Float {
             Some(b'x' | b'X') => f64::from_str_radix(text.get(2..).unwrap(), 16),
             _ => f64::from_str_radix(text, 10),
         }
-        .expect("invalid float token")
+        .expect("float token must be valid")
     }
 }

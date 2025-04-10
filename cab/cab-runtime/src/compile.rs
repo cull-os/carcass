@@ -43,7 +43,10 @@ impl Oracle {
         compiler.compile(node);
 
         Compile {
-            thunk: compiler.thunks.pop().unwrap(),
+            thunk: compiler
+                .thunks
+                .pop()
+                .expect("compiler must have at least one thunk at all times"),
             reports: compiler.reports,
         }
     }
@@ -63,7 +66,9 @@ impl Compiler {
     }
 
     fn thunk(&mut self) -> &mut Thunk {
-        self.thunks.last_mut().unwrap()
+        self.thunks
+            .last_mut()
+            .expect("compiler must have at least one thunk at all times")
     }
 
     fn emit_constant(&mut self, node: &impl IntoSpan, value: Value) {
@@ -76,7 +81,9 @@ impl Compiler {
     fn compile(&mut self, expression: node::ExpressionRef<'_>) {
         match expression {
             node::ExpressionRef::Error(_) => unreachable!(),
-            node::ExpressionRef::Parenthesis(parenthesis) => self.compile(parenthesis.expression().unwrap()),
+            node::ExpressionRef::Parenthesis(parenthesis) => {
+                self.compile(parenthesis.expression().expect("node must be validated"))
+            },
             node::ExpressionRef::List(_list) => todo!(),
             node::ExpressionRef::Attributes(_attributes) => todo!(),
             node::ExpressionRef::PrefixOperation(_prefix_operation) => todo!(),

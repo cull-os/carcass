@@ -836,7 +836,7 @@ impl<Location: fmt::Display> ReportDisplay<Location> {
                             labels: SmallVec::new(),
                         });
 
-                        lines.last_mut().expect("we just pushed a line")
+                        lines.last_mut().expect("line was pushed")
                     },
                 };
 
@@ -846,7 +846,11 @@ impl<Location: fmt::Display> ReportDisplay<Location> {
                 // Not in a single line label.
                 if !(line_is_first && line_is_last) {
                     line.strikes.push(LineStrike {
-                        id: LineStrikeId(label_index.try_into().expect("too many (>128) overlapping labels")),
+                        id: LineStrikeId(
+                            label_index
+                                .try_into()
+                                .expect("overlapping label count must not exceed u8::MAX"),
+                        ),
 
                         status: match () {
                             _ if line_is_first => LineStrikeStatus::Start,

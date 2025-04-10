@@ -278,7 +278,7 @@ macro_rules! get_node {
                 .filter_map(|node| <$type>::try_from(node).ok())
                 $(.skip($skip))?
                 .next()
-                .expect("node must have a matching node child")
+                .expect("node must have a node child of given type")
         }
     };
 }
@@ -851,8 +851,7 @@ pub trait Parted: ops::Deref<Target = red::Node> {
 
                 red::ElementRef::Node(node) => {
                     InterpolatedPartRef::Interpolation(
-                        <&Interpolation>::try_from(node)
-                            .expect("child node of a parted element wasn't an interpolation"),
+                        <&Interpolation>::try_from(node).expect("child node of parted node must be interpolation"),
                     )
                 },
             }

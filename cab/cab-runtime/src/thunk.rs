@@ -51,7 +51,7 @@ impl Thunk {
 
     pub fn read_u64(&self, id: CodeId) -> (u64, usize) {
         let encoded = match self.code.get(*id..*id + ENCODED_U64_SIZE) {
-            Some(slice) => slice.try_into().expect("size statically checked"),
+            Some(slice) => slice.try_into().expect("size was statically checked"),
 
             None => {
                 let mut buffer = [0; ENCODED_U64_SIZE];
@@ -76,7 +76,7 @@ impl Thunk {
             .get(*id..*id + ENCODED_U16_SIZE)
             .expect("cab-runtime bug: invalid code id")
             .try_into()
-            .expect("size statically checked");
+            .expect("size was statically checked");
 
         (u16::from_le_bytes(encoded), ENCODED_U16_SIZE)
     }
@@ -115,7 +115,9 @@ impl Thunk {
 
         (
             span,
-            self.code[*id].try_into().expect("cab-runtime bug: invalid operation"),
+            self.code[*id]
+                .try_into()
+                .expect("cab-runtime bug: invalid operation at code id"),
         )
     }
 }
