@@ -167,7 +167,11 @@ macro_rules! indent {
                 }
             }
 
-            header.to_str().width().try_into().expect("header too big")
+            header
+                .to_str()
+                .width()
+                .try_into()
+                .expect("header width must be smaller than u16::MAX")
         };
 
         let mut wrote = false;
@@ -230,7 +234,7 @@ macro_rules! dedent {
             __count: $writer
                 .__count
                 .checked_sub(dedent)
-                .expect("dedent was more than indent"),
+                .expect("dedent must be smaller than indent"),
             __with: if $discard { &mut move |_| Ok(0) } else { $writer.__with },
             __place: $writer.__place,
         };

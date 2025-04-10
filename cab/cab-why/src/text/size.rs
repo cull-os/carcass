@@ -79,7 +79,7 @@ impl From<Size> for usize {
 
 impl From<usize> for Size {
     fn from(that: usize) -> Self {
-        Self(that.try_into().expect("size too big"))
+        Self(that.try_into().expect("usize must fit in u32"))
     }
 }
 
