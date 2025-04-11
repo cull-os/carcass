@@ -6,11 +6,11 @@ pub mod island;
 mod operation;
 pub use operation::Operation;
 
-mod thunk;
-pub use thunk::{
-    CodeId,
-    ConstantId,
-    Thunk,
+mod code;
+pub use code::{
+    ByteIndex,
+    Code,
+    ConstantIndex,
 };
 
 mod value;
