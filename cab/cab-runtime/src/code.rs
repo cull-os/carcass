@@ -11,9 +11,9 @@ const ENCODED_U64_SIZE: usize = 9;
 const ENCODED_U16_SIZE: usize = 2;
 
 #[derive(Debug, Clone, Copy)]
-pub struct CodeId(usize);
+pub struct ByteIndex(usize);
 
-impl ops::Deref for CodeId {
+impl ops::Deref for ByteIndex {
     type Target = usize;
 
     fn deref(&self) -> &Self::Target {
@@ -22,9 +22,9 @@ impl ops::Deref for CodeId {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct ConstantId(usize);
+pub struct ConstantIndex(usize);
 
-impl ops::Deref for ConstantId {
+impl ops::Deref for ConstantIndex {
     type Target = usize;
 
     fn deref(&self) -> &Self::Target {
@@ -32,31 +32,31 @@ impl ops::Deref for ConstantId {
     }
 }
 
-pub struct Thunk {
-    code: Vec<u8>,
-    spans: Vec<(CodeId, Span)>,
+pub struct Code {
+    content: Vec<u8>,
+    spans: Vec<(ByteIndex, Span)>,
 
     constants: Vec<Value>,
 }
 
-impl Thunk {
-    pub fn push_u64(&mut self, data: u64) -> CodeId {
+impl Code {
+    pub fn push_u64(&mut self, data: u64) -> ByteIndex {
         let mut encoded = [0; ENCODED_U64_SIZE];
         let len = vu128::encode_u64(&mut encoded, data);
 
-        let id = CodeId(self.code.len());
-        self.code.extend_from_slice(&encoded[..len]);
+        let id = ByteIndex(self.content.len());
+        self.content.extend_from_slice(&encoded[..len]);
         id
     }
 
-    pub fn read_u64(&self, id: CodeId) -> (u64, usize) {
-        let encoded = match self.code.get(*id..*id + ENCODED_U64_SIZE) {
+    pub fn read_u64(&self, id: ByteIndex) -> (u64, usize) {
+        let encoded = match self.content.get(*id..*id + ENCODED_U64_SIZE) {
             Some(slice) => slice.try_into().expect("size was statically checked"),
 
             None => {
                 let mut buffer = [0; ENCODED_U64_SIZE];
-                buffer[..self.code.len() - *id]
-                    .copy_from_slice(self.code.get(*id..).expect("cab-runtime bug: invalid code id"));
+                buffer[..self.content.len() - *id]
+                    .copy_from_slice(self.content.get(*id..).expect("cab-runtime bug: invalid code id"));
                 buffer
             },
         };
@@ -64,15 +64,15 @@ impl Thunk {
         vu128::decode_u64(&encoded)
     }
 
-    pub fn push_u16(&mut self, data: u16) -> CodeId {
-        let id = CodeId(self.code.len());
-        self.code.extend_from_slice(&data.to_le_bytes());
+    pub fn push_u16(&mut self, data: u16) -> ByteIndex {
+        let id = ByteIndex(self.content.len());
+        self.content.extend_from_slice(&data.to_le_bytes());
         id
     }
 
-    pub fn read_u16(&self, id: CodeId) -> (u16, usize) {
+    pub fn read_u16(&self, id: ByteIndex) -> (u16, usize) {
         let encoded = self
-            .code
+            .content
             .get(*id..*id + ENCODED_U16_SIZE)
             .expect("cab-runtime bug: invalid code id")
             .try_into()
@@ -81,19 +81,19 @@ impl Thunk {
         (u16::from_le_bytes(encoded), ENCODED_U16_SIZE)
     }
 
-    pub fn push_constant(&mut self, value: Value) -> ConstantId {
+    pub fn push_constant(&mut self, value: Value) -> ConstantIndex {
         let id = self.constants.len();
         self.constants.push(value);
-        ConstantId(id)
+        ConstantIndex(id)
     }
 
-    pub fn read_constant(&self, id: ConstantId) -> &Value {
+    pub fn read_constant(&self, id: ConstantIndex) -> &Value {
         self.constants.get(*id).expect("cab-runtime bug: invalid constant id")
     }
 
-    pub fn push_operation(&mut self, span: Span, operation: Operation) -> CodeId {
-        let id = CodeId(self.code.len());
-        self.code.push(operation as u8);
+    pub fn push_operation(&mut self, span: Span, operation: Operation) -> ByteIndex {
+        let id = ByteIndex(self.content.len());
+        self.content.push(operation as u8);
 
         // No need to insert the span again if this instruction was created from the
         // last span.
@@ -104,7 +104,7 @@ impl Thunk {
         id
     }
 
-    pub fn read_operation(&self, id: CodeId) -> (Span, Operation) {
+    pub fn read_operation(&self, id: ByteIndex) -> (Span, Operation) {
         let position = self.spans.binary_search_by(|(id2, _)| id2.cmp(&id));
 
         let (id, span) = match position {
@@ -115,7 +115,7 @@ impl Thunk {
 
         (
             span,
-            self.code[*id]
+            self.content[*id]
                 .try_into()
                 .expect("cab-runtime bug: invalid operation at code id"),
         )

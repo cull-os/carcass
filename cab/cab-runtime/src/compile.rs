@@ -6,24 +6,24 @@ use cab_why::{
 };
 
 use crate::{
+    Code,
     Operation,
-    Thunk,
     Value,
 };
 
 pub struct Compile {
-    pub thunk: Thunk,
+    pub code: Code,
     pub reports: Vec<Report>,
 }
 
 impl Compile {
-    pub fn result(self) -> Result<Thunk, Vec<Report>> {
+    pub fn result(self) -> Result<Code, Vec<Report>> {
         if self
             .reports
             .iter()
             .all(|report| report.severity < ReportSeverity::Error)
         {
-            Ok(self.thunk)
+            Ok(self.code)
         } else {
             Err(self.reports)
         }
@@ -43,39 +43,39 @@ impl Oracle {
         compiler.compile(node);
 
         Compile {
-            thunk: compiler
-                .thunks
+            code: compiler
+                .codes
                 .pop()
-                .expect("compiler must have at least one thunk at all times"),
+                .expect("compiler must have at least one code at all times"),
             reports: compiler.reports,
         }
     }
 }
 
 struct Compiler {
-    thunks: Vec<Thunk>,
+    codes: Vec<Code>,
     reports: Vec<Report>,
 }
 
 impl Compiler {
     fn new() -> Self {
         Compiler {
-            thunks: Vec::new(),
+            codes: Vec::new(),
             reports: Vec::new(),
         }
     }
 
-    fn thunk(&mut self) -> &mut Thunk {
-        self.thunks
+    fn code(&mut self) -> &mut Code {
+        self.codes
             .last_mut()
-            .expect("compiler must have at least one thunk at all times")
+            .expect("compiler must have at least one code at all times")
     }
 
     fn emit_constant(&mut self, node: &impl IntoSpan, value: Value) {
-        let id = self.thunk().push_constant(value);
+        let id = self.code().push_constant(value);
 
-        self.thunk().push_operation(node.span(), Operation::Constant);
-        self.thunk().push_u64(*id as u64);
+        self.code().push_operation(node.span(), Operation::Constant);
+        self.code().push_u64(*id as u64);
     }
 
     fn compile(&mut self, expression: node::ExpressionRef<'_>) {
