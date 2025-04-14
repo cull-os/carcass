@@ -34,7 +34,7 @@ impl ops::Deref for ConstantIndex {
 
 pub struct Code {
    content: Vec<u8>,
-   spans: Vec<(ByteIndex, Span)>,
+   spans:   Vec<(ByteIndex, Span)>,
 
    constants: Vec<Value>,
 }

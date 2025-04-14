@@ -34,11 +34,19 @@ enum Context<'a> {
    Path,
    PathEnd,
 
-   Delimited { before: Option<&'a str>, end: char },
-   DelimitedEnd { before: Option<&'a str>, end: char },
+   Delimited {
+      before: Option<&'a str>,
+      end:    char,
+   },
+   DelimitedEnd {
+      before: Option<&'a str>,
+      end:    char,
+   },
 
    InterpolationStart,
-   Interpolation { parentheses: usize },
+   Interpolation {
+      parentheses: usize,
+   },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -487,7 +495,7 @@ impl<'a> Tokenizer<'a> {
 
             self.context_push(Context::Delimited {
                before: Some(equals),
-               end: start,
+               end:    start,
             });
 
             match start {

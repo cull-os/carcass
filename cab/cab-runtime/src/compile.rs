@@ -12,7 +12,7 @@ use crate::{
 };
 
 pub struct Compile {
-   pub code: Code,
+   pub code:    Code,
    pub reports: Vec<Report>,
 }
 
@@ -43,7 +43,7 @@ impl Oracle {
       compiler.compile(node);
 
       Compile {
-         code: compiler
+         code:    compiler
             .codes
             .pop()
             .expect("compiler must have at least one code at all times"),
@@ -53,14 +53,14 @@ impl Oracle {
 }
 
 struct Compiler {
-   codes: Vec<Code>,
+   codes:   Vec<Code>,
    reports: Vec<Report>,
 }
 
 impl Compiler {
    fn new() -> Self {
       Compiler {
-         codes: Vec::new(),
+         codes:   Vec::new(),
          reports: Vec::new(),
       }
    }

@@ -10,7 +10,7 @@ pub struct Point {
    /// The title of the label.
    pub title: yansi::Painted<Cow<'static, str>>,
    /// The text of the label.
-   pub text: Cow<'static, str>,
+   pub text:  Cow<'static, str>,
 }
 
 impl Point {

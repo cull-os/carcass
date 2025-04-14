@@ -9,8 +9,7 @@
    try_trait_v2
 )]
 
-#[cfg(feature = "error")]
-mod error;
+#[cfg(feature = "error")] mod error;
 mod print;
 mod report;
 mod text;

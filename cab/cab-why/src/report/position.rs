@@ -4,7 +4,7 @@ use crate::Span;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Position {
    /// The line number. One indexed.
-   pub line: u32,
+   pub line:   u32,
    /// The column. One indexed, but zero means we are at the newline.
    ///
    /// The column is not a raw byte index, but a char index.
@@ -64,8 +64,14 @@ mod tests {
       assert_eq!(
          Position::of(Span::new(0u32, 5u32), source),
          (
-            Position { line: 1, column: 1 },
-            Position { line: 2, column: 1 }
+            Position {
+               line:   1,
+               column: 1,
+            },
+            Position {
+               line:   2,
+               column: 1,
+            }
          )
       );
 
@@ -74,8 +80,14 @@ mod tests {
       assert_eq!(
          Position::of(Span::new(0u32, 6u32), source),
          (
-            Position { line: 1, column: 1 },
-            Position { line: 2, column: 1 }
+            Position {
+               line:   1,
+               column: 1,
+            },
+            Position {
+               line:   2,
+               column: 1,
+            }
          )
       );
 
@@ -84,22 +96,40 @@ mod tests {
       assert_eq!(
          Position::of(Span::new(0u32, 5u32), source),
          (
-            Position { line: 1, column: 1 },
-            Position { line: 2, column: 1 }
+            Position {
+               line:   1,
+               column: 1,
+            },
+            Position {
+               line:   2,
+               column: 1,
+            }
          )
       );
       assert_eq!(
          Position::of(Span::new(0u32, 6u32), source),
          (
-            Position { line: 1, column: 1 },
-            Position { line: 2, column: 1 }
+            Position {
+               line:   1,
+               column: 1,
+            },
+            Position {
+               line:   2,
+               column: 1,
+            }
          )
       );
       assert_eq!(
          Position::of(Span::new(0u32, 7u32), source),
          (
-            Position { line: 1, column: 1 },
-            Position { line: 2, column: 2 }
+            Position {
+               line:   1,
+               column: 1,
+            },
+            Position {
+               line:   2,
+               column: 2,
+            }
          )
       );
    }

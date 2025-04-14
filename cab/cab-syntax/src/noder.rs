@@ -169,7 +169,7 @@ type Result<T> = result::Result<T, ()>;
 struct Noder<'a, I: Iterator<Item = (Kind, &'a str)>> {
    builder: green::NodeBuilder,
 
-   tokens: PeekMore<I>,
+   tokens:  PeekMore<I>,
    reports: Vec<Report>,
 
    offset: Size,
@@ -180,7 +180,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
       Self {
          builder: green::NodeBuilder::from_interner(interner),
 
-         tokens: tokens.peekmore(),
+         tokens:  tokens.peekmore(),
          reports: Vec::new(),
 
          offset: Size::new(0u32),
