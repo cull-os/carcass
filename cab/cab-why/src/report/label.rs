@@ -41,11 +41,11 @@ impl LabelSeverity {
 #[derive(Debug, Clone)]
 pub struct Label {
    /// The span.
-   pub span: Span,
+   pub span:     Span,
    /// The label severity.
    pub severity: LabelSeverity,
    /// The text that will be displayed at the end of the label.
-   pub text: Cow<'static, str>,
+   pub text:     Cow<'static, str>,
 }
 
 impl Label {

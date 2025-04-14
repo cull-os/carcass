@@ -41,8 +41,13 @@ enum FsEntryContent {
 }
 
 enum FsEntryLocation {
-   Root { path: PathBuf },
-   Child { parent: Arc<FsEntry>, name: String },
+   Root {
+      path: PathBuf,
+   },
+   Child {
+      parent: Arc<FsEntry>,
+      name:   String,
+   },
 }
 
 struct FsEntry {
@@ -214,7 +219,7 @@ impl FsEntry {
          entries.push(Arc::new(FsEntry {
             location: FsEntryLocation::Child {
                parent: self.clone(),
-               name: name
+               name:   name
                   .to_str()
                   .with_context(|| {
                      format!(

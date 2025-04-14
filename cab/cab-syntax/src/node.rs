@@ -942,59 +942,65 @@ node! {
    struct Island;
 }
 
-#[rustfmt::skip]
 impl Island {
-    pub fn token_delimiter_left(&self) -> &red::Token {
-        self.header().token_delimiter_left()
-    }
+   pub fn token_delimiter_left(&self) -> &red::Token {
+      self.header().token_delimiter_left()
+   }
 
-    get_node! { header -> &IslandHeader }
+   get_node! { header -> &IslandHeader }
 
-    pub fn config(&self) -> Option<ExpressionRef<'_>> {
-        // Right after the header, must be a node.
-        self.children_with_tokens()
-            .nth(1)
-            .and_then(red::ElementRef::into_node)
-            .and_then(|node| ExpressionRef::try_from(node).ok())
-    }
+   pub fn config(&self) -> Option<ExpressionRef<'_>> {
+      // Right after the header, must be a node.
+      self
+         .children_with_tokens()
+         .nth(1)
+         .and_then(red::ElementRef::into_node)
+         .and_then(|node| ExpressionRef::try_from(node).ok())
+   }
 
-    get_token! { token_colon -> Option<TOKEN_COLON> }
+   get_token! { token_colon -> Option<TOKEN_COLON> }
 
-    pub fn path(&self) -> Option<ExpressionRef<'_>> {
-        self.children_with_tokens()
-            .skip_while(|element| element.into_token().is_none_or(|token| token.kind() != TOKEN_COLON))
-            .nth(1)
-            .and_then(red::ElementRef::into_node)
-            .and_then(|node| ExpressionRef::try_from(node).ok())
-    }
+   pub fn path(&self) -> Option<ExpressionRef<'_>> {
+      self
+         .children_with_tokens()
+         .skip_while(|element| {
+            element
+               .into_token()
+               .is_none_or(|token| token.kind() != TOKEN_COLON)
+         })
+         .nth(1)
+         .and_then(red::ElementRef::into_node)
+         .and_then(|node| ExpressionRef::try_from(node).ok())
+   }
 
-    pub fn token_delimiter_right(&self) -> Option<&red::Token> {
-        let header_delimiter_right = self.header().token_delimiter_right();
+   pub fn token_delimiter_right(&self) -> Option<&red::Token> {
+      let header_delimiter_right = self.header().token_delimiter_right();
 
-        let token = if header_delimiter_right.is_none_or(|token| token.kind() == TOKEN_MORE) {
-            header_delimiter_right
-        } else {
-            self.children_with_tokens()
-                .filter_map(red::ElementRef::into_token)
-                .last()
-        };
+      let token = if header_delimiter_right.is_none_or(|token| token.kind() == TOKEN_MORE) {
+         header_delimiter_right
+      } else {
+         self
+            .children_with_tokens()
+            .filter_map(red::ElementRef::into_token)
+            .last()
+      };
 
-        if let Some(token) = token {
-            assert_eq!(token.kind(), TOKEN_MORE);
-        }
+      if let Some(token) = token {
+         assert_eq!(token.kind(), TOKEN_MORE);
+      }
 
-        token
-    }
+      token
+   }
 
-    pub fn validate(&self, to: &mut Vec<Report>) {
-        if let Some(config) = self.config() {
-            config.validate(to);
-        }
+   pub fn validate(&self, to: &mut Vec<Report>) {
+      if let Some(config) = self.config() {
+         config.validate(to);
+      }
 
-        if let Some(path) = self.path() {
-            path.validate(to);
-        }
-    }
+      if let Some(path) = self.path() {
+         path.validate(to);
+      }
+   }
 }
 
 // PATH

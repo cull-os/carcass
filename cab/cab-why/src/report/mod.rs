@@ -60,9 +60,9 @@ impl ReportSeverity {
 #[derive(Debug, Clone)]
 pub struct Report {
    pub severity: ReportSeverity,
-   pub title: Cow<'static, str>,
-   pub labels: SmallVec<Label, 2>,
-   pub points: SmallVec<Point, 2>,
+   pub title:    Cow<'static, str>,
+   pub labels:   SmallVec<Label, 2>,
+   pub points:   SmallVec<Point, 2>,
 }
 
 impl Report {
@@ -272,14 +272,14 @@ enum LineStrikeStatus {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct LineStrike {
-   id: LineStrikeId,
-   status: LineStrikeStatus,
+   id:       LineStrikeId,
+   status:   LineStrikeStatus,
    severity: LabelSeverity,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct LineStyle {
-   span: Span,
+   span:     Span,
    severity: LabelSeverity,
 }
 
@@ -312,8 +312,8 @@ impl LineLabelSpan {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct LineLabel {
-   span: LineLabelSpan,
-   text: Cow<'static, str>,
+   span:     LineLabelSpan,
+   text:     Cow<'static, str>,
    severity: LabelSeverity,
 }
 
@@ -324,7 +324,7 @@ struct Line {
    strikes: SmallVec<LineStrike, 3>,
 
    content: String,
-   styles: SmallVec<LineStyle, 4>,
+   styles:  SmallVec<LineStyle, 4>,
 
    labels: SmallVec<LineLabel, 2>,
 }
@@ -332,7 +332,7 @@ struct Line {
 #[derive(Clone)]
 struct ReportDisplay<Location: fmt::Display> {
    severity: ReportSeverity,
-   title: Cow<'static, str>,
+   title:    Cow<'static, str>,
 
    location: Location,
 
@@ -705,10 +705,10 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
                         }
                      );
 
-                     wrapln(
-                        writer,
-                        [label.text.as_ref().paint(self.style(top_to_right.severity))],
-                     )?;
+                     wrapln(writer, [label
+                        .text
+                        .as_ref()
+                        .paint(self.style(top_to_right.severity))])?;
                   },
 
                   LineLabelSpan::Inline(_) => {
@@ -798,10 +798,10 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
                         }
                      );
 
-                     wrapln(
-                        writer,
-                        [label.text.as_ref().paint(self.style(label.severity))],
-                     )?;
+                     wrapln(writer, [label
+                        .text
+                        .as_ref()
+                        .paint(self.style(label.severity))])?;
                   },
                }
             }
@@ -878,7 +878,7 @@ impl<Location: fmt::Display> ReportDisplay<Location> {
                      strikes: SmallVec::new(),
 
                      content: line_content.to_owned(),
-                     styles: SmallVec::new(),
+                     styles:  SmallVec::new(),
 
                      labels: SmallVec::new(),
                   });
@@ -927,8 +927,8 @@ impl<Location: fmt::Display> ReportDisplay<Location> {
                   let label_width = line_content[span.as_std()].graphemes(true).count();
 
                   line.labels.push(LineLabel {
-                     span: LineLabelSpan::Inline(Span::at(up_to_start_width, label_width)),
-                     text: label.text,
+                     span:     LineLabelSpan::Inline(Span::at(up_to_start_width, label_width)),
+                     text:     label.text,
                      severity: label.severity,
                   });
                   continue 'labels;
@@ -954,7 +954,7 @@ impl<Location: fmt::Display> ReportDisplay<Location> {
                // Multiline label's intermediary line.
                (false, false) => {
                   line.styles.push(LineStyle {
-                     span: Span::up_to(line.content.len()),
+                     span:     Span::up_to(line.content.len()),
                      severity: label.severity,
                   });
                },
@@ -980,8 +980,8 @@ impl<Location: fmt::Display> ReportDisplay<Location> {
                   let up_to_end_width = line_content[..*end as usize].graphemes(true).count();
 
                   line.labels.push(LineLabel {
-                     span: LineLabelSpan::UpTo(Span::up_to(up_to_end_width)),
-                     text: label.text,
+                     span:     LineLabelSpan::UpTo(Span::up_to(up_to_end_width)),
+                     text:     label.text,
                      severity: label.severity,
                   });
                   continue 'labels;

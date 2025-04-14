@@ -16,7 +16,7 @@ pub struct Span {
    pub start: Size,
    /// The end of the span, this is not included in the span itself, as it is
    /// an exclusive span.
-   pub end: Size,
+   pub end:   Size,
 }
 
 impl fmt::Display for Span {
@@ -150,7 +150,7 @@ impl From<ops::Range<u32>> for Span {
    fn from(that: ops::Range<u32>) -> Self {
       Self {
          start: that.start.into(),
-         end: that.end.into(),
+         end:   that.end.into(),
       }
    }
 }
@@ -165,7 +165,7 @@ impl From<ops::Range<usize>> for Span {
    fn from(that: ops::Range<usize>) -> Self {
       Self {
          start: that.start.into(),
-         end: that.end.into(),
+         end:   that.end.into(),
       }
    }
 }
@@ -182,7 +182,7 @@ impl From<cstree::text::TextRange> for Span {
    fn from(that: cstree::text::TextRange) -> Self {
       Self {
          start: that.start().into(),
-         end: that.end().into(),
+         end:   that.end().into(),
       }
    }
 }

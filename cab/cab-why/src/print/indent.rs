@@ -29,11 +29,11 @@ pub struct IndentWriter<'a> {
    #[doc(hidden)]
    pub __writer: &'a mut dyn fmt::Write,
    #[doc(hidden)]
-   pub __with: IndentWith<'a>,
+   pub __with:   IndentWith<'a>,
    #[doc(hidden)]
-   pub __count: u16,
+   pub __count:  u16,
    #[doc(hidden)]
-   pub __place: IndentPlace,
+   pub __place:  IndentPlace,
 }
 
 impl Drop for IndentWriter<'_> {
@@ -118,9 +118,9 @@ pub fn indent(writer: &mut dyn fmt::Write, count: u16) -> IndentWriter<'_> {
       // SAFETY: ZERO_INDENTER does not modify anything and the pointee of self.writer in Writer
       // is never replaced. Therefore we can use it, because without writes you can't have
       // race conditions.
-      __with: unsafe { ZERO_INDENTER },
-      __count: count,
-      __place: IndentPlace::Start,
+      __with:   unsafe { ZERO_INDENTER },
+      __count:  count,
+      __place:  IndentPlace::Start,
    }
 }
 
@@ -137,9 +137,9 @@ pub fn indent_with<'a>(
 
    IndentWriter {
       __writer: writer,
-      __with: with,
-      __count: count,
-      __place: IndentPlace::Start,
+      __with:   with,
+      __count:  count,
+      __place:  IndentPlace::Start,
    }
 }
 
@@ -243,16 +243,16 @@ macro_rules! dedent {
 
       let $writer = &mut $crate::IndentWriter {
          __writer: $writer.__writer,
-         __count: $writer
+         __count:  $writer
             .__count
             .checked_sub(dedent)
             .expect("dedent must be smaller than indent"),
-         __with: if $discard {
+         __with:   if $discard {
             &mut move |_| Ok(0)
          } else {
             $writer.__with
          },
-         __place: $writer.__place,
+         __place:  $writer.__place,
       };
    };
 }
