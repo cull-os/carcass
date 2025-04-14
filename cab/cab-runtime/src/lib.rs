@@ -8,9 +8,9 @@ pub use operation::Operation;
 
 mod code;
 pub use code::{
-    ByteIndex,
-    Code,
-    ConstantIndex,
+   ByteIndex,
+   Code,
+   ConstantIndex,
 };
 
 mod value;

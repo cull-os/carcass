@@ -5,7 +5,7 @@ resolver = "3"
 metadata.crane.name = "cab"
 
 [workspace.package]
-edition    = "2024"
+edition    = "2024"                               # Keep in sync with .rustfmt.toml.
 license    = "MIT"
 publish    = false
 repository = "https://github.com/cull-os/carcass"
