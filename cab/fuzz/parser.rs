@@ -1,85 +1,88 @@
 #![no_main]
 
 use std::{
-    env,
-    fs,
-    hash::{
-        self,
-        Hash as _,
-        Hasher as _,
-    },
-    path::Path,
-    sync::Arc,
+   env,
+   fs,
+   hash::{
+      self,
+      Hash as _,
+      Hasher as _,
+   },
+   path::Path,
+   sync::Arc,
 };
 
 use cab::{
-    island,
-    syntax,
+   island,
+   syntax,
 };
 use libfuzzer_sys::{
-    Corpus,
-    fuzz_target,
+   Corpus,
+   fuzz_target,
 };
 use yansi::Paint as _;
 
 fuzz_target!(|source: &str| -> Corpus {
-    let oracle = syntax::oracle();
-    let parse = oracle.parse(syntax::tokenize(source));
+   let oracle = syntax::oracle();
+   let parse = oracle.parse(syntax::tokenize(source));
 
-    let island: Arc<dyn island::Leaf> = Arc::new(island::blob(source.to_owned()));
+   let island: Arc<dyn island::Leaf> = Arc::new(island::blob(source.to_owned()));
 
-    let Ok("true" | "1") = env::var("FUZZ_PARSER_SAVE_VALID").as_deref() else {
-        return Corpus::Keep;
-    };
+   let Ok("true" | "1") = env::var("FUZZ_PARSER_SAVE_VALID").as_deref() else {
+      return Corpus::Keep;
+   };
 
-    yansi::whenever(yansi::Condition::TTY_AND_COLOR);
+   yansi::whenever(yansi::Condition::TTY_AND_COLOR);
 
-    let node = match parse.result() {
-        Ok(node) => node,
+   let node = match parse.result() {
+      Ok(node) => node,
 
-        Err(reports) => {
-            for report in reports {
-                println!("{report}", report = report.with(island::display!(island), source));
-            }
+      Err(reports) => {
+         for report in reports {
+            println!(
+               "{report}",
+               report = report.with(island::display!(island), source)
+            );
+         }
 
-            return Corpus::Reject;
-        },
-    };
+         return Corpus::Reject;
+      },
+   };
 
-    print!("found a valid parse!");
+   print!("found a valid parse!");
 
-    let display = format!("{node:#?}", node = *node);
+   let display = format!("{node:#?}", node = *node);
 
-    let display_hash = {
-        let mut hasher = hash::DefaultHasher::new();
-        display.hash(&mut hasher);
-        hasher.finish()
-    };
+   let display_hash = {
+      let mut hasher = hash::DefaultHasher::new();
+      display.hash(&mut hasher);
+      hasher.finish()
+   };
 
-    let base_file = format!("{display_hash:016x}");
+   let base_file = format!("{display_hash:016x}");
 
-    let (source_file, display_file) = {
-        let root = Path::new("cab-syntax/test/data");
-        fs::create_dir_all(root).unwrap();
+   let (source_file, display_file) = {
+      let root = Path::new("cab-syntax/test/data");
+      fs::create_dir_all(root).unwrap();
 
-        (
-            root.join(base_file.clone() + ".cab"),
-            root.join(base_file.clone() + ".expect"),
-        )
-    };
+      (
+         root.join(base_file.clone() + ".cab"),
+         root.join(base_file.clone() + ".expect"),
+      )
+   };
 
-    if source_file.exists() {
-        println!(
-            " seems like it was already known before, skipping writing {name}",
-            name = base_file.yellow().bold()
-        );
+   if source_file.exists() {
+      println!(
+         " seems like it was already known before, skipping writing {name}",
+         name = base_file.yellow().bold()
+      );
 
-        Corpus::Reject
-    } else {
-        println!(" wrote it to {name}", name = base_file.green().bold());
-        fs::write(source_file, source).unwrap();
-        fs::write(display_file, display).unwrap();
+      Corpus::Reject
+   } else {
+      println!(" wrote it to {name}", name = base_file.green().bold());
+      fs::write(source_file, source).unwrap();
+      fs::write(display_file, display).unwrap();
 
-        Corpus::Keep
-    }
+      Corpus::Keep
+   }
 });

@@ -1,235 +1,246 @@
 //! Formatting utilities for [`node::Expression`]s.
 use std::{
-    fmt,
-    io,
+   fmt,
+   io,
 };
 
 use yansi::Paint as _;
 
 use crate::{
-    COLORS,
-    node,
-    red,
+   COLORS,
+   node,
+   red,
 };
 
 /// Formats the given node with parentheses to disambiguate.
-pub fn parenthesize(writer: &mut impl io::Write, expression: node::ExpressionRef<'_>) -> io::Result<()> {
-    Formatter::new(writer).parenthesize(expression)
+pub fn parenthesize(
+   writer: &mut impl io::Write,
+   expression: node::ExpressionRef<'_>,
+) -> io::Result<()> {
+   Formatter::new(writer).parenthesize(expression)
 }
 
 #[derive(Debug)]
 struct Formatter<'write, W: io::Write> {
-    inner: &'write mut W,
+   inner: &'write mut W,
 
-    bracket_count: usize,
+   bracket_count: usize,
 }
 
 impl<'write, W: io::Write> Formatter<'write, W> {
-    fn new(inner: &'write mut W) -> Self {
-        Self {
-            inner,
+   fn new(inner: &'write mut W) -> Self {
+      Self {
+         inner,
 
-            bracket_count: 0,
-        }
-    }
+         bracket_count: 0,
+      }
+   }
 
-    fn paint_bracket<'b>(&self, bracket: &'b str) -> yansi::Painted<&'b str> {
-        let style = COLORS[self.bracket_count % COLORS.len()];
-        bracket.paint(style)
-    }
+   fn paint_bracket<'b>(&self, bracket: &'b str) -> yansi::Painted<&'b str> {
+      let style = COLORS[self.bracket_count % COLORS.len()];
+      bracket.paint(style)
+   }
 
-    fn bracket_start(&mut self, bracket: &str) -> io::Result<()> {
-        write!(self.inner, "{painted}", painted = self.paint_bracket(bracket))?;
-        self.bracket_count += 1;
+   fn bracket_start(&mut self, bracket: &str) -> io::Result<()> {
+      write!(
+         self.inner,
+         "{painted}",
+         painted = self.paint_bracket(bracket)
+      )?;
+      self.bracket_count += 1;
 
-        Ok(())
-    }
+      Ok(())
+   }
 
-    fn bracket_end(&mut self, bracket: &str) -> io::Result<()> {
-        self.bracket_count -= 1;
-        write!(self.inner, "{painted}", painted = self.paint_bracket(bracket))
-    }
+   fn bracket_end(&mut self, bracket: &str) -> io::Result<()> {
+      self.bracket_count -= 1;
+      write!(
+         self.inner,
+         "{painted}",
+         painted = self.paint_bracket(bracket)
+      )
+   }
 
-    fn write(&mut self, painted: impl fmt::Display) -> io::Result<()> {
-        write!(self.inner, "{painted}")
-    }
+   fn write(&mut self, painted: impl fmt::Display) -> io::Result<()> {
+      write!(self.inner, "{painted}")
+   }
 
-    fn write_parted(&mut self, parted: &impl node::Parted) -> io::Result<()> {
-        for part in parted.parts() {
-            match part {
-                node::InterpolatedPartRef::Delimiter(token) => {
-                    self.write(token.text().green().bold())?;
-                },
+   fn write_parted(&mut self, parted: &impl node::Parted) -> io::Result<()> {
+      for part in parted.parts() {
+         match part {
+            node::InterpolatedPartRef::Delimiter(token) => {
+               self.write(token.text().green().bold())?;
+            },
 
-                node::InterpolatedPartRef::Content(token) => {
-                    self.write(token.text().green())?;
-                },
+            node::InterpolatedPartRef::Content(token) => {
+               self.write(token.text().green())?;
+            },
 
-                node::InterpolatedPartRef::Interpolation(interpolation) => {
-                    self.write(r"\(".yellow())?;
-                    self.parenthesize(interpolation.expression())?;
-                    self.write(")".yellow())?;
-                },
+            node::InterpolatedPartRef::Interpolation(interpolation) => {
+               self.write(r"\(".yellow())?;
+               self.parenthesize(interpolation.expression())?;
+               self.write(")".yellow())?;
+            },
+         }
+      }
+
+      Ok(())
+   }
+
+   fn parenthesize(&mut self, expression: node::ExpressionRef<'_>) -> io::Result<()> {
+      match expression {
+         node::ExpressionRef::Error(_error) => self.write("error".red().bold()),
+
+         node::ExpressionRef::Parenthesis(parenthesis) => {
+            if let Some(expression) = parenthesis.expression() {
+               self.parenthesize(expression)?;
             }
-        }
 
-        Ok(())
-    }
+            Ok(())
+         },
 
-    fn parenthesize(&mut self, expression: node::ExpressionRef<'_>) -> io::Result<()> {
-        match expression {
-            node::ExpressionRef::Error(_error) => self.write("error".red().bold()),
+         node::ExpressionRef::List(list) => {
+            self.bracket_start("[")?;
 
-            node::ExpressionRef::Parenthesis(parenthesis) => {
-                if let Some(expression) = parenthesis.expression() {
-                    self.parenthesize(expression)?;
-                }
+            let mut items = list.items().peekable();
+            if items.peek().is_some() {
+               self.write(" ")?;
+            }
 
-                Ok(())
-            },
+            while let Some(item) = items.next() {
+               self.parenthesize(item)?;
 
-            node::ExpressionRef::List(list) => {
-                self.bracket_start("[")?;
+               if items.peek().is_some() {
+                  self.write(",")?;
+               }
 
-                let mut items = list.items().peekable();
-                if items.peek().is_some() {
-                    self.write(" ")?;
-                }
+               self.write(" ")?;
+            }
 
-                while let Some(item) = items.next() {
-                    self.parenthesize(item)?;
+            self.bracket_end("]")
+         },
 
-                    if items.peek().is_some() {
-                        self.write(",")?;
-                    }
+         node::ExpressionRef::Attributes(attributes) => {
+            self.bracket_start("{")?;
 
-                    self.write(" ")?;
-                }
+            if let Some(expression) = attributes.expression() {
+               self.write(" ")?;
+               self.parenthesize(expression)?;
+               self.write(" ")?;
+            }
 
-                self.bracket_end("]")
-            },
+            self.bracket_end("}")
+         },
 
-            node::ExpressionRef::Attributes(attributes) => {
-                self.bracket_start("{")?;
+         node::ExpressionRef::PrefixOperation(operation) => {
+            self.bracket_start("(")?;
 
-                if let Some(expression) = attributes.expression() {
-                    self.write(" ")?;
-                    self.parenthesize(expression)?;
-                    self.write(" ")?;
-                }
+            self.write(operation.operator_token().text())?;
+            self.write(" ")?;
+            self.parenthesize(operation.right())?;
 
-                self.bracket_end("}")
-            },
+            self.bracket_end(")")
+         },
 
-            node::ExpressionRef::PrefixOperation(operation) => {
-                self.bracket_start("(")?;
+         node::ExpressionRef::InfixOperation(operation) => {
+            self.bracket_start("(")?;
 
-                self.write(operation.operator_token().text())?;
-                self.write(" ")?;
-                self.parenthesize(operation.right())?;
+            let operator = match operation.operator() {
+               node::InfixOperator::ImplicitApply | node::InfixOperator::Apply => None,
+               node::InfixOperator::Pipe => {
+                  self.parenthesize(operation.right())?;
+                  self.write(" ")?;
+                  self.parenthesize(operation.left())?;
 
-                self.bracket_end(")")
-            },
+                  return self.bracket_end(")");
+               },
 
-            node::ExpressionRef::InfixOperation(operation) => {
-                self.bracket_start("(")?;
+               _ => operation.operator_token().map(|token| token.text()),
+            };
 
-                let operator = match operation.operator() {
-                    node::InfixOperator::ImplicitApply | node::InfixOperator::Apply => None,
-                    node::InfixOperator::Pipe => {
-                        self.parenthesize(operation.right())?;
-                        self.write(" ")?;
-                        self.parenthesize(operation.left())?;
+            self.parenthesize(operation.left())?;
+            self.write(" ")?;
 
-                        return self.bracket_end(")");
-                    },
+            if let Some(operator) = operator {
+               self.write(operator)?;
+               self.write(" ")?;
+            }
 
-                    _ => operation.operator_token().map(|token| token.text()),
-                };
+            self.parenthesize(operation.right())?;
 
-                self.parenthesize(operation.left())?;
-                self.write(" ")?;
+            self.bracket_end(")")
+         },
 
-                if let Some(operator) = operator {
-                    self.write(operator)?;
-                    self.write(" ")?;
-                }
+         node::ExpressionRef::SuffixOperation(operation) => {
+            self.bracket_start("(")?;
 
-                self.parenthesize(operation.right())?;
+            self.parenthesize(operation.left())?;
+            self.write(" ")?;
+            self.write(operation.operator_token().text())?;
 
-                self.bracket_end(")")
-            },
+            self.bracket_end(")")
+         },
 
-            node::ExpressionRef::SuffixOperation(operation) => {
-                self.bracket_start("(")?;
+         node::ExpressionRef::Path(path) => self.write_parted(path),
 
-                self.parenthesize(operation.left())?;
-                self.write(" ")?;
-                self.write(operation.operator_token().text())?;
+         node::ExpressionRef::Bind(bind) => {
+            self.write(bind.token_at().text())?;
+            self.parenthesize(bind.identifier())
+         },
 
-                self.bracket_end(")")
-            },
+         node::ExpressionRef::Identifier(identifier) => {
+            match identifier.value() {
+               node::IdentifierValueRef::Plain(token) => {
+                  self.write(match token.text() {
+                     boolean @ ("true" | "false") => boolean.magenta().bold(),
+                     inexistent @ ("null" | "undefined") => inexistent.cyan().bold(),
+                     import @ "import" => import.yellow().bold(),
+                     identifier => identifier.new(),
+                  })
+               },
 
-            node::ExpressionRef::Path(path) => self.write_parted(path),
+               node::IdentifierValueRef::Quoted(quoted) => self.write_parted(quoted),
+            }
+         },
 
-            node::ExpressionRef::Bind(bind) => {
-                self.write(bind.token_at().text())?;
-                self.parenthesize(bind.identifier())
-            },
+         node::ExpressionRef::SString(string) => self.write_parted(string),
 
-            node::ExpressionRef::Identifier(identifier) => {
-                match identifier.value() {
-                    node::IdentifierValueRef::Plain(token) => {
-                        self.write(match token.text() {
-                            boolean @ ("true" | "false") => boolean.magenta().bold(),
-                            inexistent @ ("null" | "undefined") => inexistent.cyan().bold(),
-                            import @ "import" => import.yellow().bold(),
-                            identifier => identifier.new(),
-                        })
-                    },
+         node::ExpressionRef::Rune(rune) => self.write_parted(rune),
 
-                    node::IdentifierValueRef::Quoted(quoted) => self.write_parted(quoted),
-                }
-            },
+         node::ExpressionRef::Island(island) => {
+            self.write_parted(island.header())?;
 
-            node::ExpressionRef::SString(string) => self.write_parted(string),
+            for element in island.children_with_tokens().skip(1) {
+               match element {
+                  red::ElementRef::Node(node) => {
+                     self.parenthesize(node.try_into().unwrap())?;
+                  },
+                  red::ElementRef::Token(token) => {
+                     self.write(token.text().green())?;
+                  },
+               }
+            }
 
-            node::ExpressionRef::Rune(rune) => self.write_parted(rune),
+            Ok(())
+         },
 
-            node::ExpressionRef::Island(island) => {
-                self.write_parted(island.header())?;
+         node::ExpressionRef::Integer(integer) => self.write(integer.value().blue().bold()),
+         node::ExpressionRef::Float(float) => self.write(float.value().blue().bold()),
 
-                for element in island.children_with_tokens().skip(1) {
-                    match element {
-                        red::ElementRef::Node(node) => {
-                            self.parenthesize(node.try_into().unwrap())?;
-                        },
-                        red::ElementRef::Token(token) => {
-                            self.write(token.text().green())?;
-                        },
-                    }
-                }
+         node::ExpressionRef::If(if_) => {
+            self.bracket_start("(")?;
 
-                Ok(())
-            },
+            self.write(if_.token_if().text().red().bold())?;
+            self.write(" ")?;
+            self.parenthesize(if_.condition())?;
+            self.write(" ")?;
+            self.write(if_.token_then().text().red().bold())?;
+            self.parenthesize(if_.consequence())?;
+            self.write(" else ".red().bold())?;
+            self.parenthesize(if_.alternative())?;
 
-            node::ExpressionRef::Integer(integer) => self.write(integer.value().blue().bold()),
-            node::ExpressionRef::Float(float) => self.write(float.value().blue().bold()),
-
-            node::ExpressionRef::If(if_) => {
-                self.bracket_start("(")?;
-
-                self.write(if_.token_if().text().red().bold())?;
-                self.write(" ")?;
-                self.parenthesize(if_.condition())?;
-                self.write(" ")?;
-                self.write(if_.token_then().text().red().bold())?;
-                self.parenthesize(if_.consequence())?;
-                self.write(" else ".red().bold())?;
-                self.parenthesize(if_.alternative())?;
-
-                self.bracket_end(")")
-            },
-        }
-    }
+            self.bracket_end(")")
+         },
+      }
+   }
 }
