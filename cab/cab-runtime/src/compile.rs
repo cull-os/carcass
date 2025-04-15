@@ -122,6 +122,15 @@ impl Compiler {
       self.push_u64(*blueprint_index as u64);
    }
 
+   fn compile_list(&mut self, list: &node::List) {
+      self.compile_constant(list.span(), Constant::Nil);
+
+      for item in list.items() {
+         self.compile(item);
+         self.push_operation(list.span(), Operation::Construct);
+      }
+   }
+
    fn compile_prefix_operation(&mut self, operation: &node::PrefixOperation) {
       self.compile(operation.right());
       self.push_operation(operation.right().span(), Operation::Force);
@@ -212,7 +221,7 @@ impl Compiler {
             self.compile(parenthesis.expression().expect("node must be validated"))
          },
 
-         node::ExpressionRef::List(_list) => todo!(),
+         node::ExpressionRef::List(list) => self.compile_list(list),
          node::ExpressionRef::Attributes(_attributes) => todo!(),
 
          node::ExpressionRef::PrefixOperation(prefix_operation) => {
