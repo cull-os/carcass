@@ -12,7 +12,6 @@ use cab_why::{
 };
 
 use crate::{
-   ByteIndex,
    Code,
    Constant,
    Operation,
