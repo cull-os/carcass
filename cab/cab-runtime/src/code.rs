@@ -40,6 +40,7 @@ pub struct Code {
 }
 
 impl Code {
+   #[allow(clippy::new_without_default)]
    pub fn new() -> Self {
       Self {
          content:   Vec::new(),
