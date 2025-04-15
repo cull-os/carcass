@@ -102,7 +102,7 @@ impl Compiler {
          .expect("compiler must have at least one code at all times")
    }
 
-   fn emit_constant(&mut self, span: Span, constant: Constant) {
+   fn compile_constant(&mut self, span: Span, constant: Constant) {
       let id = self.push_constant(constant);
 
       self.push_operation(span, Operation::Constant);
@@ -199,7 +199,7 @@ impl Compiler {
          node::SuffixOperator::Sequence => {
             self.compile(operation.left());
             self.push_operation(operation.left().span(), Operation::Force);
-            self.push_constant(Constant::Integer(0xDEADBEAFu32.into())); // TODO: Use a proper value.
+            self.compile_constant(operation.span(), Constant::Integer(0xDEADBEAFu32.into())); // TODO: Use a proper value.
          },
       }
    }
@@ -238,13 +238,13 @@ impl Compiler {
          node::ExpressionRef::SString(_sstring) => todo!(),
 
          node::ExpressionRef::Rune(rune) => {
-            self.emit_constant(rune.span(), Constant::Rune(rune.value()))
+            self.compile_constant(rune.span(), Constant::Rune(rune.value()))
          },
          node::ExpressionRef::Integer(integer) => {
-            self.emit_constant(integer.span(), Constant::Integer(integer.value()))
+            self.compile_constant(integer.span(), Constant::Integer(integer.value()))
          },
          node::ExpressionRef::Float(float) => {
-            self.emit_constant(float.span(), Constant::Float(float.value()))
+            self.compile_constant(float.span(), Constant::Float(float.value()))
          },
 
          node::ExpressionRef::If(_) => todo!(),
