@@ -3,8 +3,8 @@ use std::ops;
 use cab_why::Span;
 
 use crate::{
+   Constant,
    Operation,
-   Value,
 };
 
 const ENCODED_U64_SIZE: usize = 9;
@@ -36,10 +36,18 @@ pub struct Code {
    content: Vec<u8>,
    spans:   Vec<(ByteIndex, Span)>,
 
-   constants: Vec<Value>,
+   constants: Vec<Constant>,
 }
 
 impl Code {
+   pub fn new() -> Self {
+      Self {
+         content:   Vec::new(),
+         spans:     Vec::new(),
+         constants: Vec::new(),
+      }
+   }
+
    pub fn push_u64(&mut self, data: u64) -> ByteIndex {
       let mut encoded = [0; ENCODED_U64_SIZE];
       let len = vu128::encode_u64(&mut encoded, data);
@@ -49,16 +57,16 @@ impl Code {
       id
    }
 
-   pub fn read_u64(&self, id: ByteIndex) -> (u64, usize) {
-      let encoded = match self.content.get(*id..*id + ENCODED_U64_SIZE) {
+   pub fn read_u64(&self, index: ByteIndex) -> (u64, usize) {
+      let encoded = match self.content.get(*index..*index + ENCODED_U64_SIZE) {
          Some(slice) => slice.try_into().expect("size was statically checked"),
 
          None => {
             let mut buffer = [0; ENCODED_U64_SIZE];
-            buffer[..self.content.len() - *id].copy_from_slice(
+            buffer[..self.content.len() - *index].copy_from_slice(
                self
                   .content
-                  .get(*id..)
+                  .get(*index..)
                   .expect("cab-runtime bug: invalid code id"),
             );
             buffer
@@ -74,10 +82,10 @@ impl Code {
       id
    }
 
-   pub fn read_u16(&self, id: ByteIndex) -> (u16, usize) {
+   pub fn read_u16(&self, index: ByteIndex) -> (u16, usize) {
       let encoded = self
          .content
-         .get(*id..*id + ENCODED_U16_SIZE)
+         .get(*index..*index + ENCODED_U16_SIZE)
          .expect("cab-runtime bug: invalid code id")
          .try_into()
          .expect("size was statically checked");
@@ -85,16 +93,16 @@ impl Code {
       (u16::from_le_bytes(encoded), ENCODED_U16_SIZE)
    }
 
-   pub fn push_constant(&mut self, value: Value) -> ConstantIndex {
+   pub fn push_constant(&mut self, constant: Constant) -> ConstantIndex {
       let id = self.constants.len();
-      self.constants.push(value);
+      self.constants.push(constant);
       ConstantIndex(id)
    }
 
-   pub fn read_constant(&self, id: ConstantIndex) -> &Value {
+   pub fn read_constant(&self, index: ConstantIndex) -> &Constant {
       self
          .constants
-         .get(*id)
+         .get(*index)
          .expect("cab-runtime bug: invalid constant id")
    }
 
@@ -115,8 +123,8 @@ impl Code {
       id
    }
 
-   pub fn read_operation(&self, id: ByteIndex) -> (Span, Operation) {
-      let position = self.spans.binary_search_by(|(id2, _)| id2.cmp(&id));
+   pub fn read_operation(&self, index: ByteIndex) -> (Span, Operation) {
+      let position = self.spans.binary_search_by(|(id2, _)| id2.cmp(&index));
 
       let (id, span) = match position {
          Ok(index) => self.spans[index],
@@ -130,5 +138,13 @@ impl Code {
             .try_into()
             .expect("cab-runtime bug: invalid operation at code id"),
       )
+   }
+
+   /// Patches the operand of the jump at the given index to point to the *next*
+   /// instruction will be emitted.
+   pub fn patch_jump(&mut self, index: ByteIndex) {
+      let offset = (self.content.len() - /* index: */ 1 - /* jump argument size: */ 2) as u16;
+
+      self.content[*index + 1..*index + 2].copy_from_slice(&offset.to_le_bytes());
    }
 }

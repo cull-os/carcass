@@ -7,7 +7,7 @@ use std::{
 };
 
 use cab_why::{
-   IntoSpan,
+   IntoSpan as _,
    Report,
    Span,
 };
@@ -303,8 +303,8 @@ node! {
       Bind,
       Identifier,
       SString,
-      Rune,
 
+      Rune,
       Integer,
       Float,
 
@@ -1418,11 +1418,11 @@ impl If {
 
    get_node! { condition -> 0 @ ExpressionRef<'_> }
 
-   get_token! { token_then -> TOKEN_KEYWORD_THEN }
+   get_token! { token_then -> Option<TOKEN_KEYWORD_THEN> }
 
    get_node! { consequence -> 1 @ ExpressionRef<'_> }
 
-   get_token! { token_else -> TOKEN_KEYWORD_ELSE }
+   get_token! { token_else -> Option<TOKEN_KEYWORD_ELSE> }
 
    get_node! { alternative -> 2 @ ExpressionRef<'_> }
 
