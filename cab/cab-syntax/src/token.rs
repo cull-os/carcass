@@ -7,7 +7,7 @@ use std::{
 };
 
 use cab_why::{
-   IntoSpan,
+   IntoSpan as _,
    Label,
    Report,
    Span,

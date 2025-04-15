@@ -234,7 +234,12 @@ impl<'write, W: io::Write> Formatter<'write, W> {
             self.write(" ")?;
             self.parenthesize(if_.condition())?;
             self.write(" ")?;
-            self.write(if_.token_then().text().red().bold())?;
+            self.write(
+               if_.token_then()
+                  .map_or("then", |token| token.text())
+                  .red()
+                  .bold(),
+            )?;
             self.parenthesize(if_.consequence())?;
             self.write(" else ".red().bold())?;
             self.parenthesize(if_.alternative())?;

@@ -1,6 +1,9 @@
 mod compile;
 pub use compile::oracle as compile_oracle;
 
+mod constant;
+pub use constant::Constant;
+
 pub mod island;
 
 mod operation;
@@ -12,6 +15,3 @@ pub use code::{
    Code,
    ConstantIndex,
 };
-
-mod value;
-pub use value::Value;
