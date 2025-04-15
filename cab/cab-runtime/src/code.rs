@@ -58,6 +58,7 @@ impl Code {
       id
    }
 
+   #[must_use]
    pub fn read_u64(&self, index: ByteIndex) -> (u64, usize) {
       let encoded = match self.content.get(*index..*index + ENCODED_U64_SIZE) {
          Some(slice) => slice.try_into().expect("size was statically checked"),
@@ -83,6 +84,7 @@ impl Code {
       id
    }
 
+   #[must_use]
    pub fn read_u16(&self, index: ByteIndex) -> (u16, usize) {
       let encoded = self
          .content
@@ -94,12 +96,14 @@ impl Code {
       (u16::from_le_bytes(encoded), ENCODED_U16_SIZE)
    }
 
+   #[must_use]
    pub fn push_constant(&mut self, constant: Constant) -> ConstantIndex {
       let id = self.constants.len();
       self.constants.push(constant);
       ConstantIndex(id)
    }
 
+   #[must_use]
    pub fn read_constant(&self, index: ConstantIndex) -> &Constant {
       self
          .constants
@@ -124,6 +128,7 @@ impl Code {
       id
    }
 
+   #[must_use]
    pub fn read_operation(&self, index: ByteIndex) -> (Span, Operation) {
       let position = self.spans.binary_search_by(|(id2, _)| id2.cmp(&index));
 
