@@ -53,9 +53,9 @@ impl Code {
       let mut encoded = [0; ENCODED_U64_SIZE];
       let len = vu128::encode_u64(&mut encoded, data);
 
-      let id = ByteIndex(self.content.len());
+      let index = ByteIndex(self.content.len());
       self.content.extend_from_slice(&encoded[..len]);
-      id
+      index
    }
 
    #[must_use]
@@ -79,9 +79,9 @@ impl Code {
    }
 
    pub fn push_u16(&mut self, data: u16) -> ByteIndex {
-      let id = ByteIndex(self.content.len());
+      let index = ByteIndex(self.content.len());
       self.content.extend_from_slice(&data.to_le_bytes());
-      id
+      index
    }
 
    #[must_use]
@@ -97,10 +97,10 @@ impl Code {
    }
 
    #[must_use]
-   pub fn push_constant(&mut self, constant: Constant) -> ConstantIndex {
-      let id = self.constants.len();
+   pub fn reserve_constant(&mut self, constant: Constant) -> ConstantIndex {
+      let index = ConstantIndex(self.constants.len());
       self.constants.push(constant);
-      ConstantIndex(id)
+      index
    }
 
    #[must_use]
@@ -112,7 +112,7 @@ impl Code {
    }
 
    pub fn push_operation(&mut self, span: Span, operation: Operation) -> ByteIndex {
-      let id = ByteIndex(self.content.len());
+      let index = ByteIndex(self.content.len());
       self.content.push(operation as u8);
 
       // No need to insert the span again if this instruction was created from the
@@ -122,10 +122,10 @@ impl Code {
          .last()
          .is_none_or(|&(_, last_span)| last_span != span)
       {
-         self.spans.push((id, span));
+         self.spans.push((index, span));
       }
 
-      id
+      index
    }
 
    #[must_use]

@@ -103,10 +103,10 @@ impl Compiler {
    }
 
    fn compile_constant(&mut self, span: Span, constant: Constant) {
-      let id = self.push_constant(constant);
+      let index = self.reserve_constant(constant);
 
       self.push_operation(span, Operation::Constant);
-      self.push_u64(*id as u64);
+      self.push_u64(*index as u64);
    }
 
    fn compile_thunk(&mut self, span: Span, content: impl FnOnce(&mut Self)) {
@@ -117,7 +117,7 @@ impl Compiler {
       let mut code = self.code_pop();
       code.push_operation(span, Operation::Return);
 
-      let blueprint_index = self.push_constant(Constant::Blueprint(Arc::new(code)));
+      let blueprint_index = self.reserve_constant(Constant::Blueprint(Arc::new(code)));
 
       self.push_u64(*blueprint_index as u64);
    }
