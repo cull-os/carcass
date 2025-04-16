@@ -15,8 +15,7 @@ use std::{
 };
 
 use smallvec::SmallVec;
-use unicode_segmentation::UnicodeSegmentation;
-use unicode_width::UnicodeWidthStr;
+use unicode_segmentation::UnicodeSegmentation as _;
 use yansi::Paint;
 
 pub use self::{
@@ -171,7 +170,7 @@ pub fn width(s: &str) -> Size {
          match grapheme {
             "\t" => 4,
             s if is_emoji(s) => 2,
-            s => s.width(),
+            s => unicode_width::UnicodeWidthStr::width(s),
          }
       })
       .sum::<usize>()

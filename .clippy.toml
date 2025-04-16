@@ -1,1 +1,5 @@
-
+# TODO: This doesn't work. Make it work.
+[[disallowed-methods]]
+path        = "unicode_width::UnicodeWidthStr::width"
+reason      = "UnicodeWidthStr::width does not handle emoji or tabs"
+replacement = "cab_why::width"
