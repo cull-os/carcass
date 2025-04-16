@@ -61,6 +61,8 @@
       "${projectName}-clippy" = pkgs.crane.cargoClippy (cargoArguments // {
         inherit cargoArtifacts;
 
+        env.CLIPPY_CONF_DIR = pkgs.writeTextDir ".clippy.toml" <| lib.readFile ../.clippy.toml;
+
         cargoClippyExtraArgs = "--all-targets -- --deny warnings";
       });
 
