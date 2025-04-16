@@ -38,6 +38,7 @@ pub use self::{
       Position,
       Report,
       ReportSeverity,
+      width,
    },
    text::{
       IntoSize,
