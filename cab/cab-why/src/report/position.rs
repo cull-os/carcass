@@ -1,4 +1,15 @@
-use crate::Span;
+use std::{
+   ops,
+   sync::OnceLock,
+};
+
+use smallvec::SmallVec;
+
+use crate::{
+   Size,
+   Span,
+   width,
+};
 
 /// A position in a source file.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -13,43 +24,63 @@ pub struct Position {
    pub column: u32,
 }
 
-impl Position {
-   /// Calculates the start and end position of the span in the given source.
-   pub fn of(span: Span, source: &str) -> (Position, Position) {
-      let range: std::ops::Range<usize> = span.into();
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PositionStr<'a> {
+   content:  &'a str,
+   newlines: OnceLock<SmallVec<Size, 16>>,
+}
 
-      let mut line = 1;
-      let mut column = 1;
+impl<'a> ops::Deref for PositionStr<'a> {
+   type Target = &'a str;
 
-      let mut start = Position { line, column };
-      let mut end = Position { line, column };
+   fn deref(&self) -> &Self::Target {
+      &self.content
+   }
+}
 
-      let mut index = 0;
-
-      for c in source.chars() {
-         index += c.len_utf8();
-
-         if c == '\n' {
-            line += 1;
-            column = 0;
-         } else {
-            column += 1;
-         }
-
-         if index == range.start {
-            start.line = line;
-            start.column = column;
-         }
-
-         if index >= range.end {
-            end.line = line;
-            end.column = column;
-
-            break;
-         }
+impl<'a> PositionStr<'a> {
+   pub fn new(content: &'a str) -> Self {
+      Self {
+         content,
+         newlines: OnceLock::new(),
       }
+   }
 
-      (start, end)
+   pub fn position(&self, offset: Size) -> Position {
+      let newlines = self.newlines.get_or_init(|| {
+         self
+            .content
+            .bytes()
+            .enumerate()
+            .filter_map(|(index, c)| (c == b'\n').then_some(Size::new(index)))
+            .collect()
+      });
+
+      match newlines.binary_search(&offset) {
+         Ok(line_index) => {
+            Position {
+               line:   line_index as u32 + 1,
+               column: 1,
+            }
+         },
+
+         Err(line_index) => {
+            let line_start = if line_index == 0 {
+               0
+            } else {
+               *newlines[line_index - 1] + 1
+            };
+
+            Position {
+               line:   line_index as u32 + 1,
+               column: *width(&self.content[Span::std(line_start, offset)]),
+            }
+         },
+      }
+   }
+
+   pub fn positions(&self, span: Span) -> (Position, Position) {
+      (self.position(span.start), self.position(span.end))
    }
 }
 
@@ -59,14 +90,14 @@ mod tests {
 
    #[test]
    fn test_position() {
-      let source = "foo\nbar";
+      let source = PositionStr::new("foo\nbar");
       assert_eq!(&source[0..5], "foo\nb");
       assert_eq!(
-         Position::of(Span::new(0u32, 5u32), source),
+         source.positions(Span::new(0u32, 5u32)),
          (
             Position {
                line:   1,
-               column: 1,
+               column: 0,
             },
             Position {
                line:   2,
@@ -75,14 +106,14 @@ mod tests {
          )
       );
 
-      let source = "foo\næ";
+      let source = PositionStr::new("foo\næ");
       assert_eq!(&source[0..6], "foo\næ");
       assert_eq!(
-         Position::of(Span::new(0u32, 6u32), source),
+         source.positions(Span::new(0u32, 6u32)),
          (
             Position {
                line:   1,
-               column: 1,
+               column: 0,
             },
             Position {
                line:   2,
@@ -91,14 +122,14 @@ mod tests {
          )
       );
 
-      let source = "foo\næb";
+      let source = PositionStr::new("foo\næb");
       assert_eq!(&source[0..6], "foo\næ");
       assert_eq!(
-         Position::of(Span::new(0u32, 5u32), source),
+         source.positions(Span::new(0u32, 6u32)),
          (
             Position {
                line:   1,
-               column: 1,
+               column: 0,
             },
             Position {
                line:   2,
@@ -107,24 +138,11 @@ mod tests {
          )
       );
       assert_eq!(
-         Position::of(Span::new(0u32, 6u32), source),
+         source.positions(Span::new(0u32, 7u32)),
          (
             Position {
                line:   1,
-               column: 1,
-            },
-            Position {
-               line:   2,
-               column: 1,
-            }
-         )
-      );
-      assert_eq!(
-         Position::of(Span::new(0u32, 7u32), source),
-         (
-            Position {
-               line:   1,
-               column: 1,
+               column: 0,
             },
             Position {
                line:   2,

@@ -25,7 +25,10 @@ pub use self::{
       LabelSeverity,
    },
    point::Point,
-   position::Position,
+   position::{
+      Position,
+      PositionStr,
+   },
 };
 use crate::{
    IntoSize,
@@ -144,7 +147,7 @@ impl Report {
    pub fn with<Location: fmt::Display>(
       self,
       location: Location,
-      source: &str,
+      source: &PositionStr<'_>,
    ) -> impl error::Error {
       ReportDisplay::from(self, source, location)
    }
@@ -162,7 +165,7 @@ fn is_emoji(s: &str) -> bool {
    !s.is_ascii() && s.chars().any(unic_emoji_char::is_emoji)
 }
 
-pub fn width(s: &str) -> usize {
+pub fn width(s: &str) -> Size {
    s.graphemes(true)
       .map(|grapheme| {
          match grapheme {
@@ -171,7 +174,8 @@ pub fn width(s: &str) -> usize {
             s => s.width(),
          }
       })
-      .sum()
+      .sum::<usize>()
+      .into()
 }
 
 fn extend_to_line_boundaries(source: &str, mut span: Span) -> Span {
@@ -859,11 +863,11 @@ impl<Location: fmt::Display> fmt::Debug for ReportDisplay<Location> {
 impl<Location: fmt::Display> error::Error for ReportDisplay<Location> {}
 
 impl<Location: fmt::Display> ReportDisplay<Location> {
-   fn from(report: Report, source: &str, location: Location) -> Self {
+   fn from(report: Report, source: &PositionStr<'_>, location: Location) -> Self {
       let mut labels: SmallVec<_, 2> = report
          .labels
          .into_iter()
-         .map(|label| (Position::of(label.span, source), label))
+         .map(|label| (source.positions(label.span), label))
          .collect();
 
       // Sort by line, and when labels are on the same line, sort by column. The one
@@ -880,7 +884,7 @@ impl<Location: fmt::Display> ReportDisplay<Location> {
       'labels: for (label_index, ((label_start, label_end), label)) in
          labels.into_iter().enumerate()
       {
-         let label_span_extended = extend_to_line_boundaries(source, label.span);
+         let label_span_extended = extend_to_line_boundaries(**source, label.span);
 
          for (line_number, line_content) in
             (label_start.line..).zip(source[label_span_extended.as_std()].split('\n'))
