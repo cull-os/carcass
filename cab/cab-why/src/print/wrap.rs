@@ -4,7 +4,6 @@ use std::{
 };
 
 use unicode_segmentation::UnicodeSegmentation as _;
-use unicode_width::UnicodeWidthStr as _;
 use yansi::Paint as _;
 
 use crate::{
@@ -13,6 +12,7 @@ use crate::{
       LINE_WIDTH,
       LINE_WIDTH_MAX,
    },
+   width,
 };
 
 /// [`wrap`], but with a newline after the text.
@@ -66,10 +66,10 @@ pub fn wrap<'a>(
          continue;
       };
 
-      let word_width = word.value.width() as u16;
+      let word_width = *width(word.value) as u16;
 
       // Word fits in current line.
-      if line_width + word_width < line_width_max {
+      if line_width + word_width <= line_width_max {
          write!(writer, "{word}")?;
          line_width += word_width;
 
@@ -78,7 +78,7 @@ pub fn wrap<'a>(
       }
 
       // Word fits in the next line.
-      if line_width_start + word_width < line_width_max {
+      if line_width_start + word_width <= line_width_max {
          writeln!(writer)?;
          line_width = line_width_start;
 
@@ -95,9 +95,13 @@ pub fn wrap<'a>(
       let split_index = word
          .value
          .grapheme_indices(true)
-         .enumerate()
+         .scan(0, |index, state @ (_, grapheme)| {
+            let value = Some((*index, state));
+            *index += *width(grapheme);
+            value
+         })
          .find_map(|(index, (split_index, _))| {
-            (index as u16 + 1 >= line_width_remainder).then_some(split_index)
+            (index as u16 + 1 > line_width_remainder).then_some(split_index)
          })
          .unwrap();
 
