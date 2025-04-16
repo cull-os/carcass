@@ -16,6 +16,7 @@ use std::{
 
 use smallvec::SmallVec;
 use unicode_segmentation::UnicodeSegmentation;
+use unicode_width::UnicodeWidthStr;
 use yansi::Paint;
 
 pub use self::{
@@ -155,6 +156,22 @@ fn number_width(number: u32) -> usize {
    } else {
       (number as f64).log10() as usize + 1
    }
+}
+
+fn is_emoji(s: &str) -> bool {
+   !s.is_ascii() && s.chars().any(unic_emoji_char::is_emoji)
+}
+
+pub fn width(s: &str) -> usize {
+   s.graphemes(true)
+      .map(|grapheme| {
+         match grapheme {
+            "\t" => 4,
+            s if is_emoji(s) => 2,
+            s => s.width(),
+         }
+      })
+      .sum()
 }
 
 fn extend_to_line_boundaries(source: &str, mut span: Span) -> Span {
@@ -922,9 +939,8 @@ impl<Location: fmt::Display> ReportDisplay<Location> {
                      severity: label.severity,
                   });
 
-                  let up_to_start_width =
-                     line_content[..*span.start as usize].graphemes(true).count();
-                  let label_width = line_content[span.as_std()].graphemes(true).count();
+                  let up_to_start_width = width(&line_content[..*span.start as usize]);
+                  let label_width = width(&line_content[span.as_std()]);
 
                   line.labels.push(LineLabel {
                      span:     LineLabelSpan::Inline(Span::at(up_to_start_width, label_width)),
@@ -977,7 +993,7 @@ impl<Location: fmt::Display> ReportDisplay<Location> {
                      severity: label.severity,
                   });
 
-                  let up_to_end_width = line_content[..*end as usize].graphemes(true).count();
+                  let up_to_end_width = width(&line_content[..*end as usize]);
 
                   line.labels.push(LineLabel {
                      span:     LineLabelSpan::UpTo(Span::up_to(up_to_end_width)),
