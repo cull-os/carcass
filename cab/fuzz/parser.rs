@@ -15,6 +15,7 @@ use std::{
 use cab::{
    island,
    syntax,
+   why,
 };
 use libfuzzer_sys::{
    Corpus,
@@ -23,14 +24,15 @@ use libfuzzer_sys::{
 use yansi::Paint as _;
 
 fuzz_target!(|source: &str| -> Corpus {
+   let save_valid = matches!(
+      env::var("FUZZ_PARSER_SAVE_VALID").as_deref(),
+      Ok("true" | "1")
+   );
+
    let oracle = syntax::oracle();
    let parse = oracle.parse(syntax::tokenize(source));
 
    let island: Arc<dyn island::Leaf> = Arc::new(island::blob(source.to_owned()));
-
-   let Ok("true" | "1") = env::var("FUZZ_PARSER_SAVE_VALID").as_deref() else {
-      return Corpus::Keep;
-   };
 
    yansi::whenever(yansi::Condition::TTY_AND_COLOR);
 
@@ -38,15 +40,25 @@ fuzz_target!(|source: &str| -> Corpus {
       Ok(node) => node,
 
       Err(reports) => {
+         let source = why::PositionStr::new(source);
+
          for report in reports {
             println!(
                "{report}",
-               report = report.with(island::display!(island), source)
+               report = report.with(island::display!(island), &source)
             );
          }
 
-         return Corpus::Reject;
+         return if save_valid {
+            Corpus::Reject
+         } else {
+            Corpus::Keep
+         };
       },
+   };
+
+   if !save_valid {
+      return Corpus::Keep;
    };
 
    print!("found a valid parse!");

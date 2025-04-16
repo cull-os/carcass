@@ -36,6 +36,7 @@ pub use self::{
       LabelSeverity,
       Point,
       Position,
+      PositionStr,
       Report,
       ReportSeverity,
       width,

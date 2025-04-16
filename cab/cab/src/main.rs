@@ -18,6 +18,7 @@ use cab::{
       Contextful as _,
    },
 };
+use cab_why::PositionStr;
 use clap::Parser as _;
 use yansi::Paint as _;
 
@@ -81,6 +82,8 @@ async fn main() -> why::Termination {
                leaf = island::display!(leaf)
             )
          })?;
+
+         let source = PositionStr::new(&source);
 
          match command {
             Dump::Token { color } => {
