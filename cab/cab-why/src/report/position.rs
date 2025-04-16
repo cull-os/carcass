@@ -56,19 +56,17 @@ impl<'a> PositionStr<'a> {
             .collect()
       });
 
-      match newlines.binary_search(&offset) {
-         Ok(line_index) | Err(line_index) => {
-            let line_start = if line_index == 0 {
-               0
-            } else {
-               *newlines[line_index - 1] + 1
-            };
+      let (Ok(line_index) | Err(line_index)) = newlines.binary_search(&offset);
 
-            Position {
-               line:   line_index as u32 + 1,
-               column: *width(&self.content[Span::std(line_start, offset)]) + 1,
-            }
-         },
+      let line_start = if line_index == 0 {
+         0
+      } else {
+         *newlines[line_index - 1] + 1
+      };
+
+      Position {
+         line:   line_index as u32 + 1,
+         column: *width(&self.content[Span::std(line_start, offset)]) + 1,
       }
    }
 
