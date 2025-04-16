@@ -22,6 +22,9 @@
 !.rustfmt.toml
 !.taplo.toml
 
+# LINTERS
+!.clippy.toml
+
 # PROJECTS
 !cab/
 
