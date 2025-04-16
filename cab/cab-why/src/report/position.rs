@@ -57,14 +57,7 @@ impl<'a> PositionStr<'a> {
       });
 
       match newlines.binary_search(&offset) {
-         Ok(line_index) => {
-            Position {
-               line:   line_index as u32 + 1,
-               column: 1,
-            }
-         },
-
-         Err(line_index) => {
+         Ok(line_index) | Err(line_index) => {
             let line_start = if line_index == 0 {
                0
             } else {
@@ -73,7 +66,7 @@ impl<'a> PositionStr<'a> {
 
             Position {
                line:   line_index as u32 + 1,
-               column: *width(&self.content[Span::std(line_start, offset)]),
+               column: *width(&self.content[Span::std(line_start, offset)]) + 1,
             }
          },
       }
@@ -90,65 +83,41 @@ mod tests {
 
    #[test]
    fn test_position() {
-      let source = PositionStr::new("foo\nbar");
-      assert_eq!(&source[0..5], "foo\nb");
-      assert_eq!(
-         source.positions(Span::new(0u32, 5u32)),
-         (
-            Position {
-               line:   1,
-               column: 0,
-            },
-            Position {
-               line:   2,
-               column: 1,
-            }
-         )
-      );
+      let mut source;
 
-      let source = PositionStr::new("foo\næ");
-      assert_eq!(&source[0..6], "foo\næ");
-      assert_eq!(
-         source.positions(Span::new(0u32, 6u32)),
+      macro_rules! assert_span {
          (
-            Position {
-               line:   1,
-               column: 0,
-            },
-            Position {
-               line:   2,
-               column: 1,
-            }
-         )
-      );
+            $range:expr =>
+            $slice:literal,($start_line:literal : $start_column:literal),($end_line:literal : $end_column:literal)
+         ) => {
+            assert_eq!(&source[$range], $slice);
 
-      let source = PositionStr::new("foo\næb");
-      assert_eq!(&source[0..6], "foo\næ");
-      assert_eq!(
-         source.positions(Span::new(0u32, 6u32)),
-         (
-            Position {
-               line:   1,
-               column: 0,
-            },
-            Position {
-               line:   2,
-               column: 1,
-            }
-         )
-      );
-      assert_eq!(
-         source.positions(Span::new(0u32, 7u32)),
-         (
-            Position {
-               line:   1,
-               column: 0,
-            },
-            Position {
-               line:   2,
-               column: 2,
-            }
-         )
-      );
+            let (start, end) = source.positions(Span::new($range.start as u32, $range.end as u32));
+
+            assert_eq!(start, Position {
+               line:   $start_line,
+               column: $start_column,
+            });
+            assert_eq!(end, Position {
+               line:   $end_line,
+               column: $end_column,
+            });
+         };
+      }
+
+      source = PositionStr::new("foo\nbar");
+      assert_span!(0..5 => "foo\nb", (1:1), (2:2));
+      assert_span!(0..1 => "f", (1:1), (1:2));
+
+      source = PositionStr::new("foo\næ");
+      assert_span!(0..6 => "foo\næ", (1:1), (2:2));
+
+      source = PositionStr::new("foo\næb");
+      assert_span!(0..6 => "foo\næ", (1:1), (2:2));
+      assert_span!(0..2 => "fo", (1:1), (1:3));
+      assert_span!(0..4 => "foo\n", (1:1), (2:1));
+      assert_span!(0..6 => "foo\næ", (1:1), (2:2));
+      assert_span!(0..7 => "foo\næb", (1:1), (2:3));
+      assert_span!(3..7 => "\næb", (2:1), (2:3));
    }
 }
