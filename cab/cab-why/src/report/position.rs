@@ -56,7 +56,7 @@ impl<'a> PositionStr<'a> {
             .collect()
       });
 
-      let (Ok(line_index) | Err(line_index)) = newlines.binary_search(&offset);
+      let line_index = newlines.partition_point(|&line_offset| offset > line_offset);
 
       let line_start = if line_index == 0 {
          0
@@ -116,6 +116,7 @@ mod tests {
       assert_span!(0..4 => "foo\n", (1:1), (2:1));
       assert_span!(0..6 => "foo\næ", (1:1), (2:2));
       assert_span!(0..7 => "foo\næb", (1:1), (2:3));
-      assert_span!(3..7 => "\næb", (2:1), (2:3));
+      assert_span!(3..7 => "\næb", (1:4), (2:3));
+      assert_span!(4..7 => "æb", (2:1), (2:3));
    }
 }
