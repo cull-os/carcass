@@ -10,7 +10,7 @@ use crate::{
 const ENCODED_U64_SIZE: usize = 9;
 const ENCODED_U16_SIZE: usize = 2;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ByteIndex(usize);
 
 impl ops::Deref for ByteIndex {
@@ -21,7 +21,7 @@ impl ops::Deref for ByteIndex {
    }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ConstantIndex(usize);
 
 impl ops::Deref for ConstantIndex {
@@ -69,7 +69,7 @@ impl Code {
                self
                   .content
                   .get(*index..)
-                  .expect("cab-runtime bug: invalid code id"),
+                  .expect("cab-runtime bug: invalid code index"),
             );
             buffer
          },
@@ -89,7 +89,7 @@ impl Code {
       let encoded = self
          .content
          .get(*index..*index + ENCODED_U16_SIZE)
-         .expect("cab-runtime bug: invalid code id")
+         .expect("cab-runtime bug: invalid code index")
          .try_into()
          .expect("size was statically checked");
 
@@ -108,7 +108,7 @@ impl Code {
       self
          .constants
          .get(*index)
-         .expect("cab-runtime bug: invalid constant id")
+         .expect("cab-runtime bug: invalid constant index")
    }
 
    pub fn push_operation(&mut self, span: Span, operation: Operation) -> ByteIndex {
@@ -130,19 +130,15 @@ impl Code {
 
    #[must_use]
    pub fn read_operation(&self, index: ByteIndex) -> (Span, Operation) {
-      let position = self.spans.binary_search_by(|(id2, _)| id2.cmp(&index));
+      let position = self.spans.partition_point(|&(index2, _)| index >= index2);
 
-      let (id, span) = match position {
-         Ok(index) => self.spans[index],
-         Err(0) => self.spans[0],
-         Err(index) => self.spans[index - 1],
-      };
+      let (index, span) = self.spans[position.saturating_sub(1)];
 
       (
          span,
-         self.content[*id]
+         self.content[*index]
             .try_into()
-            .expect("cab-runtime bug: invalid operation at code id"),
+            .expect("cab-runtime bug: invalid operation at code index"),
       )
    }
 
