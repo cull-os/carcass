@@ -69,7 +69,7 @@ impl Code {
                self
                   .content
                   .get(*index..)
-                  .expect("cab-runtime bug: invalid code index"),
+                  .expect("cab-runtime bug: invalid byte index"),
             );
             buffer
          },
@@ -89,7 +89,7 @@ impl Code {
       let encoded = self
          .content
          .get(*index..*index + ENCODED_U16_SIZE)
-         .expect("cab-runtime bug: invalid code index")
+         .expect("cab-runtime bug: invalid byte index")
          .try_into()
          .expect("size was statically checked");
 
@@ -138,7 +138,7 @@ impl Code {
          span,
          self.content[*index]
             .try_into()
-            .expect("cab-runtime bug: invalid operation at code index"),
+            .expect("cab-runtime bug: invalid operation at byte index"),
       )
    }
 
