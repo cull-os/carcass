@@ -170,6 +170,7 @@ pub fn width(s: &str) -> Size {
          match grapheme {
             "\t" => 4,
             s if is_emoji(s) => 2,
+            #[allow(clippy::disallowed_methods)]
             s => unicode_width::UnicodeWidthStr::width(s),
          }
       })

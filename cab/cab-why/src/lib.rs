@@ -97,7 +97,6 @@ macro_rules! into {
 pub mod __private {
    pub use anyhow;
    pub use scopeguard;
-   pub use unicode_width;
    pub use yansi;
 
    pub use super::{
