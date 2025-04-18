@@ -149,7 +149,7 @@ macro_rules! indent {
       let header = $header;
 
       let header_width: u16 = {
-         use $crate::__private::unicode_width::UnicodeWidthStr as _;
+         use $crate::width;
 
          trait ToStr {
             fn to_str(&self) -> &str;
@@ -179,9 +179,7 @@ macro_rules! indent {
             }
          }
 
-         header
-            .to_str()
-            .width()
+         (*width(header.to_str()))
             .try_into()
             .expect("header width must be smaller than u16::MAX")
       };
