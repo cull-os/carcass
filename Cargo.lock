@@ -179,8 +179,10 @@ dependencies = [
  "bytes",
  "cab-syntax",
  "cab-why",
+ "indexmap",
  "num",
  "num_enum",
+ "rustc-hash",
  "vu128",
 ]
 

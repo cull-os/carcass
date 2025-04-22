@@ -3,19 +3,26 @@ use std::{
    sync::Arc,
 };
 
-use cab_syntax::node;
+use cab_syntax::node::{
+   self,
+   Parted as _,
+};
 use cab_why::{
    IntoSpan as _,
    Report,
    ReportSeverity,
    Span,
 };
+use indexmap::IndexMap;
+use rustc_hash::FxHasher;
 
 use crate::{
    Code,
    Constant,
    Operation,
 };
+
+const CODE_EXPECT: &str = "compiler must have at least one code at all times";
 
 pub struct Compile {
    pub code:    Code,
@@ -46,214 +53,256 @@ impl Oracle {
    pub fn compile(&self, node: node::ExpressionRef<'_>) -> Compile {
       let mut compiler = Compiler::new();
 
-      compiler.compile(node);
+      compiler.emit(node);
 
       Compile {
-         code:    compiler
-            .codes
-            .pop()
-            .expect("compiler must have at least one code at all times"),
+         code: compiler.contexts.pop().expect(CODE_EXPECT).code,
+
          reports: compiler.reports,
       }
    }
 }
 
+struct Context {
+   code:  Code,
+   scope: Scope,
+}
+
 struct Compiler {
-   codes:   Vec<Code>,
-   reports: Vec<Report>,
+   contexts: Vec<Context>,
+   reports:  Vec<Report>,
 }
 
 impl ops::Deref for Compiler {
    type Target = Code;
 
    fn deref(&self) -> &Self::Target {
-      self
-         .codes
-         .last()
-         .expect("compiler must have at least one code at all times")
+      &self.contexts.last().expect(CODE_EXPECT).code
    }
 }
 
 impl ops::DerefMut for Compiler {
    fn deref_mut(&mut self) -> &mut Self::Target {
-      self
-         .codes
-         .last_mut()
-         .expect("compiler must have at least one code at all times")
+      &mut self.contexts.last_mut().expect(CODE_EXPECT).code
    }
 }
 
 impl Compiler {
    fn new() -> Self {
       Compiler {
-         codes:   Vec::new(),
-         reports: Vec::new(),
+         contexts: Vec::new(),
+         reports:  Vec::new(),
       }
    }
 
-   fn code_new(&mut self) {
-      self.codes.push(Code::new());
+   fn context(&mut self, closure: impl FnOnce(&mut Self)) -> Context {
+      self.contexts.push(Context {
+         code:  Code::new(),
+         scope: Scope::new(),
+      });
+
+      closure(self);
+
+      self.contexts.pop().expect(CODE_EXPECT)
    }
 
-   fn code_pop(&mut self) -> Code {
-      self
-         .codes
-         .pop()
-         .expect("compiler must have at least one code at all times")
+   fn emit_thunk(&mut self, span: Span, closure: impl FnOnce(&mut Self)) {
+      let mut context = self.context(|this| closure(this));
+
+      context.code.push_operation(span, Operation::Return);
+
+      if !context.scope {
+         self.push_constant(span, Value::Thunk());
+         return;
+      }
+
+      self.push_constant(span, Constant::Blueprint(Arc::new(context.code)));
    }
 
-   fn compile_constant(&mut self, span: Span, constant: Constant) {
-      let index = self.reserve_constant(constant);
-
-      self.push_operation(span, Operation::Constant);
-      self.push_u64(*index as u64);
+   fn emit_parenthesis(&mut self, parenthesis: &node::Parenthesis) {
+      self.push_operation(parenthesis.span(), Operation::Scope);
+      self.emit(parenthesis.expression().expect("node must be validated"));
    }
 
-   fn compile_thunk(&mut self, span: Span, content: impl FnOnce(&mut Self)) {
-      self.code_new();
-
-      content(self);
-
-      let mut code = self.code_pop();
-      code.push_operation(span, Operation::Return);
-
-      let blueprint_index = self.reserve_constant(Constant::Blueprint(Arc::new(code)));
-
-      self.push_u64(*blueprint_index as u64);
-   }
-
-   fn compile_list(&mut self, list: &node::List) {
-      self.compile_constant(list.span(), Constant::Nil);
-
+   fn emit_list(&mut self, list: &node::List) {
       for item in list.items() {
-         self.compile(item);
          self.push_operation(list.span(), Operation::Construct);
+
+         self.push_operation(list.span(), Operation::Scope);
+         self.emit(item);
       }
+
+      self.push_constant(list.span(), Constant::Nil);
    }
 
-   fn compile_prefix_operation(&mut self, operation: &node::PrefixOperation) {
-      self.compile(operation.right());
-      self.push_operation(operation.right().span(), Operation::Force);
-
-      self.push_operation(operation.span(), match operation.operator() {
-         node::PrefixOperator::Swwallation => Operation::Swwallation,
-         node::PrefixOperator::Negation => Operation::Negation,
-         node::PrefixOperator::Not => Operation::Not,
-         node::PrefixOperator::Try => Operation::Try,
-      });
-   }
-
-   fn compile_infix_operation(&mut self, operation: &node::InfixOperation) {
-      if operation.operator() != node::InfixOperator::Pipe {
-         self.compile(operation.left());
-         self.push_operation(operation.left().span(), Operation::Force);
-
-         self.compile(operation.right());
-         self.push_operation(operation.right().span(), Operation::Force);
+   fn emit_attributes(&mut self, attributes: &node::Attributes) {
+      if let Some(expression) = attributes.expression() {
+         self.emit_thunk(attributes.span(), |this| {
+            this.push_operation(expression.span(), Operation::Attributes);
+            this.emit(expression);
+         });
       } else {
-         self.compile(operation.right());
-         self.push_operation(operation.right().span(), Operation::Force);
-
-         self.compile(operation.left());
-         self.push_operation(operation.left().span(), Operation::Force);
+         self.push_constant(
+            attributes.span(),
+            Constant::Attributes(Arc::new(IndexMap::with_hasher(FxHasher::default()))),
+         );
       }
+   }
 
-      self.push_operation(operation.span(), match operation.operator() {
-         node::InfixOperator::Same => Operation::Same,
-         node::InfixOperator::Sequence => Operation::Sequence,
+   fn emit_prefix_operation(&mut self, operation: &node::PrefixOperation) {
+      self.emit_thunk(operation.span(), |this| {
+         this.push_operation(operation.span(), match operation.operator() {
+            node::PrefixOperator::Swwallation => Operation::Swwallation,
+            node::PrefixOperator::Negation => Operation::Negation,
+            node::PrefixOperator::Not => Operation::Not,
+            node::PrefixOperator::Try => Operation::Try,
+         });
 
-         node::InfixOperator::ImplicitApply
-         | node::InfixOperator::Apply
-         // Parameter order was swapped in the bytecode.
-         | node::InfixOperator::Pipe => Operation::Apply,
-
-         node::InfixOperator::Concat => Operation::Concat,
-         node::InfixOperator::Construct => Operation::Construct,
-
-         node::InfixOperator::Select => Operation::Select,
-         node::InfixOperator::Update => Operation::Update,
-
-         node::InfixOperator::LessOrEqual => Operation::LessOrEqual,
-         node::InfixOperator::Less => Operation::Less,
-         node::InfixOperator::MoreOrEqual => Operation::MoreOrEqual,
-         node::InfixOperator::More => Operation::More,
-
-         node::InfixOperator::Equal => Operation::Equal,
-         node::InfixOperator::NotEqual => {
-            self.push_operation(operation.span(), Operation::Equal);
-            self.push_operation(operation.span(), Operation::Not);
-            return;
-         },
-
-         node::InfixOperator::And => Operation::And,
-         node::InfixOperator::Or => Operation::Or,
-         node::InfixOperator::Implication => Operation::Implication,
-
-         node::InfixOperator::All => Operation::All,
-         node::InfixOperator::Any => Operation::Any,
-
-         node::InfixOperator::Addition => Operation::Addition,
-         node::InfixOperator::Subtraction => Operation::Subtraction,
-         node::InfixOperator::Multiplication => Operation::Multiplication,
-         node::InfixOperator::Power => Operation::Power,
-         node::InfixOperator::Division => Operation::Division,
-
-         node::InfixOperator::Lambda => todo!(),
+         this.push_operation(operation.right().span(), Operation::Force);
+         this.emit(operation.right());
       });
    }
 
-   fn compile_suffix_operation(&mut self, operation: &node::SuffixOperation) {
+   fn emit_infix_operation(&mut self, operation: &node::InfixOperation) {
+      self.emit_thunk(operation.span(), |this| {
+         let operation_ = match operation.operator() {
+            node::InfixOperator::Same => Operation::Same,
+            node::InfixOperator::Sequence => Operation::Sequence,
+
+            node::InfixOperator::ImplicitApply
+            | node::InfixOperator::Apply
+            | node::InfixOperator::Pipe => Operation::Apply,
+
+            node::InfixOperator::Concat => Operation::Concat,
+            node::InfixOperator::Construct => Operation::Construct,
+
+            node::InfixOperator::Select => Operation::Select,
+            node::InfixOperator::Update => Operation::Update,
+
+            node::InfixOperator::LessOrEqual => Operation::LessOrEqual,
+            node::InfixOperator::Less => Operation::Less,
+            node::InfixOperator::MoreOrEqual => Operation::MoreOrEqual,
+            node::InfixOperator::More => Operation::More,
+
+            node::InfixOperator::Equal => Operation::Equal,
+            node::InfixOperator::NotEqual => {
+               this.push_operation(operation.span(), Operation::Not);
+               Operation::Equal
+            },
+
+            node::InfixOperator::And => Operation::And,
+            node::InfixOperator::Or => Operation::Or,
+            node::InfixOperator::Implication => Operation::Implication,
+
+            node::InfixOperator::All => Operation::All,
+            node::InfixOperator::Any => Operation::Any,
+
+            node::InfixOperator::Addition => Operation::Addition,
+            node::InfixOperator::Subtraction => Operation::Subtraction,
+            node::InfixOperator::Multiplication => Operation::Multiplication,
+            node::InfixOperator::Power => Operation::Power,
+            node::InfixOperator::Division => Operation::Division,
+
+            node::InfixOperator::Lambda => todo!(),
+         };
+
+         this.push_operation(operation.span(), operation_);
+
+         if operation.operator() == node::InfixOperator::Pipe {
+            this.push_operation(operation.right().span(), Operation::Force);
+            this.emit(operation.right());
+            this.push_operation(operation.left().span(), Operation::Force);
+            this.emit(operation.left());
+         } else {
+            this.push_operation(operation.left().span(), Operation::Force);
+            this.emit(operation.left());
+            this.push_operation(operation.right().span(), Operation::Force);
+            this.emit(operation.right());
+         }
+      });
+   }
+
+   fn emit_suffix_operation(&mut self, operation: &node::SuffixOperation) {
       match operation.operator() {
-         node::SuffixOperator::Same => self.compile(operation.left()),
+         node::SuffixOperator::Same => self.emit(operation.left()),
          node::SuffixOperator::Sequence => {
-            self.compile(operation.left());
-            self.push_operation(operation.left().span(), Operation::Force);
-            self.compile_constant(operation.span(), Constant::Integer(0xDEADBEAFu32.into())); // TODO: Use a proper value.
+            self.emit_thunk(operation.span(), |this| {
+               this.push_operation(operation.span(), Operation::Sequence);
+
+               this.push_operation(operation.left().span(), Operation::Force);
+               this.emit(operation.left());
+
+               // TODO: Use a proper value.
+               this.push_constant(operation.span(), Constant::Nil);
+            });
          },
       }
    }
 
-   fn compile(&mut self, expression: node::ExpressionRef<'_>) {
+   fn emit_path(&mut self, path: &node::Path) {
+      self.emit_thunk(path.span(), |this| {
+         let parts = path
+            .parts()
+            .filter(|part| !matches!(part, node::InterpolatedPartRef::Delimiter(_)))
+            .collect::<Vec<_>>();
+
+         if parts.len() != 1 {
+            this.push_operation(path.span(), Operation::PathInterpolate);
+            this.push_u64(parts.len() as _);
+         }
+
+         for part in parts {
+            match part {
+               node::InterpolatedPartRef::Content(content) => {
+                  this.push_constant(content.span(), Constant::Path(content.text().to_owned()));
+               },
+
+               node::InterpolatedPartRef::Interpolation(interpolation) => {
+                  this.push_operation(interpolation.span(), Operation::Force);
+                  this.emit(interpolation.expression());
+               },
+
+               _ => {},
+            }
+         }
+      });
+   }
+
+   fn emit_reference(&mut self, identifier: &node::Identifier) {}
+
+   fn emit(&mut self, expression: node::ExpressionRef<'_>) {
       match expression {
          node::ExpressionRef::Error(_) => unreachable!(),
 
-         node::ExpressionRef::Parenthesis(parenthesis) => {
-            self.compile(parenthesis.expression().expect("node must be validated"))
-         },
+         node::ExpressionRef::Parenthesis(parenthesis) => self.emit_parenthesis(parenthesis),
 
-         node::ExpressionRef::List(list) => self.compile_list(list),
-         node::ExpressionRef::Attributes(_attributes) => todo!(),
+         node::ExpressionRef::List(list) => self.emit_list(list),
+         node::ExpressionRef::Attributes(attributes) => self.emit_attributes(attributes),
 
          node::ExpressionRef::PrefixOperation(prefix_operation) => {
-            self.compile_thunk(prefix_operation.span(), |this| {
-               this.compile_prefix_operation(prefix_operation);
-            })
+            self.emit_prefix_operation(prefix_operation);
          },
          node::ExpressionRef::InfixOperation(infix_operation) => {
-            self.compile_thunk(infix_operation.span(), |this| {
-               this.compile_infix_operation(infix_operation);
-            })
+            self.emit_infix_operation(infix_operation);
          },
          node::ExpressionRef::SuffixOperation(suffix_operation) => {
-            self.compile_thunk(suffix_operation.span(), |this| {
-               this.compile_suffix_operation(suffix_operation);
-            })
+            self.emit_suffix_operation(suffix_operation);
          },
 
          node::ExpressionRef::Island(_island) => todo!(),
-         node::ExpressionRef::Path(_path) => todo!(),
+         node::ExpressionRef::Path(path) => self.emit_path(path),
          node::ExpressionRef::Bind(_bind) => todo!(),
-         node::ExpressionRef::Identifier(_identifier) => todo!(),
-         node::ExpressionRef::SString(_sstring) => todo!(),
+         node::ExpressionRef::Identifier(identifier) => self.emit_reference(identifier),
+         node::ExpressionRef::SString(_string) => todo!(),
 
          node::ExpressionRef::Rune(rune) => {
-            self.compile_constant(rune.span(), Constant::Rune(rune.value()))
+            self.push_constant(rune.span(), Constant::Rune(rune.value()));
          },
          node::ExpressionRef::Integer(integer) => {
-            self.compile_constant(integer.span(), Constant::Integer(integer.value()))
+            self.push_constant(integer.span(), Constant::Integer(integer.value()));
          },
          node::ExpressionRef::Float(float) => {
-            self.compile_constant(float.span(), Constant::Float(float.value()))
+            self.push_constant(float.span(), Constant::Float(float.value()));
          },
 
          node::ExpressionRef::If(_) => todo!(),

@@ -8,6 +8,12 @@ pub enum Operation {
    Force,
    Return,
 
+   Scope,
+
+   Attributes,
+
+   PathInterpolate,
+
    // PREFIX
    Swwallation,
    Negation,

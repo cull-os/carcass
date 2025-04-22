@@ -96,21 +96,6 @@ impl Code {
       (u16::from_le_bytes(encoded), ENCODED_U16_SIZE)
    }
 
-   #[must_use]
-   pub fn reserve_constant(&mut self, constant: Constant) -> ConstantIndex {
-      let index = ConstantIndex(self.constants.len());
-      self.constants.push(constant);
-      index
-   }
-
-   #[must_use]
-   pub fn read_constant(&self, index: ConstantIndex) -> &Constant {
-      self
-         .constants
-         .get(*index)
-         .expect("cab-runtime bug: invalid constant index")
-   }
-
    pub fn push_operation(&mut self, span: Span, operation: Operation) -> ByteIndex {
       let index = ByteIndex(self.content.len());
       self.content.push(operation as u8);
@@ -140,6 +125,26 @@ impl Code {
             .try_into()
             .expect("cab-runtime bug: invalid operation at byte index"),
       )
+   }
+
+   // TODO: Maybe return ByteIndex?
+   pub fn push_constant(&mut self, span: Span, constant: Constant) -> ConstantIndex {
+      let index = ConstantIndex(self.constants.len());
+      self.constants.push(constant);
+
+      self.push_operation(span, Operation::Constant);
+      self.push_u64(*index as _);
+
+      index
+   }
+
+   // TODO: Maybe require ByteIndex?
+   #[must_use]
+   pub fn read_constant(&self, index: ConstantIndex) -> &Constant {
+      self
+         .constants
+         .get(*index)
+         .expect("cab-runtime bug: invalid constant index")
    }
 
    /// Patches the operand of the jump at the given index to point to the *next*
