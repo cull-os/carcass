@@ -823,6 +823,16 @@ impl InterpolatedPartRef<'_> {
       matches!(self, Self::Delimiter(_))
    }
 
+   /// Whether or not this part is a content.
+   pub fn is_content(self) -> bool {
+      matches!(self, Self::Content(_))
+   }
+
+   /// Whether or not this part is an interpolation.
+   pub fn is_interpolation(self) -> bool {
+      matches!(self, Self::Interpolation(_))
+   }
+
    pub fn span(self) -> Span {
       match self {
          Self::Delimiter(delimiter) => delimiter.span(),

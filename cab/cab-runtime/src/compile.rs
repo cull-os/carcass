@@ -1,6 +1,9 @@
 use std::{
    ops,
-   sync::Arc,
+   sync::{
+      Arc,
+      Mutex,
+   },
 };
 
 use cab_syntax::node::{
@@ -14,15 +17,17 @@ use cab_why::{
    Span,
 };
 use indexmap::IndexMap;
-use rustc_hash::FxHasher;
+use rustc_hash::FxBuildHasher;
 
 use crate::{
    Code,
-   Constant,
    Operation,
+   Scope,
+   Thunk,
+   Value,
 };
 
-const CODE_EXPECT: &str = "compiler must have at least one code at all times";
+const CONTEXT_EXPECT: &str = "compiler must have at least one context at all times";
 
 pub struct Compile {
    pub code:    Code,
@@ -56,7 +61,7 @@ impl Oracle {
       compiler.emit(node);
 
       Compile {
-         code: compiler.contexts.pop().expect(CODE_EXPECT).code,
+         code: compiler.contexts.pop().expect(CONTEXT_EXPECT).code,
 
          reports: compiler.reports,
       }
@@ -77,13 +82,13 @@ impl ops::Deref for Compiler {
    type Target = Code;
 
    fn deref(&self) -> &Self::Target {
-      &self.contexts.last().expect(CODE_EXPECT).code
+      &self.contexts.last().expect(CONTEXT_EXPECT).code
    }
 }
 
 impl ops::DerefMut for Compiler {
    fn deref_mut(&mut self) -> &mut Self::Target {
-      &mut self.contexts.last_mut().expect(CODE_EXPECT).code
+      &mut self.contexts.last_mut().expect(CONTEXT_EXPECT).code
    }
 }
 
@@ -95,6 +100,14 @@ impl Compiler {
       }
    }
 
+   fn scope(&self) -> &Scope {
+      &self.contexts.last().expect(CONTEXT_EXPECT).scope
+   }
+
+   fn scope_mut(&mut self) -> &mut Scope {
+      &mut self.contexts.last_mut().expect(CONTEXT_EXPECT).scope
+   }
+
    fn context(&mut self, closure: impl FnOnce(&mut Self)) -> Context {
       self.contexts.push(Context {
          code:  Code::new(),
@@ -103,7 +116,7 @@ impl Compiler {
 
       closure(self);
 
-      self.contexts.pop().expect(CODE_EXPECT)
+      self.contexts.pop().expect(CONTEXT_EXPECT)
    }
 
    fn emit_thunk(&mut self, span: Span, closure: impl FnOnce(&mut Self)) {
@@ -111,12 +124,15 @@ impl Compiler {
 
       context.code.push_operation(span, Operation::Return);
 
-      if !context.scope {
-         self.push_constant(span, Value::Thunk());
+      if context.scope.is_self_contained() {
+         self.push_value(
+            span,
+            Value::Thunk(Arc::new(Mutex::new(Thunk::suspended(span, context.code)))),
+         );
          return;
       }
 
-      self.push_constant(span, Constant::Blueprint(Arc::new(context.code)));
+      self.push_value(span, Value::Blueprint(Arc::new(context.code)));
    }
 
    fn emit_parenthesis(&mut self, parenthesis: &node::Parenthesis) {
@@ -132,7 +148,7 @@ impl Compiler {
          self.emit(item);
       }
 
-      self.push_constant(list.span(), Constant::Nil);
+      self.push_value(list.span(), Value::Nil);
    }
 
    fn emit_attributes(&mut self, attributes: &node::Attributes) {
@@ -142,9 +158,9 @@ impl Compiler {
             this.emit(expression);
          });
       } else {
-         self.push_constant(
+         self.push_value(
             attributes.span(),
-            Constant::Attributes(Arc::new(IndexMap::with_hasher(FxHasher::default()))),
+            Value::Attributes(Arc::new(IndexMap::with_hasher(FxBuildHasher))),
          );
       }
    }
@@ -233,7 +249,7 @@ impl Compiler {
                this.emit(operation.left());
 
                // TODO: Use a proper value.
-               this.push_constant(operation.span(), Constant::Nil);
+               this.push_value(operation.span(), Value::Nil);
             });
          },
       }
@@ -243,10 +259,10 @@ impl Compiler {
       self.emit_thunk(path.span(), |this| {
          let parts = path
             .parts()
-            .filter(|part| !matches!(part, node::InterpolatedPartRef::Delimiter(_)))
+            .filter(|part| !part.is_delimiter())
             .collect::<Vec<_>>();
 
-         if parts.len() != 1 {
+         if parts.len() > 1 || !parts[0].is_content() {
             this.push_operation(path.span(), Operation::PathInterpolate);
             this.push_u64(parts.len() as _);
          }
@@ -254,10 +270,11 @@ impl Compiler {
          for part in parts {
             match part {
                node::InterpolatedPartRef::Content(content) => {
-                  this.push_constant(content.span(), Constant::Path(content.text().to_owned()));
+                  this.push_value(content.span(), Value::Path(content.text().to_owned()));
                },
 
                node::InterpolatedPartRef::Interpolation(interpolation) => {
+                  this.push_operation(interpolation.span(), Operation::Scope);
                   this.push_operation(interpolation.span(), Operation::Force);
                   this.emit(interpolation.expression());
                },
@@ -268,7 +285,75 @@ impl Compiler {
       });
    }
 
-   fn emit_reference(&mut self, identifier: &node::Identifier) {}
+   fn emit_reference(&mut self, identifier: &node::Identifier) {
+      let literal = match identifier.value() {
+         node::IdentifierValueRef::Plain(plain) => {
+            self.push_operation(plain.span(), Operation::GetLocal);
+            self.push_value(
+               identifier.span(),
+               Value::Identifier(plain.text().to_owned()),
+            );
+
+            Some(plain.text())
+         },
+
+         node::IdentifierValueRef::Quoted(quoted) => {
+            let parts = quoted
+               .parts()
+               .filter(|part| !part.is_delimiter())
+               .collect::<Vec<_>>();
+
+            if parts.len() > 1 || !parts[0].is_content() {
+               self.push_operation(quoted.span(), Operation::IdentifierInterpolate);
+               self.push_u64(parts.len() as _);
+            }
+
+            for part in &parts {
+               match part {
+                  node::InterpolatedPartRef::Content(content) => {
+                     self.push_value(content.span(), Value::Identifier(content.text().to_owned()));
+                  },
+
+                  node::InterpolatedPartRef::Interpolation(interpolation) => {
+                     self.push_operation(interpolation.span(), Operation::Scope);
+                     self.push_operation(interpolation.span(), Operation::Force);
+                     self.emit(interpolation.expression());
+                  },
+
+                  _ => {},
+               }
+            }
+
+            if parts.len() == 1
+               && let node::InterpolatedPartRef::Content(content) = parts[0]
+            {
+               Some(content.text())
+            } else {
+               None
+            }
+         },
+      };
+
+      let scope = self.scope_mut();
+
+      match literal {
+         Some(name) => {
+            let Some(index) = scope.by_name.get(name) else {
+               // TODO: Check outer scopes for dynamic declarations and only warn here if they
+               // don't exist.
+               return;
+            };
+
+            scope.locals[**index].used = true;
+         },
+
+         None => {
+            for index in scope.by_name.values() {
+               scope.locals[**index].used = true;
+            }
+         },
+      }
+   }
 
    fn emit(&mut self, expression: node::ExpressionRef<'_>) {
       match expression {
@@ -296,13 +381,13 @@ impl Compiler {
          node::ExpressionRef::SString(_string) => todo!(),
 
          node::ExpressionRef::Rune(rune) => {
-            self.push_constant(rune.span(), Constant::Rune(rune.value()));
+            self.push_value(rune.span(), Value::Rune(rune.value()));
          },
          node::ExpressionRef::Integer(integer) => {
-            self.push_constant(integer.span(), Constant::Integer(integer.value()));
+            self.push_value(integer.span(), Value::Integer(integer.value()));
          },
          node::ExpressionRef::Float(float) => {
-            self.push_constant(float.span(), Constant::Float(float.value()));
+            self.push_value(float.span(), Value::Float(float.value()));
          },
 
          node::ExpressionRef::If(_) => todo!(),
