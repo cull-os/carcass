@@ -3,8 +3,8 @@ use std::ops;
 use cab_why::Span;
 
 use crate::{
-   Constant,
    Operation,
+   Value,
 };
 
 const ENCODED_U64_SIZE: usize = 9;
@@ -22,9 +22,9 @@ impl ops::Deref for ByteIndex {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct ConstantIndex(usize);
+pub struct ValueIndex(usize);
 
-impl ops::Deref for ConstantIndex {
+impl ops::Deref for ValueIndex {
    type Target = usize;
 
    fn deref(&self) -> &Self::Target {
@@ -36,16 +36,16 @@ pub struct Code {
    content: Vec<u8>,
    spans:   Vec<(ByteIndex, Span)>,
 
-   constants: Vec<Constant>,
+   values: Vec<Value>,
 }
 
 impl Code {
    #[allow(clippy::new_without_default)]
    pub fn new() -> Self {
       Self {
-         content:   Vec::new(),
-         spans:     Vec::new(),
-         constants: Vec::new(),
+         content: Vec::new(),
+         spans:   Vec::new(),
+         values:  Vec::new(),
       }
    }
 
@@ -128,11 +128,11 @@ impl Code {
    }
 
    // TODO: Maybe return ByteIndex?
-   pub fn push_constant(&mut self, span: Span, constant: Constant) -> ConstantIndex {
-      let index = ConstantIndex(self.constants.len());
-      self.constants.push(constant);
+   pub fn push_value(&mut self, span: Span, value: Value) -> ValueIndex {
+      let index = ValueIndex(self.values.len());
+      self.values.push(value);
 
-      self.push_operation(span, Operation::Constant);
+      self.push_operation(span, Operation::Value);
       self.push_u64(*index as _);
 
       index
@@ -140,11 +140,11 @@ impl Code {
 
    // TODO: Maybe require ByteIndex?
    #[must_use]
-   pub fn read_constant(&self, index: ConstantIndex) -> &Constant {
+   pub fn read_value(&self, index: ValueIndex) -> &Value {
       self
-         .constants
+         .values
          .get(*index)
-         .expect("cab-runtime bug: invalid constant index")
+         .expect("cab-runtime bug: invalid value index")
    }
 
    /// Patches the operand of the jump at the given index to point to the *next*

@@ -1,20 +1,26 @@
+#![feature(if_let_guard, let_chains)]
+
 mod code;
 pub use code::{
    ByteIndex,
    Code,
-   ConstantIndex,
+   ValueIndex,
 };
 
 mod compile;
 pub use compile::oracle as compile_oracle;
 
-mod constant;
-pub use constant::Constant;
-
-pub mod island;
+mod island;
+pub use island::Entry;
 
 mod operation;
 pub use operation::Operation;
 
 mod scope;
 pub use scope::Scope;
+
+mod thunk;
+pub use thunk::Thunk;
+
+mod value;
+pub use value::Value;
