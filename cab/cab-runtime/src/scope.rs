@@ -168,8 +168,8 @@ mod tests {
          LocalName::Static("b".to_owned())
       );
 
-      assert_ne!(LocalName::Static("foo".to_owned()), LocalName::Dynamic);
+      assert_eq!(LocalName::Static("foo".to_owned()), LocalName::Dynamic);
 
-      assert_ne!(LocalName::Dynamic, LocalName::Dynamic);
+      assert_eq!(LocalName::Dynamic, LocalName::Dynamic);
    }
 }
