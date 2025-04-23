@@ -1,4 +1,4 @@
-#![feature(if_let_guard, let_chains)]
+#![feature(let_chains)]
 
 mod code;
 pub use code::{
