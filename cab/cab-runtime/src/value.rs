@@ -24,6 +24,7 @@ pub enum Value {
 
    Attributes(Arc<IndexMap<String, Value, FxBuildHasher>>),
 
+   Bind(String),
    Identifier(String),
 
    Thunk(Arc<Mutex<Thunk>>),

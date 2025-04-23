@@ -499,9 +499,9 @@ impl<'a> Tokenizer<'a> {
             });
 
             match start {
+               '`' => TOKEN_IDENTIFIER_START,
                '\"' => TOKEN_STRING_START,
                '\'' => TOKEN_RUNE_START,
-               '`' => TOKEN_IDENTIFIER_START,
                _ => unreachable!(),
             }
          },

@@ -13,6 +13,7 @@ pub enum Operation {
    Attributes,
 
    PathInterpolate,
+   BindInterpolate,
    IdentifierInterpolate,
 
    GetLocal,

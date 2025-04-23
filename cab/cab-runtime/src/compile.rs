@@ -1,5 +1,6 @@
 use std::{
    cell::RefCell,
+   mem,
    ops,
    rc::Rc,
    sync::{
@@ -23,6 +24,7 @@ use rustc_hash::FxBuildHasher;
 
 use crate::{
    Code,
+   LocalName,
    Operation,
    Scope,
    Thunk,
@@ -81,16 +83,16 @@ struct Compiler {
 }
 
 impl ops::Deref for Compiler {
-   type Target = Code;
+   type Target = Context;
 
    fn deref(&self) -> &Self::Target {
-      &self.contexts.last().expect(CONTEXT_EXPECT).code
+      self.contexts.last().expect(CONTEXT_EXPECT)
    }
 }
 
 impl ops::DerefMut for Compiler {
    fn deref_mut(&mut self) -> &mut Self::Target {
-      &mut self.contexts.last_mut().expect(CONTEXT_EXPECT).code
+      self.contexts.last_mut().expect(CONTEXT_EXPECT)
    }
 }
 
@@ -106,14 +108,10 @@ impl Compiler {
       }
    }
 
-   fn scope(&self) -> &Rc<RefCell<Scope>> {
-      &self.contexts.last().expect(CONTEXT_EXPECT).scope
-   }
-
    fn context(&mut self, closure: impl FnOnce(&mut Self)) -> Context {
       self.contexts.push(Context {
          code:  Code::new(),
-         scope: Rc::new(RefCell::new(Scope::new(self.scope()))),
+         scope: Rc::clone(&self.scope),
       });
 
       closure(self);
@@ -121,46 +119,58 @@ impl Compiler {
       self.contexts.pop().expect(CONTEXT_EXPECT)
    }
 
+   fn scope(&mut self, span: Span, closure: impl FnOnce(&mut Self)) {
+      let mut new = Rc::new(RefCell::new(Scope::new(&self.scope)));
+      mem::swap(&mut new, &mut self.scope);
+      let old = new;
+
+      self.code.push_operation(span, Operation::Scope);
+      closure(self);
+
+      self.scope = old;
+   }
+
    fn emit_thunk(&mut self, span: Span, closure: impl FnOnce(&mut Self)) {
       let mut context = self.context(|this| closure(this));
 
       context.code.push_operation(span, Operation::Return);
 
-      if context.scope.borrow().is_self_contained() {
-         self.push_value(
-            span,
-            Value::Thunk(Arc::new(Mutex::new(Thunk::suspended(span, context.code)))),
-         );
-         return;
-      }
-
-      self.push_value(span, Value::Blueprint(Arc::new(context.code)));
+      self.code.push_value(
+         span,
+         if context.scope.borrow().is_self_contained() {
+            Value::Thunk(Arc::new(Mutex::new(Thunk::suspended(span, context.code))))
+         } else {
+            Value::Blueprint(Arc::new(context.code))
+         },
+      );
    }
 
    fn emit_parenthesis(&mut self, parenthesis: &node::Parenthesis) {
-      self.push_operation(parenthesis.span(), Operation::Scope);
-      self.emit(parenthesis.expression().expect("node must be validated"));
+      self.scope(parenthesis.span(), |this| {
+         this.emit(parenthesis.expression().expect("node must be validated"));
+      });
    }
 
    fn emit_list(&mut self, list: &node::List) {
       for item in list.items() {
-         self.push_operation(list.span(), Operation::Construct);
+         self.code.push_operation(list.span(), Operation::Construct);
 
-         self.push_operation(list.span(), Operation::Scope);
-         self.emit(item);
+         self.scope(item.span(), |this| this.emit(item));
       }
 
-      self.push_value(list.span(), Value::Nil);
+      self.code.push_value(list.span(), Value::Nil);
    }
 
    fn emit_attributes(&mut self, attributes: &node::Attributes) {
       if let Some(expression) = attributes.expression() {
          self.emit_thunk(attributes.span(), |this| {
-            this.push_operation(expression.span(), Operation::Attributes);
+            this
+               .code
+               .push_operation(expression.span(), Operation::Attributes);
             this.emit(expression);
          });
       } else {
-         self.push_value(
+         self.code.push_value(
             attributes.span(),
             Value::Attributes(Arc::new(IndexMap::with_hasher(FxBuildHasher))),
          );
@@ -169,14 +179,18 @@ impl Compiler {
 
    fn emit_prefix_operation(&mut self, operation: &node::PrefixOperation) {
       self.emit_thunk(operation.span(), |this| {
-         this.push_operation(operation.span(), match operation.operator() {
-            node::PrefixOperator::Swwallation => Operation::Swwallation,
-            node::PrefixOperator::Negation => Operation::Negation,
-            node::PrefixOperator::Not => Operation::Not,
-            node::PrefixOperator::Try => Operation::Try,
-         });
+         this
+            .code
+            .push_operation(operation.span(), match operation.operator() {
+               node::PrefixOperator::Swwallation => Operation::Swwallation,
+               node::PrefixOperator::Negation => Operation::Negation,
+               node::PrefixOperator::Not => Operation::Not,
+               node::PrefixOperator::Try => Operation::Try,
+            });
 
-         this.push_operation(operation.right().span(), Operation::Force);
+         this
+            .code
+            .push_operation(operation.right().span(), Operation::Force);
          this.emit(operation.right());
       });
    }
@@ -204,7 +218,7 @@ impl Compiler {
 
             node::InfixOperator::Equal => Operation::Equal,
             node::InfixOperator::NotEqual => {
-               this.push_operation(operation.span(), Operation::Not);
+               this.code.push_operation(operation.span(), Operation::Not);
                Operation::Equal
             },
 
@@ -224,17 +238,25 @@ impl Compiler {
             node::InfixOperator::Lambda => todo!(),
          };
 
-         this.push_operation(operation.span(), operation_);
+         this.code.push_operation(operation.span(), operation_);
 
          if operation.operator() == node::InfixOperator::Pipe {
-            this.push_operation(operation.right().span(), Operation::Force);
+            this
+               .code
+               .push_operation(operation.right().span(), Operation::Force);
             this.emit(operation.right());
-            this.push_operation(operation.left().span(), Operation::Force);
+            this
+               .code
+               .push_operation(operation.left().span(), Operation::Force);
             this.emit(operation.left());
          } else {
-            this.push_operation(operation.left().span(), Operation::Force);
+            this
+               .code
+               .push_operation(operation.left().span(), Operation::Force);
             this.emit(operation.left());
-            this.push_operation(operation.right().span(), Operation::Force);
+            this
+               .code
+               .push_operation(operation.right().span(), Operation::Force);
             this.emit(operation.right());
          }
       });
@@ -245,13 +267,17 @@ impl Compiler {
          node::SuffixOperator::Same => self.emit(operation.left()),
          node::SuffixOperator::Sequence => {
             self.emit_thunk(operation.span(), |this| {
-               this.push_operation(operation.span(), Operation::Sequence);
+               this
+                  .code
+                  .push_operation(operation.span(), Operation::Sequence);
 
-               this.push_operation(operation.left().span(), Operation::Force);
+               this
+                  .code
+                  .push_operation(operation.left().span(), Operation::Force);
                this.emit(operation.left());
 
                // TODO: Use a proper value.
-               this.push_value(operation.span(), Value::Nil);
+               this.code.push_value(operation.span(), Value::Nil);
             });
          },
       }
@@ -265,20 +291,27 @@ impl Compiler {
             .collect::<Vec<_>>();
 
          if parts.len() > 1 || !parts[0].is_content() {
-            this.push_operation(path.span(), Operation::PathInterpolate);
-            this.push_u64(parts.len() as _);
+            this
+               .code
+               .push_operation(path.span(), Operation::PathInterpolate);
+            this.code.push_u64(parts.len() as _);
          }
 
          for part in parts {
             match part {
                node::InterpolatedPartRef::Content(content) => {
-                  this.push_value(content.span(), Value::Path(content.text().to_owned()));
+                  this
+                     .code
+                     .push_value(content.span(), Value::Path(content.text().to_owned()));
                },
 
                node::InterpolatedPartRef::Interpolation(interpolation) => {
-                  this.push_operation(interpolation.span(), Operation::Scope);
-                  this.push_operation(interpolation.span(), Operation::Force);
-                  this.emit(interpolation.expression());
+                  this.scope(interpolation.span(), |this| {
+                     this
+                        .code
+                        .push_operation(interpolation.span(), Operation::Force);
+                     this.emit(interpolation.expression());
+                  });
                },
 
                _ => {},
@@ -287,74 +320,105 @@ impl Compiler {
       });
    }
 
-   fn emit_reference(&mut self, identifier: &node::Identifier) {
-      let literal = match identifier.value() {
-         node::IdentifierValueRef::Plain(plain) => {
-            self.push_operation(plain.span(), Operation::GetLocal);
-            self.push_value(
-               identifier.span(),
-               Value::Identifier(plain.text().to_owned()),
-            );
-
-            Some(plain.text())
-         },
-
-         node::IdentifierValueRef::Quoted(quoted) => {
-            let parts = quoted
-               .parts()
-               .filter(|part| !part.is_delimiter())
-               .collect::<Vec<_>>();
-
-            if parts.len() > 1 || !parts[0].is_content() {
-               self.push_operation(quoted.span(), Operation::IdentifierInterpolate);
-               self.push_u64(parts.len() as _);
-            }
-
-            for part in &parts {
-               match part {
-                  node::InterpolatedPartRef::Content(content) => {
-                     self.push_value(content.span(), Value::Identifier(content.text().to_owned()));
-                  },
-
-                  node::InterpolatedPartRef::Interpolation(interpolation) => {
-                     self.push_operation(interpolation.span(), Operation::Scope);
-                     self.push_operation(interpolation.span(), Operation::Force);
-                     self.emit(interpolation.expression());
-                  },
-
-                  _ => {},
+   fn emit_identifier(&mut self, is_bind: bool, span: Span, identifier: &node::Identifier) {
+      self.emit_thunk(span, |this| {
+         let name = match identifier.value() {
+            node::IdentifierValueRef::Plain(plain) => {
+               if is_bind {
+                  this
+                     .code
+                     .push_value(span, Value::Bind(plain.text().to_owned()));
+               } else {
+                  this.code.push_operation(span, Operation::GetLocal);
+                  this
+                     .code
+                     .push_value(span, Value::Identifier(plain.text().to_owned()));
                }
-            }
 
-            if parts.len() == 1
-               && let node::InterpolatedPartRef::Content(content) = parts[0]
-            {
-               Some(content.text())
-            } else {
-               None
-            }
-         },
-      };
+               LocalName::Static(plain.text().to_owned())
+            },
 
-      let Some(name) = literal else {
-         self.scope().borrow_mut().mark_all_used();
-         return;
-      };
+            node::IdentifierValueRef::Quoted(quoted) => {
+               let parts = quoted
+                  .parts()
+                  .filter(|part| !part.is_delimiter())
+                  .collect::<Vec<_>>();
 
-      let Some((scope, index)) = Scope::resolve(self.scope(), name) else {
-         self
-            .reports
-            .push(Report::warn("undefined variable").primary(identifier.span(), "no definition"));
-         return;
-      };
+               if parts.len() > 1 || !parts[0].is_content() {
+                  this.code.push_operation(
+                     span,
+                     if is_bind {
+                        Operation::BindInterpolate
+                     } else {
+                        Operation::IdentifierInterpolate
+                     },
+                  );
+                  this.code.push_u64(parts.len() as _);
+               }
 
-      match index {
-         Some(index) => {
-            scope.borrow_mut().locals[*index].used = true;
-         },
+               for part in &parts {
+                  match part {
+                     node::InterpolatedPartRef::Content(content) => {
+                        this.code.push_value(
+                           content.span(),
+                           if is_bind {
+                              Value::Bind(content.text().to_owned())
+                           } else {
+                              Value::Identifier(content.text().to_owned())
+                           },
+                        );
+                     },
 
-         None => scope.borrow_mut().mark_all_used(),
-      }
+                     node::InterpolatedPartRef::Interpolation(interpolation) => {
+                        this.scope(interpolation.span(), |this| {
+                           this
+                              .code
+                              .push_operation(interpolation.span(), Operation::Force);
+                           this.emit(interpolation.expression());
+                        });
+                     },
+
+                     _ => {},
+                  }
+               }
+
+               if parts.len() == 1
+                  && let node::InterpolatedPartRef::Content(content) = parts[0]
+               {
+                  LocalName::Static(content.text().to_owned())
+               } else {
+                  LocalName::Dynamic
+               }
+            },
+         };
+
+         if is_bind {
+            this.scope.borrow_mut().push(span, name);
+            return;
+         }
+
+         let LocalName::Static(literal) = name else {
+            this.scope.borrow_mut().mark_all_used();
+            return;
+         };
+
+         let Some((scope, index)) = Scope::resolve(&this.scope, &literal) else {
+            this
+               .reports
+               .push(Report::warn("undefined variable").primary(span, "no definition"));
+            return;
+         };
+
+         match index {
+            Some(index) => {
+               scope.borrow_mut().mark_used(index);
+            },
+
+            None => {
+               scope.borrow_mut().mark_all_used();
+            },
+         }
+      });
    }
 
    fn emit(&mut self, expression: node::ExpressionRef<'_>) {
@@ -378,18 +442,31 @@ impl Compiler {
 
          node::ExpressionRef::Island(_island) => todo!(),
          node::ExpressionRef::Path(path) => self.emit_path(path),
-         node::ExpressionRef::Bind(_bind) => todo!(),
-         node::ExpressionRef::Identifier(identifier) => self.emit_reference(identifier),
+
+         node::ExpressionRef::Bind(bind) => {
+            let node::ExpressionRef::Identifier(identifier) = bind.identifier() else {
+               unreachable!()
+            };
+            self.emit_identifier(true, bind.span(), identifier);
+         },
+         node::ExpressionRef::Identifier(identifier) => {
+            self.emit_identifier(false, identifier.span(), identifier);
+         },
+
          node::ExpressionRef::SString(_string) => todo!(),
 
          node::ExpressionRef::Rune(rune) => {
-            self.push_value(rune.span(), Value::Rune(rune.value()));
+            self.code.push_value(rune.span(), Value::Rune(rune.value()));
          },
          node::ExpressionRef::Integer(integer) => {
-            self.push_value(integer.span(), Value::Integer(integer.value()));
+            self
+               .code
+               .push_value(integer.span(), Value::Integer(integer.value()));
          },
          node::ExpressionRef::Float(float) => {
-            self.push_value(float.span(), Value::Float(float.value()));
+            self
+               .code
+               .push_value(float.span(), Value::Float(float.value()));
          },
 
          node::ExpressionRef::If(_) => todo!(),

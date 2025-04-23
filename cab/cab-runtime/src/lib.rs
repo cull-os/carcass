@@ -17,7 +17,12 @@ mod operation;
 pub use operation::Operation;
 
 mod scope;
-pub use scope::Scope;
+pub use scope::{
+   Local,
+   LocalIndex,
+   LocalName,
+   Scope,
+};
 
 mod thunk;
 pub use thunk::Thunk;
