@@ -29,10 +29,10 @@ pub enum LocalName {
 
 impl PartialEq for LocalName {
    fn eq(&self, other: &Self) -> bool {
-      match self {
-         LocalName::Static(name) if let LocalName::Static(other_name) = other => name == other_name,
+      match (self, other) {
+         (LocalName::Static(name), LocalName::Static(other_name)) => name == other_name,
 
-         _ => false,
+         _ => true,
       }
    }
 }
