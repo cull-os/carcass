@@ -45,7 +45,7 @@ impl fmt::Debug for Error {
             .bold(),
          )?;
 
-         message.drain(..); // TODO: Replace with .clear() when yansi removes the method that shadows.
+         String::clear(&mut message); // TODO: Replace with .clear() when yansi removes the method that shadows.
          write!(message, "{error}")?;
 
          let mut chars = message.char_indices();
