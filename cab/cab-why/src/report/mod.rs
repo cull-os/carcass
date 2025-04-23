@@ -500,7 +500,7 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
                      write!(
                         writer,
                         "{symbol}",
-                        symbol = strike_override.unwrap_or(STRIKE_OVERRIDE_DEFAULT)
+                        symbol = strike_override.unwrap_or(STRIKE_OVERRIDE_DEFAULT),
                      )?;
                      continue;
                   };
@@ -510,7 +510,7 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
                         write!(
                            writer,
                            "{symbol}",
-                           symbol = RIGHT_TO_BOTTOM.paint(self.style(strike.severity))
+                           symbol = RIGHT_TO_BOTTOM.paint(self.style(strike.severity)),
                         )?;
 
                         strike_override = Some(LEFT_TO_RIGHT.paint(self.style(strike.severity)));
@@ -526,7 +526,7 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
                         write!(
                            writer,
                            "{symbol}",
-                           symbol = TOP_TO_BOTTOM.paint(self.style(strike.severity))
+                           symbol = TOP_TO_BOTTOM.paint(self.style(strike.severity)),
                         )?;
                      },
                   }
@@ -535,7 +535,7 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
                write!(
                   writer,
                   "{symbol}",
-                  symbol = strike_override.unwrap_or(STRIKE_OVERRIDE_DEFAULT)
+                  symbol = strike_override.unwrap_or(STRIKE_OVERRIDE_DEFAULT),
                )?;
 
                Ok(strike_prefix_width + 1)
@@ -640,7 +640,7 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
                                     Some(strike) =>
                                        TOP_TO_BOTTOM.paint(self.style(strike.severity)),
                                     None => (&' ').new(),
-                                 }
+                                 },
                               )?;
                            }
 
@@ -651,14 +651,14 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
                            write!(
                               writer,
                               "{symbol}",
-                              symbol = TOP_TO_RIGHT.paint(self.style(top_to_right.severity))
+                              symbol = TOP_TO_RIGHT.paint(self.style(top_to_right.severity)),
                            )?;
 
                            for _ in 0..strike_prefix_width - top_to_right_index - 1 {
                               write!(
                                  writer,
                                  "{symbol}",
-                                 symbol = LEFT_TO_RIGHT.paint(self.style(top_to_right.severity))
+                                 symbol = LEFT_TO_RIGHT.paint(self.style(top_to_right.severity)),
                               )?;
                            }
 
@@ -706,7 +706,7 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
                                        LEFT_TO_RIGHT.paint(self.style(top_to_right.severity)),
 
                                     _ => (&' ').new(),
-                                 }
+                                 },
                               )?;
                            }
 
@@ -717,7 +717,7 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
                                  _ if !wrote => LEFT_TO_TOP_BOTTOM,
                                  _ => TOP_TO_BOTTOM,
                               }
-                              .paint(self.style(top_to_right.severity))
+                              .paint(self.style(top_to_right.severity)),
                            )?;
 
                            wrote = true;
@@ -748,7 +748,7 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
                                     Some(strike) =>
                                        TOP_TO_BOTTOM.paint(self.style(strike.severity)),
                                     None => (&' ').new(),
-                                 }
+                                 },
                               )?;
                            }
 
@@ -795,7 +795,7 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
                                     },
 
                                     _ => (&' ').new(),
-                                 }
+                                 },
                               )?;
                            }
 
@@ -811,7 +811,7 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
 
                                  _ => LEFT_TO_TOP_BOTTOM,
                               }
-                              .paint(self.style(label.severity))
+                              .paint(self.style(label.severity)),
                            )?;
 
                            wrote = true;

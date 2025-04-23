@@ -99,7 +99,7 @@ impl IndentWriter<'_> {
          self.__writer,
          "{:>count$}",
          "",
-         count = (self.__count - wrote) as usize
+         count = (self.__count - wrote) as usize,
       )?;
       self.__place = IndentPlace::Middle;
 
