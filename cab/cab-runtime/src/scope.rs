@@ -21,7 +21,7 @@ impl ops::Deref for LocalIndex {
    }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum LocalName {
    Static(String),
    Dynamic,
@@ -37,17 +37,25 @@ impl PartialEq for LocalName {
    }
 }
 
+#[derive(Debug)]
 pub struct Local {
-   span:     Span,
-   name:     LocalName,
-   pub used: bool,
+   span: Span,
+   name: LocalName,
+   used: bool,
 }
 
+#[derive(Debug)]
 pub struct Scope {
    pub parent:      Option<Rc<RefCell<Scope>>>,
    pub locals:      Vec<Local>,
    pub by_name:     FxHashMap<String, LocalIndex>,
    pub has_dynamic: bool,
+}
+
+impl Default for Scope {
+   fn default() -> Self {
+      Self::root()
+   }
 }
 
 impl Scope {
@@ -103,7 +111,8 @@ impl Scope {
             let defined_externally = self
                .parent
                .as_ref()
-               .is_some_and(|parent| Scope::resolve(parent, name).is_some());
+               .and_then(|parent| Scope::resolve(parent, name))
+               .is_some();
 
             // Not defined externally, which means it is not defined anywhere.
             !defined_externally
@@ -111,9 +120,34 @@ impl Scope {
       })
    }
 
+   pub fn push(&mut self, span: Span, name: LocalName) -> LocalIndex {
+      let index = LocalIndex(self.locals.len());
+      self.locals.push(Local {
+         span,
+         name: name.clone(),
+         used: false,
+      });
+
+      match name {
+         LocalName::Static(name) => {
+            self.by_name.insert(name, index);
+         },
+
+         LocalName::Dynamic => {
+            self.has_dynamic = true;
+         },
+      }
+
+      index
+   }
+
+   pub fn mark_used(&mut self, index: LocalIndex) {
+      self.locals[*index].used = true;
+   }
+
    pub fn mark_all_used(&mut self) {
-      for index in self.by_name.values() {
-         self.locals[**index].used = true;
+      for index in self.by_name.values().copied() {
+         self.locals[*index].used = true;
       }
    }
 }

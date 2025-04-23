@@ -540,13 +540,13 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
 
          Some(TOKEN_ISLAND_HEADER_START) => self.node_island(until),
 
-         Some(TOKEN_AT) => self.node_bind(until),
-
-         Some(next) if Kind::IDENTIFIERS.contains(next) => self.node_identifier(until),
-
          Some(TOKEN_PATH_START | TOKEN_STRING_START | TOKEN_RUNE_START) => {
             self.node_delimited();
          },
+
+         Some(TOKEN_AT) => self.node_bind(until),
+
+         Some(next) if Kind::IDENTIFIERS.contains(next) => self.node_identifier(until),
 
          Some(TOKEN_INTEGER) => self.node_integer(until),
          Some(TOKEN_FLOAT) => self.node_float(until),
