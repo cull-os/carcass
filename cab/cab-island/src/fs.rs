@@ -63,7 +63,7 @@ impl fmt::Display for FsEntry {
             write!(
                writer,
                "fs::{path}",
-               path = path.to_str().ok_or(fmt::Error)?
+               path = path.to_str().ok_or(fmt::Error)?,
             )
          },
          FsEntryLocation::Child { name, .. } => write!(writer, "{name}"),

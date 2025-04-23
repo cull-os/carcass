@@ -42,7 +42,7 @@ impl fmt::Debug for Error {
                "cause:"
             }
             .red()
-            .bold()
+            .bold(),
          )?;
 
          message.drain(..); // TODO: Replace with .clear() when yansi removes the method that shadows.

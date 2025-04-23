@@ -45,7 +45,7 @@ impl<'write, W: io::Write> Formatter<'write, W> {
       write!(
          self.inner,
          "{painted}",
-         painted = self.paint_bracket(bracket)
+         painted = self.paint_bracket(bracket),
       )?;
       self.bracket_count += 1;
 
@@ -57,7 +57,7 @@ impl<'write, W: io::Write> Formatter<'write, W> {
       write!(
          self.inner,
          "{painted}",
-         painted = self.paint_bracket(bracket)
+         painted = self.paint_bracket(bracket),
       )
    }
 
