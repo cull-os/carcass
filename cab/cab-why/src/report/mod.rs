@@ -36,6 +36,7 @@ use crate::{
    dedent,
    indent,
    into,
+   unwrap,
    wrapln,
 };
 
@@ -733,7 +734,7 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
                   },
 
                   LineLabelSpan::Inline(_) => {
-                     let span_start = span_start.unwrap();
+                     unwrap!(span_start);
 
                      // INDENT: "<strike-prefix> "
                      indent!(
