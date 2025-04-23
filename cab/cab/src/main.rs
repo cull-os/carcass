@@ -18,7 +18,11 @@ use cab::{
       Contextful as _,
    },
 };
-use cab_why::PositionStr;
+use cab_why::{
+   PositionStr,
+   ReportSeverity,
+   bail,
+};
 use clap::Parser as _;
 use yansi::Paint as _;
 
@@ -31,6 +35,12 @@ struct Cli {
 
 #[derive(clap::Subcommand, Debug, Clone)]
 enum Command {
+   // Compile an expression.
+   Compile {
+      #[clap(default_value = "-")]
+      expression: String,
+   },
+
    /// Various commands related to debugging.
    Dump {
       #[command(subcommand)]
@@ -67,6 +77,80 @@ async fn main() -> why::Termination {
    let (mut out, mut err) = (io::stdout(), io::stderr());
 
    match cli.command {
+      // Pretty bad but will clean up later.
+      Command::Compile { expression: source } => {
+         let leaf: Arc<dyn island::Leaf> = if source == "-" {
+            Arc::new(island::stdin())
+         } else {
+            Arc::new(island::blob(source))
+         };
+
+         let source = leaf.clone().read().await?.to_vec();
+
+         let source = String::from_utf8(source).with_context(|| {
+            format!(
+               "failed to convert {leaf} to an UTF-8 string",
+               leaf = island::display!(leaf)
+            )
+         })?;
+
+         let source = PositionStr::new(&source);
+
+         let syntax_oracle = syntax::oracle();
+         let parse = syntax_oracle.parse(syntax::tokenize(&source));
+
+         let mut fail = 0;
+         for report in parse.reports {
+            if report.severity >= ReportSeverity::Error {
+               fail += 1;
+            }
+
+            writeln!(
+               err,
+               "{report}",
+               report = report.with(island::display!(leaf), &source),
+            )
+            .ok();
+         }
+
+         if fail > 0 {
+            bail!(
+               "compilation failed due to {fail} previous error{s}",
+               s = if fail == 1 { "" } else { "s" }
+            );
+         }
+
+         let expression = parse.expression;
+
+         let compile_oracle = cab::runtime::compile_oracle();
+         let compile = compile_oracle.compile(expression.as_ref());
+
+         let mut fail = 0;
+         for report in compile.reports {
+            if report.severity >= ReportSeverity::Error {
+               fail += 1;
+            }
+
+            writeln!(
+               err,
+               "{report}",
+               report = report.with(island::display!(leaf), &source),
+            )
+            .ok();
+         }
+
+         if fail > 0 {
+            bail!(
+               "compilation failed due to {fail} previous error{s}",
+               s = if fail == 1 { "" } else { "s" }
+            );
+         }
+
+         let code = compile.code;
+
+         let _ = code;
+      },
+
       Command::Dump { path, command } => {
          let leaf: Arc<dyn island::Leaf> = if path == Path::new("-") {
             Arc::new(island::stdin())

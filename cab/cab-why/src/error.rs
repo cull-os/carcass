@@ -29,21 +29,26 @@ pub struct Error(#[doc(hidden)] pub Arc<anyhow::Error>);
 
 impl fmt::Debug for Error {
    fn fmt(&self, writer: &mut fmt::Formatter<'_>) -> fmt::Result {
-      let mut chain = self.0.chain();
+      let mut message = String::new();
+      let mut chain = self.0.chain().rev().peekable();
 
-      if let Some(error) = chain.next() {
-         writeln!(writer, "{header} {error}", header = "error:".red().bold())?;
-      }
+      while let Some(error) = chain.next() {
+         write!(
+            writer,
+            "{header} ",
+            header = if chain.peek().is_none() {
+               "error:"
+            } else {
+               "cause:"
+            }
+            .red()
+            .bold()
+         )?;
 
-      let mut cause = String::new();
+         message.drain(..); // TODO: Replace with .clear() when yansi removes the method that shadows.
+         write!(message, "{error}")?;
 
-      for error in chain {
-         write!(writer, "{header} ", header = "cause:".red().bold())?;
-
-         cause.drain(..); // TODO: Replace with .clear() when yansi removes the method that shadows.
-         write!(cause, "{error}")?;
-
-         let mut chars = cause.char_indices();
+         let mut chars = message.char_indices();
 
          if let Some((_, first)) = chars.next()
             && let Some((second_start, second)) = chars.next()
@@ -53,10 +58,10 @@ impl fmt::Debug for Error {
                writer,
                "{first_lowercase}{rest}",
                first_lowercase = first.to_lowercase(),
-               rest = &cause[second_start..],
+               rest = &message[second_start..],
             )?;
          } else {
-            writeln!(writer, "{cause}")?;
+            writeln!(writer, "{message}")?;
          }
       }
 
@@ -153,9 +158,10 @@ macro_rules! error {
 /// ```
 #[macro_export]
 macro_rules! bail {
-   ($($t:tt)*) => {
-      return Err($crate::error!($($t)*));
-   };
+   ($($t:tt)*) => {{
+      Err($crate::error!($($t)*))?;
+      unreachable!()
+   }};
 }
 
 /// The type of the context accepted by [`Contextful`].

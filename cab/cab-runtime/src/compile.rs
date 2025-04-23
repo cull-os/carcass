@@ -1,5 +1,7 @@
 use std::{
+   cell::RefCell,
    ops,
+   rc::Rc,
    sync::{
       Arc,
       Mutex,
@@ -70,7 +72,7 @@ impl Oracle {
 
 struct Context {
    code:  Code,
-   scope: Scope,
+   scope: Rc<RefCell<Scope>>,
 }
 
 struct Compiler {
@@ -95,23 +97,23 @@ impl ops::DerefMut for Compiler {
 impl Compiler {
    fn new() -> Self {
       Compiler {
-         contexts: Vec::new(),
-         reports:  Vec::new(),
+         contexts: vec![Context {
+            code:  Code::new(),
+            scope: Rc::new(RefCell::new(Scope::root())),
+         }],
+
+         reports: Vec::new(),
       }
    }
 
-   fn scope(&self) -> &Scope {
+   fn scope(&self) -> &Rc<RefCell<Scope>> {
       &self.contexts.last().expect(CONTEXT_EXPECT).scope
-   }
-
-   fn scope_mut(&mut self) -> &mut Scope {
-      &mut self.contexts.last_mut().expect(CONTEXT_EXPECT).scope
    }
 
    fn context(&mut self, closure: impl FnOnce(&mut Self)) -> Context {
       self.contexts.push(Context {
          code:  Code::new(),
-         scope: Scope::new(),
+         scope: Rc::new(RefCell::new(Scope::new(self.scope()))),
       });
 
       closure(self);
@@ -124,7 +126,7 @@ impl Compiler {
 
       context.code.push_operation(span, Operation::Return);
 
-      if context.scope.is_self_contained() {
+      if context.scope.borrow().is_self_contained() {
          self.push_value(
             span,
             Value::Thunk(Arc::new(Mutex::new(Thunk::suspended(span, context.code)))),
@@ -334,20 +336,33 @@ impl Compiler {
          },
       };
 
-      let scope = self.scope_mut();
-
       match literal {
          Some(name) => {
-            let Some(index) = scope.by_name.get(name) else {
-               // TODO: Check outer scopes for dynamic declarations and only warn here if they
-               // don't exist.
+            let Some((scope, index)) = Scope::resolve(self.scope(), name) else {
+               self.reports.push(
+                  Report::warn("undefined variable").primary(identifier.span(), "no definition"),
+               );
                return;
             };
 
-            scope.locals[**index].used = true;
+            match index {
+               Some(index) => {
+                  scope.borrow_mut().locals[*index].used = true;
+               },
+
+               None => {
+                  let scope = &mut *scope.borrow_mut();
+
+                  for index in scope.by_name.values() {
+                     scope.locals[**index].used = true;
+                  }
+               },
+            }
          },
 
          None => {
+            let scope = &mut *self.scope().borrow_mut();
+
             for index in scope.by_name.values() {
                scope.locals[**index].used = true;
             }
