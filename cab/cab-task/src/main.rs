@@ -139,7 +139,7 @@ async fn main() -> why::Termination {
                   why::bail!("failed fast");
                }
 
-               Ok(())
+               Ok::<(), why::Error>(())
             })?;
 
          if fail_count > 0 {
