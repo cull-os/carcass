@@ -93,6 +93,14 @@ macro_rules! into {
    }
 }
 
+/// [`call!`] but with the method set to `unwrap`.
+#[macro_export]
+macro_rules! unwrap {
+   ($($t:tt),*) => {
+      $crate::call!(unwrap; $($t),*);
+   }
+}
+
 #[doc(hidden)]
 pub mod __private {
    pub use anyhow;
