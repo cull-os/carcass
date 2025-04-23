@@ -24,7 +24,7 @@ impl ops::Deref for LocalIndex {
 #[derive(Debug, Clone)]
 pub enum LocalName {
    Static(String),
-   Dynamic,
+   Dynamic(Vec<String>),
 }
 
 impl PartialEq for LocalName {
@@ -39,17 +39,18 @@ impl PartialEq for LocalName {
 
 #[derive(Debug)]
 pub struct Local {
-   span: Span,
-   name: LocalName,
-   used: bool,
+   pub span: Span,
+   pub name: LocalName,
+   used:     bool,
 }
 
 #[derive(Debug)]
 pub struct Scope {
-   pub parent:      Option<Rc<RefCell<Scope>>>,
-   pub locals:      Vec<Local>,
-   pub by_name:     FxHashMap<String, LocalIndex>,
-   pub has_dynamic: bool,
+   parent: Option<Rc<RefCell<Scope>>>,
+
+   locals:           Vec<Local>,
+   by_name:          FxHashMap<String, LocalIndex>,
+   has_dynamic_bind: bool,
 }
 
 impl Default for Scope {
@@ -61,19 +62,19 @@ impl Default for Scope {
 impl Scope {
    pub fn root() -> Self {
       Self {
-         parent:      None,
-         locals:      Vec::new(),
-         by_name:     FxHashMap::with_hasher(FxBuildHasher),
-         has_dynamic: false,
+         parent:           None,
+         locals:           Vec::new(),
+         by_name:          FxHashMap::with_hasher(FxBuildHasher),
+         has_dynamic_bind: false,
       }
    }
 
    pub fn new(parent: &Rc<RefCell<Scope>>) -> Self {
       Self {
-         parent:      Some(Rc::clone(parent)),
-         locals:      Vec::new(),
-         by_name:     FxHashMap::with_hasher(FxBuildHasher),
-         has_dynamic: false,
+         parent:           Some(Rc::clone(parent)),
+         locals:           Vec::new(),
+         by_name:          FxHashMap::with_hasher(FxBuildHasher),
+         has_dynamic_bind: false,
       }
    }
 
@@ -81,7 +82,7 @@ impl Scope {
       this: &Rc<RefCell<Self>>,
       name: &str,
    ) -> Option<(Rc<RefCell<Scope>>, Option<LocalIndex>)> {
-      if this.borrow().has_dynamic {
+      if this.borrow().has_dynamic_bind {
          return Some((this.clone(), None));
       }
 
@@ -133,8 +134,8 @@ impl Scope {
             self.by_name.insert(name, index);
          },
 
-         LocalName::Dynamic => {
-            self.has_dynamic = true;
+         LocalName::Dynamic(_) => {
+            self.has_dynamic_bind = true;
          },
       }
 
@@ -149,6 +150,23 @@ impl Scope {
       for index in self.by_name.values().copied() {
          self.locals[*index].used = true;
       }
+   }
+
+   pub fn all_unused(&self) -> impl Iterator<Item = &Local> {
+      self.locals.iter().filter(|local| {
+         let unused = !local.used;
+
+         unused && {
+            let ignored = match &local.name {
+               LocalName::Static(name) => name.starts_with('_'),
+               LocalName::Dynamic(items) => {
+                  items.first().is_some_and(|first| first.starts_with('_'))
+               },
+            };
+
+            !ignored
+         }
+      })
    }
 }
 
@@ -168,8 +186,14 @@ mod tests {
          LocalName::Static("b".to_owned())
       );
 
-      assert_eq!(LocalName::Static("foo".to_owned()), LocalName::Dynamic);
+      assert_eq!(
+         LocalName::Static("foo".to_owned()),
+         LocalName::Dynamic(Vec::new())
+      );
 
-      assert_eq!(LocalName::Dynamic, LocalName::Dynamic);
+      assert_eq!(
+         LocalName::Dynamic(vec!["a".to_owned()]),
+         LocalName::Dynamic(Vec::new())
+      );
    }
 }

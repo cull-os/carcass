@@ -59,10 +59,12 @@ pub fn oracle() -> Oracle {
 }
 
 impl Oracle {
-   pub fn compile(&self, node: node::ExpressionRef<'_>) -> Compile {
+   pub fn compile(&self, expression: node::ExpressionRef<'_>) -> Compile {
       let mut compiler = Compiler::new();
 
-      compiler.emit(node);
+      compiler.scope(expression.span(), |this| {
+         this.emit(expression);
+      });
 
       Compile {
          code: compiler.contexts.pop().expect(CONTEXT_EXPECT).code,
@@ -120,14 +122,27 @@ impl Compiler {
    }
 
    fn scope(&mut self, span: Span, closure: impl FnOnce(&mut Self)) {
-      let mut new = Rc::new(RefCell::new(Scope::new(&self.scope)));
-      mem::swap(&mut new, &mut self.scope);
-      let old = new;
+      let mut scope_new = Rc::new(RefCell::new(Scope::new(&self.scope)));
+
+      mem::swap(&mut scope_new, &mut self.scope);
+      let mut scope_old = scope_new;
 
       self.code.push_operation(span, Operation::Scope);
       closure(self);
 
-      self.scope = old;
+      mem::swap(&mut scope_old, &mut self.scope);
+      let scope_new = scope_old;
+
+      for local in scope_new.borrow().all_unused() {
+         self.reports.push(
+            Report::warn(if let LocalName::Static(name) = &local.name {
+               format!("unused bind '{name}'")
+            } else {
+               "unused bind".to_string()
+            })
+            .primary(local.span, "no usage"),
+         );
+      }
    }
 
    fn emit_thunk(&mut self, span: Span, closure: impl FnOnce(&mut Self)) {
@@ -387,7 +402,20 @@ impl Compiler {
                {
                   LocalName::Static(content.text().to_owned())
                } else {
-                  LocalName::Dynamic
+                  LocalName::Dynamic(
+                     parts
+                        .into_iter()
+                        .filter_map(|part| {
+                           match part {
+                              node::InterpolatedPartRef::Content(content) => {
+                                 Some(content.text().to_owned())
+                              },
+
+                              _ => None,
+                           }
+                        })
+                        .collect(),
+                  )
                }
             },
          };
@@ -405,7 +433,7 @@ impl Compiler {
          let Some((scope, index)) = Scope::resolve(&this.scope, &literal) else {
             this
                .reports
-               .push(Report::warn("undefined variable").primary(span, "no definition"));
+               .push(Report::warn("undefined reference").primary(span, "no definition"));
             return;
          };
 
