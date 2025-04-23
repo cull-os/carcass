@@ -140,7 +140,8 @@ impl Compiler {
             } else {
                "unused bind".to_string()
             })
-            .primary(local.span, "no usage"),
+            .primary(local.span, "no usage")
+            .tip("remove this or rename it to start with '_'"),
          );
       }
    }
@@ -431,9 +432,10 @@ impl Compiler {
          };
 
          let Some((scope, index)) = Scope::resolve(&this.scope, &literal) else {
-            this
-               .reports
-               .push(Report::warn("undefined reference").primary(span, "no definition"));
+            this.reports.push(
+               Report::warn(format!("undefined reference '{literal}'"))
+                  .primary(span, "no definition"),
+            );
             return;
          };
 
