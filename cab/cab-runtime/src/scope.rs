@@ -1,4 +1,8 @@
-use std::ops;
+use std::{
+   cell::RefCell,
+   ops,
+   rc::Rc,
+};
 
 use cab_why::Span;
 use rustc_hash::{
@@ -40,25 +44,70 @@ pub struct Local {
 }
 
 pub struct Scope {
-   pub locals:  Vec<Local>,
-   pub by_name: FxHashMap<String, LocalIndex>,
+   pub parent:      Option<Rc<RefCell<Scope>>>,
+   pub locals:      Vec<Local>,
+   pub by_name:     FxHashMap<String, LocalIndex>,
+   pub has_dynamic: bool,
 }
 
 impl Scope {
-   #[allow(clippy::new_without_default)]
-   pub fn new() -> Self {
+   pub fn root() -> Self {
       Self {
-         locals:  Vec::new(),
-         by_name: FxHashMap::with_hasher(FxBuildHasher),
+         parent:      None,
+         locals:      Vec::new(),
+         by_name:     FxHashMap::with_hasher(FxBuildHasher),
+         has_dynamic: false,
       }
+   }
+
+   pub fn new(parent: &Rc<RefCell<Scope>>) -> Self {
+      Self {
+         parent:      Some(Rc::clone(parent)),
+         locals:      Vec::new(),
+         by_name:     FxHashMap::with_hasher(FxBuildHasher),
+         has_dynamic: false,
+      }
+   }
+
+   pub fn resolve(
+      this: &Rc<RefCell<Self>>,
+      name: &str,
+   ) -> Option<(Rc<RefCell<Scope>>, Option<LocalIndex>)> {
+      if this.borrow().has_dynamic {
+         return Some((this.clone(), None));
+      }
+
+      if let Some(index) = this.borrow().by_name.get(name) {
+         return Some((this.clone(), Some(*index)));
+      }
+
+      this
+         .borrow()
+         .parent
+         .as_ref()
+         .and_then(|parent| Scope::resolve(parent, name))
    }
 
    pub fn is_self_contained(&self) -> bool {
       self.locals.iter().enumerate().all(|(index, local)| {
          // Inclusive range because `@foo = foo` is possible.
-         self.locals[..=index]
+         let defined_locally = self.locals[..=index]
             .iter()
-            .any(|defined| local.name == defined.name)
+            .any(|defined| local.name == defined.name);
+
+         defined_locally || {
+            let LocalName::Static(name) = &local.name else {
+               unreachable!()
+            };
+
+            let defined_externally = self
+               .parent
+               .as_ref()
+               .is_some_and(|parent| Scope::resolve(parent, name).is_some());
+
+            // Not defined externally, which means it is not defined anywhere.
+            !defined_externally
+         }
       })
    }
 }
