@@ -336,37 +336,24 @@ impl Compiler {
          },
       };
 
-      match literal {
-         Some(name) => {
-            let Some((scope, index)) = Scope::resolve(self.scope(), name) else {
-               self.reports.push(
-                  Report::warn("undefined variable").primary(identifier.span(), "no definition"),
-               );
-               return;
-            };
+      let Some(name) = literal else {
+         self.scope().borrow_mut().mark_all_used();
+         return;
+      };
 
-            match index {
-               Some(index) => {
-                  scope.borrow_mut().locals[*index].used = true;
-               },
+      let Some((scope, index)) = Scope::resolve(self.scope(), name) else {
+         self
+            .reports
+            .push(Report::warn("undefined variable").primary(identifier.span(), "no definition"));
+         return;
+      };
 
-               None => {
-                  let scope = &mut *scope.borrow_mut();
-
-                  for index in scope.by_name.values() {
-                     scope.locals[**index].used = true;
-                  }
-               },
-            }
+      match index {
+         Some(index) => {
+            scope.borrow_mut().locals[*index].used = true;
          },
 
-         None => {
-            let scope = &mut *self.scope().borrow_mut();
-
-            for index in scope.by_name.values() {
-               scope.locals[**index].used = true;
-            }
-         },
+         None => scope.borrow_mut().mark_all_used(),
       }
    }
 
