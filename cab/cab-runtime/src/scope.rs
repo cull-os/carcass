@@ -110,6 +110,12 @@ impl Scope {
          }
       })
    }
+
+   pub fn mark_all_used(&mut self) {
+      for index in self.by_name.values() {
+         self.locals[**index].used = true;
+      }
+   }
 }
 
 #[cfg(test)]
