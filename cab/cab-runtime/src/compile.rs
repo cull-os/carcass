@@ -134,7 +134,7 @@ impl Compiler {
 
       for local in scope_new.borrow().finish() {
          self.reports.push(
-            Report::warn(if let LocalName::Static(name) = &local.name {
+            Report::warn(if let Ok(name) = &local.name.try_into_static() {
                format!("unused bind '{name}'")
             } else {
                "unused bind".to_string()
@@ -378,7 +378,7 @@ impl Compiler {
                   this.emit_push(span, Value::Identifier(plain.text().into()));
                }
 
-               LocalName::Static(plain.text().to_owned())
+               LocalName::new(vec![plain.text().to_owned()])
             },
 
             node::IdentifierValueRef::Quoted(quoted) => {
@@ -422,7 +422,7 @@ impl Compiler {
                   }
                }
 
-               LocalName::Interpolated(
+               LocalName::new(
                   parts
                      .into_iter()
                      .filter_map(|part| {
@@ -447,7 +447,7 @@ impl Compiler {
          match Scope::locate(&this.scope, &name) {
             LocalPosition::Undefined => {
                this.reports.push(
-                  Report::warn(if let LocalName::Static(name) = name {
+                  Report::warn(if let Ok(name) = name.try_into_static() {
                      format!("undefined reference '{name}'")
                   } else {
                      "undefined reference".to_owned()
