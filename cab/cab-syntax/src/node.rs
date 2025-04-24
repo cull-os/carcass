@@ -11,6 +11,7 @@ use cab_why::{
    Report,
    Span,
 };
+use derive_more::Deref;
 use paste::paste;
 
 use crate::{
@@ -79,17 +80,9 @@ macro_rules! node {
       struct $name:ident;
    ) => {
       $(#[$attribute])*
-      #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+      #[derive(Deref, Debug, Clone, PartialEq, Eq, Hash)]
       #[repr(transparent)]
       pub struct $name(red::Node);
-
-      impl ops::Deref for $name {
-         type Target = red::Node;
-
-         fn deref(&self) -> &Self::Target {
-            &self.0
-         }
-      }
 
       impl<'a> TryFrom<&'a red::Node> for &'a $name {
          type Error = ();

@@ -1,9 +1,11 @@
 use std::ops;
 
+use derive_more::Deref;
+
 use crate::into;
 
 /// Byte len of a source code element.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Deref, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Size(u32);
 
 impl Size {
@@ -48,14 +50,6 @@ where
    #[track_caller]
    fn sub_assign(&mut self, rhs: I) {
       *self = *self - rhs
-   }
-}
-
-impl ops::Deref for Size {
-   type Target = u32;
-
-   fn deref(&self) -> &Self::Target {
-      &self.0
    }
 }
 

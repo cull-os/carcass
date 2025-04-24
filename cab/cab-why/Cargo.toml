@@ -22,6 +22,7 @@ thiserror.optional  = true
 thiserror.workspace = true
 
 const-str.workspace            = true
+derive_more.workspace          = true
 scopeguard.workspace           = true
 smallvec.workspace             = true
 terminal_size.workspace        = true

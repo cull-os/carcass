@@ -64,8 +64,8 @@ pub use self::{
 /// ```
 #[macro_export]
 macro_rules! call {
-   ($method:ident; $($variable:ident),*) => {
-      $(let $variable = $variable.$method();)*
+   ($method:ident; $($identifier:ident),*) => {
+      $(let $identifier = $identifier.$method();)*
    }
 }
 

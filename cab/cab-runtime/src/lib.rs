@@ -21,6 +21,7 @@ pub use scope::{
    Local,
    LocalIndex,
    LocalName,
+   LocalPosition,
    Scope,
 };
 

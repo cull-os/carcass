@@ -1,6 +1,5 @@
-use std::ops;
-
 use cab_why::Span;
+use derive_more::Deref;
 
 use crate::{
    Operation,
@@ -10,27 +9,11 @@ use crate::{
 const ENCODED_SIZE_U64: usize = 9;
 const ENCODED_SIZE_U16: usize = 2;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Deref, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ByteIndex(usize);
 
-impl ops::Deref for ByteIndex {
-   type Target = usize;
-
-   fn deref(&self) -> &Self::Target {
-      &self.0
-   }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Deref, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ValueIndex(usize);
-
-impl ops::Deref for ValueIndex {
-   type Target = usize;
-
-   fn deref(&self) -> &Self::Target {
-      &self.0
-   }
-}
 
 pub struct Code {
    content: Vec<u8>,
@@ -127,18 +110,12 @@ impl Code {
       )
    }
 
-   // TODO: Maybe return ByteIndex?
-   pub fn push_value(&mut self, span: Span, value: Value) -> ValueIndex {
+   pub fn push_value(&mut self, value: Value) -> ValueIndex {
       let index = ValueIndex(self.values.len());
       self.values.push(value);
-
-      self.push_operation(span, Operation::Value);
-      self.push_u64(*index as _);
-
       index
    }
 
-   // TODO: Maybe require ByteIndex?
    #[must_use]
    pub fn read_value(&self, index: ValueIndex) -> &Value {
       self
