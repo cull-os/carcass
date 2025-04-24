@@ -422,26 +422,20 @@ impl Compiler {
                   }
                }
 
-               if parts.len() == 1
-                  && let node::InterpolatedPartRef::Content(content) = parts[0]
-               {
-                  LocalName::Static(content.text().to_owned())
-               } else {
-                  LocalName::Interpolated(
-                     parts
-                        .into_iter()
-                        .filter_map(|part| {
-                           match part {
-                              node::InterpolatedPartRef::Content(content) => {
-                                 Some(content.text().to_owned())
-                              },
+               LocalName::Interpolated(
+                  parts
+                     .into_iter()
+                     .filter_map(|part| {
+                        match part {
+                           node::InterpolatedPartRef::Content(content) => {
+                              Some(content.text().to_owned())
+                           },
 
-                              _ => None,
-                           }
-                        })
-                        .collect(),
-                  )
-               }
+                           _ => None,
+                        }
+                     })
+                     .collect(),
+               )
             },
          };
 
