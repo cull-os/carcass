@@ -7,8 +7,8 @@ use crate::{
    Value,
 };
 
-const ENCODED_U64_SIZE: usize = 9;
-const ENCODED_U16_SIZE: usize = 2;
+const ENCODED_SIZE_U64: usize = 9;
+const ENCODED_SIZE_U16: usize = 2;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ByteIndex(usize);
@@ -50,7 +50,7 @@ impl Code {
    }
 
    pub fn push_u64(&mut self, data: u64) -> ByteIndex {
-      let mut encoded = [0; ENCODED_U64_SIZE];
+      let mut encoded = [0; ENCODED_SIZE_U64];
       let len = vu128::encode_u64(&mut encoded, data);
 
       let index = ByteIndex(self.content.len());
@@ -60,11 +60,11 @@ impl Code {
 
    #[must_use]
    pub fn read_u64(&self, index: ByteIndex) -> (u64, usize) {
-      let encoded = match self.content.get(*index..*index + ENCODED_U64_SIZE) {
+      let encoded = match self.content.get(*index..*index + ENCODED_SIZE_U64) {
          Some(slice) => slice.try_into().expect("size was statically checked"),
 
          None => {
-            let mut buffer = [0; ENCODED_U64_SIZE];
+            let mut buffer = [0; ENCODED_SIZE_U64];
             buffer[..self.content.len() - *index].copy_from_slice(
                self
                   .content
@@ -88,12 +88,12 @@ impl Code {
    pub fn read_u16(&self, index: ByteIndex) -> (u16, usize) {
       let encoded = self
          .content
-         .get(*index..*index + ENCODED_U16_SIZE)
+         .get(*index..*index + ENCODED_SIZE_U16)
          .expect("cab-runtime bug: invalid byte index")
          .try_into()
          .expect("size was statically checked");
 
-      (u16::from_le_bytes(encoded), ENCODED_U16_SIZE)
+      (u16::from_le_bytes(encoded), ENCODED_SIZE_U16)
    }
 
    pub fn push_operation(&mut self, span: Span, operation: Operation) -> ByteIndex {
@@ -147,11 +147,9 @@ impl Code {
          .expect("cab-runtime bug: invalid value index")
    }
 
-   /// Patches the operand of the jump at the given index to point to the *next*
-   /// instruction will be emitted.
-   pub fn patch_jump(&mut self, index: ByteIndex) {
-      let offset = (self.content.len() - /* index: */ 1 - /* jump argument size: */ 2) as u16;
+   pub fn set_here(&mut self, index: ByteIndex) {
+      let here = self.content.len() as u16;
 
-      self.content[*index + 1..*index + 2].copy_from_slice(&offset.to_le_bytes());
+      self.content[*index..*index + ENCODED_SIZE_U16].copy_from_slice(&here.to_le_bytes());
    }
 }
