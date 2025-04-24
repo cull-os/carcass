@@ -134,7 +134,7 @@ impl Compiler {
 
       for local in scope_new.borrow().finish() {
          self.reports.push(
-            Report::warn(if let Ok(name) = &local.name.try_into_static() {
+            Report::warn(if let Ok(name) = TryInto::<&str>::try_into(&local.name) {
                format!("unused bind '{name}'")
             } else {
                "unused bind".to_string()
@@ -447,7 +447,7 @@ impl Compiler {
          match Scope::locate(&this.scope, &name) {
             LocalPosition::Undefined => {
                this.reports.push(
-                  Report::warn(if let Ok(name) = name.try_into_static() {
+                  Report::warn(if let Ok(name) = TryInto::<&str>::try_into(&name) {
                      format!("undefined reference '{name}'")
                   } else {
                      "undefined reference".to_owned()
