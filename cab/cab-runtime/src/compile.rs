@@ -19,7 +19,7 @@ use cab_why::{
    ReportSeverity,
    Span,
 };
-use indexmap::IndexMap;
+use im::HashMap as CowMap;
 use rustc_hash::FxBuildHasher;
 
 use crate::{
@@ -188,7 +188,7 @@ impl Compiler {
       } else {
          self.code.push_value(
             attributes.span(),
-            Value::Attributes(Arc::new(IndexMap::with_hasher(FxBuildHasher))),
+            Value::Attributes(Arc::new(CowMap::with_hasher(FxBuildHasher))),
          );
       }
    }

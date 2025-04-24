@@ -12,7 +12,7 @@ cab-why.path    = "../cab-why"
 
 async-trait.workspace = true
 bytes.workspace       = true
-indexmap.workspace    = true
+im.workspace          = true
 num.workspace         = true
 num_enum.workspace    = true
 rustc-hash.workspace  = true
