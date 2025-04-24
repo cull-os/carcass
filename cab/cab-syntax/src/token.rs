@@ -157,10 +157,7 @@ impl Content {
                continue;
             }
 
-            let literal = &text[literal_start_offset..offset];
-            if !literal.is_empty() {
-               yield ContentPart::Literal(literal);
-            }
+            yield ContentPart::Literal(&text[literal_start_offset..offset]);
 
             literal_start_offset = offset;
 
@@ -197,10 +194,7 @@ impl Content {
             });
          }
 
-         let literal = &text[literal_start_offset..text.len()];
-         if !literal.is_empty() {
-            yield ContentPart::Literal(literal);
-         }
+         yield ContentPart::Literal(&text[literal_start_offset..text.len()]);
       }
    }
 }
