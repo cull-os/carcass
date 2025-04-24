@@ -19,7 +19,7 @@ use cab_why::{
    ReportSeverity,
    Span,
 };
-use im::HashMap as CowMap;
+use rpds::HashTrieMapSync as HashTrieMap;
 use rustc_hash::FxBuildHasher;
 
 use crate::{
@@ -188,7 +188,7 @@ impl Compiler {
       } else {
          self.code.push_value(
             attributes.span(),
-            Value::Attributes(Arc::new(CowMap::with_hasher(FxBuildHasher))),
+            Value::Attributes(HashTrieMap::new_with_hasher_and_ptr_kind(FxBuildHasher)),
          );
       }
    }
@@ -318,7 +318,7 @@ impl Compiler {
                node::InterpolatedPartRef::Content(content) => {
                   this
                      .code
-                     .push_value(content.span(), Value::Path(content.text().to_owned()));
+                     .push_value(content.span(), Value::Path(content.text().into()));
                },
 
                node::InterpolatedPartRef::Interpolation(interpolation) => {
@@ -341,14 +341,12 @@ impl Compiler {
          let name = match identifier.value() {
             node::IdentifierValueRef::Plain(plain) => {
                if is_bind {
-                  this
-                     .code
-                     .push_value(span, Value::Bind(plain.text().to_owned()));
+                  this.code.push_value(span, Value::Bind(plain.text().into()));
                } else {
                   this.code.push_operation(span, Operation::GetLocal);
                   this
                      .code
-                     .push_value(span, Value::Identifier(plain.text().to_owned()));
+                     .push_value(span, Value::Identifier(plain.text().into()));
                }
 
                LocalName::Static(plain.text().to_owned())
@@ -378,9 +376,9 @@ impl Compiler {
                         this.code.push_value(
                            content.span(),
                            if is_bind {
-                              Value::Bind(content.text().to_owned())
+                              Value::Bind(content.text().into())
                            } else {
-                              Value::Identifier(content.text().to_owned())
+                              Value::Identifier(content.text().into())
                            },
                         );
                      },

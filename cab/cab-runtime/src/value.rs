@@ -3,7 +3,7 @@ use std::sync::{
    Mutex,
 };
 
-use im::HashMap as CowMap;
+use rpds::HashTrieMapSync as HashTrieMap;
 use rustc_hash::FxBuildHasher;
 
 use crate::{
@@ -16,16 +16,16 @@ use crate::{
 pub enum Value {
    Nil,
 
-   Path(String),
+   Path(Arc<str>),
 
    Rune(char),
    Integer(num::BigInt),
    Float(f64),
 
-   Attributes(Arc<CowMap<String, Value, FxBuildHasher>>),
+   Attributes(HashTrieMap<String, Value, FxBuildHasher>),
 
-   Bind(String),
-   Identifier(String),
+   Bind(Arc<str>),
+   Identifier(Arc<str>),
 
    Thunk(Arc<Mutex<Thunk>>),
    Blueprint(Arc<Code>),
