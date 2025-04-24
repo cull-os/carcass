@@ -21,6 +21,7 @@ use cab_why::{
 };
 use rpds::HashTrieMapSync as HashTrieMap;
 use rustc_hash::FxBuildHasher;
+use smallvec::smallvec;
 
 use crate::{
    Code,
@@ -378,7 +379,7 @@ impl Compiler {
                   this.emit_push(span, Value::Identifier(plain.text().into()));
                }
 
-               LocalName::new(vec![plain.text().to_owned()])
+               LocalName::new(smallvec![plain.text().to_owned()])
             },
 
             node::IdentifierValueRef::Quoted(quoted) => {
