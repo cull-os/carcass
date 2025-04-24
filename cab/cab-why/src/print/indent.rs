@@ -147,42 +147,38 @@ pub fn indent_with<'a>(
 macro_rules! indent {
    ($writer:ident,header = $header:expr) => {
       let header = $header;
-
-      let header_width: u16 = {
-         use $crate::width;
-
-         trait ToStr {
-            fn to_str(&self) -> &str;
+      let header_width: u16 = (*$crate::width({
+         trait AsStr {
+            fn as_str(&self) -> &str;
          }
 
-         impl ToStr for &'_ str {
-            fn to_str(&self) -> &str {
+         impl AsStr for &'_ str {
+            fn as_str(&self) -> &str {
                self
             }
          }
 
-         impl ToStr for ::std::borrow::Cow<'_, str> {
-            fn to_str(&self) -> &str {
+         impl AsStr for ::std::borrow::Cow<'_, str> {
+            fn as_str(&self) -> &str {
                self.as_ref()
             }
          }
 
-         impl ToStr for ::yansi::Painted<&'_ str> {
-            fn to_str(&self) -> &str {
+         impl AsStr for ::yansi::Painted<&'_ str> {
+            fn as_str(&self) -> &str {
                self.value
             }
          }
 
-         impl ToStr for ::yansi::Painted<::std::borrow::Cow<'_, str>> {
-            fn to_str(&self) -> &str {
+         impl AsStr for ::yansi::Painted<::std::borrow::Cow<'_, str>> {
+            fn as_str(&self) -> &str {
                self.value.as_ref()
             }
          }
-
-         (*width(header.to_str()))
-            .try_into()
-            .expect("header width must be smaller than u16::MAX")
-      };
+         header.as_str()
+      }))
+      .try_into()
+      .expect("header width must be smaller than u16::MAX");
 
       let mut wrote = false;
       $crate::indent!(
