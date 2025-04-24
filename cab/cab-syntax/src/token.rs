@@ -1,10 +1,7 @@
 //! Typed [`Token`] definitions.
 //!
 //! [`Token`]: crate::Token
-use std::{
-   fmt,
-   ops,
-};
+use std::fmt;
 
 use cab_why::{
    IntoSpan as _,
@@ -12,6 +9,7 @@ use cab_why::{
    Report,
    Span,
 };
+use derive_more::Deref;
 use num::Num as _;
 
 use crate::{
@@ -26,21 +24,13 @@ macro_rules! token {
       struct $name:ident;
    ) => {
       $(#[$attribute])*
-      #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+      #[derive(Deref, Debug, Clone, PartialEq, Eq, Hash)]
       #[repr(transparent)]
       pub struct $name(red::Token);
 
       impl fmt::Display for $name {
          fn fmt(&self, writer: &mut fmt::Formatter<'_>) -> fmt::Result {
             (&**self).fmt(writer)
-         }
-      }
-
-      impl ops::Deref for $name {
-         type Target = red::Token;
-
-         fn deref(&self) -> &Self::Target {
-            &self.0
          }
       }
 

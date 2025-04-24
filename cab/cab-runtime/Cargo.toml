@@ -12,6 +12,7 @@ cab-why.path    = "../cab-why"
 
 async-trait.workspace = true
 bytes.workspace       = true
+derive_more.workspace = true
 num.workspace         = true
 num_enum.workspace    = true
 rpds.workspace        = true

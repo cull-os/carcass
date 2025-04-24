@@ -63,14 +63,9 @@ impl<'a> Iterator for Tokenizer<'a> {
    fn next(&mut self) -> Option<Self::Item> {
       let start = self.offset;
 
-      let kind = self.consume_kind();
-      let slice = self.consumed_since(start);
-
-      if kind == Some(TOKEN_CONTENT) && slice.is_empty() {
-         return self.next();
-      }
-
-      kind.map(|kind| (kind, slice))
+      self
+         .consume_kind()
+         .map(|kind| (kind, self.consumed_since(start)))
    }
 }
 
@@ -541,7 +536,7 @@ mod tests {
    }
 
    #[test]
-   fn no_empty_tokens() {
+   fn empty_tokens() {
       assert_token_matches!(
          r#""foo \(bar)""#,
          (TOKEN_STRING_START, r#"""#),
@@ -549,6 +544,7 @@ mod tests {
          (TOKEN_INTERPOLATION_START, r"\("),
          (TOKEN_IDENTIFIER, "bar"),
          (TOKEN_INTERPOLATION_END, ")"),
+         (TOKEN_CONTENT, ""),
          (TOKEN_STRING_END, r#"""#),
       );
    }
