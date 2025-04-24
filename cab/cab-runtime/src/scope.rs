@@ -237,13 +237,3 @@ impl Scope {
       })
    }
 }
-
-#[cfg(test)]
-mod tests {
-   use super::*;
-
-   #[test]
-   fn local_name_equality() {
-      todo!();
-   }
-}
