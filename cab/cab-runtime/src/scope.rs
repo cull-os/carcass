@@ -48,12 +48,17 @@ impl LocalName {
          },
 
          // Return true if the static identifier contains all `parts` in order, possibly with
-         // arbitrary text in between from interpolation.
+         // arbitrary text in between from interpolation. Can never return false positives, aka can
+         // never return true for two names that will *never* match.
          (LocalName::Static(name), LocalName::Interpolated(parts))
          | (LocalName::Interpolated(parts), LocalName::Static(name)) => {
+            if parts.is_empty() {
+               return name.is_empty();
+            }
+
             let mut offset = 0;
 
-            for part in parts {
+            for part in &parts[..parts.len() - 1] {
                match name[offset..].find(part) {
                   Some(idx) => offset += idx + part.len(),
 
@@ -61,7 +66,9 @@ impl LocalName {
                }
             }
 
-            offset == name.len()
+            let last = parts.last().expect("len was statically checked");
+
+            name.ends_with(last) && name.len() - last.len() >= offset
          },
       }
    }
