@@ -414,7 +414,7 @@ impl Kind {
    }
 
    /// Returns the node and closing kinds of this kind.
-   pub fn as_node_and_closing(self) -> Option<(Kind, Kind)> {
+   pub fn into_node_and_closing(self) -> Option<(Kind, Kind)> {
       Some(match self {
          TOKEN_PATH_START => (NODE_PATH, TOKEN_PATH_END),
          TOKEN_IDENTIFIER_START => (NODE_IDENTIFIER, TOKEN_IDENTIFIER_END),

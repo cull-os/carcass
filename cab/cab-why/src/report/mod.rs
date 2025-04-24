@@ -247,7 +247,7 @@ fn resolve_style<'a>(
                      yield content[Span::std(content_offset, contained_style.span.start)]
                         .paint(style.severity.style_in(severity));
 
-                     yield content[contained_style.span.as_std()]
+                     yield content[contained_style.span.into_std()]
                         .paint(contained_style.severity.style_in(severity));
 
                      yield content[Span::std(contained_style.span.end, style.span.end)]
@@ -888,7 +888,7 @@ impl<Location: fmt::Display> ReportDisplay<Location> {
          let label_span_extended = extend_to_line_boundaries(**source, label.span);
 
          for (line_number, line_content) in
-            (label_start.line..).zip(source[label_span_extended.as_std()].split('\n'))
+            (label_start.line..).zip(source[label_span_extended.into_std()].split('\n'))
          {
             let line = match lines.iter_mut().find(|line| line.number == line_number) {
                Some(item) => item,
@@ -945,7 +945,7 @@ impl<Location: fmt::Display> ReportDisplay<Location> {
                   });
 
                   let up_to_start_width = width(&line_content[..*span.start as usize]);
-                  let label_width = width(&line_content[span.as_std()]);
+                  let label_width = width(&line_content[span.into_std()]);
 
                   line.labels.push(LineLabel {
                      span:     LineLabelSpan::Inline(Span::at(up_to_start_width, label_width)),

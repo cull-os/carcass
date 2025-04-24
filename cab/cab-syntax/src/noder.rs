@@ -430,7 +430,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
    fn node_delimited(&mut self) -> Option<&str> {
       let start_of_delimited = self.checkpoint();
 
-      let (node, end) = self.next().unwrap().as_node_and_closing().unwrap();
+      let (node, end) = self.next().unwrap().into_node_and_closing().unwrap();
 
       let mut end_delimiter = None;
 

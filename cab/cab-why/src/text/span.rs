@@ -47,7 +47,7 @@ impl Span {
 
    /// Turns this span into a [`ops::Range<usize>`].
    #[inline]
-   pub fn as_std(self) -> ops::Range<usize> {
+   pub fn into_std(self) -> ops::Range<usize> {
       self.into()
    }
 
