@@ -5,13 +5,14 @@ pub enum Operation {
    // increses our chances of Code::read_operation panicking if we ever write wrong code.
    Value = 2u8.pow(7),
 
-   Force,
    Return,
 
+   Force,
+   ForceAndCollectScope,
    Scope,
 
-   Attributes,
-
+   IslandHeaderInterpolate,
+   Island,
    PathInterpolate,
    BindInterpolate,
    IdentifierInterpolate,

@@ -16,13 +16,14 @@ use crate::{
 pub enum Value {
    Nil,
 
-   Path(Arc<str>),
-
    Rune(char),
    Integer(num::BigInt),
    Float(f64),
 
    Attributes(HashTrieMap<String, Value, FxBuildHasher>),
+
+   IslandHeader(Arc<str>),
+   Path(Arc<str>),
 
    Bind(Arc<str>),
    Identifier(Arc<str>),
