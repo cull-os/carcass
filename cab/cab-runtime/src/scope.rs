@@ -18,21 +18,28 @@ impl PartialEq for LocalName {
    }
 }
 
-impl LocalName {
-   pub fn new(parts: Vec<String>) -> Self {
-      Self(parts)
-   }
+impl<'a> TryInto<&'a str> for &'a LocalName {
+   type Error = &'a [String];
 
-   pub fn try_into_static(&self) -> Result<&str, &[String]> {
+   fn try_into(self) -> Result<&'a str, Self::Error> {
       match self.0.len() {
          0 => Ok(""),
          1 => Ok(&self.0[0]),
          _ => Err(&self.0),
       }
    }
+}
+
+impl LocalName {
+   pub fn new(parts: Vec<String>) -> Self {
+      Self(parts)
+   }
 
    fn maybe_equals(&self, other: &Self) -> bool {
-      match (self.try_into_static(), other.try_into_static()) {
+      match (
+         TryInto::<&str>::try_into(self),
+         TryInto::<&str>::try_into(other),
+      ) {
          (Ok(name), Ok(other_name)) => name == other_name,
 
          // Return true if `name` *can* contain all `parts` in order,
