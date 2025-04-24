@@ -51,6 +51,8 @@ pub struct Scope {
    locals:           Vec<Local>,
    by_name:          FxHashMap<String, LocalIndex>,
    has_dynamic_bind: bool,
+
+   references_parent_scope: bool,
 }
 
 impl Default for Scope {
@@ -62,19 +64,21 @@ impl Default for Scope {
 impl Scope {
    pub fn root() -> Self {
       Self {
-         parent:           None,
-         locals:           Vec::new(),
-         by_name:          FxHashMap::with_hasher(FxBuildHasher),
-         has_dynamic_bind: false,
+         parent:                  None,
+         locals:                  Vec::new(),
+         by_name:                 FxHashMap::with_hasher(FxBuildHasher),
+         has_dynamic_bind:        false,
+         references_parent_scope: false,
       }
    }
 
    pub fn new(parent: &Rc<RefCell<Scope>>) -> Self {
       Self {
-         parent:           Some(parent.clone()),
-         locals:           Vec::new(),
-         by_name:          FxHashMap::with_hasher(FxBuildHasher),
-         has_dynamic_bind: false,
+         parent:                  Some(parent.clone()),
+         locals:                  Vec::new(),
+         by_name:                 FxHashMap::with_hasher(FxBuildHasher),
+         has_dynamic_bind:        false,
+         references_parent_scope: false,
       }
    }
 
@@ -90,35 +94,21 @@ impl Scope {
          return Some((this.clone(), Some(*index)));
       }
 
-      this
+      let parent_resolve = this
          .borrow()
          .parent
          .as_ref()
-         .and_then(|parent| Scope::resolve(parent, name))
+         .and_then(|parent| Scope::resolve(parent, name));
+
+      if parent_resolve.is_some() {
+         this.borrow_mut().references_parent_scope = true;
+      }
+
+      parent_resolve
    }
 
-   pub fn is_self_contained(&self) -> bool {
-      self.locals.iter().enumerate().all(|(index, local)| {
-         // Inclusive range because `@foo = foo` is possible.
-         let defined_locally = self.locals[..=index]
-            .iter()
-            .any(|defined| local.name == defined.name);
-
-         defined_locally || {
-            let LocalName::Static(name) = &local.name else {
-               unreachable!()
-            };
-
-            let defined_externally = self
-               .parent
-               .as_ref()
-               .and_then(|parent| Scope::resolve(parent, name))
-               .is_some();
-
-            // Not defined externally, which means it is not defined anywhere.
-            !defined_externally
-         }
-      })
+   pub fn references_parent_scope(&self) -> bool {
+      self.references_parent_scope
    }
 
    pub fn push(&mut self, span: Span, name: LocalName) -> LocalIndex {
@@ -150,6 +140,8 @@ impl Scope {
       for index in self.by_name.values().copied() {
          self.locals[*index].used = true;
       }
+
+      self.references_parent_scope = true;
    }
 
    pub fn all_unused(&self) -> impl Iterator<Item = &Local> {
