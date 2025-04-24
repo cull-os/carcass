@@ -5,12 +5,16 @@ use std::{
 
 use cab_why::Span;
 use derive_more::Deref;
+use smallvec::{
+   SmallVec,
+   smallvec,
+};
 
 #[derive(Deref, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct LocalIndex(usize);
 
 #[derive(Debug, Clone, Eq)]
-pub struct LocalName(Vec<String>);
+pub struct LocalName(SmallVec<String, 4>);
 
 impl PartialEq for LocalName {
    fn eq(&self, other: &Self) -> bool {
@@ -31,7 +35,7 @@ impl<'a> TryInto<&'a str> for &'a LocalName {
 }
 
 impl LocalName {
-   pub fn new(parts: Vec<String>) -> Self {
+   pub fn new(parts: SmallVec<String, 4>) -> Self {
       Self(parts)
    }
 
@@ -142,8 +146,8 @@ pub struct Local {
 pub struct Scope {
    parent: Option<Rc<RefCell<Scope>>>,
 
-   locals:         Vec<Local>,
-   locals_by_name: Vec<(LocalName, Vec<LocalIndex>)>,
+   locals:         SmallVec<Local, 4>,
+   locals_by_name: SmallVec<(LocalName, SmallVec<LocalIndex, 4>), 4>,
 }
 
 impl Default for Scope {
@@ -156,16 +160,16 @@ impl Scope {
    pub fn root() -> Self {
       Self {
          parent:         None,
-         locals:         Vec::new(),
-         locals_by_name: Vec::new(),
+         locals:         SmallVec::new(),
+         locals_by_name: SmallVec::new(),
       }
    }
 
    pub fn new(parent: &Rc<RefCell<Scope>>) -> Self {
       Self {
          parent:         Some(parent.clone()),
-         locals:         Vec::new(),
-         locals_by_name: Vec::new(),
+         locals:         SmallVec::new(),
+         locals_by_name: SmallVec::new(),
       }
    }
 
@@ -185,7 +189,7 @@ impl Scope {
       match slot {
          Some((_, indexes)) => indexes.push(index),
 
-         None => self.locals_by_name.push((name, vec![index])),
+         None => self.locals_by_name.push((name, smallvec![index])),
       }
 
       index

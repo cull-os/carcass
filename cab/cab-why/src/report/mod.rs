@@ -343,7 +343,7 @@ struct LineLabel {
 struct Line {
    number: u32,
 
-   strikes: SmallVec<LineStrike, 3>,
+   strikes: SmallVec<LineStrike, 2>,
 
    content: String,
    styles:  SmallVec<LineStyle, 4>,
@@ -358,7 +358,7 @@ struct ReportDisplay<Location: fmt::Display> {
 
    location: Location,
 
-   lines: SmallVec<Line, 10>,
+   lines: SmallVec<Line, 8>,
 
    points: SmallVec<Point, 2>,
 }
@@ -484,7 +484,7 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
 
       {
          // INDENT: "<strike-prefix> "
-         let strike_prefix = RefCell::new(SmallVec::<_, 3>::from_iter(iter::repeat_n(
+         let strike_prefix = RefCell::new(SmallVec::<_, 2>::from_iter(iter::repeat_n(
             None::<LineStrike>,
             strike_prefix_width,
          )));
@@ -880,7 +880,7 @@ impl<Location: fmt::Display> ReportDisplay<Location> {
             .then_with(|| a_end.column.cmp(&b_end.column))
       });
 
-      let mut lines = SmallVec::<Line, 10>::new();
+      let mut lines = SmallVec::<Line, 8>::new();
 
       'labels: for (label_index, ((label_start, label_end), label)) in
          labels.into_iter().enumerate()
