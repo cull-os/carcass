@@ -3,7 +3,7 @@ use std::sync::{
    Mutex,
 };
 
-use indexmap::IndexMap;
+use im::HashMap as CowMap;
 use rustc_hash::FxBuildHasher;
 
 use crate::{
@@ -22,7 +22,7 @@ pub enum Value {
    Integer(num::BigInt),
    Float(f64),
 
-   Attributes(Arc<IndexMap<String, Value, FxBuildHasher>>),
+   Attributes(Arc<CowMap<String, Value, FxBuildHasher>>),
 
    Bind(String),
    Identifier(String),
