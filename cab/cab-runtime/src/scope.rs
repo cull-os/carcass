@@ -71,7 +71,7 @@ impl Scope {
 
    pub fn new(parent: &Rc<RefCell<Scope>>) -> Self {
       Self {
-         parent:           Some(Rc::clone(parent)),
+         parent:           Some(parent.clone()),
          locals:           Vec::new(),
          by_name:          FxHashMap::with_hasher(FxBuildHasher),
          has_dynamic_bind: false,

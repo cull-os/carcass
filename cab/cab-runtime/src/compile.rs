@@ -113,7 +113,7 @@ impl Compiler {
    fn context(&mut self, closure: impl FnOnce(&mut Self)) -> Context {
       self.contexts.push(Context {
          code:  Code::new(),
-         scope: Rc::clone(&self.scope),
+         scope: self.scope.clone(),
       });
 
       closure(self);

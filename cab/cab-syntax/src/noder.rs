@@ -1,7 +1,6 @@
 use std::{
    fmt::Write as _,
    result,
-   sync::Arc,
 };
 
 use cab_why::{
@@ -72,7 +71,7 @@ pub fn oracle() -> Oracle {
 
 impl Oracle {
    pub fn parse<'a>(&self, tokens: impl Iterator<Item = (Kind, &'a str)>) -> Parse {
-      let mut noder = Noder::with_interner_and_tokens(Arc::clone(self.cache.interner()), tokens);
+      let mut noder = Noder::with_interner_and_tokens(self.cache.interner().clone(), tokens);
 
       noder.node(NODE_ROOT, |this| {
          this.node_expression(EnumSet::empty());
@@ -81,7 +80,7 @@ impl Oracle {
 
       let (green_node, _) = noder.builder.finish();
 
-      let node = red::Node::new_root_with_resolver(green_node, Arc::clone(self.cache.interner()));
+      let node = red::Node::new_root_with_resolver(green_node, self.cache.interner().clone());
 
       let expression = node
          .first_child()
