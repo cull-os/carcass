@@ -38,38 +38,71 @@ impl PartialEq for LocalName {
    }
 }
 
+/// Returns true if the given name *can* contain all `parts` in order,
+/// possibly with arbitrary text in between.
+///
+/// Can never return false positives, aka can never return true for two names
+/// that will *never* match.
+fn can_match(name: &str, parts: &[String]) -> bool {
+   let mut offset = 0;
+
+   for part in &parts[..parts.len() - 1] {
+      match name[offset..].find(part) {
+         Some(idx) => offset += idx + part.len(),
+
+         None => return false,
+      }
+   }
+
+   let last = parts.last().expect("len was statically checked");
+
+   name.ends_with(last) && name.len() - last.len() >= offset
+}
+
 impl LocalName {
+   fn as_static(&self) -> Option<&str> {
+      match self {
+         LocalName::Static(name) => Some(name),
+
+         LocalName::Interpolated(parts) => {
+            match parts.len() {
+               0 => Some(""),
+               1 => Some(&parts[0]),
+               _ => None,
+            }
+         },
+      }
+   }
+
    fn maybe_equals(&self, other: &Self) -> bool {
       match (self, other) {
          (LocalName::Static(name), LocalName::Static(other_name)) => name == other_name,
 
          (LocalName::Interpolated(parts), LocalName::Interpolated(other_parts)) => {
-            parts == other_parts
+            match (self.as_static(), other.as_static()) {
+               (Some(name), Some(other_name)) => name == other_name,
+
+               (Some(name), None) => can_match(name, other_parts),
+               (None, Some(other_name)) => can_match(other_name, parts),
+
+               (None, None) => {
+                  ({
+                     let first = &parts[0];
+                     let other_first = &other_parts[0];
+
+                     first.starts_with(other_first) || other_first.starts_with(first)
+                  } && {
+                     let last = parts.last().expect("len was statically checked");
+                     let other_last = other_parts.last().expect("len was statically checked");
+
+                     last.starts_with(other_last) || other_last.starts_with(last)
+                  })
+               },
+            }
          },
 
-         // Return true if the static identifier contains all `parts` in order, possibly with
-         // arbitrary text in between from interpolation. Can never return false positives, aka can
-         // never return true for two names that will *never* match.
          (LocalName::Static(name), LocalName::Interpolated(parts))
-         | (LocalName::Interpolated(parts), LocalName::Static(name)) => {
-            if parts.is_empty() {
-               return name.is_empty();
-            }
-
-            let mut offset = 0;
-
-            for part in &parts[..parts.len() - 1] {
-               match name[offset..].find(part) {
-                  Some(idx) => offset += idx + part.len(),
-
-                  None => return false,
-               }
-            }
-
-            let last = parts.last().expect("len was statically checked");
-
-            name.ends_with(last) && name.len() - last.len() >= offset
-         },
+         | (LocalName::Interpolated(parts), LocalName::Static(name)) => can_match(name, parts),
       }
    }
 }
