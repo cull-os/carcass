@@ -153,10 +153,10 @@ impl Compiler {
 
       self.code.push_value(
          span,
-         if context.scope.borrow().is_self_contained() {
-            Value::Thunk(Arc::new(Mutex::new(Thunk::suspended(span, context.code))))
-         } else {
+         if context.scope.borrow().references_parent_scope() {
             Value::Blueprint(Arc::new(context.code))
+         } else {
+            Value::Thunk(Arc::new(Mutex::new(Thunk::suspended(span, context.code))))
          },
       );
    }
