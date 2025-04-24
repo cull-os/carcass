@@ -31,7 +31,8 @@ use crate::{
    Value,
 };
 
-const CONTEXT_EXPECT: &str = "compiler must have at least one context at all times";
+const EXPECT_CONTEXT: &str = "compiler must have at least one context at all times";
+const EXPECT_VALIDATED: &str = "syntax must be validated";
 
 pub struct Compile {
    pub code:    Code,
@@ -62,12 +63,12 @@ impl Oracle {
    pub fn compile(&self, expression: node::ExpressionRef<'_>) -> Compile {
       let mut compiler = Compiler::new();
 
-      compiler.scope(expression.span(), |this| {
-         this.emit(expression);
+      compiler.emit_scope(expression.span(), |this| {
+         this.emit_force(expression);
       });
 
       Compile {
-         code: compiler.contexts.pop().expect(CONTEXT_EXPECT).code,
+         code: compiler.contexts.pop().expect(EXPECT_CONTEXT).code,
 
          reports: compiler.reports,
       }
@@ -88,13 +89,13 @@ impl ops::Deref for Compiler {
    type Target = Context;
 
    fn deref(&self) -> &Self::Target {
-      self.contexts.last().expect(CONTEXT_EXPECT)
+      self.contexts.last().expect(EXPECT_CONTEXT)
    }
 }
 
 impl ops::DerefMut for Compiler {
    fn deref_mut(&mut self) -> &mut Self::Target {
-      self.contexts.last_mut().expect(CONTEXT_EXPECT)
+      self.contexts.last_mut().expect(EXPECT_CONTEXT)
    }
 }
 
@@ -118,10 +119,10 @@ impl Compiler {
 
       closure(self);
 
-      self.contexts.pop().expect(CONTEXT_EXPECT)
+      self.contexts.pop().expect(EXPECT_CONTEXT)
    }
 
-   fn scope(&mut self, span: Span, closure: impl FnOnce(&mut Self)) {
+   fn emit_scope(&mut self, span: Span, closure: impl FnOnce(&mut Self)) {
       let mut scope_new = Rc::new(RefCell::new(Scope::new(&self.scope)));
 
       mem::swap(&mut scope_new, &mut self.scope);
@@ -162,8 +163,8 @@ impl Compiler {
    }
 
    fn emit_parenthesis(&mut self, parenthesis: &node::Parenthesis) {
-      self.scope(parenthesis.span(), |this| {
-         this.emit(parenthesis.expression().expect("node must be validated"));
+      self.emit_scope(parenthesis.span(), |this| {
+         this.emit(parenthesis.expression().expect(EXPECT_VALIDATED));
       });
    }
 
@@ -171,7 +172,7 @@ impl Compiler {
       for item in list.items() {
          self.code.push_operation(list.span(), Operation::Construct);
 
-         self.scope(item.span(), |this| this.emit(item));
+         self.emit_scope(item.span(), |this| this.emit_force(item));
       }
 
       self.code.push_value(list.span(), Value::Nil);
@@ -182,7 +183,7 @@ impl Compiler {
          self.emit_thunk(attributes.span(), |this| {
             this
                .code
-               .push_operation(expression.span(), Operation::Attributes);
+               .push_operation(expression.span(), Operation::ForceAndCollectScope);
             this.emit(expression);
          });
       } else {
@@ -204,10 +205,7 @@ impl Compiler {
                node::PrefixOperator::Try => Operation::Try,
             });
 
-         this
-            .code
-            .push_operation(operation.right().span(), Operation::Force);
-         this.emit(operation.right());
+         this.emit_force(operation.right());
       });
    }
 
@@ -257,23 +255,11 @@ impl Compiler {
          this.code.push_operation(operation.span(), operation_);
 
          if operation.operator() == node::InfixOperator::Pipe {
-            this
-               .code
-               .push_operation(operation.right().span(), Operation::Force);
-            this.emit(operation.right());
-            this
-               .code
-               .push_operation(operation.left().span(), Operation::Force);
-            this.emit(operation.left());
+            this.emit_force(operation.right());
+            this.emit_force(operation.left());
          } else {
-            this
-               .code
-               .push_operation(operation.left().span(), Operation::Force);
-            this.emit(operation.left());
-            this
-               .code
-               .push_operation(operation.right().span(), Operation::Force);
-            this.emit(operation.right());
+            this.emit_force(operation.left());
+            this.emit_force(operation.right());
          }
       });
    }
@@ -287,16 +273,65 @@ impl Compiler {
                   .code
                   .push_operation(operation.span(), Operation::Sequence);
 
-               this
-                  .code
-                  .push_operation(operation.left().span(), Operation::Force);
-               this.emit(operation.left());
+               this.emit_force(operation.left());
 
                // TODO: Use a proper value.
                this.code.push_value(operation.span(), Value::Nil);
             });
          },
       }
+   }
+
+   fn emit_island(&mut self, island: &node::Island) {
+      self.emit_thunk(island.span(), |this| {
+         let parts = island
+            .header()
+            .parts()
+            .filter(|part| !part.is_delimiter())
+            .collect::<Vec<_>>();
+
+         this.code.push_operation(island.span(), Operation::Island);
+
+         if parts.len() != 1 || !parts[0].is_content() {
+            this
+               .code
+               .push_operation(island.span(), Operation::IslandHeaderInterpolate);
+            this.code.push_u64(parts.len() as _);
+         }
+
+         for part in parts {
+            match part {
+               node::InterpolatedPartRef::Content(content) => {
+                  this
+                     .code
+                     .push_value(content.span(), Value::IslandHeader(content.text().into()));
+               },
+
+               node::InterpolatedPartRef::Interpolation(interpolation) => {
+                  this.emit_scope(interpolation.span(), |this| {
+                     this.emit_force(interpolation.expression());
+                  })
+               },
+
+               _ => {},
+            }
+         }
+
+         if let Some(config) = island.config() {
+            this.emit_scope(config.span(), |this| this.emit_force(config));
+         } else {
+            this.code.push_value(
+               island.span(),
+               Value::Attributes(HashTrieMap::new_with_hasher_and_ptr_kind(FxBuildHasher)),
+            );
+         }
+
+         if let Some(path) = island.path() {
+            this.emit_scope(path.span(), |this| this.emit_force(path));
+         } else {
+            this.code.push_value(island.span(), Value::Path("/".into()));
+         }
+      });
    }
 
    fn emit_path(&mut self, path: &node::Path) {
@@ -306,7 +341,7 @@ impl Compiler {
             .filter(|part| !part.is_delimiter())
             .collect::<Vec<_>>();
 
-         if parts.len() > 1 || !parts[0].is_content() {
+         if parts.len() != 1 || !parts[0].is_content() {
             this
                .code
                .push_operation(path.span(), Operation::PathInterpolate);
@@ -322,11 +357,8 @@ impl Compiler {
                },
 
                node::InterpolatedPartRef::Interpolation(interpolation) => {
-                  this.scope(interpolation.span(), |this| {
-                     this
-                        .code
-                        .push_operation(interpolation.span(), Operation::Force);
-                     this.emit(interpolation.expression());
+                  this.emit_scope(interpolation.span(), |this| {
+                     this.emit_force(interpolation.expression());
                   });
                },
 
@@ -358,7 +390,7 @@ impl Compiler {
                   .filter(|part| !part.is_delimiter())
                   .collect::<Vec<_>>();
 
-               if parts.len() > 1 || !parts[0].is_content() {
+               if parts.len() != 1 || !parts[0].is_content() {
                   this.code.push_operation(
                      span,
                      if is_bind {
@@ -384,11 +416,8 @@ impl Compiler {
                      },
 
                      node::InterpolatedPartRef::Interpolation(interpolation) => {
-                        this.scope(interpolation.span(), |this| {
-                           this
-                              .code
-                              .push_operation(interpolation.span(), Operation::Force);
-                           this.emit(interpolation.expression());
+                        this.emit_scope(interpolation.span(), |this| {
+                           this.emit_force(interpolation.expression());
                         });
                      },
 
@@ -451,7 +480,7 @@ impl Compiler {
 
    fn emit(&mut self, expression: node::ExpressionRef<'_>) {
       match expression {
-         node::ExpressionRef::Error(_) => unreachable!(),
+         node::ExpressionRef::Error(_) => unreachable!("{EXPECT_VALIDATED}"),
 
          node::ExpressionRef::Parenthesis(parenthesis) => self.emit_parenthesis(parenthesis),
 
@@ -468,12 +497,12 @@ impl Compiler {
             self.emit_suffix_operation(suffix_operation);
          },
 
-         node::ExpressionRef::Island(_island) => todo!(),
+         node::ExpressionRef::Island(island) => self.emit_island(island),
          node::ExpressionRef::Path(path) => self.emit_path(path),
 
          node::ExpressionRef::Bind(bind) => {
             let node::ExpressionRef::Identifier(identifier) = bind.identifier() else {
-               unreachable!()
+               unreachable!("{EXPECT_VALIDATED}")
             };
             self.emit_identifier(true, bind.span(), identifier);
          },
@@ -499,5 +528,12 @@ impl Compiler {
 
          node::ExpressionRef::If(_) => todo!(),
       }
+   }
+
+   fn emit_force(&mut self, expression: node::ExpressionRef<'_>) {
+      self
+         .code
+         .push_operation(expression.span(), Operation::Force);
+      self.emit(expression);
    }
 }
