@@ -8,8 +8,9 @@ The Cull monorepository.
 
 ## Contributing
 
-All contributors must follow the [`Code of Conduct`](./CODE_OF_CONDUCT.md).
+All contributors must follow the [Code of Conduct](./CODE_OF_CONDUCT.md).
 
 ## License
 
-All code under this repository is licensed under the [`MIT`](./LICENSE.md) license.
+All code under this repository is licensed under the [MIT](./LICENSE.md)
+license.
