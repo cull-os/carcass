@@ -6,8 +6,8 @@ use crate::{
    Value,
 };
 
-const ENCODED_SIZE_U64: usize = 9;
-const ENCODED_SIZE_U16: usize = 2;
+const ENCODED_U64_LEN: usize = 9;
+const ENCODED_U16_LEN: usize = 0u16.to_le_bytes().len();
 
 #[derive(Deref, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ByteIndex(usize);
@@ -33,7 +33,7 @@ impl Code {
    }
 
    pub fn push_u64(&mut self, data: u64) -> ByteIndex {
-      let mut encoded = [0; ENCODED_SIZE_U64];
+      let mut encoded = [0; ENCODED_U64_LEN];
       let len = vu128::encode_u64(&mut encoded, data);
 
       let index = ByteIndex(self.content.len());
@@ -43,11 +43,11 @@ impl Code {
 
    #[must_use]
    pub fn read_u64(&self, index: ByteIndex) -> (u64, usize) {
-      let encoded = match self.content.get(*index..*index + ENCODED_SIZE_U64) {
+      let encoded = match self.content.get(*index..*index + ENCODED_U64_LEN) {
          Some(slice) => slice.try_into().expect("size was statically checked"),
 
          None => {
-            let mut buffer = [0; ENCODED_SIZE_U64];
+            let mut buffer = [0; ENCODED_U64_LEN];
             buffer[..self.content.len() - *index].copy_from_slice(
                self
                   .content
@@ -71,12 +71,12 @@ impl Code {
    pub fn read_u16(&self, index: ByteIndex) -> (u16, usize) {
       let encoded = self
          .content
-         .get(*index..*index + ENCODED_SIZE_U16)
+         .get(*index..*index + ENCODED_U16_LEN)
          .expect("cab-runtime bug: invalid byte index")
          .try_into()
          .expect("size was statically checked");
 
-      (u16::from_le_bytes(encoded), ENCODED_SIZE_U16)
+      (u16::from_le_bytes(encoded), ENCODED_U16_LEN)
    }
 
    pub fn push_operation(&mut self, span: Span, operation: Operation) -> ByteIndex {
@@ -127,6 +127,6 @@ impl Code {
    pub fn set_here(&mut self, index: ByteIndex) {
       let here = self.content.len() as u16;
 
-      self.content[*index..*index + ENCODED_SIZE_U16].copy_from_slice(&here.to_le_bytes());
+      self.content[*index..*index + ENCODED_U16_LEN].copy_from_slice(&here.to_le_bytes());
    }
 }

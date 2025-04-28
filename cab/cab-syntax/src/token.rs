@@ -87,7 +87,7 @@ token! {
 }
 
 impl Comment {
-   const START_HASHTAG_LEN: usize = 1;
+   const START_HASHTAG_LEN: usize = '#'.len_utf8();
 
    /// Returns the starting delimiter of this comment.
    pub fn start_delimiter(&self) -> &str {
