@@ -351,7 +351,6 @@ impl<'a> Tokenizer<'a> {
          },
 
          ';' => TOKEN_SEMICOLON,
-         '?' => TOKEN_QUESTIONMARK,
 
          '<' if self.try_consume_character('|') => TOKEN_LESS_PIPE,
          '|' if self.try_consume_character('>') => TOKEN_PIPE_MORE,

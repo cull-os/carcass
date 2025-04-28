@@ -115,9 +115,6 @@ pub enum Kind {
    #[display("';'")]
    #[static_text(";")]
    TOKEN_SEMICOLON,
-   #[display("'?'")]
-   #[static_text("?")]
-   TOKEN_QUESTIONMARK,
 
    #[display("'<|'")]
    #[static_text("<|")]

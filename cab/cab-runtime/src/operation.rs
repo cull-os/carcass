@@ -42,8 +42,6 @@ pub enum Operation {
 
    Not,
 
-   Try,
-
    // INFIX
    Same,
    Sequence,

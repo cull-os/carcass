@@ -489,8 +489,6 @@ pub enum PrefixOperator {
    Negation,
 
    Not,
-
-   Try,
 }
 
 impl TryFrom<Kind> for PrefixOperator {
@@ -501,9 +499,7 @@ impl TryFrom<Kind> for PrefixOperator {
          TOKEN_PLUS => Self::Swwallation,
          TOKEN_MINUS => Self::Negation,
 
-         TOKEN_EXCLAMATIONMARK => Self::Not,
-
-         TOKEN_QUESTIONMARK => Self::Try,
+         TOKEN_EXCLAMATION => Self::Not,
 
          _ => return Err(()),
       })
@@ -516,7 +512,6 @@ impl PrefixOperator {
       match self {
          Self::Swwallation | Self::Negation => ((), 145),
          Self::Not => ((), 125),
-         Self::Try => ((), 105),
       }
    }
 }
