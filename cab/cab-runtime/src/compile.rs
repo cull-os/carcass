@@ -206,7 +206,6 @@ impl Compiler {
                node::PrefixOperator::Swwallation => Operation::Swwallation,
                node::PrefixOperator::Negation => Operation::Negation,
                node::PrefixOperator::Not => Operation::Not,
-               node::PrefixOperator::Try => Operation::Try,
             });
 
          this.emit_force(operation.right());
