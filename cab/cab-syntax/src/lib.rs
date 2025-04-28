@@ -416,7 +416,7 @@ impl Kind {
       )
    }
 
-   /// Returns the node and closing kinds of this kind.
+   /// Returns the node and closing kinds of this starting delimiter.
    pub fn into_node_and_closing(self) -> Option<(Kind, Kind)> {
       Some(match self {
          TOKEN_PATH_CONTENT_START => (NODE_PATH_CONTENT, TOKEN_PATH_END),
