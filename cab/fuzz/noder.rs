@@ -25,7 +25,7 @@ use yansi::Paint as _;
 
 fuzz_target!(|source: &str| -> Corpus {
    let save_valid = matches!(
-      env::var("FUZZ_PARSER_SAVE_VALID").as_deref(),
+      env::var("FUZZ_NODER_SAVE_VALID").as_deref(),
       Ok("true" | "1")
    );
 

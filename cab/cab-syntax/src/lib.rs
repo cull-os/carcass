@@ -1,4 +1,4 @@
-//! Token, tokenizer, node, noder, parser implementations.
+//! Token, tokenizer, node, noder implementations.
 
 #![feature(assert_matches, gen_blocks, if_let_guard, let_chains, trait_alias)]
 

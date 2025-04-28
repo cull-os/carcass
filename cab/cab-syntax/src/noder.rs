@@ -84,9 +84,9 @@ impl Oracle {
 
       let expression: node::ExpressionRef<'_> = node
          .first_child()
-         .expect("noder output must contain a single parser root node")
+         .expect("noder output must contain a single parse root node")
          .try_into()
-         .expect("parser root node must contain an expression");
+         .expect("parse root node must contain an expression");
 
       noder.reports.retain({
          let mut last_span = None;
