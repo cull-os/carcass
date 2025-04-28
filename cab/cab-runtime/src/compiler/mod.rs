@@ -3,10 +3,7 @@ use std::{
    mem,
    ops,
    rc::Rc,
-   sync::{
-      Arc,
-      Mutex,
-   },
+   sync::Arc,
 };
 
 use cab_syntax::node::{
@@ -29,9 +26,10 @@ use crate::{
    LocalPosition,
    Operation,
    Scope,
-   Thunk,
    Value,
 };
+
+mod optimizer;
 
 const EXPECT_CONTEXT: &str = "compiler must have at least one context at all times";
 const EXPECT_VALIDATED: &str = "syntax must be validated";
@@ -160,9 +158,10 @@ impl Compiler {
       self.emit_push(
          span,
          // if context.scope.borrow().references_parent {
-         //    Value::Blueprint(Arc::new(context.code))
+         Value::Blueprint(Arc::new(context.code)),
          // } else {
-         Value::Thunk(Arc::new(Mutex::new(Thunk::suspended(span, context.code)))), // },
+         //     Value::Thunk(Arc::new(Mutex::new(Thunk::suspended(span, context.code))))
+         // }
       );
    }
 
@@ -173,10 +172,12 @@ impl Compiler {
    }
 
    fn emit_list(&mut self, list: &node::List) {
-      self.emit_push(list.span(), Value::Nil);
-
-      for item in list.items() {
+      for (index, item) in list.items().enumerate() {
          self.emit_scope(item.span(), |this| this.emit_force(item));
+
+         if index == 0 {
+            self.emit_push(list.span(), Value::Nil);
+         }
 
          self.code.push_operation(list.span(), Operation::Construct);
       }
@@ -200,6 +201,8 @@ impl Compiler {
 
    fn emit_prefix_operation(&mut self, operation: &node::PrefixOperation) {
       self.emit_thunk(operation.span(), |this| {
+         this.emit(operation.right());
+
          this
             .code
             .push_operation(operation.span(), match operation.operator() {
@@ -207,15 +210,20 @@ impl Compiler {
                node::PrefixOperator::Negation => Operation::Negation,
                node::PrefixOperator::Not => Operation::Not,
             });
-
-         this.emit_force(operation.right());
       });
    }
 
    fn emit_infix_operation(&mut self, operation: &node::InfixOperation) {
       self.emit_thunk(operation.span(), |this| {
+         if operation.operator() == node::InfixOperator::Pipe {
+            this.emit(operation.right());
+            this.emit(operation.left());
+         } else {
+            this.emit(operation.left());
+            this.emit(operation.right());
+         }
+
          let operation_ = match operation.operator() {
-            node::InfixOperator::Same => Operation::Same,
             node::InfixOperator::Sequence => Operation::Sequence,
 
             node::InfixOperator::ImplicitApply
@@ -225,7 +233,7 @@ impl Compiler {
             node::InfixOperator::Concat => Operation::Concat,
             node::InfixOperator::Construct => Operation::Construct,
 
-            node::InfixOperator::Select => Operation::Select,
+            node::InfixOperator::Select => todo!(),
             node::InfixOperator::Update => Operation::Update,
 
             node::InfixOperator::LessOrEqual => Operation::LessOrEqual,
@@ -235,15 +243,16 @@ impl Compiler {
 
             node::InfixOperator::Equal => Operation::Equal,
             node::InfixOperator::NotEqual => {
+               this.code.push_operation(operation.span(), Operation::Equal);
                this.code.push_operation(operation.span(), Operation::Not);
-               Operation::Equal
+               return;
             },
 
             node::InfixOperator::And => Operation::And,
             node::InfixOperator::Or => Operation::Or,
             node::InfixOperator::Implication => Operation::Implication,
 
-            node::InfixOperator::All => Operation::All,
+            node::InfixOperator::Same | node::InfixOperator::All => Operation::All,
             node::InfixOperator::Any => Operation::Any,
 
             node::InfixOperator::Addition => Operation::Addition,
@@ -256,14 +265,6 @@ impl Compiler {
          };
 
          this.code.push_operation(operation.span(), operation_);
-
-         if operation.operator() == node::InfixOperator::Pipe {
-            this.emit_force(operation.right());
-            this.emit_force(operation.left());
-         } else {
-            this.emit_force(operation.left());
-            this.emit_force(operation.right());
-         }
       });
    }
 
@@ -272,14 +273,14 @@ impl Compiler {
          node::SuffixOperator::Same => self.emit(operation.left()),
          node::SuffixOperator::Sequence => {
             self.emit_thunk(operation.span(), |this| {
+               this.emit(operation.left());
+
+               // TODO: Use a proper value, similar to `undefined` in Haskell.
+               this.emit_push(operation.span(), Value::Nil);
+
                this
                   .code
                   .push_operation(operation.span(), Operation::Sequence);
-
-               this.emit_force(operation.left());
-
-               // TODO: Use a proper value.
-               this.emit_push(operation.span(), Value::Nil);
             });
          },
       }
@@ -375,8 +376,8 @@ impl Compiler {
                if is_bind {
                   this.emit_push(span, Value::Bind(plain.text().into()));
                } else {
-                  this.code.push_operation(span, Operation::GetLocal);
                   this.emit_push(span, Value::Identifier(plain.text().into()));
+                  this.code.push_operation(span, Operation::GetLocal);
                }
 
                LocalName::new(smallvec![plain.text().to_owned()])
@@ -387,18 +388,6 @@ impl Compiler {
                   .parts()
                   .filter(|part| !part.is_delimiter())
                   .collect::<Vec<_>>();
-
-               if parts.len() != 1 || !parts[0].is_content() {
-                  this.code.push_operation(
-                     span,
-                     if is_bind {
-                        Operation::BindInterpolate
-                     } else {
-                        Operation::IdentifierInterpolate
-                     },
-                  );
-                  this.code.push_u64(parts.len() as _);
-               }
 
                for part in &parts {
                   match part {
@@ -421,6 +410,18 @@ impl Compiler {
 
                      _ => {},
                   }
+               }
+
+               if parts.len() != 1 || !parts[0].is_content() {
+                  this.code.push_operation(
+                     span,
+                     if is_bind {
+                        Operation::BindInterpolate
+                     } else {
+                        Operation::IdentifierInterpolate
+                     },
+                  );
+                  this.code.push_u64(parts.len() as _);
                }
 
                LocalName::new(
@@ -463,6 +464,8 @@ impl Compiler {
    }
 
    fn emit(&mut self, expression: node::ExpressionRef<'_>) {
+      let expression = self.optimize(expression);
+
       match expression {
          node::ExpressionRef::Error(_) => unreachable!("{EXPECT_VALIDATED}"),
 
@@ -510,9 +513,9 @@ impl Compiler {
    }
 
    fn emit_force(&mut self, expression: node::ExpressionRef<'_>) {
+      self.emit(expression);
       self
          .code
          .push_operation(expression.span(), Operation::Force);
-      self.emit(expression);
    }
 }

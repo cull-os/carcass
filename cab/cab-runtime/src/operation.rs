@@ -6,7 +6,7 @@
 #[repr(u8)]
 pub enum Operation {
    // Small numbers represented as 1 u8 in vu128 are [0, 2**7) so starting the operation at that
-   // increses our chances of Code::read_operation panicking if we ever write wrong code.
+   // increases our chances of Code::read_operation panicking if we ever write wrong code.
    /// Pushes the value with the index stored at [0:u64] onto the stack.
    Push = 2u8.pow(7),
 
@@ -43,7 +43,6 @@ pub enum Operation {
    Not,
 
    // INFIX
-   Same,
    Sequence,
 
    Apply,
@@ -51,7 +50,6 @@ pub enum Operation {
    Concat,
    Construct,
 
-   Select,
    Update,
 
    LessOrEqual,
