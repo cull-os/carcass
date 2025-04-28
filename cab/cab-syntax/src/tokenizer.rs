@@ -28,11 +28,10 @@ fn is_valid_path_character(c: char) -> bool {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Context<'a> {
-   IslandHeader,
-   IslandHeaderEnd,
-
    Path,
    PathEnd,
+   PathRootType,
+   PathRootTypeEnd,
 
    Delimited {
       before: Option<&'a str>,
@@ -164,27 +163,6 @@ impl<'a> Tokenizer<'a> {
       }
    }
 
-   fn consume_island_header(&mut self) -> Kind {
-      loop {
-         if let Some('>' | ':') = self.peek_character() {
-            self.context_pop(Context::IslandHeader);
-            self.context_push(Context::IslandHeaderEnd);
-
-            return TOKEN_CONTENT;
-         }
-
-         if self.peek_character().is_none() {
-            self.context_pop(Context::IslandHeader);
-
-            return TOKEN_CONTENT;
-         }
-
-         if let Some(kind) = self.consume_delimited_part() {
-            return kind;
-         }
-      }
-   }
-
    fn consume_delimited(&mut self, before: Option<&'a str>, end: char) -> Kind {
       loop {
          let remaining = self.remaining();
@@ -205,6 +183,27 @@ impl<'a> Tokenizer<'a> {
 
             return TOKEN_CONTENT;
          };
+
+         if let Some(kind) = self.consume_delimited_part() {
+            return kind;
+         }
+      }
+   }
+
+   fn consume_path_root_type(&mut self) -> Kind {
+      loop {
+         if let Some('>' | ':') = self.peek_character() {
+            self.context_pop(Context::PathRootType);
+            self.context_push(Context::PathRootTypeEnd);
+
+            return TOKEN_CONTENT;
+         }
+
+         if self.peek_character().is_none() {
+            self.context_pop(Context::PathRootType);
+
+            return TOKEN_CONTENT;
+         }
 
          if let Some(kind) = self.consume_delimited_part() {
             return kind;
@@ -250,14 +249,14 @@ impl<'a> Tokenizer<'a> {
       let start = self.offset;
 
       match self.context.last().copied() {
-         Some(Context::IslandHeader) => {
-            return Some(self.consume_island_header());
+         Some(Context::PathRootType) => {
+            return Some(self.consume_path_root_type());
          },
-         Some(Context::IslandHeaderEnd) => {
+         Some(Context::PathRootTypeEnd) => {
             assert_matches!(self.consume_character(), Some('>' | ':'));
-            self.context_pop(Context::IslandHeaderEnd);
+            self.context_pop(Context::PathRootTypeEnd);
 
-            return Some(TOKEN_ISLAND_HEADER_END);
+            return Some(TOKEN_PATH_ROOT_TYPE_END);
          },
 
          Some(Context::Path) => {
@@ -281,7 +280,7 @@ impl<'a> Tokenizer<'a> {
             self.context_pop(Context::DelimitedEnd { before, end });
 
             return Some(match end {
-               '`' => TOKEN_IDENTIFIER_END,
+               '`' => TOKEN_QUOTED_IDENTIFIER_END,
                '"' => TOKEN_STRING_END,
                '\'' => TOKEN_RUNE_END,
                _ => unreachable!(),
@@ -350,6 +349,7 @@ impl<'a> Tokenizer<'a> {
             TOKEN_COMMENT
          },
 
+         ',' => TOKEN_COMMA,
          ';' => TOKEN_SEMICOLON,
 
          '<' if self.try_consume_character('|') => TOKEN_LESS_PIPE,
@@ -377,7 +377,6 @@ impl<'a> Tokenizer<'a> {
          ')' => TOKEN_PARENTHESIS_RIGHT,
 
          '=' if self.try_consume_character('>') => TOKEN_EQUAL_MORE,
-         ',' => TOKEN_COMMA,
 
          ':' => TOKEN_COLON,
          '+' if self.try_consume_character('+') => TOKEN_PLUS_PLUS,
@@ -388,14 +387,15 @@ impl<'a> Tokenizer<'a> {
          '{' => TOKEN_CURLYBRACE_LEFT,
          '}' => TOKEN_CURLYBRACE_RIGHT,
 
-         '!' if self.try_consume_character('=') => TOKEN_EXCLAMATION_EQUAL,
-         '=' => TOKEN_EQUAL,
          '>' if self.try_consume_character('=') => TOKEN_MORE_EQUAL,
          '>' => TOKEN_MORE,
 
+         '!' if self.try_consume_character('=') => TOKEN_EXCLAMATION_EQUAL,
+         '=' => TOKEN_EQUAL,
+
          '&' if self.try_consume_character('&') => TOKEN_AMPERSAND_AMPERSAND,
          '|' if self.try_consume_character('|') => TOKEN_PIPE_PIPE,
-         '!' => TOKEN_EXCLAMATIONMARK,
+         '!' => TOKEN_EXCLAMATION,
          '-' if self.try_consume_character('>') => TOKEN_MINUS_MORE,
 
          '&' => TOKEN_AMPERSAND,
@@ -466,19 +466,30 @@ impl<'a> Tokenizer<'a> {
             self.offset -= start.len_utf8();
             self.context_push(Context::Path);
 
-            TOKEN_PATH_START
+            TOKEN_PATH_CONTENT_START
          },
+         // ./bar/baz.txt
          start @ '.' if let Some('.' | '/') = self.peek_character() => {
             self.offset -= start.len_utf8();
             self.context_push(Context::Path);
 
-            TOKEN_PATH_START
+            TOKEN_PATH_CONTENT_START
          },
+         // /bar/baz.txt
          start @ '/' if self.peek_character().is_some_and(is_valid_path_character) => {
             self.offset -= start.len_utf8();
             self.context_push(Context::Path);
 
-            TOKEN_PATH_START
+            TOKEN_PATH_CONTENT_START
+         },
+         // <self>/bar/baz.txt
+         '<' if self
+            .peek_character()
+            .is_some_and(|c| is_valid_initial_identifier_character(c) || c == '\\') =>
+         {
+            self.context_push(Context::PathRootType);
+
+            TOKEN_PATH_ROOT_TYPE_START
          },
 
          '@' => TOKEN_AT,
@@ -493,24 +504,16 @@ impl<'a> Tokenizer<'a> {
             });
 
             match start {
-               '`' => TOKEN_IDENTIFIER_START,
+               '`' => TOKEN_QUOTED_IDENTIFIER_START,
                '\"' => TOKEN_STRING_START,
                '\'' => TOKEN_RUNE_START,
                _ => unreachable!(),
             }
          },
 
+         // TODO: Reorder `Syntax` and parse these in the same order.
          '.' => TOKEN_PERIOD,
          '/' => TOKEN_SLASH,
-
-         '<' if self
-            .peek_character()
-            .is_some_and(|c| is_valid_initial_identifier_character(c) || c == '\\') =>
-         {
-            self.context_push(Context::IslandHeader);
-
-            TOKEN_ISLAND_HEADER_START
-         },
 
          '<' if self.try_consume_character('=') => TOKEN_LESS_EQUAL,
          '<' => TOKEN_LESS,
@@ -535,7 +538,7 @@ mod tests {
    }
 
    #[test]
-   fn empty_tokens() {
+   fn test_empty_tokens() {
       assert_token_matches!(
          r#""foo \(bar)""#,
          (TOKEN_STRING_START, r#"""#),
@@ -549,7 +552,7 @@ mod tests {
    }
 
    #[test]
-   fn number_errors() {
+   fn test_number_errors() {
       assert_token_matches!(
          "0b__e 0x0 0x123.0e 0o777.0e",
          (TOKEN_ERROR_NUMBER_NO_DIGIT, "0b__"),
@@ -564,10 +567,10 @@ mod tests {
    }
 
    #[test]
-   fn path() {
+   fn test_path() {
       assert_token_matches!(
          r"../foo\(𓃰)///baz",
-         (TOKEN_PATH_START, ""),
+         (TOKEN_PATH_CONTENT_START, ""),
          (TOKEN_CONTENT, "../foo"),
          (TOKEN_INTERPOLATION_START, r"\("),
          (TOKEN_IDENTIFIER, "𓃰"),
@@ -578,7 +581,7 @@ mod tests {
    }
 
    #[test]
-   fn errors_are_individual() {
+   fn test_errors_are_individual() {
       assert_token_matches!(
          "~~~",
          (TOKEN_ERROR_UNKNOWN, "~"),

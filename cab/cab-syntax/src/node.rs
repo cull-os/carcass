@@ -290,7 +290,6 @@ node! {
       InfixOperation,
       SuffixOperation,
 
-      Island,
       Path,
 
       Bind,
@@ -322,7 +321,6 @@ impl<'a> ExpressionRef<'a> {
          Self::Identifier(identifier) => identifier.validate(to),
          Self::SString(string) => string.validate(to),
          Self::Rune(rune) => rune.validate(to),
-         Self::Island(island) => island.validate(to),
          Self::If(if_else) => if_else.validate(to),
 
          Self::Error(_) | Self::Integer(_) | Self::Float(_) => {},
@@ -840,13 +838,9 @@ node! {
 impl Interpolation {
    get_token! { interpolation_token_start -> TOKEN_INTERPOLATION_START }
 
-   get_node! { expression -> 0 @ ExpressionRef<'_> }
+   get_node! { expression -> ExpressionRef<'_> }
 
    get_token! { interpolation_token_end -> Option<TOKEN_INTERPOLATION_END> }
-
-   pub fn validate(&self, to: &mut Vec<Report>) {
-      self.expression().validate(to);
-   }
 }
 
 /// A trait that can be implemented on any node that iterates over interpolated
@@ -875,17 +869,17 @@ pub trait Parted: ops::Deref<Target = red::Node> {
    }
 }
 
-// ISLAND
+// PATH
 
 node! {
-   #[from(NODE_ISLAND_HEADER)]
-   /// An island header.
-   struct IslandHeader;
+   #[from(NODE_PATH_ROOT_TYPE)]
+   /// A path root type.
+   struct PathRootType;
 }
 
-impl Parted for IslandHeader {}
+impl Parted for PathRootType {}
 
-impl IslandHeader {
+impl PathRootType {
    get_token! { token_delimiter_left -> TOKEN_LESS }
 
    pub fn token_delimiter_right(&self) -> Option<&red::Token> {
@@ -900,53 +894,20 @@ impl IslandHeader {
 
       token
    }
-
-   pub fn validate(&self, to: &mut Vec<Report>) {
-      let mut report = Report::error("invalid island");
-      let mut reported_control_character = false;
-
-      for part in self.parts() {
-         match part {
-            InterpolatedPartRef::Content(content) => {
-               content.parts(Some(&mut report)).count();
-
-               let text = content.text();
-
-               if !reported_control_character && text.chars().any(char::is_control) {
-                  reported_control_character = true;
-                  report.push_primary(content.span(), "here");
-                  report.push_tip(
-                     "islands cannot contain control characters (non-escaped newlines, tabs, ...)",
-                  );
-               }
-            },
-
-            InterpolatedPartRef::Interpolation(interpolation) => {
-               interpolation.validate(to);
-            },
-
-            _ => {},
-         }
-      }
-
-      if !report.is_empty() {
-         to.push(report)
-      }
-   }
 }
 
 node! {
-   #[from(NODE_ISLAND)]
-   /// An island.
-   struct Island;
+   #[from(NODE_PATH_ROOT)]
+   /// A path root.
+   struct PathRoot;
 }
 
-impl Island {
+impl PathRoot {
    pub fn token_delimiter_left(&self) -> &red::Token {
-      self.header().token_delimiter_left()
+      self.type_().token_delimiter_left()
    }
 
-   get_node! { header -> &IslandHeader }
+   get_node! { type_ -> &PathRootType }
 
    pub fn config(&self) -> Option<ExpressionRef<'_>> {
       // Right after the header, must be a node.
@@ -973,7 +934,7 @@ impl Island {
    }
 
    pub fn token_delimiter_right(&self) -> Option<&red::Token> {
-      let header_delimiter_right = self.header().token_delimiter_right();
+      let header_delimiter_right = self.type_().token_delimiter_right();
 
       let token = if header_delimiter_right.is_none_or(|token| token.kind() == TOKEN_MORE) {
          header_delimiter_right
@@ -990,19 +951,15 @@ impl Island {
 
       token
    }
-
-   pub fn validate(&self, to: &mut Vec<Report>) {
-      if let Some(config) = self.config() {
-         config.validate(to);
-      }
-
-      if let Some(path) = self.path() {
-         path.validate(to);
-      }
-   }
 }
 
-// PATH
+node! {
+   #[from(NODE_PATH_CONTENT)]
+   /// A path content.
+   struct PathContent;
+}
+
+impl Parted for PathContent {}
 
 node! {
    #[from(NODE_PATH)]
@@ -1010,13 +967,59 @@ node! {
    struct Path;
 }
 
-impl Parted for Path {}
-
 impl Path {
+   get_node! { root -> Option<&PathRoot> }
+
+   get_node! { content -> Option<&PathContent> }
+
    pub fn validate(&self, to: &mut Vec<Report>) {
-      for part in self.parts() {
-         if let InterpolatedPartRef::Interpolation(interpolation) = part {
-            interpolation.validate(to);
+      if let Some(root) = self.root() {
+         let mut report = Report::error("invalid path root");
+         let mut reported_control_character = false;
+
+         for part in root.type_().parts() {
+            match part {
+               InterpolatedPartRef::Content(content) => {
+                  content.parts(Some(&mut report)).count();
+
+                  let text = content.text();
+
+                  if !reported_control_character && text.chars().any(char::is_control) {
+                     reported_control_character = true;
+                     report.push_primary(content.span(), "here");
+                     report.push_tip(
+                        "path roots cannot contain control characters (non-escaped newlines, \
+                         tabs, ...)",
+                     );
+                  }
+               },
+
+               InterpolatedPartRef::Interpolation(interpolation) => {
+                  interpolation.expression().validate(to);
+               },
+
+               _ => {},
+            }
+         }
+
+         if !report.is_empty() {
+            to.push(report)
+         }
+
+         if let Some(config) = root.config() {
+            config.validate(to);
+         }
+
+         if let Some(path) = root.path() {
+            path.validate(to);
+         }
+      }
+
+      if let Some(content) = self.content() {
+         for part in content.parts() {
+            if let InterpolatedPartRef::Interpolation(interpolation) = part {
+               interpolation.expression().validate(to);
+            }
          }
       }
    }
@@ -1085,7 +1088,7 @@ impl IdentifierQuoted {
             },
 
             InterpolatedPartRef::Interpolation(interpolation) => {
-               interpolation.validate(to);
+               interpolation.expression().validate(to);
             },
 
             _ => {},
@@ -1185,7 +1188,7 @@ impl SString {
 
          match &part {
             InterpolatedPartRef::Interpolation(interpolation) => {
-               interpolation.validate(to);
+               interpolation.expression().validate(to);
 
                let span = interpolation.span();
 

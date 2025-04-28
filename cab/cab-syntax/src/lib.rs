@@ -72,13 +72,6 @@ mod green {
    pub type Token = cstree::green::GreenToken;
 }
 
-/// [`derive_more`] causes [`unreachable`] to warn too many times
-/// so we're just suppressing it like this. No, #[allow(unreachable_code)]
-/// doesn't suppress the warns coming from the #[derive(derive_more::Display)].
-const fn unreachable() -> &'static str {
-   unreachable!()
-}
-
 /// The syntax kind.
 #[derive(
    derive_more::Display,
@@ -109,9 +102,24 @@ pub enum Kind {
    /// When the comment starts with `#` and a nonzero number of `=`, it will be
    /// multiline. Multiline comments can be closed with the initial amount of
    /// `=` and then a `#`, but they don't have to be.
+   ///
+   /// Comments can be nested. The following is a valid comment:
+   ///
+   /// ```text
+   /// #==
+   ///   #=
+   ///   ==# (this doesn't close the first comment, nor
+   ///        does it close the second comment start
+   ///        token, therefore it is ignored)
+   ///   =#
+   /// ==#
+   /// ```
    #[display("a comment")]
    TOKEN_COMMENT,
 
+   #[display("','")]
+   #[static_text(",")]
+   TOKEN_COMMA,
    #[display("';'")]
    #[static_text(";")]
    TOKEN_SEMICOLON,
@@ -136,9 +144,6 @@ pub enum Kind {
    #[static_text(")")]
    TOKEN_INTERPOLATION_END,
 
-   #[display("','")]
-   #[static_text(",")]
-   TOKEN_COMMA,
    #[display("'=>'")]
    #[static_text("=>")]
    TOKEN_EQUAL_MORE,
@@ -156,12 +161,12 @@ pub enum Kind {
    #[static_text("]")]
    TOKEN_BRACKET_RIGHT,
 
-   #[display("'//'")]
-   #[static_text("//")]
-   TOKEN_SLASH_SLASH,
    #[display("'.'")]
    #[static_text(".")]
    TOKEN_PERIOD,
+   #[display("'//'")]
+   #[static_text("//")]
+   TOKEN_SLASH_SLASH,
    #[display("'{{'")]
    #[static_text("{")]
    TOKEN_CURLYBRACE_LEFT,
@@ -169,12 +174,6 @@ pub enum Kind {
    #[static_text("}")]
    TOKEN_CURLYBRACE_RIGHT,
 
-   #[display("'!='")]
-   #[static_text("!=")]
-   TOKEN_EXCLAMATION_EQUAL,
-   #[display("'='")]
-   #[static_text("=")]
-   TOKEN_EQUAL,
    #[display("'<='")]
    #[static_text("<=")]
    TOKEN_LESS_EQUAL,
@@ -188,6 +187,13 @@ pub enum Kind {
    #[static_text(">")]
    TOKEN_MORE,
 
+   #[display("'!='")]
+   #[static_text("!=")]
+   TOKEN_EXCLAMATION_EQUAL,
+   #[display("'='")]
+   #[static_text("=")]
+   TOKEN_EQUAL,
+
    #[display("'&&'")]
    #[static_text("&&")]
    TOKEN_AMPERSAND_AMPERSAND,
@@ -196,7 +202,7 @@ pub enum Kind {
    TOKEN_PIPE_PIPE,
    #[display("'!'")]
    #[static_text("!")]
-   TOKEN_EXCLAMATIONMARK,
+   TOKEN_EXCLAMATION,
    #[display("'->'")]
    #[static_text("->")]
    TOKEN_MINUS_MORE,
@@ -247,14 +253,26 @@ pub enum Kind {
    #[display("content")]
    TOKEN_CONTENT,
 
+   /// The start of a path root type.
+   #[display("a root")]
+   #[static_text("<")]
+   TOKEN_PATH_ROOT_TYPE_START,
+   /// The end of a path root type.
+   #[display("the closing delimiter of a root")]
+   TOKEN_PATH_ROOT_TYPE_END,
+
    /// A zero width token for the start of a path. Has no content.
    #[display("a path")]
    #[static_text("")]
-   TOKEN_PATH_START,
+   TOKEN_PATH_CONTENT_START,
    /// A zero width token for the end of a path. Has no content.
    #[display("the closing delimiter of a path")]
    #[static_text("")]
    TOKEN_PATH_END,
+
+   #[display("'@'")]
+   #[static_text("@")]
+   TOKEN_AT,
 
    /// A normal non-quoted identifier. All characters must be either
    /// [`char::is_alphanumeric`], `_`, `-` or `'`. The initial character must
@@ -262,13 +280,10 @@ pub enum Kind {
    #[display("an identifier")]
    TOKEN_IDENTIFIER,
 
-   #[display("'@'")]
-   #[static_text("@")]
-   TOKEN_AT,
    #[display("an identifier")]
-   TOKEN_IDENTIFIER_START,
+   TOKEN_QUOTED_IDENTIFIER_START,
    #[display("the closing delimiter of an identifier")]
-   TOKEN_IDENTIFIER_END,
+   TOKEN_QUOTED_IDENTIFIER_END,
 
    #[display("a string")]
    TOKEN_STRING_START,
@@ -280,14 +295,8 @@ pub enum Kind {
    #[display("the closing delimiter of a rune")]
    TOKEN_RUNE_END,
 
-   #[display("an island")]
-   #[static_text("<")]
-   TOKEN_ISLAND_HEADER_START,
-   #[display("the closing delimiter of an island")]
-   TOKEN_ISLAND_HEADER_END,
-
-   #[display("{}", unreachable())]
-   NODE_ROOT,
+   #[display("{}", unreachable!())]
+   NODE_PARSE_ROOT,
    #[display("an erroneous expression")]
    NODE_ERROR,
 
@@ -310,20 +319,17 @@ pub enum Kind {
    /// A node which starts with a [`TOKEN_INTERPOLATION_START`], ends with a
    /// [`TOKEN_INTERPOLATION_END`] while having a node at the middle that can
    /// be cast to an [Expression](crate::node::Expression).
-   #[display("{}", unreachable())]
+   #[display("{}", unreachable!())]
    NODE_INTERPOLATION,
 
-   // TODO: Document.
-   #[display("{}", unreachable())]
-   NODE_ISLAND_HEADER,
-   #[display("an island")]
-   NODE_ISLAND,
-
-   /// A stringlike that is delimited by zero width [`TOKEN_PATH_START`] and
-   /// [`TOKEN_PATH_END`] tokens. See [`NODE_STRING`] for the definition of
-   /// stringlike.
    #[display("a path")]
    NODE_PATH,
+   #[display("{}", unreachable!())]
+   NODE_PATH_ROOT,
+   #[display("{}", unreachable!())]
+   NODE_PATH_ROOT_TYPE,
+   #[display("{}", unreachable!())]
+   NODE_PATH_CONTENT,
 
    /// A node that starts with a [`TOKEN_AT`] and has a [`NODE_IDENTIFIER`] as
    /// a child, used for binding expressions to identifiers.
@@ -372,16 +378,17 @@ impl Kind {
          | TOKEN_INTEGER
          | TOKEN_FLOAT
          | TOKEN_KEYWORD_IF
-         | TOKEN_PATH_START
+         | TOKEN_PATH_CONTENT_START
          | TOKEN_AT
          | TOKEN_IDENTIFIER
-         | TOKEN_IDENTIFIER_START
+         | TOKEN_QUOTED_IDENTIFIER_START
          | TOKEN_STRING_START
          | TOKEN_RUNE_START
-         | TOKEN_ISLAND_HEADER_START
    );
+
    /// An enumset of all identifier starter token kinds.
-   pub const IDENTIFIERS: EnumSet<Kind> = enum_set!(TOKEN_IDENTIFIER | TOKEN_IDENTIFIER_START);
+   pub const IDENTIFIERS: EnumSet<Kind> =
+      enum_set!(TOKEN_IDENTIFIER | TOKEN_QUOTED_IDENTIFIER_START);
 
    /// Whether if this token can be used as a lambda argument.
    ///
@@ -412,11 +419,11 @@ impl Kind {
    /// Returns the node and closing kinds of this kind.
    pub fn into_node_and_closing(self) -> Option<(Kind, Kind)> {
       Some(match self {
-         TOKEN_PATH_START => (NODE_PATH, TOKEN_PATH_END),
-         TOKEN_IDENTIFIER_START => (NODE_IDENTIFIER, TOKEN_IDENTIFIER_END),
+         TOKEN_PATH_CONTENT_START => (NODE_PATH_CONTENT, TOKEN_PATH_END),
+         TOKEN_PATH_ROOT_TYPE_START => (NODE_PATH_ROOT_TYPE, TOKEN_PATH_ROOT_TYPE_END),
+         TOKEN_QUOTED_IDENTIFIER_START => (NODE_IDENTIFIER, TOKEN_QUOTED_IDENTIFIER_END),
          TOKEN_STRING_START => (NODE_STRING, TOKEN_STRING_END),
          TOKEN_RUNE_START => (NODE_RUNE, TOKEN_RUNE_END),
-         TOKEN_ISLAND_HEADER_START => (NODE_ISLAND_HEADER, TOKEN_ISLAND_HEADER_END),
          _ => return None,
       })
    }
