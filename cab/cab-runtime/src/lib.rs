@@ -10,9 +10,6 @@ pub use code::{
 mod compile;
 pub use compile::oracle as compile_oracle;
 
-mod island;
-pub use island::Entry;
-
 mod operation;
 pub use operation::Operation;
 
