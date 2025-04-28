@@ -25,6 +25,6 @@ test  = false
 [[bin]]
 bench = false
 doc   = false
-name  = "cab-parser"
-path  = "../cab/fuzz/parser.rs"
+name  = "cab-noder"
+path  = "../cab/fuzz/noder.rs"
 test  = false
