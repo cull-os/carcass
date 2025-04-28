@@ -317,7 +317,7 @@ impl<'a> Tokenizer<'a> {
                         && remaining.starts_with(equals)
                         && remaining.as_bytes().get(equals_len).copied() == Some(b'#') =>
                   {
-                     // Hard code a 1 here because that comparision up top is a byte.
+                     // Hard code a 1 here because that comparison up top is a byte.
                      self.offset += equals_len + 1;
 
                      break TOKEN_COMMENT;

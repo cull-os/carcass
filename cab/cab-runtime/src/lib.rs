@@ -7,8 +7,8 @@ pub use code::{
    ValueIndex,
 };
 
-mod compile;
-pub use compile::oracle as compile_oracle;
+mod compiler;
+pub use compiler::oracle as compiler_oracler;
 
 mod operation;
 pub use operation::Operation;

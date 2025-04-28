@@ -119,7 +119,7 @@ async fn main() -> why::Termination {
 
          let expression = parse.expression;
 
-         let compile_oracle = cab::runtime::compile_oracle();
+         let compile_oracle = cab::runtime::compiler_oracler();
          let compile = compile_oracle.compile(expression.as_ref());
 
          let mut fail = 0;

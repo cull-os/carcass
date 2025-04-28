@@ -18,7 +18,7 @@ use std::{
 
 use yansi::Paint;
 
-/// A type alias for consice use of [`Error`].
+/// A type alias for concice use of [`Error`].
 pub type Result<T> = result::Result<T, Error>;
 
 /// The error type. Stores an error chain that can be appended to with

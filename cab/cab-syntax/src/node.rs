@@ -387,7 +387,7 @@ impl Parenthesis {
             to.push(
                Report::error("parenthesis without inner expression").primary(
                   Span::empty(self.token_parenthesis_left().span().end),
-                  "expeted an expression here",
+                  "expected an expression here",
                ),
             )
          },
