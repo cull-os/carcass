@@ -30,11 +30,11 @@ use crate::{
 /// list of [`Report`]s.
 #[derive(Debug)]
 pub struct Parse {
-   /// The underlying node.
-   pub node: red::Node,
-
    /// The [`node::Expression`].
    pub expression: node::Expression,
+
+   /// The underlying node.
+   pub node: red::Node,
 
    /// Issues reported during parsing.
    pub reports: Vec<Report>,
@@ -82,10 +82,11 @@ impl Oracle {
 
       let node = red::Node::new_root_with_resolver(green_node, self.cache.interner().clone());
 
-      let expression = node
+      let expression: node::ExpressionRef<'_> = node
          .first_child()
-         .and_then(|node| node::Expression::try_from(node.clone()).ok())
-         .unwrap();
+         .expect("noder output must contain a single parser root node")
+         .try_into()
+         .expect("parser root node must contain an expression");
 
       noder.reports.retain({
          let mut last_span = None;
@@ -104,11 +105,11 @@ impl Oracle {
          }
       });
 
-      expression.as_ref().validate(&mut noder.reports);
+      expression.validate(&mut noder.reports);
 
       Parse {
+         expression: expression.to_owned(),
          node,
-         expression,
          reports: noder.reports,
       }
    }
@@ -239,13 +240,13 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
       self.peek_nth(0)
    }
 
-   fn next_direct(&mut self) -> Option<Kind> {
+   fn next_direct(&mut self) -> Kind {
       match self.tokens.next() {
          Some((kind, slice)) => {
             self.offset += slice.size();
             self.builder.token(kind, slice);
 
-            Some(kind)
+            kind
          },
 
          None => {
@@ -253,14 +254,14 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
                .reports
                .push(unexpected(None, EnumSet::empty(), Span::empty(self.offset)));
 
-            None
+            unreachable!()
          },
       }
    }
 
    fn next_direct_while(&mut self, mut predicate: impl FnMut(Kind) -> bool) {
       while self.peek_direct().is_some_and(&mut predicate) {
-         self.next_direct().unwrap();
+         self.next_direct();
       }
    }
 
@@ -268,7 +269,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
       self.next_direct_while(Kind::is_trivia)
    }
 
-   fn next(&mut self) -> Option<Kind> {
+   fn next(&mut self) -> Kind {
       self.next_while_trivia();
       self.next_direct()
    }
@@ -277,7 +278,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
       let condition = self.peek() == Some(expected);
 
       if condition {
-         self.next().unwrap();
+         self.next();
       }
 
       condition
@@ -287,7 +288,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
       let start = self.offset;
 
       while self.peek().is_some_and(&mut predicate) {
-         self.next().unwrap();
+         self.next();
       }
 
       Span::new(start, self.offset)
@@ -298,7 +299,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
 
       match self.peek() {
          None if expected.is_empty() => None,
-         Some(next) if expected.contains(next) => Some(self.next().unwrap()),
+         Some(next) if expected.contains(next) => Some(self.next()),
 
          unexpected => {
             let unexpected_span = self.next_while(|next| !(until | expected).contains(next));
@@ -312,7 +313,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
             let next = self.peek()?;
 
             if expected.contains(next) {
-               Some(self.next().unwrap())
+               Some(self.next())
             } else {
                None
             }
@@ -440,7 +441,10 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
    fn node_delimited(&mut self) -> Option<&str> {
       let start_of_delimited = self.checkpoint();
 
-      let (node, end) = self.next().unwrap().into_node_and_closing().unwrap();
+      let (node, end) = self
+         .next()
+         .into_node_and_closing()
+         .expect("node_delimited must be called right before a starting delimiter");
 
       let mut end_delimiter = None;
 
@@ -448,7 +452,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
          loop {
             match this.peek() {
                Some(TOKEN_CONTENT) => {
-                  this.next_direct().unwrap();
+                  this.next_direct();
                },
 
                Some(TOKEN_INTERPOLATION_START) => {
@@ -457,7 +461,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
 
                Some(other) if other == end => {
                   end_delimiter = this.tokens.peek().map(|&(_, slice)| slice);
-                  this.next_direct().unwrap();
+                  this.next_direct();
                   break;
                },
 
@@ -465,7 +469,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
                   // Sometimes recoverably parsing interpolation leaves us unwanted tokens. It
                   // is not worth it trying to node it correctly without a big rewrite, so
                   // just consume them.
-                  this.next_direct().unwrap();
+                  this.next_direct();
                },
 
                None => {
@@ -585,7 +589,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
          let ((), right_power) = operator.binding_power();
 
          self.node(NODE_PREFIX_OPERATION, |this| {
-            this.next().unwrap();
+            this.next();
             this.node_expression_binding_power(right_power, until);
          });
       } else {
@@ -601,11 +605,11 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
             break;
          }
 
-         let operator_token = operator.is_token_owning().then(|| self.next().unwrap());
+         let operator_token = operator.is_token_owning().then(|| self.next());
 
          // Handle suffix-able infix operators. Not for purely suffix operators.
-         if operator_token.is_some()
-            && node::SuffixOperator::try_from(operator_token.unwrap()).is_ok()
+         if let Some(operator_token) = operator_token
+            && node::SuffixOperator::try_from(operator_token).is_ok()
             && self
                .peek()
                .is_none_or(|kind| !Kind::EXPRESSIONS.contains(kind))
