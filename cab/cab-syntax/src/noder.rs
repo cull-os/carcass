@@ -73,7 +73,7 @@ impl Oracle {
    pub fn parse<'a>(&self, tokens: impl Iterator<Item = (Kind, &'a str)>) -> Parse {
       let mut noder = Noder::with_interner_and_tokens(self.cache.interner().clone(), tokens);
 
-      noder.node(NODE_ROOT, |this| {
+      noder.node(NODE_PARSE_ROOT, |this| {
          this.node_expression(EnumSet::empty());
          this.next_expect(EnumSet::empty(), EnumSet::empty());
       });
@@ -139,7 +139,7 @@ fn unexpected(got: Option<Kind>, mut expected: EnumSet<Kind>, span: Span) -> Rep
    }
 
    if expected.is_superset(Kind::IDENTIFIERS) {
-      expected.remove(TOKEN_IDENTIFIER_START);
+      expected.remove(TOKEN_QUOTED_IDENTIFIER_START);
    }
 
    for (index, item) in expected.into_iter().enumerate() {
@@ -162,8 +162,6 @@ fn unexpected(got: Option<Kind>, mut expected: EnumSet<Kind>, span: Span) -> Rep
 
    report.primary(span, reason)
 }
-
-type Result<T> = result::Result<T, ()>;
 
 struct Noder<'a, I: Iterator<Item = (Kind, &'a str)>> {
    builder: green::NodeBuilder,
@@ -241,13 +239,13 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
       self.peek_nth(0)
    }
 
-   fn next_direct(&mut self) -> Result<Kind> {
+   fn next_direct(&mut self) -> Option<Kind> {
       match self.tokens.next() {
          Some((kind, slice)) => {
             self.offset += slice.size();
             self.builder.token(kind, slice);
 
-            Ok(kind)
+            Some(kind)
          },
 
          None => {
@@ -255,7 +253,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
                .reports
                .push(unexpected(None, EnumSet::empty(), Span::empty(self.offset)));
 
-            Err(())
+            None
          },
       }
    }
@@ -270,7 +268,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
       self.next_direct_while(Kind::is_trivia)
    }
 
-   fn next(&mut self) -> Result<Kind> {
+   fn next(&mut self) -> Option<Kind> {
       self.next_while_trivia();
       self.next_direct()
    }
@@ -373,16 +371,16 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
       });
    }
 
-   fn node_island(&mut self, until: EnumSet<Kind>) {
-      self.node(NODE_ISLAND, |this| {
+   fn node_path_root(&mut self, until: EnumSet<Kind>) {
+      self.node(NODE_PATH_ROOT, |this| {
          let end = this.node_delimited();
 
          if end == Some(">") {
-            // DONE: <island>
+            // DONE: <root>
             return;
          }
 
-         // DONE: <island:
+         // DONE: <root:
 
          if this.next_if(TOKEN_COLON) {
             // DONE: :path
@@ -401,10 +399,22 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
          this.next_expect(TOKEN_MORE.into(), until);
 
          // EITHER:
-         // <island>
-         // <island::path>
-         // <island:config>
-         // <island:config:path>
+         // <root>
+         // <root::path>
+         // <root:config>
+         // <root:config:path>
+      });
+   }
+
+   fn node_path(&mut self, until: EnumSet<Kind>) {
+      self.node(NODE_PATH, |this| {
+         if this.peek() == Some(TOKEN_PATH_ROOT_TYPE_START) {
+            this.node_path_root(until | TOKEN_PATH_CONTENT_START);
+         }
+
+         if this.peek() == Some(TOKEN_PATH_CONTENT_START) {
+            this.node_delimited();
+         }
       });
    }
 
@@ -418,7 +428,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
    }
 
    fn node_identifier(&mut self, until: EnumSet<Kind>) {
-      if self.peek() == Some(TOKEN_IDENTIFIER_START) {
+      if self.peek() == Some(TOKEN_QUOTED_IDENTIFIER_START) {
          self.node_delimited();
       } else {
          self.node(NODE_IDENTIFIER, |this| {
@@ -469,16 +479,6 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
             }
          }
       });
-
-      // Treat expressions such as <foo>/bar as applciations. The evaluator will
-      // special case on island<->path applications that contain literals to be path
-      // accesses as islands are just virtual path roots anyway. Normally you cannot
-      // use an island as a functor, I must say. That will be a hard error.
-      if node == NODE_ISLAND && self.peek_direct() == Some(TOKEN_PATH_START) {
-         self.node_from(start_of_delimited, NODE_INFIX_OPERATION, |this| {
-            this.node_delimited();
-         });
-      }
 
       end_delimiter
    }
@@ -537,11 +537,12 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
 
          Some(TOKEN_CURLYBRACE_LEFT) => self.node_attributes(until),
 
-         Some(TOKEN_ISLAND_HEADER_START) => self.node_island(until),
-
-         Some(TOKEN_PATH_START | TOKEN_STRING_START | TOKEN_RUNE_START) => {
-            self.node_delimited();
-         },
+         Some(
+            TOKEN_PATH_ROOT_TYPE_START
+            | TOKEN_PATH_CONTENT_START
+            | TOKEN_STRING_START
+            | TOKEN_RUNE_START,
+         ) => self.node_path(until),
 
          Some(TOKEN_AT) => self.node_bind(until),
 
