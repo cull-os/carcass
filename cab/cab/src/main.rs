@@ -63,9 +63,6 @@ enum Dump {
 
    /// Dump the provided file's syntax.
    Syntax,
-
-   /// Dump the provided file with parentheses to disambiguate.
-   Parenthesize,
 }
 
 #[tokio::main]
@@ -183,7 +180,7 @@ async fn main() -> why::Termination {
                }
             },
 
-            Dump::Syntax | Dump::Parenthesize => {
+            Dump::Syntax => {
                let oracle = syntax::oracle();
                let parse = oracle.parse(syntax::tokenize(&source));
 
@@ -196,12 +193,7 @@ async fn main() -> why::Termination {
                   .ok();
                }
 
-               if let Dump::Syntax = command {
-                  write!(out, "{node:#?}", node = parse.node)
-               } else {
-                  syntax::format::parenthesize(&mut out, parse.expression.as_ref())
-               }
-               .context("failed to write to stdout")?;
+               write!(out, "{node:#?}", node = parse.node).context("failed to write to stdout")?;
             },
          }
       },

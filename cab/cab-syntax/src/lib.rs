@@ -3,7 +3,6 @@
 #![feature(assert_matches, gen_blocks, if_let_guard, let_chains, trait_alias)]
 
 mod color;
-pub mod format;
 
 use std::ops;
 
