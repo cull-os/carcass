@@ -18,4 +18,5 @@ num_enum.workspace    = true
 rpds.workspace        = true
 rustc-hash.workspace  = true
 smallvec.workspace    = true
+tokio.workspace       = true
 vu128.workspace       = true

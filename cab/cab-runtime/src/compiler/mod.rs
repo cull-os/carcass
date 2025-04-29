@@ -391,7 +391,7 @@ impl<'a> Compiler<'a> {
                if is_bind {
                   this.emit_push(span, Value::Bind(plain.text().into()));
                } else {
-                  this.emit_push(span, Value::Identifier(plain.text().into()));
+                  this.emit_push(span, Value::Reference(plain.text().into()));
                   this.push_operation(span, Operation::GetLocal);
                }
 
@@ -412,7 +412,7 @@ impl<'a> Compiler<'a> {
                            if is_bind {
                               Value::Bind(content.text().into())
                            } else {
-                              Value::Identifier(content.text().into())
+                              Value::Reference(content.text().into())
                            },
                         );
                      },
