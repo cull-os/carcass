@@ -194,6 +194,7 @@ dependencies = [
  "rpds",
  "rustc-hash",
  "smallvec 2.0.0-alpha.11",
+ "tokio",
  "vu128",
 ]
 
