@@ -132,7 +132,7 @@ impl Code {
          .expect("cab-runtime bug: invalid value index")
    }
 
-   pub fn set_here(&mut self, index: ByteIndex) {
+   pub fn point_here(&mut self, index: ByteIndex) {
       let here = self.bytes.len() as u16;
 
       self.bytes[*index..*index + ENCODED_U16_LEN].copy_from_slice(&here.to_le_bytes());
