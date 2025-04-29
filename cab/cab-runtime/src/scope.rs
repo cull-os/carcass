@@ -107,12 +107,12 @@ impl LocalPosition<'_, '_> {
 
          LocalPosition::Unknown { name, scopes } => {
             for scope in scopes.iter_mut().rev() {
-               for (local_name, indexes) in &scope.locals_by_name {
+               for (local_name, indices) in &scope.locals_by_name {
                   if !local_name.maybe_equals(name) {
                      continue;
                   }
 
-                  let index = indexes
+                  let index = indices
                      .last()
                      .expect("by-name locals must have at least one item per entry");
 
@@ -162,7 +162,7 @@ impl<'a> Scope<'a> {
          .find(|(local_name, _)| local_name == &name);
 
       match slot {
-         Some((_, indexes)) => indexes.push(index),
+         Some((_, indices)) => indices.push(index),
 
          None => self.locals_by_name.push((name, smallvec![index])),
       }
@@ -175,11 +175,11 @@ impl<'a> Scope<'a> {
       name: &LocalName<'a>,
    ) -> LocalPosition<'this, 'a> {
       for (scope_index, scope) in scopes.iter().enumerate().rev() {
-         for (local_name, indexes) in &scope.locals_by_name {
+         for (local_name, indices) in &scope.locals_by_name {
             match () {
                _ if local_name == name => {
                   return LocalPosition::Known {
-                     index:  *indexes.last().unwrap(),
+                     index:  *indices.last().unwrap(),
                      scopes: &mut scopes[scope_index..],
                   };
                },
