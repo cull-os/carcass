@@ -13,8 +13,6 @@ use smallvec::{
 
 use super::{
    Compiler,
-   LocalName,
-   LocalPosition,
    Scope,
 };
 

@@ -1,13 +1,12 @@
 use std::sync::Arc;
 
-use rpds::HashTrieMapSync as HashTrieMap;
-use rustc_hash::FxBuildHasher;
-use tokio::sync::RwLock;
+mod attributes;
+pub use attributes::Attributes;
 
-use crate::{
-   Code,
-   Thunk,
-};
+mod thunk;
+pub use thunk::Thunk;
+
+use crate::Code;
 
 #[warn(variant_size_differences)]
 #[derive(Clone)]
@@ -15,7 +14,7 @@ pub enum Value {
    Nil,
    Cons(Arc<Value>, Arc<Value>),
 
-   Attributes(HashTrieMap<Arc<str>, Value, FxBuildHasher>),
+   Attributes(Attributes),
 
    Path(Arc<str>),
 
@@ -26,6 +25,6 @@ pub enum Value {
    Integer(num::BigInt),
    Float(f64),
 
-   Thunk(Arc<RwLock<Thunk>>),
+   Thunk(Thunk),
    Blueprint(Arc<Code>),
 }
