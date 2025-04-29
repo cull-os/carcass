@@ -76,15 +76,8 @@ impl<'a> Compiler<'a> {
          Or,
       };
 
-      let real_false = matches!(
-         Scope::locate(&mut self.scopes[1..], &LocalName::new(smallvec!["false"])),
-         LocalPosition::Undefined
-      );
-
-      let real_true = matches!(
-         Scope::locate(&mut self.scopes[1..], &LocalName::new(smallvec!["true"])),
-         LocalPosition::Undefined
-      );
+      let real_false = !Scope::is_user_defined(&mut self.scopes, "false");
+      let real_true = !Scope::is_user_defined(&mut self.scopes, "true");
 
       let operator_span = operation.operator_token().map(|token| token.span());
 

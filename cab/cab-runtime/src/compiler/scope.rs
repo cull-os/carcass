@@ -214,6 +214,13 @@ impl<'a> Scope<'a> {
       LocalPosition::Undefined
    }
 
+   pub fn is_user_defined(scopes: &mut [Scope<'a>], name: &'a str) -> bool {
+      !matches!(
+         Self::locate(&mut scopes[1..], &LocalName::new(smallvec![name])),
+         LocalPosition::Undefined
+      )
+   }
+
    pub fn finish(&self) -> impl Iterator<Item = &Local> {
       self.locals.iter().filter(|local| {
          let unused = !local.used;
