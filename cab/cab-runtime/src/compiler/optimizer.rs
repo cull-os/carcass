@@ -64,7 +64,11 @@ impl<'a> Compiler<'a> {
       &mut self,
       operation: &'a node::InfixOperation,
    ) -> node::ExpressionRef<'a> {
-      use Boolean::*;
+      use Boolean::{
+         False,
+         Other,
+         True,
+      };
       use node::InfixOperator::{
          All,
          And,

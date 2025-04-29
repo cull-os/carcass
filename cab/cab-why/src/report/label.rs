@@ -17,8 +17,16 @@ impl LabelSeverity {
    /// Returns the applicable style of this label severity in the given report
    /// severity.
    pub fn style_in(self, severity: ReportSeverity) -> yansi::Style {
-      use LabelSeverity::*;
-      use ReportSeverity::*;
+      use LabelSeverity::{
+         Primary,
+         Secondary,
+      };
+      use ReportSeverity::{
+         Bug,
+         Error,
+         Note,
+         Warn,
+      };
 
       match (severity, self) {
          (Note, Secondary) => yansi::Color::Blue,
