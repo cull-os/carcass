@@ -59,8 +59,8 @@ impl<'a> From<node::ExpressionRef<'a>> for Boolean<'a> {
    }
 }
 
-impl Compiler {
-   fn optimize_infix_operation<'a>(
+impl<'a> Compiler<'a> {
+   fn optimize_infix_operation(
       &mut self,
       operation: &'a node::InfixOperation,
    ) -> node::ExpressionRef<'a> {
@@ -72,11 +72,15 @@ impl Compiler {
          Or,
       };
 
-      // TODO: Inefficient as hell. Make it borrow data instead.
-      let (LocalPosition::Undefined, LocalPosition::Undefined) = (
-         Scope::locate(&self.scope, &LocalName::new(smallvec!["false".to_owned()])),
-         Scope::locate(&self.scope, &LocalName::new(smallvec!["true".to_owned()])),
-      ) else {
+      let LocalPosition::Undefined =
+         Scope::locate(&mut self.scopes, &LocalName::new(smallvec!["false"]))
+      else {
+         return operation.into();
+      };
+
+      let LocalPosition::Undefined =
+         Scope::locate(&mut self.scopes, &LocalName::new(smallvec!["true"]))
+      else {
          return operation.into();
       };
 
@@ -121,7 +125,7 @@ impl Compiler {
       }
    }
 
-   pub fn optimize<'a>(&mut self, expression: node::ExpressionRef<'a>) -> node::ExpressionRef<'a> {
+   pub fn optimize(&mut self, expression: node::ExpressionRef<'a>) -> node::ExpressionRef<'a> {
       match expression {
          node::ExpressionRef::InfixOperation(operation) => self.optimize_infix_operation(operation),
 

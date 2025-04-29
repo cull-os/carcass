@@ -1,10 +1,4 @@
-use std::{
-   cell::RefCell,
-   mem,
-   ops,
-   rc::Rc,
-   sync::Arc,
-};
+use std::sync::Arc;
 
 use cab_syntax::node::{
    self,
@@ -31,7 +25,8 @@ use crate::{
 
 mod optimizer;
 
-const EXPECT_CONTEXT: &str = "compiler must have at least one context at all times";
+const EXPECT_CODE: &str = "compiler must have at least one code at all times";
+const EXPECT_SCOPE: &str = "compiler must have at least one scope at all times";
 const EXPECT_VALIDATED: &str = "syntax must be validated";
 
 pub struct Compile {
@@ -68,70 +63,52 @@ impl Oracle {
       });
 
       Compile {
-         code: compiler.contexts.pop().expect(EXPECT_CONTEXT).code,
+         code: compiler.codes.pop().expect(EXPECT_CODE),
 
          reports: compiler.reports,
       }
    }
 }
 
-struct Context {
-   code:  Code,
-   scope: Rc<RefCell<Scope>>,
+struct Compiler<'a> {
+   codes:   Vec<Code>,
+   scopes:  Vec<Scope<'a>>,
+   reports: Vec<Report>,
 }
 
-struct Compiler {
-   contexts: Vec<Context>,
-   reports:  Vec<Report>,
-}
-
-impl ops::Deref for Compiler {
-   type Target = Context;
-
-   fn deref(&self) -> &Self::Target {
-      self.contexts.last().expect(EXPECT_CONTEXT)
-   }
-}
-
-impl ops::DerefMut for Compiler {
-   fn deref_mut(&mut self) -> &mut Self::Target {
-      self.contexts.last_mut().expect(EXPECT_CONTEXT)
-   }
-}
-
-impl Compiler {
+impl<'a> Compiler<'a> {
    fn new() -> Self {
       Compiler {
-         contexts: vec![Context {
-            code:  Code::new(),
-            scope: Rc::new(RefCell::new(Scope::root())),
-         }],
+         codes: vec![Code::new()],
+
+         scopes: vec![Scope::new()],
 
          reports: Vec::new(),
       }
    }
 
-   fn emit_push(&mut self, span: Span, value: Value) {
-      let index = self.code.push_value(value);
+   fn code(&mut self) -> &mut Code {
+      self.codes.last_mut().expect(EXPECT_CODE)
+   }
+   fn scope(&mut self) -> &mut Scope<'a> {
+      self.scopes.last_mut().expect(EXPECT_SCOPE)
+   }
 
-      self.code.push_operation(span, Operation::Push);
-      self.code.push_u64(*index as _);
+   fn emit_push(&mut self, span: Span, value: Value) {
+      let index = self.code().push_value(value);
+
+      self.code().push_operation(span, Operation::Push);
+      self.code().push_u64(*index as _);
    }
 
    fn emit_scope(&mut self, span: Span, closure: impl FnOnce(&mut Self)) {
-      let mut scope_new = Rc::new(RefCell::new(Scope::new(&self.scope)));
+      self.scopes.push(Scope::new());
 
-      mem::swap(&mut scope_new, &mut self.scope);
-      let mut scope_old = scope_new;
-
-      self.code.push_operation(span, Operation::ScopeStart);
+      self.code().push_operation(span, Operation::ScopeStart);
       closure(self);
-      self.code.push_operation(span, Operation::ScopeEnd);
+      self.code().push_operation(span, Operation::ScopeEnd);
 
-      mem::swap(&mut scope_old, &mut self.scope);
-      let scope_new = scope_old;
-
-      for local in scope_new.borrow().finish() {
+      for local in self.scopes.pop().expect("scope was just pushed").finish() {
          self.reports.push(
             Report::warn(if let Ok(name) = TryInto::<&str>::try_into(&local.name) {
                format!("unused bind '{name}'")
@@ -145,33 +122,30 @@ impl Compiler {
    }
 
    fn emit_thunk(&mut self, span: Span, closure: impl FnOnce(&mut Self)) {
-      self.contexts.push(Context {
-         code:  Code::new(),
-         scope: self.scope.clone(),
-      });
+      self.codes.push(Code::new());
 
       closure(self);
-      self.code.push_operation(span, Operation::Return);
+      self.code().push_operation(span, Operation::Return);
 
-      let context = self.contexts.pop().expect(EXPECT_CONTEXT);
+      let code = self.codes.pop().expect(EXPECT_CODE);
 
       self.emit_push(
          span,
-         // if context.scope.borrow().references_parent {
-         Value::Blueprint(Arc::new(context.code)),
+         // if code.references_parent {
+         Value::Blueprint(Arc::new(code)),
          // } else {
          //     Value::Thunk(Arc::new(Mutex::new(Thunk::suspended(span, context.code))))
          // }
       );
    }
 
-   fn emit_parenthesis(&mut self, parenthesis: &node::Parenthesis) {
+   fn emit_parenthesis(&mut self, parenthesis: &'a node::Parenthesis) {
       self.emit_scope(parenthesis.span(), |this| {
          this.emit(parenthesis.expression().expect(EXPECT_VALIDATED));
       });
    }
 
-   fn emit_list(&mut self, list: &node::List) {
+   fn emit_list(&mut self, list: &'a node::List) {
       for (index, item) in list.items().enumerate() {
          self.emit_scope(item.span(), |this| this.emit_force(item));
 
@@ -179,16 +153,18 @@ impl Compiler {
             self.emit_push(list.span(), Value::Nil);
          }
 
-         self.code.push_operation(list.span(), Operation::Construct);
+         self
+            .code()
+            .push_operation(list.span(), Operation::Construct);
       }
    }
 
-   fn emit_attributes(&mut self, attributes: &node::Attributes) {
+   fn emit_attributes(&mut self, attributes: &'a node::Attributes) {
       if let Some(expression) = attributes.expression() {
          self.emit_thunk(attributes.span(), |this| {
             this.emit_scope(attributes.span(), |this| this.emit(expression));
             this
-               .code
+               .code()
                .push_operation(expression.span(), Operation::PushScope);
          });
       } else {
@@ -199,12 +175,12 @@ impl Compiler {
       }
    }
 
-   fn emit_prefix_operation(&mut self, operation: &node::PrefixOperation) {
+   fn emit_prefix_operation(&mut self, operation: &'a node::PrefixOperation) {
       self.emit_thunk(operation.span(), |this| {
          this.emit(operation.right());
 
          this
-            .code
+            .code()
             .push_operation(operation.span(), match operation.operator() {
                node::PrefixOperator::Swwallation => Operation::Swwallation,
                node::PrefixOperator::Negation => Operation::Negation,
@@ -213,7 +189,7 @@ impl Compiler {
       });
    }
 
-   fn emit_infix_operation(&mut self, operation: &node::InfixOperation) {
+   fn emit_infix_operation(&mut self, operation: &'a node::InfixOperation) {
       self.emit_thunk(operation.span(), |this| {
          if operation.operator() == node::InfixOperator::Pipe {
             this.emit(operation.right());
@@ -243,8 +219,10 @@ impl Compiler {
 
             node::InfixOperator::Equal => Operation::Equal,
             node::InfixOperator::NotEqual => {
-               this.code.push_operation(operation.span(), Operation::Equal);
-               this.code.push_operation(operation.span(), Operation::Not);
+               this
+                  .code()
+                  .push_operation(operation.span(), Operation::Equal);
+               this.code().push_operation(operation.span(), Operation::Not);
                return;
             },
 
@@ -264,11 +242,11 @@ impl Compiler {
             node::InfixOperator::Lambda => todo!(),
          };
 
-         this.code.push_operation(operation.span(), operation_);
+         this.code().push_operation(operation.span(), operation_);
       });
    }
 
-   fn emit_suffix_operation(&mut self, operation: &node::SuffixOperation) {
+   fn emit_suffix_operation(&mut self, operation: &'a node::SuffixOperation) {
       match operation.operator() {
          node::SuffixOperator::Same => self.emit(operation.left()),
          node::SuffixOperator::Sequence => {
@@ -279,7 +257,7 @@ impl Compiler {
                this.emit_push(operation.span(), Value::Nil);
 
                this
-                  .code
+                  .code()
                   .push_operation(operation.span(), Operation::Sequence);
             });
          },
@@ -369,7 +347,7 @@ impl Compiler {
    //    });
    // }
 
-   fn emit_identifier(&mut self, is_bind: bool, span: Span, identifier: &node::Identifier) {
+   fn emit_identifier(&mut self, is_bind: bool, span: Span, identifier: &'a node::Identifier) {
       self.emit_thunk(span, |this| {
          let name = match identifier.value() {
             node::IdentifierValueRef::Plain(plain) => {
@@ -377,10 +355,10 @@ impl Compiler {
                   this.emit_push(span, Value::Bind(plain.text().into()));
                } else {
                   this.emit_push(span, Value::Identifier(plain.text().into()));
-                  this.code.push_operation(span, Operation::GetLocal);
+                  this.code().push_operation(span, Operation::GetLocal);
                }
 
-               LocalName::new(smallvec![plain.text().to_owned()])
+               LocalName::new(smallvec![plain.text()])
             },
 
             node::IdentifierValueRef::Quoted(quoted) => {
@@ -413,7 +391,7 @@ impl Compiler {
                }
 
                if parts.len() != 1 || !parts[0].is_content() {
-                  this.code.push_operation(
+                  this.code().push_operation(
                      span,
                      if is_bind {
                         Operation::BindInterpolate
@@ -421,7 +399,7 @@ impl Compiler {
                         Operation::IdentifierInterpolate
                      },
                   );
-                  this.code.push_u64(parts.len() as _);
+                  this.code().push_u64(parts.len() as _);
                }
 
                LocalName::new(
@@ -429,9 +407,7 @@ impl Compiler {
                      .into_iter()
                      .filter_map(|part| {
                         match part {
-                           node::InterpolatedPartRef::Content(content) => {
-                              Some(content.text().to_owned())
-                           },
+                           node::InterpolatedPartRef::Content(content) => Some(content.text()),
 
                            _ => None,
                         }
@@ -442,11 +418,11 @@ impl Compiler {
          };
 
          if is_bind {
-            this.scope.borrow_mut().push(span, name);
+            this.scope().push(span, name);
             return;
          }
 
-         match Scope::locate(&this.scope, &name) {
+         match Scope::locate(&mut this.scopes, &name) {
             LocalPosition::Undefined => {
                this.reports.push(
                   Report::warn(if let Ok(name) = TryInto::<&str>::try_into(&name) {
@@ -458,12 +434,12 @@ impl Compiler {
                )
             },
 
-            position => position.mark_used(),
+            mut position => position.mark_used(),
          }
       });
    }
 
-   fn emit(&mut self, expression: node::ExpressionRef<'_>) {
+   fn emit(&mut self, expression: node::ExpressionRef<'a>) {
       let expression = self.optimize(expression);
 
       match expression {
@@ -512,10 +488,10 @@ impl Compiler {
       }
    }
 
-   fn emit_force(&mut self, expression: node::ExpressionRef<'_>) {
+   fn emit_force(&mut self, expression: node::ExpressionRef<'a>) {
       self.emit(expression);
       self
-         .code
+         .code()
          .push_operation(expression.span(), Operation::Force);
    }
 }
