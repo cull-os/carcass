@@ -205,7 +205,7 @@ impl<'a> Compiler<'a> {
          Some(expression) => {
             self.emit_thunk(attributes.span(), |this| {
                this.emit_scope(attributes.span(), |this| this.emit(expression));
-               this.push_operation(expression.span(), Operation::PushScope);
+               this.push_operation(expression.span(), Operation::ScopePush);
             });
          },
 
@@ -232,12 +232,33 @@ impl<'a> Compiler<'a> {
 
    fn emit_infix_operation(&mut self, operation: &'a node::InfixOperation) {
       self.emit_thunk(operation.span(), |this| {
-         if operation.operator() == node::InfixOperator::Pipe {
-            this.emit(operation.right());
-            this.emit(operation.left());
-         } else {
-            this.emit(operation.left());
-            this.emit(operation.right());
+         match operation.operator() {
+            node::InfixOperator::Pipe => {
+               this.emit(operation.right());
+               this.emit(operation.left());
+            },
+
+            node::InfixOperator::Select => {
+               let scopes = this.scopes.split_off(1);
+
+               this.emit_scope(operation.right().span(), |this| {
+                  // TODO: Unhack.
+                  this
+                     .scope()
+                     .push(Span::new(0u32, 0u32), LocalName::new(smallvec!["", ""]));
+
+                  this.emit(operation.right())
+               });
+
+               this.scopes.extend(scopes);
+
+               this.emit(operation.left());
+            },
+
+            _ => {
+               this.emit(operation.left());
+               this.emit(operation.right());
+            },
          }
 
          let operation_ = match operation.operator() {
@@ -245,12 +266,37 @@ impl<'a> Compiler<'a> {
 
             node::InfixOperator::ImplicitApply
             | node::InfixOperator::Apply
-            | node::InfixOperator::Pipe => Operation::Apply,
+            | node::InfixOperator::Pipe => todo!(),
 
             node::InfixOperator::Concat => Operation::Concat,
             node::InfixOperator::Construct => Operation::Construct,
 
-            node::InfixOperator::Select => todo!(),
+            node::InfixOperator::Select => {
+               // <right>
+               // <left>
+
+               // <right>
+               // <old-scope>
+               this.push_operation(operation.span(), Operation::ScopeSwap);
+
+               // <old-scope>
+               // <right>
+               this.push_operation(operation.span(), Operation::Swap);
+               this.push_u16(1);
+
+               // <old-scope>
+               // <right-forced>
+               this.push_operation(operation.span(), Operation::Force);
+
+               // <right-forced>
+               // <old-scope>
+               this.push_operation(operation.span(), Operation::Swap);
+               this.push_u16(1);
+
+               // <right-forced>
+               this.push_operation(operation.span(), Operation::Pop);
+               return;
+            },
             node::InfixOperator::Update => Operation::Update,
 
             node::InfixOperator::LessOrEqual => Operation::LessOrEqual,
@@ -392,7 +438,7 @@ impl<'a> Compiler<'a> {
                   this.emit_push(span, Value::Bind(plain.text().into()));
                } else {
                   this.emit_push(span, Value::Reference(plain.text().into()));
-                  this.push_operation(span, Operation::GetLocal);
+                  this.push_operation(span, Operation::Resolve);
                }
 
                LocalName::new(smallvec![plain.text()])
