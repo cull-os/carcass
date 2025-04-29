@@ -12,12 +12,20 @@ const ENCODED_U16_LEN: usize = 0u16.to_le_bytes().len();
 #[derive(Deref, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ByteIndex(usize);
 
+impl ByteIndex {
+   pub const DUMMY: Self = Self(usize::MAX);
+}
+
 #[derive(Deref, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ValueIndex(usize);
 
+impl ValueIndex {
+   pub const DUMMY: Self = Self(usize::MAX);
+}
+
 pub struct Code {
-   content: Vec<u8>,
-   spans:   Vec<(ByteIndex, Span)>,
+   bytes: Vec<u8>,
+   spans: Vec<(ByteIndex, Span)>,
 
    values: Vec<Value>,
 }
@@ -26,9 +34,9 @@ impl Code {
    #[allow(clippy::new_without_default)]
    pub fn new() -> Self {
       Self {
-         content: Vec::new(),
-         spans:   Vec::new(),
-         values:  Vec::new(),
+         bytes:  Vec::new(),
+         spans:  Vec::new(),
+         values: Vec::new(),
       }
    }
 
@@ -36,21 +44,21 @@ impl Code {
       let mut encoded = [0; ENCODED_U64_LEN];
       let len = vu128::encode_u64(&mut encoded, data);
 
-      let index = ByteIndex(self.content.len());
-      self.content.extend_from_slice(&encoded[..len]);
+      let index = ByteIndex(self.bytes.len());
+      self.bytes.extend_from_slice(&encoded[..len]);
       index
    }
 
    #[must_use]
    pub fn read_u64(&self, index: ByteIndex) -> (u64, usize) {
-      let encoded = match self.content.get(*index..*index + ENCODED_U64_LEN) {
+      let encoded = match self.bytes.get(*index..*index + ENCODED_U64_LEN) {
          Some(slice) => slice.try_into().expect("size was statically checked"),
 
          None => {
             let mut buffer = [0; ENCODED_U64_LEN];
-            buffer[..self.content.len() - *index].copy_from_slice(
+            buffer[..self.bytes.len() - *index].copy_from_slice(
                self
-                  .content
+                  .bytes
                   .get(*index..)
                   .expect("cab-runtime bug: invalid byte index"),
             );
@@ -62,15 +70,15 @@ impl Code {
    }
 
    pub fn push_u16(&mut self, data: u16) -> ByteIndex {
-      let index = ByteIndex(self.content.len());
-      self.content.extend_from_slice(&data.to_le_bytes());
+      let index = ByteIndex(self.bytes.len());
+      self.bytes.extend_from_slice(&data.to_le_bytes());
       index
    }
 
    #[must_use]
    pub fn read_u16(&self, index: ByteIndex) -> (u16, usize) {
       let encoded = self
-         .content
+         .bytes
          .get(*index..*index + ENCODED_U16_LEN)
          .expect("cab-runtime bug: invalid byte index")
          .try_into()
@@ -80,8 +88,8 @@ impl Code {
    }
 
    pub fn push_operation(&mut self, span: Span, operation: Operation) -> ByteIndex {
-      let index = ByteIndex(self.content.len());
-      self.content.push(operation as u8);
+      let index = ByteIndex(self.bytes.len());
+      self.bytes.push(operation as u8);
 
       // No need to insert the span again if this instruction was created from the
       // last span.
@@ -104,7 +112,7 @@ impl Code {
 
       (
          span,
-         self.content[*index]
+         self.bytes[*index]
             .try_into()
             .expect("cab-runtime bug: invalid operation at byte index"),
       )
@@ -125,8 +133,8 @@ impl Code {
    }
 
    pub fn set_here(&mut self, index: ByteIndex) {
-      let here = self.content.len() as u16;
+      let here = self.bytes.len() as u16;
 
-      self.content[*index..*index + ENCODED_U16_LEN].copy_from_slice(&here.to_le_bytes());
+      self.bytes[*index..*index + ENCODED_U16_LEN].copy_from_slice(&here.to_le_bytes());
    }
 }

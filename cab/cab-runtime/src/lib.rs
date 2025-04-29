@@ -8,7 +8,7 @@ pub use code::{
 };
 
 mod compiler;
-pub use compiler::oracle as compiler_oracler;
+pub use compiler::oracle as compile_oracler;
 
 mod operation;
 pub use operation::Operation;
