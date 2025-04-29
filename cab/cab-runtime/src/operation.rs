@@ -33,8 +33,6 @@ pub enum Operation {
    Not,
 
    // INFIX
-   Sequence,
-
    Concat,
    Construct,
 
