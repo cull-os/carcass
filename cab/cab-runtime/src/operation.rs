@@ -5,24 +5,19 @@
 #[derive(num_enum::TryFromPrimitive)]
 #[repr(u8)]
 pub enum Operation {
-   // Small numbers represented as 1 u8 in vu128 are [0, 2**7) so starting the operation at that
-   // increases our chances of Code::read_operation panicking if we ever write wrong code.
-   /// Pushes the value with the index stored at [0:u64] onto the stack.
-   Push = 2u8.pow(7),
+   Push,
+   Pop,
 
-   /// Discards the current frame.
+   Swap,
+
    Return,
 
-   /// Forces {0}.
    Force,
 
-   /// Pushes the current scope to the stack.
-   PushScope,
-
-   /// Creates a new scope.
    ScopeStart,
-   /// Ends the current scope.
    ScopeEnd,
+   ScopePush,
+   ScopeSwap,
 
    IslandHeaderInterpolate,
    Island,
@@ -30,11 +25,7 @@ pub enum Operation {
    BindInterpolate,
    IdentifierInterpolate,
 
-   /// Fetches a
-   GetLocal,
-
-   /// Jumps to {1} if {0}.
-   JumpIf,
+   Resolve,
 
    // PREFIX
    Swwallation,
@@ -44,8 +35,6 @@ pub enum Operation {
 
    // INFIX
    Sequence,
-
-   Apply,
 
    Concat,
    Construct,
