@@ -77,12 +77,12 @@ impl<'a> Compiler<'a> {
       };
 
       let real_false = matches!(
-         Scope::locate(&mut self.scopes, &LocalName::new(smallvec!["false"])),
+         Scope::locate(&mut self.scopes[1..], &LocalName::new(smallvec!["false"])),
          LocalPosition::Undefined
       );
 
       let real_true = matches!(
-         Scope::locate(&mut self.scopes, &LocalName::new(smallvec!["true"])),
+         Scope::locate(&mut self.scopes[1..], &LocalName::new(smallvec!["true"])),
          LocalPosition::Undefined
       );
 

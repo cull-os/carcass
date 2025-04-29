@@ -77,18 +77,18 @@ impl Oracle {
 }
 
 struct Compiler<'a> {
-   codes:   Vec<Code>,
-   scopes:  Vec<Scope<'a>>,
-   reports: Vec<Report>,
+   codes:  Vec<Code>,
+   scopes: Vec<Scope<'a>>,
 
-   dead: usize,
+   reports: Vec<Report>,
+   dead:    usize,
 }
 
 impl<'a> Compiler<'a> {
    fn new() -> Self {
       Compiler {
          codes:   vec![Code::new()],
-         scopes:  vec![Scope::new()],
+         scopes:  vec![Scope::global()],
          reports: Vec::new(),
 
          dead: 0,

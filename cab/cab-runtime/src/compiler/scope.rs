@@ -5,6 +5,8 @@ use smallvec::{
    smallvec,
 };
 
+const GLOBALS: &[&str] = &["false", "true"];
+
 const BY_NAME_EXPECT: &str = "by-name locals must have at least one item per entry";
 
 #[derive(Deref, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -103,7 +105,7 @@ impl LocalPosition<'_, '_> {
       match self {
          LocalPosition::Known { index, scopes } => {
             scopes
-               .last_mut()
+               .first_mut()
                .expect("known local must belong to a scope")
                .locals[**index]
                .used = true;
@@ -141,8 +143,7 @@ pub struct Scope<'a> {
    locals_by_name: SmallVec<(LocalName<'a>, SmallVec<LocalIndex, 4>), 4>,
 }
 
-impl<'a> Scope<'a> {
-   #[allow(clippy::new_without_default)]
+impl Scope<'_> {
    pub fn new() -> Self {
       Self {
          locals:         SmallVec::new(),
@@ -150,6 +151,18 @@ impl<'a> Scope<'a> {
       }
    }
 
+   pub fn global() -> Self {
+      let mut this = Self::new();
+
+      for global in GLOBALS {
+         this.push(Span::new(0u32, 0u32), LocalName(smallvec![*global]));
+      }
+
+      this
+   }
+}
+
+impl<'a> Scope<'a> {
    pub fn push(&mut self, span: Span, name: LocalName<'a>) -> LocalIndex {
       let index = LocalIndex(self.locals.len());
       self.locals.push(Local {
