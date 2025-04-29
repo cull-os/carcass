@@ -5,6 +5,8 @@ use smallvec::{
    smallvec,
 };
 
+const BY_NAME_EXPECT: &str = "by-name locals must have at least one item per entry";
+
 #[derive(Deref, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct LocalIndex(usize);
 
@@ -17,24 +19,8 @@ impl PartialEq for LocalName<'_> {
    }
 }
 
-impl<'this, 'a> TryInto<&'a str> for &'this LocalName<'a> {
-   type Error = &'this [&'a str];
-
-   fn try_into(self) -> Result<&'a str, Self::Error> {
-      match self.0.len() {
-         0 => Ok(""),
-         1 => Ok(self.0[0]),
-         _ => Err(&self.0),
-      }
-   }
-}
-
-impl<'a> LocalName<'a> {
-   pub fn new(parts: SmallVec<&'a str, 4>) -> Self {
-      Self(parts)
-   }
-
-   fn maybe_equals(&self, other: &Self) -> bool {
+impl LocalName<'_> {
+   pub fn maybe_eq(&self, other: &Self) -> bool {
       match (
          TryInto::<&str>::try_into(self),
          TryInto::<&str>::try_into(other),
@@ -79,6 +65,24 @@ impl<'a> LocalName<'a> {
    }
 }
 
+impl<'this, 'a> TryInto<&'a str> for &'this LocalName<'a> {
+   type Error = &'this [&'a str];
+
+   fn try_into(self) -> Result<&'a str, Self::Error> {
+      match self.0.len() {
+         0 => Ok(""),
+         1 => Ok(self.0[0]),
+         _ => Err(&self.0),
+      }
+   }
+}
+
+impl<'a> LocalName<'a> {
+   pub fn new(parts: SmallVec<&'a str, 4>) -> Self {
+      Self(parts)
+   }
+}
+
 #[derive(Debug)]
 pub enum LocalPosition<'this, 'a> {
    Known {
@@ -108,13 +112,11 @@ impl LocalPosition<'_, '_> {
          LocalPosition::Unknown { name, scopes } => {
             for scope in scopes.iter_mut().rev() {
                for (local_name, indices) in &scope.locals_by_name {
-                  if !local_name.maybe_equals(name) {
+                  if !local_name.maybe_eq(name) {
                      continue;
                   }
 
-                  let index = indices
-                     .last()
-                     .expect("by-name locals must have at least one item per entry");
+                  let index = indices.last().expect(BY_NAME_EXPECT);
 
                   scope.locals[**index].used = true;
                }
@@ -177,14 +179,14 @@ impl<'a> Scope<'a> {
       for (scope_index, scope) in scopes.iter().enumerate().rev() {
          for (local_name, indices) in &scope.locals_by_name {
             match () {
-               _ if local_name == name => {
+               _ if local_name.eq(name) => {
                   return LocalPosition::Known {
-                     index:  *indices.last().unwrap(),
+                     index:  *indices.last().expect(BY_NAME_EXPECT),
                      scopes: &mut scopes[scope_index..],
                   };
                },
 
-               _ if local_name.maybe_equals(name) => {
+               _ if local_name.maybe_eq(name) => {
                   return LocalPosition::Unknown {
                      name:   name.clone(),
                      scopes: &mut scopes[scope_index..],
