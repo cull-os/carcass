@@ -33,6 +33,7 @@ use scope::{
 const EXPECT_CODE: &str = "compiler must have at least one code at all times";
 const EXPECT_SCOPE: &str = "compiler must have at least one scope at all times";
 const EXPECT_VALIDATED: &str = "syntax must be validated";
+const EXPECT_HANDLED: &str = "case was handled";
 
 pub struct Compile {
    pub code:    Code,
@@ -234,9 +235,18 @@ impl<'a> Compiler<'a> {
       });
    }
 
+   // TODO: Preserve warning order, make it be the same as declaration order.
    fn emit_infix_operation(&mut self, operation: &'a node::InfixOperation) {
       self.emit_thunk(operation.span(), |this| {
          match operation.operator() {
+            node::InfixOperator::Sequence => {
+               this.emit_force(operation.left());
+               this.push_operation(operation.span(), Operation::Pop);
+
+               this.emit(operation.right());
+               return;
+            },
+
             node::InfixOperator::Pipe => {
                this.emit(operation.right());
                this.emit(operation.left());
@@ -257,6 +267,31 @@ impl<'a> Compiler<'a> {
                this.scopes.extend(scopes);
 
                this.emit(operation.left());
+
+               // <right>
+               // <left>
+               this.push_operation(operation.span(), Operation::ScopeSwap);
+
+               // <right>
+               // <old-scope>
+               this.push_operation(operation.span(), Operation::Swap);
+               this.push_u16(1);
+
+               // <old-scope>
+               // <right>
+               this.push_operation(operation.span(), Operation::Force);
+
+               // <old-scope>
+               // <right-forced>
+               this.push_operation(operation.span(), Operation::Swap);
+               this.push_u16(1);
+
+               // <right-forced>
+               // <old-scope>
+               this.push_operation(operation.span(), Operation::Pop);
+
+               // <right-forced>
+               return;
             },
 
             _ => {
@@ -266,7 +301,7 @@ impl<'a> Compiler<'a> {
          }
 
          let operation_ = match operation.operator() {
-            node::InfixOperator::Sequence => Operation::Sequence,
+            node::InfixOperator::Sequence => unreachable!("{EXPECT_HANDLED}"),
 
             node::InfixOperator::ImplicitApply
             | node::InfixOperator::Apply
@@ -275,32 +310,7 @@ impl<'a> Compiler<'a> {
             node::InfixOperator::Concat => Operation::Concat,
             node::InfixOperator::Construct => Operation::Construct,
 
-            node::InfixOperator::Select => {
-               // <right>
-               // <left>
-
-               // <right>
-               // <old-scope>
-               this.push_operation(operation.span(), Operation::ScopeSwap);
-
-               // <old-scope>
-               // <right>
-               this.push_operation(operation.span(), Operation::Swap);
-               this.push_u16(1);
-
-               // <old-scope>
-               // <right-forced>
-               this.push_operation(operation.span(), Operation::Force);
-
-               // <right-forced>
-               // <old-scope>
-               this.push_operation(operation.span(), Operation::Swap);
-               this.push_u16(1);
-
-               // <right-forced>
-               this.push_operation(operation.span(), Operation::Pop);
-               return;
-            },
+            node::InfixOperator::Select => unreachable!("{EXPECT_HANDLED}"),
             node::InfixOperator::Update => Operation::Update,
 
             node::InfixOperator::LessOrEqual => Operation::LessOrEqual,
@@ -340,12 +350,11 @@ impl<'a> Compiler<'a> {
          node::SuffixOperator::Same => self.emit(operation.left()),
          node::SuffixOperator::Sequence => {
             self.emit_thunk(operation.span(), |this| {
-               this.emit(operation.left());
+               this.emit_force(operation.left());
+               this.push_operation(operation.span(), Operation::Pop);
 
                // TODO: Use a proper value, similar to `undefined` in Haskell.
                this.emit_push(operation.span(), Value::Nil);
-
-               this.push_operation(operation.span(), Operation::Sequence);
             });
          },
       }
