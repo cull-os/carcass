@@ -72,17 +72,15 @@ impl<'a> Compiler<'a> {
          Or,
       };
 
-      let LocalPosition::Undefined =
-         Scope::locate(&mut self.scopes, &LocalName::new(smallvec!["false"]))
-      else {
-         return operation.into();
-      };
+      let real_false = matches!(
+         Scope::locate(&mut self.scopes, &LocalName::new(smallvec!["false"])),
+         LocalPosition::Undefined
+      );
 
-      let LocalPosition::Undefined =
-         Scope::locate(&mut self.scopes, &LocalName::new(smallvec!["true"]))
-      else {
-         return operation.into();
-      };
+      let real_true = matches!(
+         Scope::locate(&mut self.scopes, &LocalName::new(smallvec!["true"])),
+         LocalPosition::Undefined
+      );
 
       let operator_span = operation.operator_token().map(|token| token.span());
 
@@ -92,13 +90,12 @@ impl<'a> Compiler<'a> {
          operation.right().into(),
       ) {
          // false ||, false |
-         // true &&, true &
          (False(boolean), Or | Any, Other(expression))
          | (Other(expression), Or | Any, False(boolean))
-         | (True(boolean), And | All, Other(expression))
-         | (Other(expression), And | All, True(boolean)) => {
+            if real_false =>
+         {
             self.reports.push(
-               Report::warn("unnecessary infix operation")
+               Report::warn("this `false` has no effect on the result of the operation")
                   .primary(boolean.span().cover(operator_span.unwrap()), "delete this"),
             );
 
@@ -106,17 +103,78 @@ impl<'a> Compiler<'a> {
          },
 
          // false &&, false &
+         (False(boolean), And | All, right) if real_false => {
+            self.reports.push(
+               Report::warn("this expression is always `false`")
+                  .secondary(operation.span(), "this expression")
+                  .primary(
+                     boolean.span().cover(operator_span.unwrap()),
+                     "this might be unwanted",
+                  ),
+            );
+
+            if let Other(expression) = right {
+               self.emit_dead(expression);
+            }
+
+            boolean
+         },
+
+         // && false, & false
+         (_, And | All, False(boolean)) if real_false => {
+            self.reports.push(
+               Report::warn("this expression is always `false`")
+                  .secondary(operation.span(), "this expression")
+                  .primary(
+                     boolean.span().cover(operator_span.unwrap()),
+                     "this might be unwanted",
+                  ),
+            );
+
+            operation.into()
+         },
+
+         // true &&, true &
+         (True(boolean), And | All, Other(expression))
+         | (Other(expression), And | All, True(boolean))
+            if real_true =>
+         {
+            self.reports.push(
+               Report::warn("this `true` has no effect on the result of the operation")
+                  .primary(boolean.span().cover(operator_span.unwrap()), "delete this"),
+            );
+
+            expression
+         },
+
          // true ||, true |
-         (True(boolean), Or | Any, Other(_))
-         | (Other(_), Or | Any, True(boolean))
-         | (False(boolean), And | All, Other(_))
-         | (Other(_), And | All, False(boolean)) => {
-            self
-               .reports
-               .push(Report::warn("this expression never changes").primary(
-                  boolean.span().cover(operator_span.unwrap()),
-                  "because of this",
-               ));
+         (True(boolean), Or | Any, right) if real_true => {
+            self.reports.push(
+               Report::warn("this expression is always `true`")
+                  .secondary(operation.span(), "this expression")
+                  .primary(
+                     boolean.span().cover(operator_span.unwrap()),
+                     "this might be unwanted",
+                  ),
+            );
+
+            if let Other(expression) = right {
+               self.emit_dead(expression);
+            }
+
+            boolean
+         },
+
+         // || true, | true
+         (_, Or | Any, True(boolean)) if real_true => {
+            self.reports.push(
+               Report::warn("this expression is always `true`")
+                  .secondary(operation.span(), "this expression")
+                  .primary(
+                     boolean.span().cover(operator_span.unwrap()),
+                     "this might be unwanted",
+                  ),
+            );
 
             operation.into()
          },

@@ -15,12 +15,14 @@ use rustc_hash::FxBuildHasher;
 use smallvec::smallvec;
 
 use crate::{
+   ByteIndex,
    Code,
    LocalName,
    LocalPosition,
    Operation,
    Scope,
    Value,
+   ValueIndex,
 };
 
 mod optimizer;
@@ -74,39 +76,76 @@ struct Compiler<'a> {
    codes:   Vec<Code>,
    scopes:  Vec<Scope<'a>>,
    reports: Vec<Report>,
+
+   dead: usize,
 }
 
 impl<'a> Compiler<'a> {
    fn new() -> Self {
       Compiler {
-         codes: vec![Code::new()],
-
-         scopes: vec![Scope::new()],
-
+         codes:   vec![Code::new()],
+         scopes:  vec![Scope::new()],
          reports: Vec::new(),
+
+         dead: 0,
       }
    }
 
    fn code(&mut self) -> &mut Code {
       self.codes.last_mut().expect(EXPECT_CODE)
    }
+
    fn scope(&mut self) -> &mut Scope<'a> {
       self.scopes.last_mut().expect(EXPECT_SCOPE)
    }
 
-   fn emit_push(&mut self, span: Span, value: Value) {
-      let index = self.code().push_value(value);
+   fn push_u64(&mut self, data: u64) -> ByteIndex {
+      if self.dead > 0 {
+         return ByteIndex::DUMMY;
+      }
 
-      self.code().push_operation(span, Operation::Push);
-      self.code().push_u64(*index as _);
+      self.code().push_u64(data)
+   }
+
+   fn push_u16(&mut self, data: u16) -> ByteIndex {
+      if self.dead > 0 {
+         return ByteIndex::DUMMY;
+      }
+
+      self.code().push_u16(data)
+   }
+
+   fn push_operation(&mut self, span: Span, operation: Operation) -> ByteIndex {
+      if self.dead > 0 {
+         return ByteIndex::DUMMY;
+      }
+
+      self.code().push_operation(span, operation)
+   }
+
+   fn push_value(&mut self, value: Value) -> ValueIndex {
+      if self.dead > 0 {
+         return ValueIndex::DUMMY;
+      }
+
+      self.code().push_value(value)
+   }
+}
+
+impl<'a> Compiler<'a> {
+   fn emit_push(&mut self, span: Span, value: Value) {
+      let index = self.push_value(value);
+
+      self.push_operation(span, Operation::Push);
+      self.push_u64(*index as _);
    }
 
    fn emit_scope(&mut self, span: Span, closure: impl FnOnce(&mut Self)) {
       self.scopes.push(Scope::new());
 
-      self.code().push_operation(span, Operation::ScopeStart);
+      self.push_operation(span, Operation::ScopeStart);
       closure(self);
-      self.code().push_operation(span, Operation::ScopeEnd);
+      self.push_operation(span, Operation::ScopeEnd);
 
       for local in self.scopes.pop().expect("scope was just pushed").finish() {
          self.reports.push(
@@ -125,7 +164,7 @@ impl<'a> Compiler<'a> {
       self.codes.push(Code::new());
 
       closure(self);
-      self.code().push_operation(span, Operation::Return);
+      self.push_operation(span, Operation::Return);
 
       let code = self.codes.pop().expect(EXPECT_CODE);
 
@@ -153,25 +192,25 @@ impl<'a> Compiler<'a> {
             self.emit_push(list.span(), Value::Nil);
          }
 
-         self
-            .code()
-            .push_operation(list.span(), Operation::Construct);
+         self.push_operation(list.span(), Operation::Construct);
       }
    }
 
    fn emit_attributes(&mut self, attributes: &'a node::Attributes) {
-      if let Some(expression) = attributes.expression() {
-         self.emit_thunk(attributes.span(), |this| {
-            this.emit_scope(attributes.span(), |this| this.emit(expression));
-            this
-               .code()
-               .push_operation(expression.span(), Operation::PushScope);
-         });
-      } else {
-         self.emit_push(
-            attributes.span(),
-            Value::Attributes(HashTrieMap::new_with_hasher_and_ptr_kind(FxBuildHasher)),
-         );
+      match attributes.expression() {
+         Some(expression) => {
+            self.emit_thunk(attributes.span(), |this| {
+               this.emit_scope(attributes.span(), |this| this.emit(expression));
+               this.push_operation(expression.span(), Operation::PushScope);
+            });
+         },
+
+         None => {
+            self.emit_push(
+               attributes.span(),
+               Value::Attributes(HashTrieMap::new_with_hasher_and_ptr_kind(FxBuildHasher)),
+            );
+         },
       }
    }
 
@@ -179,13 +218,11 @@ impl<'a> Compiler<'a> {
       self.emit_thunk(operation.span(), |this| {
          this.emit(operation.right());
 
-         this
-            .code()
-            .push_operation(operation.span(), match operation.operator() {
-               node::PrefixOperator::Swwallation => Operation::Swwallation,
-               node::PrefixOperator::Negation => Operation::Negation,
-               node::PrefixOperator::Not => Operation::Not,
-            });
+         this.push_operation(operation.span(), match operation.operator() {
+            node::PrefixOperator::Swwallation => Operation::Swwallation,
+            node::PrefixOperator::Negation => Operation::Negation,
+            node::PrefixOperator::Not => Operation::Not,
+         });
       });
    }
 
@@ -219,10 +256,8 @@ impl<'a> Compiler<'a> {
 
             node::InfixOperator::Equal => Operation::Equal,
             node::InfixOperator::NotEqual => {
-               this
-                  .code()
-                  .push_operation(operation.span(), Operation::Equal);
-               this.code().push_operation(operation.span(), Operation::Not);
+               this.push_operation(operation.span(), Operation::Equal);
+               this.push_operation(operation.span(), Operation::Not);
                return;
             },
 
@@ -242,7 +277,7 @@ impl<'a> Compiler<'a> {
             node::InfixOperator::Lambda => todo!(),
          };
 
-         this.code().push_operation(operation.span(), operation_);
+         this.push_operation(operation.span(), operation_);
       });
    }
 
@@ -256,9 +291,7 @@ impl<'a> Compiler<'a> {
                // TODO: Use a proper value, similar to `undefined` in Haskell.
                this.emit_push(operation.span(), Value::Nil);
 
-               this
-                  .code()
-                  .push_operation(operation.span(), Operation::Sequence);
+               this.push_operation(operation.span(), Operation::Sequence);
             });
          },
       }
@@ -355,7 +388,7 @@ impl<'a> Compiler<'a> {
                   this.emit_push(span, Value::Bind(plain.text().into()));
                } else {
                   this.emit_push(span, Value::Identifier(plain.text().into()));
-                  this.code().push_operation(span, Operation::GetLocal);
+                  this.push_operation(span, Operation::GetLocal);
                }
 
                LocalName::new(smallvec![plain.text()])
@@ -391,7 +424,7 @@ impl<'a> Compiler<'a> {
                }
 
                if parts.len() != 1 || !parts[0].is_content() {
-                  this.code().push_operation(
+                  this.push_operation(
                      span,
                      if is_bind {
                         Operation::BindInterpolate
@@ -399,7 +432,7 @@ impl<'a> Compiler<'a> {
                         Operation::IdentifierInterpolate
                      },
                   );
-                  this.code().push_u64(parts.len() as _);
+                  this.push_u64(parts.len() as _);
                }
 
                LocalName::new(
@@ -488,10 +521,14 @@ impl<'a> Compiler<'a> {
       }
    }
 
+   fn emit_dead(&mut self, expression: node::ExpressionRef<'a>) {
+      self.dead += 1;
+      self.emit(expression);
+      self.dead -= 1;
+   }
+
    fn emit_force(&mut self, expression: node::ExpressionRef<'a>) {
       self.emit(expression);
-      self
-         .code()
-         .push_operation(expression.span(), Operation::Force);
+      self.push_operation(expression.span(), Operation::Force);
    }
 }
