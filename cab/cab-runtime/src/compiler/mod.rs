@@ -133,6 +133,14 @@ impl<'a> Compiler<'a> {
 
       self.code().push_value(value)
    }
+
+   fn point_here(&mut self, index: ByteIndex) {
+      if self.dead > 0 {
+         return;
+      }
+
+      self.code().point_here(index);
+   }
 }
 
 impl<'a> Compiler<'a> {
@@ -518,6 +526,26 @@ impl<'a> Compiler<'a> {
       });
    }
 
+   fn emit_if(&mut self, if_: &'a node::If) {
+      self.emit_thunk(if_.span(), |this| {
+         this.emit_force(if_.condition());
+
+         this.push_operation(if_.span(), Operation::JumpIf);
+         let to_consequence = this.push_u16(0);
+
+         this.push_operation(if_.span(), Operation::Pop);
+         this.emit(if_.alternative());
+         this.push_operation(if_.span(), Operation::Jump);
+         let over_consequence = this.push_u16(0);
+
+         this.point_here(to_consequence);
+         this.push_operation(if_.span(), Operation::Pop);
+         this.emit(if_.alternative());
+
+         this.point_here(over_consequence);
+      });
+   }
+
    fn emit(&mut self, expression: node::ExpressionRef<'a>) {
       let expression = self.optimize(expression);
 
@@ -563,7 +591,7 @@ impl<'a> Compiler<'a> {
             self.emit_push(float.span(), Value::Float(float.value()));
          },
 
-         node::ExpressionRef::If(_) => todo!(),
+         node::ExpressionRef::If(if_) => self.emit_if(if_),
       }
    }
 

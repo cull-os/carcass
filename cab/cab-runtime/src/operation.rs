@@ -5,12 +5,15 @@
 #[derive(num_enum::TryFromPrimitive)]
 #[repr(u8)]
 pub enum Operation {
+   Return,
+
    Push,
    Pop,
 
    Swap,
 
-   Return,
+   Jump,
+   JumpIf,
 
    Force,
 
