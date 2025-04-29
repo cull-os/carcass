@@ -10,8 +10,6 @@ use cab_why::{
    ReportSeverity,
    Span,
 };
-use rpds::HashTrieMapSync as HashTrieMap;
-use rustc_hash::FxBuildHasher;
 use smallvec::smallvec;
 
 use crate::{
@@ -20,6 +18,7 @@ use crate::{
    Operation,
    Value,
    ValueIndex,
+   value,
 };
 
 mod optimizer;
@@ -210,10 +209,7 @@ impl<'a> Compiler<'a> {
          },
 
          None => {
-            self.emit_push(
-               attributes.span(),
-               Value::Attributes(HashTrieMap::new_with_hasher_and_ptr_kind(FxBuildHasher)),
-            );
+            self.emit_push(attributes.span(), value::Attributes::new().into());
          },
       }
    }

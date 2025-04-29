@@ -8,13 +8,14 @@ use rustc_hash::{
    FxBuildHasher,
    FxHashMap,
 };
+use tokio::sync::RwLock;
 
 use crate::{
    Code,
    Value,
 };
 
-pub enum Thunk {
+enum ThunkInner {
    Suspended {
       span:   Span,
       code:   Code,
@@ -32,16 +33,27 @@ pub enum Thunk {
    Evaluated(Arc<Value>),
 }
 
+#[derive(Clone)]
+pub struct Thunk(Arc<RwLock<ThunkInner>>);
+
+impl Into<Value> for Thunk {
+   fn into(self) -> Value {
+      Value::Thunk(self)
+   }
+}
+
 impl Thunk {
    pub fn suspended(span: Span, code: Code) -> Self {
-      Self::Suspended {
+      Self(Arc::new(RwLock::new(ThunkInner::Suspended {
          span,
          code,
          locals: HashMap::with_hasher(FxBuildHasher),
-      }
+      })))
    }
 
    pub fn suspended_native(native: impl FnOnce() -> Value + Send + Sync + 'static) -> Self {
-      Self::SuspendedNative(Box::new(native))
+      Self(Arc::new(RwLock::new(ThunkInner::SuspendedNative(
+         Box::new(native),
+      ))))
    }
 }

@@ -13,8 +13,5 @@ pub use compiler::oracle as compile_oracler;
 mod operation;
 pub use operation::Operation;
 
-mod thunk;
-pub use thunk::Thunk;
-
-mod value;
+pub mod value;
 pub use value::Value;
