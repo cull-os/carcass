@@ -22,11 +22,7 @@ pub enum Operation {
    ScopePush,
    ScopeSwap,
 
-   IslandHeaderInterpolate,
-   Island,
-   PathInterpolate,
-   BindInterpolate,
-   IdentifierInterpolate,
+   Interpolate,
 
    Resolve,
 

@@ -478,14 +478,7 @@ impl<'a> Compiler<'a> {
                }
 
                if parts.len() != 1 || !parts[0].is_content() {
-                  this.push_operation(
-                     span,
-                     if is_bind {
-                        Operation::BindInterpolate
-                     } else {
-                        Operation::IdentifierInterpolate
-                     },
-                  );
+                  this.push_operation(span, Operation::Interpolate);
                   this.push_u64(parts.len() as _);
                }
 
