@@ -1,8 +1,3 @@
-use std::{
-   cell::RefCell,
-   rc::Rc,
-};
-
 use cab_why::Span;
 use derive_more::Deref;
 use smallvec::{
@@ -14,28 +9,28 @@ use smallvec::{
 pub struct LocalIndex(usize);
 
 #[derive(Debug, Clone, Eq)]
-pub struct LocalName(SmallVec<String, 4>);
+pub struct LocalName<'a>(SmallVec<&'a str, 4>);
 
-impl PartialEq for LocalName {
+impl PartialEq for LocalName<'_> {
    fn eq(&self, other: &Self) -> bool {
       self.0.len() <= 1 && self.0 == other.0
    }
 }
 
-impl<'a> TryInto<&'a str> for &'a LocalName {
-   type Error = &'a [String];
+impl<'this, 'a> TryInto<&'a str> for &'this LocalName<'a> {
+   type Error = &'this [&'a str];
 
    fn try_into(self) -> Result<&'a str, Self::Error> {
       match self.0.len() {
          0 => Ok(""),
-         1 => Ok(&self.0[0]),
+         1 => Ok(self.0[0]),
          _ => Err(&self.0),
       }
    }
 }
 
-impl LocalName {
-   pub fn new(parts: SmallVec<String, 4>) -> Self {
+impl<'a> LocalName<'a> {
+   pub fn new(parts: SmallVec<&'a str, 4>) -> Self {
       Self(parts)
    }
 
@@ -84,49 +79,45 @@ impl LocalName {
    }
 }
 
-#[derive(Debug, Clone)]
-pub enum LocalPosition {
+#[derive(Debug)]
+pub enum LocalPosition<'this, 'a> {
    Known {
-      scope: Rc<RefCell<Scope>>,
-      index: LocalIndex,
+      index:  LocalIndex,
+      scopes: &'this mut [Scope<'a>],
    },
 
    Unknown {
-      haystack: Rc<RefCell<Scope>>,
-      needle:   LocalName,
+      name:   LocalName<'a>,
+      scopes: &'this mut [Scope<'a>],
    },
 
    Undefined,
 }
 
-impl LocalPosition {
-   pub fn mark_used(&self) {
+impl LocalPosition<'_, '_> {
+   pub fn mark_used(&mut self) {
       match self {
-         LocalPosition::Known { scope, index } => scope.borrow_mut().locals[**index].used = true,
+         LocalPosition::Known { index, scopes } => {
+            scopes
+               .last_mut()
+               .expect("known local must belong to a scope")
+               .locals[**index]
+               .used = true;
+         },
 
-         LocalPosition::Unknown { haystack, needle } => {
-            let mut haystack = haystack.clone();
-
-            loop {
-               {
-                  let scope = &mut *haystack.borrow_mut();
-
-                  for (local_name, indexes) in &scope.locals_by_name {
-                     if local_name.maybe_equals(needle) {
-                        let visible = indexes
-                           .last()
-                           .expect("by-name locals must have at least one item per entry");
-
-                        scope.locals[**visible].used = true;
-                     }
+         LocalPosition::Unknown { name, scopes } => {
+            for scope in scopes.iter_mut().rev() {
+               for (local_name, indexes) in &scope.locals_by_name {
+                  if !local_name.maybe_equals(name) {
+                     continue;
                   }
+
+                  let index = indexes
+                     .last()
+                     .expect("by-name locals must have at least one item per entry");
+
+                  scope.locals[**index].used = true;
                }
-
-               let Some(parent) = haystack.borrow().parent.clone() else {
-                  break;
-               };
-
-               haystack = parent;
             }
          },
 
@@ -136,44 +127,28 @@ impl LocalPosition {
 }
 
 #[derive(Debug)]
-pub struct Local {
+pub struct Local<'a> {
    pub span: Span,
-   pub name: LocalName,
+   pub name: LocalName<'a>,
    used:     bool,
 }
 
 #[derive(Debug)]
-pub struct Scope {
-   parent: Option<Rc<RefCell<Scope>>>,
-
-   locals:         SmallVec<Local, 4>,
-   locals_by_name: SmallVec<(LocalName, SmallVec<LocalIndex, 4>), 4>,
+pub struct Scope<'a> {
+   locals:         SmallVec<Local<'a>, 4>,
+   locals_by_name: SmallVec<(LocalName<'a>, SmallVec<LocalIndex, 4>), 4>,
 }
 
-impl Default for Scope {
-   fn default() -> Self {
-      Self::root()
-   }
-}
-
-impl Scope {
-   pub fn root() -> Self {
+impl<'a> Scope<'a> {
+   #[allow(clippy::new_without_default)]
+   pub fn new() -> Self {
       Self {
-         parent:         None,
          locals:         SmallVec::new(),
          locals_by_name: SmallVec::new(),
       }
    }
 
-   pub fn new(parent: &Rc<RefCell<Scope>>) -> Self {
-      Self {
-         parent:         Some(parent.clone()),
-         locals:         SmallVec::new(),
-         locals_by_name: SmallVec::new(),
-      }
-   }
-
-   pub fn push(&mut self, span: Span, name: LocalName) -> LocalIndex {
+   pub fn push(&mut self, span: Span, name: LocalName<'a>) -> LocalIndex {
       let index = LocalIndex(self.locals.len());
       self.locals.push(Local {
          span,
@@ -195,34 +170,33 @@ impl Scope {
       index
    }
 
-   pub fn locate(this: &Rc<RefCell<Self>>, name: &LocalName) -> LocalPosition {
-      for (local_name, indexes) in &this.borrow().locals_by_name {
-         match () {
-            _ if local_name == name => {
-               return LocalPosition::Known {
-                  scope: this.clone(),
-                  index: *indexes.last().expect(""),
-               };
-            },
+   pub fn locate<'this>(
+      scopes: &'this mut [Scope<'a>],
+      name: &LocalName<'a>,
+   ) -> LocalPosition<'this, 'a> {
+      for (scope_index, scope) in scopes.iter().enumerate().rev() {
+         for (local_name, indexes) in &scope.locals_by_name {
+            match () {
+               _ if local_name == name => {
+                  return LocalPosition::Known {
+                     index:  *indexes.last().unwrap(),
+                     scopes: &mut scopes[scope_index..],
+                  };
+               },
 
-            _ if local_name.maybe_equals(name) => {
-               return LocalPosition::Unknown {
-                  haystack: this.clone(),
-                  needle:   name.clone(),
-               };
-            },
+               _ if local_name.maybe_equals(name) => {
+                  return LocalPosition::Unknown {
+                     name:   name.clone(),
+                     scopes: &mut scopes[scope_index..],
+                  };
+               },
 
-            _ => {},
+               _ => {},
+            }
          }
       }
 
-      this
-         .borrow()
-         .parent
-         .as_ref()
-         .map_or(LocalPosition::Undefined, |parent| {
-            Scope::locate(parent, name)
-         })
+      LocalPosition::Undefined
    }
 
    pub fn finish(&self) -> impl Iterator<Item = &Local> {
