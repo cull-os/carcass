@@ -13,15 +13,6 @@ pub use compiler::oracle as compile_oracler;
 mod operation;
 pub use operation::Operation;
 
-mod scope;
-pub use scope::{
-   Local,
-   LocalIndex,
-   LocalName,
-   LocalPosition,
-   Scope,
-};
-
 mod thunk;
 pub use thunk::Thunk;
 

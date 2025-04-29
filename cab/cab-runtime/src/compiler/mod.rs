@@ -17,15 +17,19 @@ use smallvec::smallvec;
 use crate::{
    ByteIndex,
    Code,
-   LocalName,
-   LocalPosition,
    Operation,
-   Scope,
    Value,
    ValueIndex,
 };
 
 mod optimizer;
+
+mod scope;
+use scope::{
+   LocalName,
+   LocalPosition,
+   Scope,
+};
 
 const EXPECT_CODE: &str = "compiler must have at least one code at all times";
 const EXPECT_SCOPE: &str = "compiler must have at least one scope at all times";

@@ -11,8 +11,8 @@ use smallvec::{
    smallvec,
 };
 
-use super::Compiler;
-use crate::{
+use super::{
+   Compiler,
    LocalName,
    LocalPosition,
    Scope,
