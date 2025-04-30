@@ -5,6 +5,7 @@ use cab_syntax::node::{
 use cab_why::{
    IntoSpan,
    Report,
+   Span,
 };
 use smallvec::{
    SmallVec,
@@ -77,7 +78,11 @@ impl<'a> Compiler<'a> {
       let real_false = !Scope::is_user_defined(&mut self.scopes, "false");
       let real_true = !Scope::is_user_defined(&mut self.scopes, "true");
 
-      let operator_span = operation.operator_token().map(|token| token.span());
+      let operator_span = match operation.operator_token() {
+         Some(token) => token.span(),
+
+         None => Span::at(operation.left().span().end, 0),
+      };
 
       match (
          operation.left().into(),
@@ -90,8 +95,8 @@ impl<'a> Compiler<'a> {
             if real_false =>
          {
             self.reports.push(
-               Report::warn("this `false` has no effect on the result of the operation")
-                  .primary(boolean.span().cover(operator_span.unwrap()), "delete this"),
+               Report::warn("this `false` has no effect on the operation")
+                  .primary(boolean.span().cover(operator_span), "delete this"),
             );
 
             expression
@@ -103,7 +108,7 @@ impl<'a> Compiler<'a> {
                Report::warn("this expression is always `false`")
                   .secondary(operation.span(), "this expression")
                   .primary(
-                     boolean.span().cover(operator_span.unwrap()),
+                     boolean.span().cover(operator_span),
                      "this might be unwanted",
                   ),
             );
@@ -121,7 +126,7 @@ impl<'a> Compiler<'a> {
                Report::warn("this expression is always `false`")
                   .secondary(operation.span(), "this expression")
                   .primary(
-                     boolean.span().cover(operator_span.unwrap()),
+                     boolean.span().cover(operator_span),
                      "this might be unwanted",
                   ),
             );
@@ -135,8 +140,8 @@ impl<'a> Compiler<'a> {
             if real_true =>
          {
             self.reports.push(
-               Report::warn("this `true` has no effect on the result of the operation")
-                  .primary(boolean.span().cover(operator_span.unwrap()), "delete this"),
+               Report::warn("this `true` has no effect on the operation")
+                  .primary(boolean.span().cover(operator_span), "delete this"),
             );
 
             expression
@@ -148,7 +153,7 @@ impl<'a> Compiler<'a> {
                Report::warn("this expression is always `true`")
                   .secondary(operation.span(), "this expression")
                   .primary(
-                     boolean.span().cover(operator_span.unwrap()),
+                     boolean.span().cover(operator_span),
                      "this might be unwanted",
                   ),
             );
@@ -166,7 +171,7 @@ impl<'a> Compiler<'a> {
                Report::warn("this expression is always `true`")
                   .secondary(operation.span(), "this expression")
                   .primary(
-                     boolean.span().cover(operator_span.unwrap()),
+                     boolean.span().cover(operator_span),
                      "this might be unwanted",
                   ),
             );
