@@ -151,19 +151,19 @@ macro_rules! indent {
             }
          }
 
-         impl AsStr for Cow<'_, str> {
+         impl AsStr for std::borrow::Cow<'_, str> {
             fn as_str(&self) -> &str {
                self.as_ref()
             }
          }
 
-         impl AsStr for Styled<&'_ str> {
+         impl AsStr for $crate::style::Styled<&'_ str> {
             fn as_str(&self) -> &str {
                self.value
             }
          }
 
-         impl AsStr for Styled<Cow<'_, str>> {
+         impl AsStr for $crate::style::Styled<std::borrow::Cow<'_, str>> {
             fn as_str(&self) -> &str {
                self.value.as_ref()
             }

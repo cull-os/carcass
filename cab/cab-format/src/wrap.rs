@@ -5,13 +5,13 @@ use std::{
 
 use cab_util::call;
 use unicode_segmentation::UnicodeSegmentation as _;
-use yansi::Paint as _;
 
 use crate::{
    private::{
       LINE_WIDTH,
       LINE_WIDTH_MAX,
    },
+   style::StyleExt as _,
    width,
 };
 
@@ -50,7 +50,7 @@ pub fn wrap<'a>(
          part
             .value
             .split(' ')
-            .map(move |word| Word(word.paint(part.style)))
+            .map(move |word| Word(word.style(part.style)))
             .intersperse(Space)
       })
       .peekable();
