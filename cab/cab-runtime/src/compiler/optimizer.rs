@@ -3,7 +3,7 @@ use cab_syntax::node::{
    Parted,
 };
 use cab_why::{
-   IntoSpan,
+   IntoSpan as _,
    Report,
    Span,
 };
@@ -81,7 +81,7 @@ impl<'a> Compiler<'a> {
       let operator_span = match operation.operator_token() {
          Some(token) => token.span(),
 
-         None => Span::at(operation.left().span().end, 0),
+         None => Span::at(operation.left().span().end, 0u32),
       };
 
       match (

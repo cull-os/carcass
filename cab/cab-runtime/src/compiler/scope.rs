@@ -83,6 +83,14 @@ impl<'a> LocalName<'a> {
    pub fn new(parts: SmallVec<&'a str, 4>) -> Self {
       Self(parts)
    }
+
+   pub fn plain(s: &'a str) -> Self {
+      Self::new(smallvec![s])
+   }
+
+   pub fn wildcard() -> Self {
+      Self::new(smallvec!["", ""])
+   }
 }
 
 #[derive(Debug)]
@@ -155,7 +163,7 @@ impl Scope<'_> {
       let mut this = Self::new();
 
       for global in GLOBALS {
-         this.push(Span::new(0u32, 0u32), LocalName(smallvec![*global]));
+         this.push(Span::dummy(), LocalName::plain(global));
       }
 
       this
@@ -216,7 +224,7 @@ impl<'a> Scope<'a> {
 
    pub fn is_user_defined(scopes: &mut [Scope<'a>], name: &'a str) -> bool {
       !matches!(
-         Self::locate(&mut scopes[1..], &LocalName::new(smallvec![name])),
+         Self::locate(&mut scopes[1..], &LocalName::plain(name)),
          LocalPosition::Undefined
       )
    }

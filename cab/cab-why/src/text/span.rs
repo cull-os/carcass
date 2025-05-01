@@ -36,6 +36,11 @@ impl Span {
       Self { start, end }
    }
 
+   /// Creates a new dummy [`Span`].
+   pub fn dummy() -> Self {
+      Self::new(0u32, 0u32)
+   }
+
    /// Creates a new [`ops::Range<usize>`] from two sizes, one for the start
    /// and one for the end.
    #[inline]
