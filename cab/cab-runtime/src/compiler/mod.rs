@@ -310,6 +310,7 @@ impl<'a> Compiler<'a> {
                this.push_operation(operation.span(), Operation::AssertBoolean);
 
                this.point_here(over_right);
+               return;
             },
 
             operator @ (node::InfixOperator::Or | node::InfixOperator::Implication) => {
@@ -328,6 +329,7 @@ impl<'a> Compiler<'a> {
                this.push_operation(operation.span(), Operation::AssertBoolean);
 
                this.point_here(to_end);
+               return;
             },
 
             _ => {
