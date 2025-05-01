@@ -133,6 +133,7 @@ async fn main() -> report::Termination {
                report = report.with(island::display!(leaf), &source),
             )
             .ok();
+            writeln!(err).ok();
          }
 
          if fail > 0 {

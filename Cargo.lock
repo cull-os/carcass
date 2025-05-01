@@ -177,6 +177,7 @@ dependencies = [
  "cab-span",
  "cab-util",
  "derive_more",
+ "num",
  "scopeguard",
  "terminal_size",
  "unic-emoji-char",

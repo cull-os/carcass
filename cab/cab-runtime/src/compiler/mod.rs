@@ -132,12 +132,12 @@ impl<'a> Compiler<'a> {
       self.code().push_operation(span, operation)
    }
 
-   fn push_value(&mut self, value: Value) -> ValueIndex {
+   fn value(&mut self, value: Value) -> ValueIndex {
       if self.dead > 0 {
          return ValueIndex::dummy();
       }
 
-      self.code().push_value(value)
+      self.code().value(value)
    }
 
    fn point_here(&mut self, index: ByteIndex) {
@@ -151,7 +151,7 @@ impl<'a> Compiler<'a> {
 
 impl<'a> Compiler<'a> {
    fn emit_push(&mut self, span: Span, value: Value) {
-      let index = self.push_value(value);
+      let index = self.value(value);
 
       self.push_operation(span, Operation::Push);
       self.push_u64(*index as _);
