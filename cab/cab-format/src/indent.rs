@@ -176,7 +176,7 @@ macro_rules! indent {
       indent!(
          $writer,
          header_width + 1,
-         with = move |writer: &mut dyn std::fmt::Write| {
+         with = |writer: &mut dyn std::fmt::Write| {
             if wrote {
                return Ok(0);
             }

@@ -1,18 +1,23 @@
+use cab_util::as_;
 use unicode_segmentation::UnicodeSegmentation as _;
 
-pub fn number_width(number: u32) -> usize {
-   if number == 0 {
+pub fn number_width(number: impl num::traits::AsPrimitive<f64>) -> usize {
+   as_!(number);
+
+   if number == 0.0 {
       1
    } else {
-      (number as f64).log10() as usize + 1
+      number.log10() as usize + 1
    }
 }
 
-pub fn number_hex_width(number: u32) -> usize {
-   if number == 0 {
+pub fn number_hex_width(number: impl num::traits::AsPrimitive<f64>) -> usize {
+   as_!(number);
+
+   if number == 0.0 {
       1
    } else {
-      (number as f64).log(16.0) as usize + 1
+      number.log(16.0) as usize + 1
    }
 }
 

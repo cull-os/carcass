@@ -31,6 +31,7 @@ use cab_format::{
       TOP_TO_RIGHT,
    },
    width,
+   wrap,
    wrapln,
 };
 use cab_span::{
@@ -354,7 +355,7 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
          // INDENT: "<note|warn|error|bug>: "
          indent!(writer, header = self.severity.header());
 
-         wrapln(writer, [self.title.as_ref().bold()])?;
+         wrap(writer, [self.title.as_ref().bold()])?;
       }
 
       let line_number_width = self
@@ -434,14 +435,25 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
                   .style(style::GUTTER)
          );
 
+         writeln!(writer)?;
+
          style::HEADER_PATH.fmt_prefix(writer)?;
          write!(writer, "{location}", location = self.location)?;
          style::HEADER_PATH.fmt_suffix(writer)?;
 
-         let line_number = line.number.style(style::HEADER_POSITION);
-         let column_number = *line.styles.first().unwrap().span.start + 1;
-         let column_number = column_number.style(style::HEADER_POSITION);
-         writeln!(writer, ":{line_number}:{column_number}")?;
+         writeln!(
+            writer,
+            ":{line_number}:{column_number}",
+            line_number = line.number.style(style::HEADER_POSITION),
+            column_number = line
+               .labels
+               .first()
+               .unwrap()
+               .span
+               .start()
+               .map_or(1, |span| *span + 1)
+               .style(style::HEADER_POSITION)
+         )?;
       }
 
       let strike_prefix_width = self
@@ -512,7 +524,8 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
             }
          );
 
-         for (line_index, line) in self.lines.iter().enumerate() {
+         let mut lines = self.lines.iter().enumerate().peekable();
+         while let Some((line_index, line)) = lines.next() {
             line_number.borrow_mut().replace(line.number);
 
             // Write an empty line at the start.
@@ -564,7 +577,8 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
 
             // Write the line labels.
             // Reverse, because we want to print the labels that end the last first.
-            for (label_index, label) in line.labels.iter().enumerate().rev() {
+            let mut labels = line.labels.iter().enumerate().rev().peekable();
+            while let Some((label_index, label)) = labels.next() {
                // HACK: wrapln may split the current line into multiple
                // lines, so the label pointer may be too far left.
                // Just max it to 60 for now.
@@ -696,7 +710,7 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
                         }
                      );
 
-                     wrapln(writer, [label
+                     wrap(writer, [label
                         .text
                         .as_ref()
                         .style(self.style(top_to_right.severity))])?;
@@ -789,11 +803,15 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
                         }
                      );
 
-                     wrapln(writer, [label
+                     wrap(writer, [label
                         .text
                         .as_ref()
                         .style(self.style(label.severity))])?;
                   },
+               }
+
+               if lines.peek().is_some() || labels.peek().is_some() {
+                  writeln!(writer)?;
                }
             }
          }
@@ -809,14 +827,19 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
          // DEDENT: "| "
          dedent!(writer, 2);
 
-         for point in &self.points {
+         let mut points = self.points.iter().peekable();
+         while let Some(point) = points.next() {
             // INDENT: "= "
             indent!(writer, header = "=".style(style::GUTTER));
 
             // INDENT: "<tip|help|...>: "
             indent!(writer, header = &point.title);
 
-            wrapln(writer, [point.text.as_ref().styled()])?;
+            wrap(writer, [point.text.as_ref().styled()])?;
+
+            if points.peek().is_some() {
+               writeln!(writer)?;
+            }
          }
       }
 

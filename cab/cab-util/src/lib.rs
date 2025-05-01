@@ -18,6 +18,14 @@ macro_rules! call {
    }
 }
 
+/// [`call!`] but with the method set to `as_`.
+#[macro_export]
+macro_rules! as_ {
+   ($($t:tt),*) => {
+      $crate::call!(as_; $($t),*);
+   }
+}
+
 /// [`call!`] but with the method set to `as_ref`.
 #[macro_export]
 macro_rules! as_ref {

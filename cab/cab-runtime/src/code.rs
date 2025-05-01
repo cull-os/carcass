@@ -4,13 +4,16 @@ use std::{
       self,
       Write as _,
    },
+   ops,
 };
 
 use cab_format::{
    indent,
+   number_hex_width,
    style::{
       self,
       DOT,
+      StyleExt,
       TOP_TO_BOTTOM,
    },
 };
@@ -54,7 +57,7 @@ pub struct Code {
 
 impl fmt::Display for Code {
    fn fmt(&self, writer: &mut fmt::Formatter<'_>) -> fmt::Result {
-      let index_width = format!("{index:#X}", index = self.bytes.len() - 1).len();
+      let index_width = number_hex_width(self.bytes.len() - 1);
 
       let index = RefCell::new(ByteIndex(0));
       let mut index_previous = None::<usize>;
@@ -67,7 +70,7 @@ impl fmt::Display for Code {
             style::GUTTER.fmt_prefix(writer)?;
 
             if index_previous == Some(index) {
-               let dot_width = format!("{index:#X}").len();
+               let dot_width = number_hex_width(index);
                let space_width = index_width - dot_width;
 
                write!(writer, "{:>space_width$}", "")?;
@@ -126,10 +129,31 @@ impl fmt::Display for Code {
             }
          }
 
-         writeln!(writer)?;
+         if **index.borrow() < self.bytes.len() {
+            writeln!(writer)?;
+         }
       }
 
       Ok(())
+   }
+}
+
+impl Code {
+   pub fn value(&mut self, value: Value) -> ValueIndex {
+      let index = ValueIndex(self.values.len());
+      self.values.push(value);
+      index
+   }
+}
+
+impl ops::Index<ValueIndex> for Code {
+   type Output = Value;
+
+   fn index(&self, index: ValueIndex) -> &Self::Output {
+      self
+         .values
+         .get(*index)
+         .expect("cab-runtime bug: invalid value index")
    }
 }
 
@@ -220,20 +244,6 @@ impl Code {
             .expect("cab-runtime bug: invalid operation at byte index"),
          ENCODED_OPERATION_LEN,
       )
-   }
-
-   pub fn push_value(&mut self, value: Value) -> ValueIndex {
-      let index = ValueIndex(self.values.len());
-      self.values.push(value);
-      index
-   }
-
-   #[must_use]
-   pub fn read_value(&self, index: ValueIndex) -> &Value {
-      self
-         .values
-         .get(*index)
-         .expect("cab-runtime bug: invalid value index")
    }
 
    pub fn point_here(&mut self, index: ByteIndex) {
