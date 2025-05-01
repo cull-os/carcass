@@ -23,7 +23,11 @@ use cab::{
    },
    syntax,
 };
+use cab_report::Contextful;
 use clap::Parser as _;
+
+const FAIL_STDERR: &str = "failed to write to stderr";
+const FAIL_STDOUT: &str = "failed to write to stdout";
 
 #[derive(clap::Parser)]
 #[command(version, about)]
@@ -103,13 +107,14 @@ async fn main() -> report::Termination {
 
             writeln!(
                err,
-               "{report}",
+               "{report}\n",
                report = report.with(island::display!(leaf), &source),
             )
-            .ok();
+            .context(FAIL_STDERR)?;
          }
 
          if fail > 0 {
+            writeln!(err).context(FAIL_STDERR)?;
             bail!(
                "compilation failed due to {fail} previous error{s}",
                s = if fail == 1 { "" } else { "s" }
@@ -129,14 +134,14 @@ async fn main() -> report::Termination {
 
             writeln!(
                err,
-               "{report}",
+               "{report}\n",
                report = report.with(island::display!(leaf), &source),
             )
-            .ok();
-            writeln!(err).ok();
+            .context(FAIL_STDERR)?;
          }
 
          if fail > 0 {
+            writeln!(err).context(FAIL_STDERR)?;
             bail!(
                "compilation failed due to {fail} previous error{s}",
                s = if fail == 1 { "" } else { "s" }
@@ -145,7 +150,7 @@ async fn main() -> report::Termination {
 
          let code = compile.code;
 
-         writeln!(out, "{code}").context("failed to write to stdout")?;
+         writeln!(out, "{code}").context(FAIL_STDOUT)?;
       },
 
       Command::Dump { path, command } => {
@@ -176,7 +181,7 @@ async fn main() -> report::Termination {
                   } else {
                      writeln!(out, "{kind:?} {slice:?}")
                   }
-                  .context("failed to write to stdout")?;
+                  .context(FAIL_STDOUT)?;
                }
             },
 
@@ -187,13 +192,13 @@ async fn main() -> report::Termination {
                for report in parse.reports {
                   writeln!(
                      err,
-                     "{report}",
+                     "{report}\n",
                      report = report.with(island::display!(leaf), &source)
                   )
-                  .ok();
+                  .context(FAIL_STDERR)?;
                }
 
-               write!(out, "{node:#?}", node = parse.node).context("failed to write to stdout")?;
+               write!(out, "{node:#?}", node = parse.node).context(FAIL_STDOUT)?;
             },
          }
       },
