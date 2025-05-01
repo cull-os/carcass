@@ -218,6 +218,7 @@ dependencies = [
  "cab-report",
  "cab-span",
  "cab-syntax",
+ "const-str",
  "derive_more",
  "num",
  "num_enum",

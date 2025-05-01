@@ -1,18 +1,26 @@
 use std::{
    cell::RefCell,
+   collections::VecDeque,
    fmt::{
       self,
       Write as _,
    },
-   ops,
+   ops::{
+      self,
+      Add as _,
+   },
 };
 
 use cab_format::{
+   dedent,
    indent,
    number_hex_width,
    style::{
       self,
       DOT,
+      LEFT_TO_RIGHT,
+      RIGHT_TO_BOTTOM,
+      Style,
       StyleExt,
       TOP_TO_BOTTOM,
    },
@@ -57,79 +65,147 @@ pub struct Code {
 
 impl fmt::Display for Code {
    fn fmt(&self, writer: &mut fmt::Formatter<'_>) -> fmt::Result {
-      let index_width = number_hex_width(self.bytes.len() - 1);
+      let mut codes = VecDeque::from([(0u64, self)]);
 
-      let index = RefCell::new(ByteIndex(0));
-      let mut index_previous = None::<usize>;
-      indent!(
-         writer,
-         index_width + 3,
-         with = |writer: &mut dyn fmt::Write| {
-            let index = **index.borrow();
+      while let Some((code_index, code)) = codes.pop_back() {
+         let highlighted = RefCell::new(Vec::<ByteIndex>::new());
+         let index_width = 2 + number_hex_width(code.bytes.len() - 1);
 
-            style::GUTTER.fmt_prefix(writer)?;
+         let index = RefCell::new(ByteIndex(0));
+         let mut index_previous = None::<usize>;
+         indent!(
+            writer,
+            index_width + 3,
+            with = |writer: &mut dyn fmt::Write| {
+               let index = *index.borrow();
 
-            if index_previous == Some(index) {
-               let dot_width = number_hex_width(index);
-               let space_width = index_width - dot_width;
+               let style = if !highlighted.borrow().contains(&index) {
+                  style::GUTTER
+               } else {
+                  Style::new().cyan().bold()
+               };
 
-               write!(writer, "{:>space_width$}", "")?;
+               let index = *index;
 
-               for _ in 0..dot_width {
-                  write!(writer, "{DOT}")?;
+               style.fmt_prefix(writer)?;
+
+               if index_previous == Some(index) {
+                  let dot_width = 2 + number_hex_width(index);
+                  let space_width = index_width - dot_width;
+
+                  write!(writer, "{:>space_width$}", "")?;
+
+                  for _ in 0..dot_width {
+                     write!(writer, "{DOT}")?;
+                  }
+               } else {
+                  write!(writer, "{index:>#index_width$X}")?;
                }
-            } else {
-               write!(writer, "{index:>#index_width$X}")?;
+
+               write!(writer, " {TOP_TO_BOTTOM} ",)?;
+               style.fmt_suffix(writer)?;
+
+               index_previous.replace(index);
+               Ok(index_width + 3)
             }
+         );
 
-            write!(writer, " {TOP_TO_BOTTOM} ",)?;
-            style::GUTTER.fmt_suffix(writer)?;
+         if **index.borrow() < code.bytes.len() {
+            // DEDENT: "| "
+            dedent!(writer, 2);
 
-            index_previous.replace(index);
-            Ok(index_width + 3)
+            // INDENT: "┏━━━ ".
+            indent!(
+               writer,
+               header =
+                  const_str::concat!(RIGHT_TO_BOTTOM, LEFT_TO_RIGHT, LEFT_TO_RIGHT, LEFT_TO_RIGHT)
+                     .style(style::GUTTER)
+            );
+
+            writeln!(
+               writer,
+               "{code_index:#X}",
+               code_index = code_index.red().bold(),
+            )?;
          }
-      );
 
-      while **index.borrow() < self.bytes.len() {
-         let (_, operation, size) = self.read_operation(*index.borrow());
-
-         write!(writer, "{operation:?}")?;
-         index.borrow_mut().0 += size;
-
-         let mut arguments = operation.arguments().iter().enumerate().peekable();
-         while let Some((argument_index, argument)) = arguments.next() {
-            if argument_index == 0 {
-               write!(writer, "(")?;
-            }
-
-            let (argument, size) = match argument {
-               Argument::U64 => self.read_u64(*index.borrow()),
-               Argument::ValueIndex => {
-                  let (u64, size) = self.read_u64(*index.borrow());
-                  let _ = &self.values[u64 as usize]; // TODO: Proper value printing.
-                  (u64 as _, size)
-               },
-
-               Argument::U16 => {
-                  let (u16, size) = self.read_u16(*index.borrow());
-                  (u16 as _, size)
-               },
-               // TODO: Highlight these properly.
-               Argument::ByteIndex => {
-                  let (u16, size) = self.read_u16(*index.borrow());
-                  (u16 as _, size)
-               },
-            };
-
-            write!(writer, "{argument}")?;
+         while **index.borrow() < code.bytes.len() {
+            let (_, operation, size) = code.read_operation(*index.borrow());
             index.borrow_mut().0 += size;
 
-            if arguments.peek().is_none() {
-               write!(writer, ")")?;
+            write!(writer, "{operation:?}", operation = operation.yellow())?;
+
+            let mut arguments = operation.arguments().iter().enumerate().peekable();
+            while let Some((argument_index, argument)) = arguments.next() {
+               if argument_index == 0 {
+                  write!(writer, "{symbol}", symbol = '('.bright_black().bold())?;
+               }
+
+               match argument {
+                  Argument::U64 => {
+                     let (u64, size) = code.read_u64(*index.borrow());
+                     index.borrow_mut().0 += size;
+
+                     write!(writer, "{argument}", argument = u64.blue())?;
+                  },
+
+                  Argument::ValueIndex => {
+                     let (value_index, size) = code.read_u64(*index.borrow());
+                     index.borrow_mut().0 += size;
+
+                     let value_index_unique = code_index.add(2) * value_index.add(2);
+
+                     write!(
+                        writer,
+                        "{value_index:#X}",
+                        value_index = value_index.blue().bold(),
+                     )?;
+
+                     if let Value::Blueprint(code) = &code[ValueIndex(value_index as _)] {
+                        codes.push_front((value_index_unique, code));
+
+                        write!(
+                           writer,
+                           " {arrow} {unique:#X}",
+                           arrow = "->".white(),
+                           unique = value_index_unique.red().bold(),
+                        )?;
+                     }
+                  },
+
+                  Argument::U16 => {
+                     let (u16, size) = code.read_u16(*index.borrow());
+                     index.borrow_mut().0 += size;
+
+                     write!(writer, "{argument}", argument = u16.magenta())?;
+                  },
+
+                  Argument::ByteIndex => {
+                     let (u16, size) = code.read_u16(*index.borrow());
+                     index.borrow_mut().0 += size;
+
+                     highlighted.borrow_mut().push(ByteIndex(u16 as _));
+
+                     write!(writer, "{argument:#X}", argument = u16.cyan().bold())?;
+                  },
+               };
+
+               write!(
+                  writer,
+                  "{symbol}",
+                  symbol = if arguments.peek().is_none() { ')' } else { ',' }
+                     .bright_black()
+                     .bold(),
+               )?;
+            }
+
+            if **index.borrow() < code.bytes.len() {
+               writeln!(writer)?;
             }
          }
 
-         if **index.borrow() < self.bytes.len() {
+         if !codes.is_empty() {
+            writeln!(writer)?;
             writeln!(writer)?;
          }
       }
