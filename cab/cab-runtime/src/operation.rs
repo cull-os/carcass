@@ -26,6 +26,8 @@ pub enum Operation {
 
    Resolve,
 
+   AssertBoolean,
+
    // PREFIX
    Swwallation,
    Negation,
@@ -44,10 +46,6 @@ pub enum Operation {
    More,
 
    Equal,
-
-   And,
-   Or,
-   Implication,
 
    All,
    Any,

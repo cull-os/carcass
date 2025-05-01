@@ -10,7 +10,6 @@ use cab_why::{
    ReportSeverity,
    Span,
 };
-use smallvec::smallvec;
 
 use crate::{
    ByteIndex,
@@ -67,6 +66,10 @@ impl Oracle {
       compiler.emit_scope(expression.span(), |this| {
          this.emit_force(expression);
       });
+
+      compiler
+         .reports
+         .sort_by_key(|report| report.labels.iter().map(|label| label.span.start).min());
 
       Compile {
          code: compiler.codes.pop().expect(EXPECT_CODE),
@@ -235,7 +238,6 @@ impl<'a> Compiler<'a> {
       });
    }
 
-   // TODO: Preserve warning order, make it be the same as declaration order.
    fn emit_infix_operation(&mut self, operation: &'a node::InfixOperation) {
       self.emit_thunk(operation.span(), |this| {
          match operation.operator() {
@@ -256,10 +258,7 @@ impl<'a> Compiler<'a> {
                let scopes = this.scopes.split_off(1);
 
                this.emit_scope(operation.right().span(), |this| {
-                  // TODO: Unhack.
-                  this
-                     .scope()
-                     .push(Span::new(0u32, 0u32), LocalName::new(smallvec!["", ""]));
+                  this.scope().push(Span::dummy(), LocalName::wildcard());
 
                   this.emit(operation.right())
                });
@@ -294,6 +293,43 @@ impl<'a> Compiler<'a> {
                return;
             },
 
+            node::InfixOperator::And => {
+               this.emit_force(operation.left());
+               let to_right = {
+                  this.push_operation(operation.span(), Operation::JumpIf);
+                  this.push_u16(0)
+               };
+               let over_right = {
+                  this.push_operation(operation.span(), Operation::Jump);
+                  this.push_u16(0)
+               };
+
+               this.point_here(to_right);
+               this.push_operation(operation.span(), Operation::Pop);
+               this.emit_force(operation.right());
+               this.push_operation(operation.span(), Operation::AssertBoolean);
+
+               this.point_here(over_right);
+            },
+
+            operator @ (node::InfixOperator::Or | node::InfixOperator::Implication) => {
+               this.emit_force(operation.left());
+               if operator == node::InfixOperator::Implication {
+                  this.push_operation(operation.span(), Operation::Not);
+               }
+
+               let to_end = {
+                  this.push_operation(operation.span(), Operation::JumpIf);
+                  this.push_u16(0)
+               };
+
+               this.push_operation(operation.span(), Operation::Pop);
+               this.emit_force(operation.right());
+               this.push_operation(operation.span(), Operation::AssertBoolean);
+
+               this.point_here(to_end);
+            },
+
             _ => {
                this.emit(operation.left());
                this.emit(operation.right());
@@ -325,9 +361,9 @@ impl<'a> Compiler<'a> {
                return;
             },
 
-            node::InfixOperator::And => Operation::And,
-            node::InfixOperator::Or => Operation::Or,
-            node::InfixOperator::Implication => Operation::Implication,
+            node::InfixOperator::And
+            | node::InfixOperator::Or
+            | node::InfixOperator::Implication => unreachable!("{EXPECT_HANDLED}"),
 
             node::InfixOperator::Same | node::InfixOperator::All => Operation::All,
             node::InfixOperator::Any => Operation::Any,
@@ -454,7 +490,7 @@ impl<'a> Compiler<'a> {
                   this.push_operation(span, Operation::Resolve);
                }
 
-               LocalName::new(smallvec![plain.text()])
+               LocalName::plain(plain.text())
             },
 
             node::IdentifierValueRef::Quoted(quoted) => {
@@ -531,14 +567,17 @@ impl<'a> Compiler<'a> {
    fn emit_if(&mut self, if_: &'a node::If) {
       self.emit_thunk(if_.span(), |this| {
          this.emit_force(if_.condition());
-
-         this.push_operation(if_.span(), Operation::JumpIf);
-         let to_consequence = this.push_u16(0);
+         let to_consequence = {
+            this.push_operation(if_.span(), Operation::JumpIf);
+            this.push_u16(0)
+         };
 
          this.push_operation(if_.span(), Operation::Pop);
          this.emit(if_.alternative());
-         this.push_operation(if_.span(), Operation::Jump);
-         let over_consequence = this.push_u16(0);
+         let over_consequence = {
+            this.push_operation(if_.span(), Operation::Jump);
+            this.push_u16(0)
+         };
 
          this.point_here(to_consequence);
          this.push_operation(if_.span(), Operation::Pop);

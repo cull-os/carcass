@@ -11,6 +11,8 @@ use crate::Code;
 #[warn(variant_size_differences)]
 #[derive(Clone)]
 pub enum Value {
+   Boolean(bool),
+
    Nil,
    Cons(Arc<Value>, Arc<Value>),
 
