@@ -218,8 +218,10 @@ impl<'a> Compiler<'a> {
       match attributes.expression() {
          Some(expression) => {
             self.emit_thunk(attributes.span(), |this| {
-               this.emit_scope(attributes.span(), |this| this.emit(expression));
-               this.push_operation(expression.span(), Operation::ScopePush);
+               this.emit_scope(attributes.span(), |this| {
+                  this.emit(expression);
+                  this.push_operation(expression.span(), Operation::ScopePush);
+               });
             });
          },
 
