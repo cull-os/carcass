@@ -108,7 +108,7 @@ impl<'a> Compiler<'a> {
 
    fn push_u64(&mut self, data: u64) -> ByteIndex {
       if self.dead > 0 {
-         return ByteIndex::DUMMY;
+         return ByteIndex::dummy();
       }
 
       self.code().push_u64(data)
@@ -116,7 +116,7 @@ impl<'a> Compiler<'a> {
 
    fn push_u16(&mut self, data: u16) -> ByteIndex {
       if self.dead > 0 {
-         return ByteIndex::DUMMY;
+         return ByteIndex::dummy();
       }
 
       self.code().push_u16(data)
@@ -124,7 +124,7 @@ impl<'a> Compiler<'a> {
 
    fn push_operation(&mut self, span: Span, operation: Operation) -> ByteIndex {
       if self.dead > 0 {
-         return ByteIndex::DUMMY;
+         return ByteIndex::dummy();
       }
 
       self.code().push_operation(span, operation)
@@ -132,7 +132,7 @@ impl<'a> Compiler<'a> {
 
    fn push_value(&mut self, value: Value) -> ValueIndex {
       if self.dead > 0 {
-         return ValueIndex::DUMMY;
+         return ValueIndex::dummy();
       }
 
       self.code().push_value(value)

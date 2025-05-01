@@ -13,14 +13,18 @@ const ENCODED_U16_LEN: usize = 0u16.to_le_bytes().len();
 pub struct ByteIndex(usize);
 
 impl ByteIndex {
-   pub const DUMMY: Self = Self(usize::MAX);
+   pub fn dummy() -> Self {
+      Self(usize::MAX)
+   }
 }
 
 #[derive(Deref, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ValueIndex(usize);
 
 impl ValueIndex {
-   pub const DUMMY: Self = Self(usize::MAX);
+   pub fn dummy() -> Self {
+      Self(usize::MAX)
+   }
 }
 
 pub struct Code {
