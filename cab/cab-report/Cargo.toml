@@ -1,0 +1,26 @@
+[package]
+name                 = "cab-report"
+edition.workspace    = true
+license.workspace    = true
+publish.workspace    = true
+repository.workspace = true
+version.workspace    = true
+
+[features]
+default = [ "cstree", "error" ]
+
+cstree = [ "cab-span/cstree" ]
+error  = [ "dep:anyhow", "dep:thiserror" ]
+
+[dependencies]
+cab-format.path = "../cab-format"
+cab-span.path   = "../cab-span"
+cab-util.path   = "../cab-util"
+
+anyhow.optional     = true
+anyhow.workspace    = true
+thiserror.optional  = true
+thiserror.workspace = true
+
+const-str.workspace = true
+smallvec.workspace  = true

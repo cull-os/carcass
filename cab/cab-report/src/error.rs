@@ -16,7 +16,7 @@ use std::{
    sync::Arc,
 };
 
-use yansi::Paint;
+use cab_format::style::StyleExt as _;
 
 /// A type alias for concice use of [`Error`].
 pub type Result<T> = result::Result<T, Error>;
@@ -45,7 +45,7 @@ impl fmt::Debug for Error {
             .bold(),
          )?;
 
-         String::clear(&mut message); // TODO: Replace with .clear() when yansi removes the method that shadows.
+         message.clear();
          write!(message, "{error}")?;
 
          let mut chars = message.char_indices();
@@ -147,7 +147,7 @@ impl Termination {
 #[macro_export]
 macro_rules! error {
    ($($t:tt)*) => {
-      $crate::Error(::std::sync::Arc::new($crate::__private::anyhow::anyhow!($($t)*)))
+      $crate::Error(::std::sync::Arc::new($crate::private::anyhow::anyhow!($($t)*)))
    };
 }
 

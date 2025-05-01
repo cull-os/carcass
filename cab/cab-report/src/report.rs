@@ -1,7 +1,3 @@
-mod label;
-mod point;
-mod position;
-
 use std::{
    borrow::Cow,
    cell::RefCell,
@@ -14,30 +10,45 @@ use std::{
    iter,
 };
 
-use smallvec::SmallVec;
-use unicode_segmentation::UnicodeSegmentation as _;
-use yansi::Paint;
-
-pub use self::{
-   label::{
-      Label,
-      LabelSeverity,
-   },
-   point::Point,
-   position::{
-      Position,
-      PositionStr,
-   },
-};
-use crate::{
-   IntoSize,
-   Size,
-   Span,
+use cab_format::{
    dedent,
    indent,
+   number_width,
+   style::{
+      self,
+      DOT,
+      LEFT_TO_RIGHT,
+      LEFT_TO_TOP_BOTTOM,
+      RIGHT_TO_BOTTOM,
+      Style,
+      StyleExt,
+      Styled,
+      TOP_LEFT_TO_RIGHT,
+      TOP_TO_BOTTOM,
+      TOP_TO_BOTTOM_LEFT,
+      TOP_TO_BOTTOM_PARTIAL,
+      TOP_TO_BOTTOM_RIGHT,
+      TOP_TO_RIGHT,
+   },
+   width,
+   wrapln,
+};
+use cab_span::{
+   IntoSize as _,
+   Size,
+   Span,
+};
+use cab_util::{
    into,
    unwrap,
-   wrapln,
+};
+use smallvec::SmallVec;
+
+use crate::{
+   Label,
+   LabelSeverity,
+   Point,
+   PositionStr,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -49,14 +60,14 @@ pub enum ReportSeverity {
 }
 
 impl ReportSeverity {
-   pub fn header(self) -> yansi::Painted<&'static str> {
+   pub fn header(self) -> Styled<&'static str> {
       match self {
          ReportSeverity::Note => "note:",
          ReportSeverity::Warn => "warn:",
          ReportSeverity::Error => "error:",
          ReportSeverity::Bug => "bug:",
       }
-      .paint(LabelSeverity::Primary.style_in(self))
+      .style(LabelSeverity::Primary.style_in(self))
       .bold()
    }
 }
@@ -153,32 +164,6 @@ impl Report {
    }
 }
 
-fn number_width(number: u32) -> usize {
-   if number == 0 {
-      1
-   } else {
-      (number as f64).log10() as usize + 1
-   }
-}
-
-fn is_emoji(s: &str) -> bool {
-   !s.is_ascii() && s.chars().any(unic_emoji_char::is_emoji)
-}
-
-pub fn width(s: &str) -> Size {
-   s.graphemes(true)
-      .map(|grapheme| {
-         match grapheme {
-            "\t" => 4,
-            s if is_emoji(s) => 2,
-            #[allow(clippy::disallowed_methods)]
-            s => unicode_width::UnicodeWidthStr::width(s),
-         }
-      })
-      .sum::<usize>()
-      .into()
-}
-
 fn extend_to_line_boundaries(source: &str, mut span: Span) -> Span {
    while *span.start > 0
       && source
@@ -207,7 +192,7 @@ fn resolve_style<'a>(
    content: &'a str,
    styles: &'a [LineStyle],
    severity: ReportSeverity,
-) -> impl Iterator<Item = yansi::Painted<&'a str>> + 'a {
+) -> impl Iterator<Item = Styled<&'a str>> + 'a {
    gen move {
       let mut content_offset = Size::new(0u32);
       let mut style_offset: usize = 0;
@@ -245,18 +230,18 @@ fn resolve_style<'a>(
                      style_offset += style_offset_diff;
 
                      yield content[Span::std(content_offset, contained_style.span.start)]
-                        .paint(style.severity.style_in(severity));
+                        .style(style.severity.style_in(severity));
 
                      yield content[contained_style.span.into_std()]
-                        .paint(contained_style.severity.style_in(severity));
+                        .style(contained_style.severity.style_in(severity));
 
                      yield content[Span::std(contained_style.span.end, style.span.end)]
-                        .paint(style.severity.style_in(severity));
+                        .style(style.severity.style_in(severity));
                   },
 
                   None => {
                      yield content[Span::std(content_offset, style.span.end)]
-                        .paint(style.severity.style_in(severity));
+                        .style(style.severity.style_in(severity));
                   },
                }
 
@@ -274,7 +259,7 @@ fn resolve_style<'a>(
 
                style_offset += relative_offset;
 
-               yield (&content[Span::std(content_offset, next_offset)]).new();
+               yield content[Span::std(content_offset, next_offset)].styled();
                content_offset = next_offset;
             },
          }
@@ -363,22 +348,6 @@ struct ReportDisplay<Location: fmt::Display> {
    points: SmallVec<Point, 2>,
 }
 
-pub const RIGHT_TO_BOTTOM: char = '┏';
-pub const TOP_TO_BOTTOM: char = '┃';
-pub const TOP_TO_BOTTOM_PARTIAL: char = '┇';
-pub const DOT: char = '·';
-pub const TOP_TO_RIGHT: char = '┗';
-pub const LEFT_TO_RIGHT: char = '━';
-pub const LEFT_TO_TOP_BOTTOM: char = '┫';
-
-pub const TOP_TO_BOTTOM_LEFT: char = '▏';
-pub const TOP_LEFT_TO_RIGHT: char = '╲';
-pub const TOP_TO_BOTTOM_RIGHT: char = '▕';
-
-pub const STYLE_GUTTER: yansi::Style = yansi::Style::new().blue();
-pub const STYLE_HEADER_PATH: yansi::Style = yansi::Style::new().green();
-pub const STYLE_HEADER_POSITION: yansi::Style = yansi::Style::new().blue();
-
 impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
    fn fmt(&self, writer: &mut fmt::Formatter<'_>) -> fmt::Result {
       {
@@ -407,7 +376,7 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
 
             let mut line_number_previous = line_number_previous.borrow_mut();
 
-            STYLE_GUTTER.fmt_prefix(writer)?;
+            style::GUTTER.fmt_prefix(writer)?;
             match () {
                // Don't write the current line number, just print spaces instead.
                _ if !*line_number_should_write.borrow() => {
@@ -446,7 +415,7 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
             }
 
             write!(writer, " {TOP_TO_BOTTOM} ")?;
-            STYLE_GUTTER.fmt_suffix(writer)?;
+            style::GUTTER.fmt_suffix(writer)?;
 
             line_number_previous.replace(line_number);
             Ok(line_number_width + 3)
@@ -462,16 +431,16 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
             writer,
             header =
                const_str::concat!(RIGHT_TO_BOTTOM, LEFT_TO_RIGHT, LEFT_TO_RIGHT, LEFT_TO_RIGHT)
-                  .paint(STYLE_GUTTER)
+                  .style(style::GUTTER)
          );
 
-         STYLE_HEADER_PATH.fmt_prefix(writer)?;
+         style::HEADER_PATH.fmt_prefix(writer)?;
          write!(writer, "{location}", location = self.location)?;
-         STYLE_HEADER_PATH.fmt_suffix(writer)?;
+         style::HEADER_PATH.fmt_suffix(writer)?;
 
-         let line_number = line.number.paint(STYLE_HEADER_POSITION);
+         let line_number = line.number.style(style::HEADER_POSITION);
          let column_number = *line.styles.first().unwrap().span.start + 1;
-         let column_number = column_number.paint(STYLE_HEADER_POSITION);
+         let column_number = column_number.style(style::HEADER_POSITION);
          writeln!(writer, ":{line_number}:{column_number}")?;
       }
 
@@ -492,9 +461,9 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
             writer,
             strike_prefix_width + 1,
             with = |writer: &mut dyn fmt::Write| {
-               const STRIKE_OVERRIDE_DEFAULT: yansi::Painted<&char> = yansi::Painted::new(&' ');
+               const STRIKE_OVERRIDE_DEFAULT: Styled<char> = Styled::new(' ');
 
-               let mut strike_override = None::<yansi::Painted<&char>>;
+               let mut strike_override = None::<Styled<char>>;
 
                for slot in &*strike_prefix.borrow() {
                   let Some(strike) = *slot else {
@@ -511,10 +480,10 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
                         write!(
                            writer,
                            "{symbol}",
-                           symbol = RIGHT_TO_BOTTOM.paint(self.style(strike.severity)),
+                           symbol = RIGHT_TO_BOTTOM.style(self.style(strike.severity)),
                         )?;
 
-                        strike_override = Some(LEFT_TO_RIGHT.paint(self.style(strike.severity)));
+                        strike_override = Some(LEFT_TO_RIGHT.style(self.style(strike.severity)));
                      },
 
                      LineStrikeStatus::Continue | LineStrikeStatus::End
@@ -527,7 +496,7 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
                         write!(
                            writer,
                            "{symbol}",
-                           symbol = TOP_TO_BOTTOM.paint(self.style(strike.severity)),
+                           symbol = TOP_TO_BOTTOM.style(self.style(strike.severity)),
                         )?;
                      },
                   }
@@ -639,8 +608,8 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
                                  "{symbol}",
                                  symbol = match slot {
                                     Some(strike) =>
-                                       TOP_TO_BOTTOM.paint(self.style(strike.severity)),
-                                    None => (&' ').new(),
+                                       TOP_TO_BOTTOM.style(self.style(strike.severity)),
+                                    None => ' '.styled(),
                                  },
                               )?;
                            }
@@ -652,14 +621,14 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
                            write!(
                               writer,
                               "{symbol}",
-                              symbol = TOP_TO_RIGHT.paint(self.style(top_to_right.severity)),
+                              symbol = TOP_TO_RIGHT.style(self.style(top_to_right.severity)),
                            )?;
 
                            for _ in 0..strike_prefix_width - top_to_right_index - 1 {
                               write!(
                                  writer,
                                  "{symbol}",
-                                 symbol = LEFT_TO_RIGHT.paint(self.style(top_to_right.severity)),
+                                 symbol = LEFT_TO_RIGHT.style(self.style(top_to_right.severity)),
                               )?;
                            }
 
@@ -677,7 +646,7 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
                         //   after <strike-prefix> before.
                         //
                         // + 1 because we want a space after the <top-to-bottom>.
-                        *span_end + 2,
+                        *span_end as usize + 2,
                         with = |writer: &mut dyn fmt::Write| {
                            for index in 0..*span_end {
                               write!(
@@ -697,16 +666,16 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
                                        }) =>
                                     {
                                        if label.span.is_empty() {
-                                          TOP_TO_BOTTOM_LEFT.paint(self.style(label.severity))
+                                          TOP_TO_BOTTOM_LEFT.style(self.style(label.severity))
                                        } else {
-                                          TOP_TO_BOTTOM.paint(self.style(label.severity))
+                                          TOP_TO_BOTTOM.style(self.style(label.severity))
                                        }
                                     },
 
                                     _ if !wrote =>
-                                       LEFT_TO_RIGHT.paint(self.style(top_to_right.severity)),
+                                       LEFT_TO_RIGHT.style(self.style(top_to_right.severity)),
 
-                                    _ => (&' ').new(),
+                                    _ => ' '.styled(),
                                  },
                               )?;
                            }
@@ -718,19 +687,19 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
                                  _ if !wrote => LEFT_TO_TOP_BOTTOM,
                                  _ => TOP_TO_BOTTOM,
                               }
-                              .paint(self.style(top_to_right.severity)),
+                              .style(self.style(top_to_right.severity)),
                            )?;
 
                            wrote = true;
                            strike_prefix.borrow_mut()[top_to_right_index] = None;
-                           Ok(*span_end + 1)
+                           Ok(*span_end as usize + 1)
                         }
                      );
 
                      wrapln(writer, [label
                         .text
                         .as_ref()
-                        .paint(self.style(top_to_right.severity))])?;
+                        .style(self.style(top_to_right.severity))])?;
                   },
 
                   LineLabelSpan::Inline(_) => {
@@ -747,8 +716,8 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
                                  "{symbol}",
                                  symbol = match slot {
                                     Some(strike) =>
-                                       TOP_TO_BOTTOM.paint(self.style(strike.severity)),
-                                    None => (&' ').new(),
+                                       TOP_TO_BOTTOM.style(self.style(strike.severity)),
+                                    None => ' '.styled(),
                                  },
                               )?;
                            }
@@ -765,7 +734,7 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
                         // + 1 for extra space.
                         // + 1 if the label is zero-width. The <top-left-to-right> will be placed
                         //   after the span.
-                        *span_end + if span_start == span_end { 1 } else { 0 } + 1,
+                        *span_end as usize + if span_start == span_end { 1 } else { 0 } + 1,
                         with = |writer: &mut dyn fmt::Write| {
                            for index in 0..*span_end - if span_start == span_end { 0 } else { 1 } {
                               write!(
@@ -773,7 +742,7 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
                                  "{symbol}",
                                  symbol = match () {
                                     _ if index == *span_start =>
-                                       TOP_TO_RIGHT.paint(self.style(label.severity)),
+                                       TOP_TO_RIGHT.style(self.style(label.severity)),
 
                                     _ if let Some(label) =
                                        line.labels[..label_index].iter().rev().find(|label| {
@@ -785,17 +754,17 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
                                        }) =>
                                     {
                                        if label.span.is_empty() {
-                                          TOP_TO_BOTTOM_LEFT.paint(self.style(label.severity))
+                                          TOP_TO_BOTTOM_LEFT.style(self.style(label.severity))
                                        } else {
-                                          TOP_TO_BOTTOM.paint(self.style(label.severity))
+                                          TOP_TO_BOTTOM.style(self.style(label.severity))
                                        }
                                     },
 
                                     _ if !wrote && index > *span_start => {
-                                       LEFT_TO_RIGHT.paint(self.style(label.severity))
+                                       LEFT_TO_RIGHT.style(self.style(label.severity))
                                     },
 
-                                    _ => (&' ').new(),
+                                    _ => ' '.styled(),
                                  },
                               )?;
                            }
@@ -812,18 +781,18 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
 
                                  _ => LEFT_TO_TOP_BOTTOM,
                               }
-                              .paint(self.style(label.severity)),
+                              .style(self.style(label.severity)),
                            )?;
 
                            wrote = true;
-                           Ok(*span_end + if span_start == span_end { 1 } else { 0 })
+                           Ok(*span_end as usize + if span_start == span_end { 1 } else { 0 })
                         }
                      );
 
                      wrapln(writer, [label
                         .text
                         .as_ref()
-                        .paint(self.style(label.severity))])?;
+                        .style(self.style(label.severity))])?;
                   },
                }
             }
@@ -842,12 +811,12 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
 
          for point in &self.points {
             // INDENT: "= "
-            indent!(writer, header = "=".paint(STYLE_GUTTER));
+            indent!(writer, header = "=".style(style::GUTTER));
 
             // INDENT: "<tip|help|...>: "
             indent!(writer, header = &point.title);
 
-            wrapln(writer, [point.text.as_ref().new()])?;
+            wrapln(writer, [point.text.as_ref().styled()])?;
          }
       }
 
@@ -1049,7 +1018,7 @@ impl<Location: fmt::Display> ReportDisplay<Location> {
       }
    }
 
-   fn style(&self, severity: LabelSeverity) -> yansi::Style {
+   fn style(&self, severity: LabelSeverity) -> Style {
       severity.style_in(self.severity)
    }
 }

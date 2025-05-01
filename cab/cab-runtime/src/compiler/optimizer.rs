@@ -1,11 +1,11 @@
+use cab_report::Report;
+use cab_span::{
+   IntoSpan as _,
+   Span,
+};
 use cab_syntax::node::{
    self,
    Parted,
-};
-use cab_why::{
-   IntoSpan as _,
-   Report,
-   Span,
 };
 use smallvec::{
    SmallVec,

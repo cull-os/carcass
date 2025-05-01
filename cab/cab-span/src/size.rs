@@ -1,8 +1,7 @@
 use std::ops;
 
+use cab_util::into;
 use derive_more::Deref;
-
-use crate::into;
 
 /// Byte len of a source code element.
 #[derive(Deref, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]

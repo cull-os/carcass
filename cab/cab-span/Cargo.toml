@@ -1,0 +1,20 @@
+[package]
+name                 = "cab-span"
+edition.workspace    = true
+license.workspace    = true
+publish.workspace    = true
+repository.workspace = true
+version.workspace    = true
+
+[features]
+default = [ "cstree" ]
+
+cstree = [ "dep:cstree" ]
+
+[dependencies]
+cab-util.path = "../cab-util"
+
+cstree.optional  = true
+cstree.workspace = true
+
+derive_more.workspace = true

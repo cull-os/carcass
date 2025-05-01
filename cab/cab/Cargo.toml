@@ -8,11 +8,12 @@ repository.workspace = true
 version.workspace    = true
 
 [dependencies]
+cab-format.path  = "../cab-format"
 cab-island.path  = "../cab-island"
 cab-runtime.path = "../cab-runtime"
+cab-span.path    = "../cab-span"
 cab-syntax.path  = "../cab-syntax"
-cab-why.path     = "../cab-why"
+cab-report.path     = "../cab-report"
 
 clap.workspace  = true
 tokio.workspace = true
-yansi.workspace = true

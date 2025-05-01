@@ -7,7 +7,7 @@ repository.workspace = true
 version.workspace    = true
 
 [dependencies]
-cab-why.path = "../cab-why"
+cab-report.path = "../cab-report"
 
 async-once-cell.workspace = true
 async-trait.workspace     = true

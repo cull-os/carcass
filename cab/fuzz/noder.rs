@@ -13,15 +13,18 @@ use std::{
 };
 
 use cab::{
+   format::{
+      self,
+      style::StyleExt as _,
+   },
    island,
+   report,
    syntax,
-   why,
 };
 use libfuzzer_sys::{
    Corpus,
    fuzz_target,
 };
-use yansi::Paint as _;
 
 fuzz_target!(|source: &str| -> Corpus {
    let save_valid = matches!(
@@ -34,13 +37,13 @@ fuzz_target!(|source: &str| -> Corpus {
 
    let island: Arc<dyn island::Leaf> = Arc::new(island::blob(source.to_owned()));
 
-   yansi::whenever(yansi::Condition::TTY_AND_COLOR);
+   format::init();
 
    let node = match parse.result() {
       Ok(node) => node,
 
       Err(reports) => {
-         let source = why::PositionStr::new(source);
+         let source = report::PositionStr::new(source);
 
          for report in reports {
             println!(

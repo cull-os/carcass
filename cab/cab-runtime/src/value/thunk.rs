@@ -1,9 +1,11 @@
+#![allow(dead_code)]
+
 use std::{
    collections::HashMap,
    sync::Arc,
 };
 
-use cab_why::Span;
+use cab_span::Span;
 use rustc_hash::{
    FxBuildHasher,
    FxHashMap,
@@ -36,9 +38,9 @@ enum ThunkInner {
 #[derive(Clone)]
 pub struct Thunk(Arc<RwLock<ThunkInner>>);
 
-impl Into<Value> for Thunk {
-   fn into(self) -> Value {
-      Value::Thunk(self)
+impl From<Thunk> for Value {
+   fn from(val: Thunk) -> Self {
+      Value::Thunk(val)
    }
 }
 

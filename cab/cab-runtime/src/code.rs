@@ -6,13 +6,15 @@ use std::{
    },
 };
 
-use cab_why::{
-   DOT,
-   STYLE_GUTTER,
-   Span,
-   TOP_TO_BOTTOM,
+use cab_format::{
    indent,
+   style::{
+      self,
+      DOT,
+      TOP_TO_BOTTOM,
+   },
 };
+use cab_span::Span;
 use derive_more::Deref;
 
 use crate::{
@@ -62,7 +64,7 @@ impl fmt::Display for Code {
          with = |writer: &mut dyn fmt::Write| {
             let index = **index.borrow();
 
-            STYLE_GUTTER.fmt_prefix(writer)?;
+            style::GUTTER.fmt_prefix(writer)?;
 
             if index_previous == Some(index) {
                let dot_width = format!("{index:#X}").len();
@@ -77,8 +79,8 @@ impl fmt::Display for Code {
                write!(writer, "{index:>#index_width$X}")?;
             }
 
-            write!(writer, " {TOP_TO_BOTTOM} ")?;
-            STYLE_GUTTER.fmt_suffix(writer)?;
+            write!(writer, " {TOP_TO_BOTTOM} ",)?;
+            style::GUTTER.fmt_suffix(writer)?;
 
             index_previous.replace(index);
             Ok(index_width + 3)

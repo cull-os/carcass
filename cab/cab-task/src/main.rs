@@ -5,15 +5,18 @@ use std::{
 };
 
 use cab::{
-   syntax,
-   why::{
+   format::{
+      self,
+      style::StyleExt as _,
+   },
+   report::{
       self,
       Contextful as _,
    },
+   syntax,
 };
 use clap::Parser as _;
 use which::which;
-use yansi::Paint as _;
 
 #[derive(clap::Parser)]
 struct Cli {
@@ -46,10 +49,10 @@ enum Check {
 }
 
 #[tokio::main]
-async fn main() -> why::Termination {
+async fn main() -> report::Termination {
    let cli = Cli::parse();
 
-   yansi::whenever(yansi::Condition::TTY_AND_COLOR);
+   format::init();
 
    match cli.command {
       Command::Check {
@@ -136,10 +139,10 @@ async fn main() -> why::Termination {
                fail_count += 1;
 
                if fail_fast {
-                  why::bail!("failed fast");
+                  report::bail!("failed fast");
                }
 
-               Ok::<(), why::Error>(())
+               Ok::<(), report::Error>(())
             })?;
 
          if fail_count > 0 {
@@ -152,5 +155,5 @@ async fn main() -> why::Termination {
       },
    }
 
-   why::Termination::success()
+   report::Termination::success()
 }

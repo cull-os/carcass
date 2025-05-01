@@ -3,12 +3,12 @@ use std::{
    sync::atomic,
 };
 
+use cab_util::call;
 use unicode_segmentation::UnicodeSegmentation as _;
 use yansi::Paint as _;
 
 use crate::{
-   call,
-   text::{
+   private::{
       LINE_WIDTH,
       LINE_WIDTH_MAX,
    },
@@ -42,7 +42,7 @@ pub fn wrap<'a>(
       *LINE_WIDTH_MAX
    } else {
       // If we can't even write any text just assume the line is uncapped.
-      u16::MAX
+      usize::MAX
    };
 
    let mut parts = parts
@@ -66,7 +66,7 @@ pub fn wrap<'a>(
          continue;
       };
 
-      let word_width = *width(word.value) as u16;
+      let word_width = width(word.value);
 
       // Word fits in current line.
       if line_width + word_width <= line_width_max {
@@ -97,11 +97,11 @@ pub fn wrap<'a>(
          .grapheme_indices(true)
          .scan(0, |index, state @ (_, grapheme)| {
             let value = Some((*index, state));
-            *index += *width(grapheme);
+            *index += width(grapheme);
             value
          })
          .find_map(|(index, (split_index, _))| {
-            (index as u16 + 1 > line_width_remainder).then_some(split_index)
+            (index + 1 > line_width_remainder).then_some(split_index)
          })
          .unwrap();
 

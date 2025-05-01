@@ -3,13 +3,12 @@ use std::{
    sync::OnceLock,
 };
 
-use smallvec::SmallVec;
-
-use crate::{
+use cab_format::width;
+use cab_span::{
    Size,
    Span,
-   width,
 };
+use smallvec::SmallVec;
 
 /// A position in a source file.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -66,7 +65,7 @@ impl<'a> PositionStr<'a> {
 
       Position {
          line:   line_index as u32 + 1,
-         column: *width(&self.content[Span::std(line_start, offset)]) + 1,
+         column: width(&self.content[Span::std(line_start, offset)]) as u32 + 1,
       }
    }
 
