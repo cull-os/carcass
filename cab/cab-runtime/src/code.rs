@@ -131,9 +131,9 @@ impl fmt::Display for Code {
 
          while **index.borrow() < code.bytes.len() {
             let (_, operation, size) = code.read_operation(*index.borrow());
-            index.borrow_mut().0 += size;
 
             write!(writer, "{operation:?}", operation = operation.yellow())?;
+            index.borrow_mut().0 += size;
 
             let mut arguments = operation.arguments().iter().enumerate().peekable();
             while let Some((argument_index, argument)) = arguments.next() {
@@ -144,14 +144,13 @@ impl fmt::Display for Code {
                match argument {
                   Argument::U64 => {
                      let (u64, size) = code.read_u64(*index.borrow());
-                     index.borrow_mut().0 += size;
 
                      write!(writer, "{argument}", argument = u64.blue())?;
+                     index.borrow_mut().0 += size;
                   },
 
                   Argument::ValueIndex => {
                      let (value_index, size) = code.read_u64(*index.borrow());
-                     index.borrow_mut().0 += size;
 
                      let value_index_unique = code_index.add(2) * value_index.add(2);
 
@@ -160,6 +159,7 @@ impl fmt::Display for Code {
                         "{value_index:#X}",
                         value_index = value_index.blue().bold(),
                      )?;
+                     index.borrow_mut().0 += size;
 
                      if let Value::Blueprint(code) = &code[ValueIndex(value_index as _)] {
                         codes.push_front((value_index_unique, code));
@@ -175,18 +175,18 @@ impl fmt::Display for Code {
 
                   Argument::U16 => {
                      let (u16, size) = code.read_u16(*index.borrow());
-                     index.borrow_mut().0 += size;
 
                      write!(writer, "{argument}", argument = u16.magenta())?;
+                     index.borrow_mut().0 += size;
                   },
 
                   Argument::ByteIndex => {
                      let (u16, size) = code.read_u16(*index.borrow());
-                     index.borrow_mut().0 += size;
 
                      highlighted.borrow_mut().push(ByteIndex(u16 as _));
 
                      write!(writer, "{argument:#X}", argument = u16.cyan().bold())?;
+                     index.borrow_mut().0 += size;
                   },
                };
 
