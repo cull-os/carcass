@@ -386,15 +386,6 @@ impl<'a> Compiler<'a> {
    fn emit_suffix_operation(&mut self, operation: &'a node::SuffixOperation) {
       match operation.operator() {
          node::SuffixOperator::Same => self.emit(operation.left()),
-         node::SuffixOperator::Sequence => {
-            self.emit_thunk(operation.span(), |this| {
-               this.emit_force(operation.left());
-               this.push_operation(operation.span(), Operation::Pop);
-
-               // TODO: Use a proper value, similar to `undefined` in Haskell.
-               this.emit_push(operation.span(), Value::Nil);
-            });
-         },
       }
    }
 
