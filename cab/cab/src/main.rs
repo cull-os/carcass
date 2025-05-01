@@ -145,7 +145,7 @@ async fn main() -> why::Termination {
 
          let code = compile.code;
 
-         let _ = code;
+         writeln!(out, "{code}").context("failed to write to stdout")?;
       },
 
       Command::Dump { path, command } => {

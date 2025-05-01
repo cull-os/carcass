@@ -520,6 +520,10 @@ impl<'a> Compiler<'a> {
                   this.push_u64(parts.len() as _);
                }
 
+               if !is_bind {
+                  this.push_operation(span, Operation::Resolve);
+               }
+
                LocalName::new(
                   parts
                      .into_iter()
