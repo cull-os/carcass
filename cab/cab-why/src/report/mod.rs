@@ -363,21 +363,21 @@ struct ReportDisplay<Location: fmt::Display> {
    points: SmallVec<Point, 2>,
 }
 
-const RIGHT_TO_BOTTOM: char = '┏';
-const TOP_TO_BOTTOM: char = '┃';
-const TOP_TO_BOTTOM_PARTIAL: char = '┇';
-const DOT: char = '·';
-const TOP_TO_RIGHT: char = '┗';
-const LEFT_TO_RIGHT: char = '━';
-const LEFT_TO_TOP_BOTTOM: char = '┫';
+pub const RIGHT_TO_BOTTOM: char = '┏';
+pub const TOP_TO_BOTTOM: char = '┃';
+pub const TOP_TO_BOTTOM_PARTIAL: char = '┇';
+pub const DOT: char = '·';
+pub const TOP_TO_RIGHT: char = '┗';
+pub const LEFT_TO_RIGHT: char = '━';
+pub const LEFT_TO_TOP_BOTTOM: char = '┫';
 
-const TOP_TO_BOTTOM_LEFT: char = '▏';
-const TOP_LEFT_TO_RIGHT: char = '╲';
-const TOP_TO_BOTTOM_RIGHT: char = '▕';
+pub const TOP_TO_BOTTOM_LEFT: char = '▏';
+pub const TOP_LEFT_TO_RIGHT: char = '╲';
+pub const TOP_TO_BOTTOM_RIGHT: char = '▕';
 
-const STYLE_GUTTER: yansi::Style = yansi::Style::new().blue();
-const STYLE_HEADER_PATH: yansi::Style = yansi::Style::new().green();
-const STYLE_HEADER_POSITION: yansi::Style = yansi::Style::new().blue();
+pub const STYLE_GUTTER: yansi::Style = yansi::Style::new().blue();
+pub const STYLE_HEADER_PATH: yansi::Style = yansi::Style::new().green();
+pub const STYLE_HEADER_POSITION: yansi::Style = yansi::Style::new().blue();
 
 impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
    fn fmt(&self, writer: &mut fmt::Formatter<'_>) -> fmt::Result {

@@ -1,8 +1,4 @@
-/// {n} = stack indexing, from the end.
-///
-/// [n:type] = instruction indexing, index 0 is right after the documented
-/// instruction.
-#[derive(num_enum::TryFromPrimitive)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, num_enum::TryFromPrimitive)]
 #[repr(u8)]
 pub enum Operation {
    Return,
@@ -55,4 +51,70 @@ pub enum Operation {
    Multiplication,
    Power,
    Division,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Argument {
+   U64,
+   ValueIndex,
+
+   U16,
+   ByteIndex,
+}
+
+impl Operation {
+   pub fn arguments(self) -> &'static [Argument] {
+      use Argument::{
+         ByteIndex,
+         U16,
+         U64,
+         ValueIndex,
+      };
+
+      match self {
+         Operation::Return => &[],
+
+         Operation::Push => &[ValueIndex],
+         Operation::Pop => &[],
+
+         Operation::Swap => &[U16],
+
+         Operation::Jump | Operation::JumpIf => &[ByteIndex],
+
+         Operation::Force => &[],
+
+         Operation::ScopeStart
+         | Operation::ScopeEnd
+         | Operation::ScopePush
+         | Operation::ScopeSwap => &[],
+
+         Operation::Interpolate => &[U64],
+
+         Operation::Resolve => &[],
+
+         Operation::AssertBoolean => &[],
+
+         Operation::Swwallation | Operation::Negation => &[],
+
+         Operation::Not => &[],
+
+         Operation::Concat | Operation::Construct => &[],
+
+         Operation::Update
+         | Operation::LessOrEqual
+         | Operation::Less
+         | Operation::MoreOrEqual
+         | Operation::More => &[],
+
+         Operation::Equal => &[],
+
+         Operation::All | Operation::Any => &[],
+
+         Operation::Addition
+         | Operation::Subtraction
+         | Operation::Multiplication
+         | Operation::Power
+         | Operation::Division => &[],
+      }
+   }
 }

@@ -11,7 +11,10 @@ mod compiler;
 pub use compiler::oracle as compile_oracler;
 
 mod operation;
-pub use operation::Operation;
+pub use operation::{
+   Argument,
+   Operation,
+};
 
 pub mod value;
 pub use value::Value;

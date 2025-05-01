@@ -1,13 +1,29 @@
-use cab_why::Span;
+use std::{
+   cell::RefCell,
+   fmt::{
+      self,
+      Write as _,
+   },
+};
+
+use cab_why::{
+   DOT,
+   STYLE_GUTTER,
+   Span,
+   TOP_TO_BOTTOM,
+   indent,
+};
 use derive_more::Deref;
 
 use crate::{
+   Argument,
    Operation,
    Value,
 };
 
 const ENCODED_U64_LEN: usize = 9;
 const ENCODED_U16_LEN: usize = 0u16.to_le_bytes().len();
+const ENCODED_OPERATION_LEN: usize = 1;
 
 #[derive(Deref, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ByteIndex(usize);
@@ -32,6 +48,87 @@ pub struct Code {
    spans: Vec<(ByteIndex, Span)>,
 
    values: Vec<Value>,
+}
+
+impl fmt::Display for Code {
+   fn fmt(&self, writer: &mut fmt::Formatter<'_>) -> fmt::Result {
+      let index_width = format!("{index:#X}", index = self.bytes.len() - 1).len();
+
+      let index = RefCell::new(ByteIndex(0));
+      let mut index_previous = None::<usize>;
+      indent!(
+         writer,
+         index_width + 3,
+         with = |writer: &mut dyn fmt::Write| {
+            let index = **index.borrow();
+
+            STYLE_GUTTER.fmt_prefix(writer)?;
+
+            if index_previous == Some(index) {
+               let dot_width = format!("{index:#X}").len();
+               let space_width = index_width - dot_width;
+
+               write!(writer, "{:>space_width$}", "")?;
+
+               for _ in 0..dot_width {
+                  write!(writer, "{DOT}")?;
+               }
+            } else {
+               write!(writer, "{index:>#index_width$X}")?;
+            }
+
+            write!(writer, " {TOP_TO_BOTTOM} ")?;
+            STYLE_GUTTER.fmt_suffix(writer)?;
+
+            index_previous.replace(index);
+            Ok(index_width + 3)
+         }
+      );
+
+      while **index.borrow() < self.bytes.len() {
+         let (_, operation, size) = self.read_operation(*index.borrow());
+
+         write!(writer, "{operation:?}")?;
+         index.borrow_mut().0 += size;
+
+         let mut arguments = operation.arguments().iter().enumerate().peekable();
+         while let Some((argument_index, argument)) = arguments.next() {
+            if argument_index == 0 {
+               write!(writer, "(")?;
+            }
+
+            let (argument, size) = match argument {
+               Argument::U64 => self.read_u64(*index.borrow()),
+               Argument::ValueIndex => {
+                  let (u64, size) = self.read_u64(*index.borrow());
+                  let _ = &self.values[u64 as usize]; // TODO: Proper value printing.
+                  (u64 as _, size)
+               },
+
+               Argument::U16 => {
+                  let (u16, size) = self.read_u16(*index.borrow());
+                  (u16 as _, size)
+               },
+               // TODO: Highlight these properly.
+               Argument::ByteIndex => {
+                  let (u16, size) = self.read_u16(*index.borrow());
+                  (u16 as _, size)
+               },
+            };
+
+            write!(writer, "{argument}")?;
+            index.borrow_mut().0 += size;
+
+            if arguments.peek().is_none() {
+               write!(writer, ")")?;
+            }
+         }
+
+         writeln!(writer)?;
+      }
+
+      Ok(())
+   }
 }
 
 impl Code {
@@ -109,16 +206,17 @@ impl Code {
    }
 
    #[must_use]
-   pub fn read_operation(&self, index: ByteIndex) -> (Span, Operation) {
+   pub fn read_operation(&self, index: ByteIndex) -> (Span, Operation, usize) {
       let position = self.spans.partition_point(|&(index2, _)| index >= index2);
 
-      let (index, span) = self.spans[position.saturating_sub(1)];
+      let (_, span) = self.spans[position.saturating_sub(1)];
 
       (
          span,
          self.bytes[*index]
             .try_into()
             .expect("cab-runtime bug: invalid operation at byte index"),
+         ENCODED_OPERATION_LEN,
       )
    }
 
