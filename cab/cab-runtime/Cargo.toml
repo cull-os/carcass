@@ -7,11 +7,11 @@ repository.workspace = true
 version.workspace    = true
 
 [dependencies]
+cab-format.path = "../cab-format"
+cab-span.path   = "../cab-span"
 cab-syntax.path = "../cab-syntax"
-cab-why.path    = "../cab-why"
+cab-report.path    = "../cab-report"
 
-async-trait.workspace = true
-bytes.workspace       = true
 derive_more.workspace = true
 num.workspace         = true
 num_enum.workspace    = true

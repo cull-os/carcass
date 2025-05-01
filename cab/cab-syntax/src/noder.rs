@@ -3,10 +3,12 @@ use std::{
    result,
 };
 
-use cab_why::{
-   IntoSize,
+use cab_report::{
    Report,
    ReportSeverity,
+};
+use cab_span::{
+   IntoSize as _,
    Size,
    Span,
 };

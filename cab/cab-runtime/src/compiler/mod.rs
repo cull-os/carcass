@@ -1,14 +1,16 @@
 use std::sync::Arc;
 
+use cab_report::{
+   Report,
+   ReportSeverity,
+};
+use cab_span::{
+   IntoSpan as _,
+   Span,
+};
 use cab_syntax::node::{
    self,
    Parted as _,
-};
-use cab_why::{
-   IntoSpan as _,
-   Report,
-   ReportSeverity,
-   Span,
 };
 
 use crate::{

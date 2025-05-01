@@ -6,9 +6,9 @@ use std::{
    ops,
 };
 
-use cab_why::{
+use cab_report::Report;
+use cab_span::{
    IntoSpan as _,
-   Report,
    Span,
 };
 use derive_more::Deref;

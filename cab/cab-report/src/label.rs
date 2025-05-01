@@ -1,10 +1,13 @@
 use std::borrow::Cow;
 
-use crate::{
-   ReportSeverity,
-   Span,
-   into,
+use cab_format::style::{
+   Color,
+   Style,
 };
+use cab_span::Span;
+use cab_util::into;
+
+use crate::ReportSeverity;
 
 /// The severity of a label.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -16,7 +19,7 @@ pub enum LabelSeverity {
 impl LabelSeverity {
    /// Returns the applicable style of this label severity in the given report
    /// severity.
-   pub fn style_in(self, severity: ReportSeverity) -> yansi::Style {
+   pub fn style_in(self, severity: ReportSeverity) -> Style {
       use LabelSeverity::{
          Primary,
          Secondary,
@@ -29,17 +32,17 @@ impl LabelSeverity {
       };
 
       match (severity, self) {
-         (Note, Secondary) => yansi::Color::Blue,
-         (Note, Primary) => yansi::Color::Magenta,
+         (Note, Secondary) => Color::Blue,
+         (Note, Primary) => Color::Magenta,
 
-         (Warn, Secondary) => yansi::Color::Blue,
-         (Warn, Primary) => yansi::Color::Yellow,
+         (Warn, Secondary) => Color::Blue,
+         (Warn, Primary) => Color::Yellow,
 
-         (Error, Secondary) => yansi::Color::Yellow,
-         (Error, Primary) => yansi::Color::Red,
+         (Error, Secondary) => Color::Yellow,
+         (Error, Primary) => Color::Red,
 
-         (Bug, Secondary) => yansi::Color::Yellow,
-         (Bug, Primary) => yansi::Color::Red,
+         (Bug, Secondary) => Color::Yellow,
+         (Bug, Primary) => Color::Red,
       }
       .foreground()
    }

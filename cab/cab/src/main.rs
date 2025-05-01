@@ -11,20 +11,19 @@ use std::{
 };
 
 use cab::{
+   format,
+   format::style::StyleExt as _,
    island,
-   syntax,
-   why::{
+   report::{
       self,
       Contextful as _,
+      PositionStr,
+      ReportSeverity,
+      bail,
    },
-};
-use cab_why::{
-   PositionStr,
-   ReportSeverity,
-   bail,
+   syntax,
 };
 use clap::Parser as _;
-use yansi::Paint as _;
 
 #[derive(clap::Parser)]
 #[command(version, about)]
@@ -66,10 +65,10 @@ enum Dump {
 }
 
 #[tokio::main]
-async fn main() -> why::Termination {
+async fn main() -> report::Termination {
    let cli = Cli::parse();
 
-   yansi::whenever(yansi::Condition::TTY_AND_COLOR);
+   format::init();
 
    let (mut out, mut err) = (io::stdout(), io::stderr());
 
@@ -172,7 +171,7 @@ async fn main() -> why::Termination {
                   if color {
                      let style = syntax::COLORS[kind as usize];
 
-                     write!(out, "{slice}", slice = slice.paint(style))
+                     write!(out, "{slice}", slice = slice.style(style))
                   } else {
                      writeln!(out, "{kind:?} {slice:?}")
                   }
@@ -199,5 +198,5 @@ async fn main() -> why::Termination {
       },
    }
 
-   why::Termination::success()
+   report::Termination::success()
 }

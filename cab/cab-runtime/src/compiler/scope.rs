@@ -1,4 +1,4 @@
-use cab_why::Span;
+use cab_span::Span;
 use derive_more::Deref;
 use smallvec::{
    SmallVec,

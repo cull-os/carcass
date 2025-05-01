@@ -3,10 +3,12 @@
 //! [`Token`]: crate::Token
 use std::fmt;
 
-use cab_why::{
-   IntoSpan as _,
+use cab_report::{
    Label,
    Report,
+};
+use cab_span::{
+   IntoSpan as _,
    Span,
 };
 use derive_more::Deref;

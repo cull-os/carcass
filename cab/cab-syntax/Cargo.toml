@@ -7,7 +7,9 @@ repository.workspace = true
 version.workspace    = true
 
 [dependencies]
-cab-why.path = "../cab-why"
+cab-format.path = "../cab-format"
+cab-span.path   = "../cab-span"
+cab-report.path    = "../cab-report"
 
 cstree.workspace      = true
 derive_more.workspace = true
@@ -17,4 +19,3 @@ paste.workspace       = true
 peekmore.workspace    = true
 phf.workspace         = true
 smallvec.workspace    = true
-yansi.workspace       = true

@@ -160,12 +160,28 @@ checksum = "d71b6127be86fdcfddb610f7182ac57211d4b18a3e9c82eb2d17662f2227ad6a"
 name = "cab"
 version = "0.0.1"
 dependencies = [
+ "cab-format",
  "cab-island",
+ "cab-report",
  "cab-runtime",
+ "cab-span",
  "cab-syntax",
- "cab-why",
  "clap",
  "tokio",
+]
+
+[[package]]
+name = "cab-format"
+version = "0.0.1"
+dependencies = [
+ "cab-span",
+ "cab-util",
+ "derive_more",
+ "scopeguard",
+ "terminal_size",
+ "unic-emoji-char",
+ "unicode-segmentation",
+ "unicode-width",
  "yansi",
 ]
 
@@ -176,18 +192,31 @@ dependencies = [
  "async-once-cell",
  "async-trait",
  "bytes",
- "cab-why",
+ "cab-report",
  "tokio",
+]
+
+[[package]]
+name = "cab-report"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "cab-format",
+ "cab-span",
+ "cab-util",
+ "const-str",
+ "smallvec 2.0.0-alpha.11",
+ "thiserror",
 ]
 
 [[package]]
 name = "cab-runtime"
 version = "0.0.1"
 dependencies = [
- "async-trait",
- "bytes",
+ "cab-format",
+ "cab-report",
+ "cab-span",
  "cab-syntax",
- "cab-why",
  "derive_more",
  "num",
  "num_enum",
@@ -199,10 +228,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "cab-span"
+version = "0.0.1"
+dependencies = [
+ "cab-util",
+ "cstree",
+ "derive_more",
+]
+
+[[package]]
 name = "cab-syntax"
 version = "0.0.1"
 dependencies = [
- "cab-why",
+ "cab-format",
+ "cab-report",
+ "cab-span",
  "cstree",
  "derive_more",
  "enumset",
@@ -211,7 +251,6 @@ dependencies = [
  "peekmore",
  "phf",
  "smallvec 2.0.0-alpha.11",
- "yansi",
 ]
 
 [[package]]
@@ -222,26 +261,11 @@ dependencies = [
  "clap",
  "tokio",
  "which",
- "yansi",
 ]
 
 [[package]]
-name = "cab-why"
+name = "cab-util"
 version = "0.0.1"
-dependencies = [
- "anyhow",
- "const-str",
- "cstree",
- "derive_more",
- "scopeguard",
- "smallvec 2.0.0-alpha.11",
- "terminal_size",
- "thiserror",
- "unic-emoji-char",
- "unicode-segmentation",
- "unicode-width",
- "yansi",
-]
 
 [[package]]
 name = "cc"
@@ -482,7 +506,6 @@ version = "0.0.1"
 dependencies = [
  "cab",
  "libfuzzer-sys",
- "yansi",
 ]
 
 [[package]]

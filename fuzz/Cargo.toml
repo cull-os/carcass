@@ -13,7 +13,6 @@ cargo-fuzz = true
 cab.path = "../cab/cab"
 
 libfuzzer-sys.workspace = true
-yansi.workspace         = true
 
 [[bin]]
 bench = false

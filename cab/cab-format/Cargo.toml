@@ -1,30 +1,17 @@
 [package]
-name                 = "cab-why"
+name                 = "cab-format"
 edition.workspace    = true
 license.workspace    = true
 publish.workspace    = true
 repository.workspace = true
 version.workspace    = true
 
-[features]
-default = [ "cstree", "error" ]
-
-cstree = [ "dep:cstree" ]
-error  = [ "dep:anyhow", "dep:thiserror" ]
-
 [dependencies]
-cstree.optional  = true
-cstree.workspace = true
+cab-span.path = "../cab-span"
+cab-util.path = "../cab-util"
 
-anyhow.optional     = true
-anyhow.workspace    = true
-thiserror.optional  = true
-thiserror.workspace = true
-
-const-str.workspace            = true
 derive_more.workspace          = true
 scopeguard.workspace           = true
-smallvec.workspace             = true
 terminal_size.workspace        = true
 unic-emoji-char.workspace      = true
 unicode-segmentation.workspace = true

@@ -4,10 +4,9 @@ use std::{
    ops,
 };
 
-use crate::{
-   Size,
-   into,
-};
+use cab_util::into;
+
+use crate::Size;
 
 /// The span of a source code element.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
