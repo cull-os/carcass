@@ -68,6 +68,7 @@ impl Oracle {
       compiler.emit_scope(expression.span(), |this| {
          this.emit_force(expression);
       });
+      compiler.push_operation(expression.span(), Operation::Return);
 
       compiler
          .reports
