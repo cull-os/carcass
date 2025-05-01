@@ -328,6 +328,7 @@ impl<'a> ExpressionRef<'a> {
    }
 
    /// Iterates over all subexpressions delimited with the same operator.
+   #[allow(irrefutable_let_patterns)]
    pub fn same_items(self) -> impl Iterator<Item = ExpressionRef<'a>> {
       gen move {
          let mut expressions = VecDeque::from([self]);
@@ -742,7 +743,6 @@ impl InfixOperation {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SuffixOperator {
    Same,
-   Sequence,
 }
 
 impl TryFrom<Kind> for SuffixOperator {
@@ -751,7 +751,6 @@ impl TryFrom<Kind> for SuffixOperator {
    fn try_from(from: Kind) -> Result<Self, ()> {
       match from {
          TOKEN_COMMA => Ok(Self::Same),
-         TOKEN_SEMICOLON => Ok(Self::Sequence),
 
          _ => Err(()),
       }
