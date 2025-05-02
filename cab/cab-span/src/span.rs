@@ -1,6 +1,6 @@
-use core::fmt;
 use std::{
    cmp,
+   fmt,
    ops,
 };
 
@@ -19,7 +19,7 @@ pub struct Span {
 }
 
 impl fmt::Display for Span {
-   fn fmt(&self, writer: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+   fn fmt(&self, writer: &mut fmt::Formatter<'_>) -> fmt::Result {
       use fmt::Debug as _;
 
       <Self as Into<ops::Range<u32>>>::into(*self).fmt(writer)
@@ -36,8 +36,9 @@ impl Span {
    }
 
    /// Creates a new dummy [`Span`].
+   #[must_use]
    pub fn dummy() -> Self {
-      Self::new(0u32, 0u32)
+      Self::new(0_u32, 0_u32)
    }
 
    /// Creates a new [`ops::Range<usize>`] from two sizes, one for the start
@@ -51,6 +52,7 @@ impl Span {
 
    /// Turns this span into a [`ops::Range<usize>`].
    #[inline]
+   #[must_use]
    pub fn into_std(self) -> ops::Range<usize> {
       self.into()
    }
@@ -85,19 +87,21 @@ impl Span {
    /// Creates a span that starts from zero and ends at the given size.
    #[inline]
    pub fn up_to(end: impl Into<Size>) -> Self {
-      Self::new(0u32, end)
+      Self::new(0_u32, end)
    }
 }
 
 impl Span {
    /// Returns the len of this span.
    #[inline]
+   #[must_use]
    pub fn len(self) -> Size {
       self.start - self.end
    }
 
    /// Whether or not this span has a len of 0.
    #[inline]
+   #[must_use]
    pub fn is_empty(self) -> bool {
       self.start == self.end
    }
@@ -135,6 +139,7 @@ impl Span {
    /// Calculates the smallest span that covers both this span and another
    /// span.
    #[inline]
+   #[must_use]
    pub fn cover(self, that: impl Into<Self>) -> Self {
       into!(that);
 

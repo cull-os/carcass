@@ -1,7 +1,10 @@
 //! Typed [`Token`] definitions.
 //!
 //! [`Token`]: crate::Token
-use std::fmt;
+use std::{
+   fmt,
+   ptr,
+};
 
 use cab_report::{
    Label,
@@ -47,7 +50,7 @@ macro_rules! token {
             // SAFETY: token is &red::Token and we are casting it to $name.
             // $name holds red::Token with #[repr(transparent)], so the layout
             // is the exact same for &red::Token and &$name.
-            Ok(unsafe { &*(token as *const _ as *const $name) })
+            Ok(unsafe { &*ptr::from_ref(token).cast::<$name>() })
          }
       }
 
@@ -75,6 +78,7 @@ token! {
 
 impl Whitespace {
    /// Returns the amount of lines this whitespace.
+   #[must_use]
    pub fn newline_count(&self) -> usize {
       self.text().bytes().filter(|&c| c == b'\n').count() + 1
    }
@@ -92,6 +96,7 @@ impl Comment {
    const START_HASHTAG_LEN: usize = '#'.len_utf8();
 
    /// Returns the starting delimiter of this comment.
+   #[must_use]
    pub fn start_delimiter(&self) -> &str {
       let text = self.text();
 
@@ -107,6 +112,7 @@ impl Comment {
 
    /// Whether if this comment has the capability to span multiple
    /// lines.
+   #[must_use]
    pub fn is_multiline(&self) -> bool {
       self
          .text()
@@ -212,6 +218,7 @@ token! {
 impl Integer {
    /// Returns the value of this integer, after resolving binary,
    /// octadecimal and hexadecimal notation if it exists.
+   #[must_use]
    pub fn value(&self) -> num::BigInt {
       let text = self.text();
 
@@ -235,6 +242,7 @@ token! {
 
 impl Float {
    /// Returns the value of the float by parsing the underlying slice.
+   #[must_use]
    pub fn value(&self) -> f64 {
       let text = self.text();
 

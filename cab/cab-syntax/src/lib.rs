@@ -27,7 +27,7 @@ mod noder;
 pub mod token;
 mod tokenizer;
 
-#[allow(dead_code)]
+#[expect(dead_code)]
 mod red {
    use super::*;
 
@@ -51,7 +51,7 @@ pub trait Token = TryFrom<red::Token> + ops::Deref<Target = red::Token>;
 pub trait TokenRef<'a> =
    TryFrom<&'a red::Token> + ops::Deref<Target: ops::Deref<Target = red::Token>>;
 
-#[allow(dead_code)]
+#[expect(dead_code)]
 mod green {
    use std::sync::Arc;
 
@@ -86,7 +86,7 @@ mod green {
 )]
 #[repr(u32)]
 #[enumset(no_super_impls)]
-#[allow(non_camel_case_types)]
+#[expect(non_camel_case_types)]
 #[non_exhaustive]
 pub enum Kind {
    /// Represents any sequence of tokens that was not recognized.
@@ -396,6 +396,7 @@ impl Kind {
    /// max 42 (38) + 61
    ///     t  t    f
    /// ```
+   #[must_use]
    pub fn is_argument(self) -> bool {
       let mut arguments = Self::EXPRESSIONS;
       arguments.remove(TOKEN_KEYWORD_IF);
@@ -404,11 +405,13 @@ impl Kind {
    }
 
    /// Whether if the token should be ignored by the noder.
+   #[must_use]
    pub fn is_trivia(self) -> bool {
       matches!(self, TOKEN_COMMENT | TOKEN_WHITESPACE)
    }
 
    /// Whether if this token is erroneous.
+   #[must_use]
    pub fn is_error(self) -> bool {
       matches!(
          self,
@@ -417,6 +420,7 @@ impl Kind {
    }
 
    /// Returns the node and closing kinds of this starting delimiter.
+   #[must_use]
    pub fn into_node_and_closing(self) -> Option<(Kind, Kind)> {
       Some(match self {
          TOKEN_PATH_CONTENT_START => (NODE_PATH_CONTENT, TOKEN_PATH_END),

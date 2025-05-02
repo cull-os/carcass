@@ -38,6 +38,7 @@ impl<'a> ops::Deref for PositionStr<'a> {
 }
 
 impl<'a> PositionStr<'a> {
+   #[must_use]
    pub fn new(content: &'a str) -> Self {
       Self {
          content,
@@ -64,8 +65,10 @@ impl<'a> PositionStr<'a> {
       };
 
       Position {
-         line:   line_index as u32 + 1,
-         column: width(&self.content[Span::std(line_start, offset)]) as u32 + 1,
+         line:   u32::try_from(line_index).expect("line index must fit in u32") + 1,
+         column: u32::try_from(width(&self.content[Span::std(line_start, offset)]))
+            .expect("column must fit in u32")
+            + 1,
       }
    }
 
@@ -79,7 +82,7 @@ mod tests {
    use super::*;
 
    #[test]
-   fn test_position() {
+   fn position() {
       let mut source;
 
       macro_rules! assert_span {
@@ -87,9 +90,11 @@ mod tests {
             $range:expr =>
             $slice:literal,($start_line:literal : $start_column:literal),($end_line:literal : $end_column:literal)
          ) => {
-            assert_eq!(&source[$range], $slice);
+            let range: ops::Range<usize> = $range;
 
-            let (start, end) = source.positions(Span::new($range.start as u32, $range.end as u32));
+            assert_eq!(&source[range.clone()], $slice);
+
+            let (start, end) = source.positions(Span::new(range.start, range.end));
 
             assert_eq!(start, Position {
                line:   $start_line,

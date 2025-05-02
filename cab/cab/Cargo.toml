@@ -7,6 +7,9 @@ publish.workspace    = true
 repository.workspace = true
 version.workspace    = true
 
+[lints]
+workspace = true
+
 [dependencies]
 cab-format.path  = "../cab-format"
 cab-island.path  = "../cab-island"

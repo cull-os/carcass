@@ -6,8 +6,12 @@ publish.workspace    = true
 repository.workspace = true
 version.workspace    = true
 
+[lints]
+workspace = true
+
 [dependencies]
 cab-report.path = "../cab-report"
+cab-util.path   = "../cab-util"
 
 async-once-cell.workspace = true
 async-trait.workspace     = true

@@ -21,7 +21,7 @@ use cab_format::{
       LEFT_TO_RIGHT,
       RIGHT_TO_BOTTOM,
       Style,
-      StyleExt,
+      StyleExt as _,
       TOP_TO_BOTTOM,
    },
 };
@@ -35,13 +35,14 @@ use crate::{
 };
 
 const ENCODED_U64_LEN: usize = 9;
-const ENCODED_U16_LEN: usize = 0u16.to_le_bytes().len();
+const ENCODED_U16_LEN: usize = 0_u16.to_le_bytes().len();
 const ENCODED_OPERATION_LEN: usize = 1;
 
 #[derive(Deref, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ByteIndex(usize);
 
 impl ByteIndex {
+   #[must_use]
    pub fn dummy() -> Self {
       Self(usize::MAX)
    }
@@ -51,6 +52,7 @@ impl ByteIndex {
 pub struct ValueIndex(usize);
 
 impl ValueIndex {
+   #[must_use]
    pub fn dummy() -> Self {
       Self(usize::MAX)
    }
@@ -65,7 +67,7 @@ pub struct Code {
 
 impl fmt::Display for Code {
    fn fmt(&self, writer: &mut fmt::Formatter<'_>) -> fmt::Result {
-      let mut codes = VecDeque::from([(0u64, self)]);
+      let mut codes = VecDeque::from([(0_u64, self)]);
 
       while let Some((code_index, code)) = codes.pop_back() {
          let highlighted = RefCell::new(Vec::<ByteIndex>::new());
@@ -79,10 +81,10 @@ impl fmt::Display for Code {
             with = |writer: &mut dyn fmt::Write| {
                let index = *index.borrow();
 
-               let style = if !highlighted.borrow().contains(&index) {
-                  style::GUTTER
-               } else {
+               let style = if highlighted.borrow().contains(&index) {
                   Style::new().cyan().bold()
+               } else {
+                  style::GUTTER
                };
 
                let index = *index;
@@ -136,7 +138,7 @@ impl fmt::Display for Code {
             index.borrow_mut().0 += size;
 
             let mut arguments = operation.arguments().iter().enumerate().peekable();
-            while let Some((argument_index, argument)) = arguments.next() {
+            while let Some((argument_index, &argument)) = arguments.next() {
                if argument_index == 0 {
                   write!(writer, "{symbol}", symbol = '('.bright_black().bold())?;
                }
@@ -161,7 +163,12 @@ impl fmt::Display for Code {
                      )?;
                      index.borrow_mut().0 += size;
 
-                     if let Value::Blueprint(code) = &code[ValueIndex(value_index as _)] {
+                     #[expect(clippy::pattern_type_mismatch)]
+                     if let Value::Blueprint(code) = &code[ValueIndex(
+                        value_index
+                           .try_into()
+                           .expect("value index must fit in usize"),
+                     )] {
                         codes.push_front((value_index_unique, code));
 
                         write!(
@@ -188,7 +195,7 @@ impl fmt::Display for Code {
                      write!(writer, "{argument:#X}", argument = u16.cyan().bold())?;
                      index.borrow_mut().0 += size;
                   },
-               };
+               }
 
                write!(
                   writer,
@@ -226,15 +233,13 @@ impl ops::Index<ValueIndex> for Code {
    type Output = Value;
 
    fn index(&self, index: ValueIndex) -> &Self::Output {
-      self
-         .values
-         .get(*index)
-         .expect("cab-runtime bug: invalid value index")
+      self.values.get(*index).expect("value index must be valid")
    }
 }
 
 impl Code {
-   #[allow(clippy::new_without_default)]
+   #[expect(clippy::new_without_default)]
+   #[must_use]
    pub fn new() -> Self {
       Self {
          bytes:  Vec::new(),
@@ -259,12 +264,8 @@ impl Code {
 
          None => {
             let mut buffer = [0; ENCODED_U64_LEN];
-            buffer[..self.bytes.len() - *index].copy_from_slice(
-               self
-                  .bytes
-                  .get(*index..)
-                  .expect("cab-runtime bug: invalid byte index"),
-            );
+            buffer[..self.bytes.len() - *index]
+               .copy_from_slice(self.bytes.get(*index..).expect("byte index must be valid"));
             buffer
          },
       };
@@ -283,7 +284,7 @@ impl Code {
       let encoded = self
          .bytes
          .get(*index..*index + ENCODED_U16_LEN)
-         .expect("cab-runtime bug: invalid byte index")
+         .expect("byte index must be valid")
          .try_into()
          .expect("size was statically checked");
 
@@ -292,7 +293,7 @@ impl Code {
 
    pub fn push_operation(&mut self, span: Span, operation: Operation) -> ByteIndex {
       let index = ByteIndex(self.bytes.len());
-      self.bytes.push(operation as u8);
+      self.bytes.push(operation as _);
 
       // No need to insert the span again if this instruction was created from the
       // last span.
@@ -317,13 +318,17 @@ impl Code {
          span,
          self.bytes[*index]
             .try_into()
-            .expect("cab-runtime bug: invalid operation at byte index"),
+            .expect("byte index must be valid"),
          ENCODED_OPERATION_LEN,
       )
    }
 
    pub fn point_here(&mut self, index: ByteIndex) {
-      let here = self.bytes.len() as u16;
+      let here: u16 = self
+         .bytes
+         .len()
+         .try_into()
+         .expect("bytes len must fit in u16");
 
       self.bytes[*index..*index + ENCODED_U16_LEN].copy_from_slice(&here.to_le_bytes());
    }

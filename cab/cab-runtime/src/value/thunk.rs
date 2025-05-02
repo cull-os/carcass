@@ -45,6 +45,7 @@ impl From<Thunk> for Value {
 }
 
 impl Thunk {
+   #[must_use]
    pub fn suspended(span: Span, code: Code) -> Self {
       Self(Arc::new(RwLock::new(ThunkInner::Suspended {
          span,
@@ -53,6 +54,7 @@ impl Thunk {
       })))
    }
 
+   #[must_use]
    pub fn suspended_native(native: impl FnOnce() -> Value + Send + Sync + 'static) -> Self {
       Self(Arc::new(RwLock::new(ThunkInner::SuspendedNative(
          Box::new(native),

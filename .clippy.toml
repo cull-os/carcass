@@ -1,5 +1,12 @@
-# TODO: This doesn't work in editor, but works with crane. Huh?
+avoid-breaking-exported-api = false
+
+allowed-idents-below-min-chars = [ "x", "y", "z", "r", "g", "b", "c", "s" ]
+
+absolute-paths-allowed-crates = [ "cstree" ]
+allowed-wildcard-imports      = [ "super", "Kind" ]
+
+# Ignore the warning, it is defined: <https://github.com/rust-lang/rust-clippy/pull/14397#issuecomment-2848328221>.
 [[disallowed-methods]]
 path        = "unicode_width::UnicodeWidthStr::width"
 reason      = "UnicodeWidthStr::width does not handle emoji or tabs"
-replacement = "cab_why::width"
+replacement = "cab_format::width"

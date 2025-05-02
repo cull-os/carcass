@@ -110,17 +110,24 @@ pub enum LocalPosition<'this, 'a> {
 
 impl LocalPosition<'_, '_> {
    pub fn mark_used(&mut self) {
-      match self {
-         LocalPosition::Known { index, scopes } => {
+      match *self {
+         LocalPosition::Known {
+            index,
+            ref mut scopes,
+         } => {
             scopes
                .first_mut()
                .expect("known local must belong to a scope")
-               .locals[**index]
+               .locals[*index]
                .used = true;
          },
 
-         LocalPosition::Unknown { name, scopes } => {
+         LocalPosition::Unknown {
+            ref name,
+            ref mut scopes,
+         } => {
             for scope in scopes.iter_mut().rev() {
+               #[expect(clippy::pattern_type_mismatch)]
                for (local_name, indices) in &scope.locals_by_name {
                   if !local_name.maybe_eq(name) {
                      continue;
@@ -182,10 +189,10 @@ impl<'a> Scope<'a> {
       let slot = self
          .locals_by_name
          .iter_mut()
-         .find(|(local_name, _)| local_name == &name);
+         .find(|&&mut (ref local_name, _)| local_name == &name);
 
       match slot {
-         Some((_, indices)) => indices.push(index),
+         Some(&mut (_, ref mut indices)) => indices.push(index),
 
          None => self.locals_by_name.push((name, smallvec![index])),
       }
@@ -198,23 +205,24 @@ impl<'a> Scope<'a> {
       name: &LocalName<'a>,
    ) -> LocalPosition<'this, 'a> {
       for (scope_index, scope) in scopes.iter().enumerate().rev() {
+         #[expect(clippy::pattern_type_mismatch)]
          for (local_name, indices) in &scope.locals_by_name {
             match () {
-               _ if local_name.eq(name) => {
+               () if local_name.eq(name) => {
                   return LocalPosition::Known {
                      index:  *indices.last().expect(BY_NAME_EXPECT),
                      scopes: &mut scopes[scope_index..],
                   };
                },
 
-               _ if local_name.maybe_eq(name) => {
+               () if local_name.maybe_eq(name) => {
                   return LocalPosition::Unknown {
                      name:   name.clone(),
                      scopes: &mut scopes[scope_index..],
                   };
                },
 
-               _ => {},
+               () => {},
             }
          }
       }

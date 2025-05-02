@@ -4,6 +4,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use bytes::Bytes;
 use cab_report::Result;
+use cab_util::into;
 
 use crate::{
    Entry,
@@ -12,9 +13,9 @@ use crate::{
 
 /// Creates a leaf from the given content.
 pub fn blob(content: impl Into<Bytes>) -> impl Leaf {
-   Blob {
-      content: content.into(),
-   }
+   into!(content);
+
+   Blob { content }
 }
 
 struct Blob {

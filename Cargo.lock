@@ -194,6 +194,7 @@ dependencies = [
  "async-trait",
  "bytes",
  "cab-report",
+ "cab-util",
  "tokio",
 ]
 

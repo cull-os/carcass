@@ -20,16 +20,17 @@ pub enum IndentPlace {
 /// will be printed as spaces.
 ///
 /// If it is higher than that number, the [`IndentWriter`] will panic.
-pub type IndentWith<'a> = &'a mut dyn FnMut(&mut dyn fmt::Write) -> Result<usize, fmt::Error>;
+pub type IndentWith<'scope> =
+   &'scope mut dyn FnMut(&mut dyn fmt::Write) -> Result<usize, fmt::Error>;
 
 /// An indent writer.
 ///
 /// TODO: Explain how it behaves properly.
-pub struct IndentWriter<'a> {
+pub struct IndentWriter<'scope> {
    #[doc(hidden)]
-   pub writer: &'a mut dyn fmt::Write,
+   pub writer: &'scope mut dyn fmt::Write,
    #[doc(hidden)]
-   pub with:   IndentWith<'a>,
+   pub with:   IndentWith<'scope>,
    #[doc(hidden)]
    pub count:  usize,
    #[doc(hidden)]
@@ -62,7 +63,7 @@ impl fmt::Write for IndentWriter<'_> {
                self.place = IndentPlace::Start;
             },
 
-            _ => {},
+            IndentPlace::Start | IndentPlace::Middle => {},
          }
 
          match line {
@@ -80,17 +81,21 @@ impl fmt::Write for IndentWriter<'_> {
 
 impl IndentWriter<'_> {
    /// Asserts that it is at the start of the line and writes the indent.
+   ///
+   /// # Panics
+   ///
+   /// Panics if the writer isn't at the start of the line or if the indent
+   /// writer wrote more than the indent.
    pub fn write_indent(&mut self) -> fmt::Result {
       assert_eq!(self.place, IndentPlace::Start);
 
       let wrote = (self.with)(self.writer)?;
 
-      if wrote > self.count {
-         panic!(
-            "indent writer wrote ({wrote}) more than the indent ({count})",
-            count = self.count
-         );
-      }
+      assert!(
+         wrote <= self.count,
+         "indent writer wrote ({wrote}) more than the indent ({count})",
+         count = self.count
+      );
 
       write!(self.writer, "{:>count$}", "", count = self.count - wrote)?;
       self.place = IndentPlace::Middle;
@@ -120,11 +125,11 @@ pub fn indent(writer: &mut dyn fmt::Write, count: usize) -> IndentWriter<'_> {
 /// [`IndentWith`].
 ///
 /// Consult the documentation on [`IndentWith`] to learn what it is used for.
-pub fn indent_with<'a>(
-   writer: &'a mut dyn fmt::Write,
+pub fn indent_with<'scope>(
+   writer: &'scope mut dyn fmt::Write,
    count: usize,
-   with: IndentWith<'a>,
-) -> IndentWriter<'a> {
+   with: IndentWith<'scope>,
+) -> IndentWriter<'scope> {
    LINE_WIDTH.fetch_add(count, atomic::Ordering::SeqCst);
 
    IndentWriter {

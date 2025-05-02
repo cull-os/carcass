@@ -114,7 +114,7 @@ impl process::Termination for Termination {
          None => process::ExitCode::SUCCESS,
 
          Some(error) => {
-            write!(io::stderr(), "{error:?}").ok();
+            let _ = write!(io::stderr(), "{error:?}");
             process::ExitCode::FAILURE
          },
       }
@@ -123,11 +123,13 @@ impl process::Termination for Termination {
 
 impl Termination {
    /// Creates a [`Termination`] from the provided [`Error`].
+   #[must_use]
    pub fn error(error: Error) -> Self {
       Self(Some(error))
    }
 
    /// Creates a successful [`Termination`] that returns success.
+   #[must_use]
    pub fn success() -> Self {
       Self(None)
    }

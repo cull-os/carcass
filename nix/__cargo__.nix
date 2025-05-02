@@ -44,6 +44,8 @@
         pkgs.cargo-fuzz
       ];
 
+      env.CLIPPY_CONF_DIR = pkgs.writeTextDir "clippy.toml" <| lib.readFile ../.clippy.toml;
+
       shellHook = ''
         # So we can do `{bin}` instead of `./target/{optimization}/{bin}`
         root=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
@@ -61,7 +63,7 @@
       "${projectName}-clippy" = pkgs.crane.cargoClippy (cargoArguments // {
         inherit cargoArtifacts;
 
-        env.CLIPPY_CONF_DIR = pkgs.writeTextDir ".clippy.toml" <| lib.readFile ../.clippy.toml;
+        env.CLIPPY_CONF_DIR = pkgs.writeTextDir "clippy.toml" <| lib.readFile ../.clippy.toml;
 
         cargoClippyExtraArgs = "--all-targets -- --deny warnings";
       });

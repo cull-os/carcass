@@ -65,6 +65,7 @@ pub struct Oracle {
 }
 
 /// Returns a fresh parse oracle with an empty cache.
+#[must_use]
 pub fn oracle() -> Oracle {
    Oracle {
       cache: green::NodeCache::from_interner(green::interner()),
@@ -98,11 +99,11 @@ impl Oracle {
                return true;
             };
 
-            if last_span != Some(start) {
+            if last_span == Some(start) {
+               false
+            } else {
                last_span = Some(start);
                true
-            } else {
-               false
             }
          }
       });
@@ -138,7 +139,7 @@ fn unexpected(got: Option<Kind>, mut expected: EnumSet<Kind>, span: Span) -> Rep
          2.. => ", ",
       };
 
-      write!(reason, "an expression{separator}").ok();
+      let _ = write!(reason, "an expression{separator}");
    }
 
    if expected.is_superset(Kind::IDENTIFIERS) {
@@ -154,14 +155,14 @@ fn unexpected(got: Option<Kind>, mut expected: EnumSet<Kind>, span: Span) -> Rep
          _ => ", ",
       };
 
-      write!(reason, "{item}{separator}").ok();
+      let _ = write!(reason, "{item}{separator}");
    }
 
-   if let Some(got) = got {
-      write!(reason, ", got {got}").ok();
+   let _ = if let Some(got) = got {
+      write!(reason, ", got {got}")
    } else {
-      write!(reason, ", reached end of file").ok();
-   }
+      write!(reason, ", reached end of file")
+   };
 
    report.primary(span, reason)
 }
@@ -183,7 +184,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
          tokens:  tokens.peekmore(),
          reports: Vec::new(),
 
-         offset: Size::new(0u32),
+         offset: Size::new(0_u32),
       }
    }
 
@@ -219,6 +220,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
       self.tokens.peek().map(|&(kind, _)| kind)
    }
 
+   #[expect(clippy::min_ident_chars)]
    fn peek_nth(&mut self, n: usize) -> Option<Kind> {
       let mut peek_index: usize = 0;
       let mut index: usize = 0;
@@ -268,7 +270,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
    }
 
    fn next_while_trivia(&mut self) {
-      self.next_direct_while(Kind::is_trivia)
+      self.next_direct_while(Kind::is_trivia);
    }
 
    fn next(&mut self) -> Kind {
@@ -314,11 +316,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
 
             let next = self.peek()?;
 
-            if expected.contains(next) {
-               Some(self.next())
-            } else {
-               None
-            }
+            expected.contains(next).then(|| self.next())
          },
       }
    }
@@ -566,7 +564,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
                !((until | Kind::EXPRESSIONS).contains(kind)
                   || node::PrefixOperator::try_from(kind).is_ok()
                   || node::InfixOperator::try_from(kind)
-                     .is_ok_and(|operator| operator.is_token_owning())
+                     .is_ok_and(node::InfixOperator::is_token_owning)
                   || node::SuffixOperator::try_from(kind).is_ok())
             });
 

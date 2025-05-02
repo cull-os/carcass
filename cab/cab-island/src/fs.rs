@@ -26,6 +26,7 @@ use crate::{
 };
 
 /// Creates an entry from a given fs path.
+#[must_use]
 pub fn fs(path: PathBuf) -> impl Leaf + CollectionList {
    FsEntry {
       location: FsEntryLocation::Root { path },
@@ -58,15 +59,15 @@ struct FsEntry {
 
 impl fmt::Display for FsEntry {
    fn fmt(&self, writer: &mut fmt::Formatter<'_>) -> fmt::Result {
-      match &self.location {
-         FsEntryLocation::Root { path } => {
+      match self.location {
+         FsEntryLocation::Root { ref path } => {
             write!(
                writer,
                "fs::{path}",
                path = path.to_str().ok_or(fmt::Error)?,
             )
          },
-         FsEntryLocation::Child { name, .. } => write!(writer, "{name}"),
+         FsEntryLocation::Child { ref name, .. } => write!(writer, "{name}"),
       }
    }
 }
@@ -74,16 +75,16 @@ impl fmt::Display for FsEntry {
 #[async_trait]
 impl Entry for FsEntry {
    fn name(&self) -> Option<&str> {
-      match &self.location {
+      match self.location {
          FsEntryLocation::Root { .. } => None,
-         FsEntryLocation::Child { name, .. } => Some(name),
+         FsEntryLocation::Child { ref name, .. } => Some(name),
       }
    }
 
    fn parent(&self) -> Option<Arc<dyn Collection>> {
-      match &self.location {
+      match self.location {
          FsEntryLocation::Root { .. } => None,
-         FsEntryLocation::Child { parent, .. } => Some(parent.clone()),
+         FsEntryLocation::Child { ref parent, .. } => Some(parent.clone()),
       }
    }
 
@@ -151,10 +152,14 @@ impl FsEntry {
       let mut parts = Vec::new();
 
       loop {
-         match &this.location {
-            FsEntryLocation::Root { path } => break parts.push(path.as_path()),
+         match this.location {
+            FsEntryLocation::Root { ref path } => break parts.push(path.as_path()),
 
-            FsEntryLocation::Child { parent, name, .. } => {
+            FsEntryLocation::Child {
+               ref parent,
+               ref name,
+               ..
+            } => {
                this = parent;
 
                parts.push(Path::new(name.as_str()));
@@ -162,7 +167,7 @@ impl FsEntry {
          }
       }
 
-      PathBuf::from_iter(parts.into_iter().rev())
+      parts.into_iter().rev().collect::<PathBuf>()
    }
 
    async fn content(self: &Arc<Self>) -> Result<FsEntryContent> {
@@ -232,7 +237,7 @@ impl FsEntry {
             },
 
             content: OnceCell::new(),
-         }))
+         }));
       }
 
       Ok(FsEntryContent::CollectionList(entries.into()))

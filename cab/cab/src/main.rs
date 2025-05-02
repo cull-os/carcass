@@ -11,8 +11,10 @@ use std::{
 };
 
 use cab::{
-   format,
-   format::style::StyleExt as _,
+   format::{
+      self,
+      style::StyleExt as _,
+   },
    island,
    report::{
       self,
@@ -21,6 +23,7 @@ use cab::{
       ReportSeverity,
       bail,
    },
+   runtime,
    syntax,
 };
 use clap::Parser as _;
@@ -98,7 +101,7 @@ async fn main() -> report::Termination {
          let syntax_oracle = syntax::oracle();
          let parse = syntax_oracle.parse(syntax::tokenize(&source));
 
-         let mut fail = 0;
+         let mut fail: usize = 0;
          for report in parse.reports {
             if report.severity >= ReportSeverity::Error {
                fail += 1;
@@ -122,10 +125,10 @@ async fn main() -> report::Termination {
 
          let expression = parse.expression;
 
-         let compile_oracle = cab::runtime::compile_oracler();
+         let compile_oracle = runtime::compile_oracler();
          let compile = compile_oracle.compile(expression.as_ref());
 
-         let mut fail = 0;
+         let mut fail: usize = 0;
          for report in compile.reports {
             if report.severity >= ReportSeverity::Error {
                fail += 1;

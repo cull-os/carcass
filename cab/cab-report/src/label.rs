@@ -19,6 +19,7 @@ pub enum LabelSeverity {
 impl LabelSeverity {
    /// Returns the applicable style of this label severity in the given report
    /// severity.
+   #[must_use]
    pub fn style_in(self, severity: ReportSeverity) -> Style {
       use LabelSeverity::{
          Primary,
@@ -71,8 +72,8 @@ impl Label {
 
       Self {
          span,
-         text,
          severity,
+         text,
       }
    }
 

@@ -82,12 +82,19 @@ async fn main() -> report::Termination {
                }))
             })
             .try_for_each(|(source_file, expected_display_file)| {
-               let source = fs::read_to_string(&source_file)
-                  .with_context(|| format!("failed to read source file {source_file:?}"))?;
+               let source = fs::read_to_string(&source_file).with_context(|| {
+                  format!(
+                     "failed to read source file {source_file}",
+                     source_file = source_file.display(),
+                  )
+               })?;
 
                let expected_display =
                   fs::read_to_string(&expected_display_file).with_context(|| {
-                     format!("failed to read expected display file {expected_display_file:?}")
+                     format!(
+                        "failed to read expected display file {expected_display_file}",
+                        expected_display_file = expected_display_file.display(),
+                     )
                   })?;
 
                let actual_display = {
@@ -130,8 +137,9 @@ async fn main() -> report::Termination {
                   eprintln!("overwriting old test case...");
                   fs::write(&expected_display_file, &actual_display).with_context(|| {
                      format!(
-                        "failed to override expected display file {expected_display_file:?} with \
-                         actual display"
+                        "failed to override expected display file {expected_display_file} with \
+                         actual display",
+                        expected_display_file = expected_display_file.display(),
                      )
                   })?;
                }
@@ -150,7 +158,7 @@ async fn main() -> report::Termination {
                eprintln!("behaviour has changed for {fail_count} test cases");
             }
 
-            process::exit(1);
+            report::bail!("exiting due to {fail_count} previous errors");
          }
       },
    }
