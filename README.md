@@ -4,7 +4,7 @@ The Cull monorepository.
 
 ## Projects
 
-- [`cab`](./cab): A reproducible contextful-expression language.
+- [`cab`](./cab/README.md): A reproducible contextful-expression language.
 
 ## Contributing
 
