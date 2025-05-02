@@ -8,8 +8,8 @@ version.workspace    = true
 
 [dependencies]
 cab-format.path = "../cab-format"
+cab-report.path = "../cab-report"
 cab-span.path   = "../cab-span"
-cab-report.path    = "../cab-report"
 
 cstree.workspace      = true
 derive_more.workspace = true

@@ -23,7 +23,6 @@ use cab::{
    },
    syntax,
 };
-use cab_report::Contextful;
 use clap::Parser as _;
 
 const FAIL_STDERR: &str = "failed to write to stderr";
