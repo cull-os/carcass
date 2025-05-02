@@ -8,16 +8,16 @@ version.workspace    = true
 
 [dependencies]
 cab-format.path = "../cab-format"
+cab-report.path = "../cab-report"
 cab-span.path   = "../cab-span"
 cab-syntax.path = "../cab-syntax"
-cab-report.path    = "../cab-report"
 
+const-str.workspace   = true
 derive_more.workspace = true
 num.workspace         = true
 num_enum.workspace    = true
 rpds.workspace        = true
 rustc-hash.workspace  = true
 smallvec.workspace    = true
-const-str.workspace   = true
 tokio.workspace       = true
 vu128.workspace       = true
