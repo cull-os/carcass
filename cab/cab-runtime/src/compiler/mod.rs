@@ -55,13 +55,15 @@ impl Compile {
    }
 }
 
-pub struct Oracle {}
+pub struct Oracle;
 
+#[must_use]
 pub fn oracle() -> Oracle {
-   Oracle {}
+   Oracle
 }
 
 impl Oracle {
+   #[expect(clippy::unused_self)]
    pub fn compile(&self, expression: node::ExpressionRef<'_>) -> Compile {
       let mut compiler = Compiler::new();
 
@@ -170,7 +172,7 @@ impl<'a> Compiler<'a> {
             Report::warn(if let Ok(name) = TryInto::<&str>::try_into(&local.name) {
                format!("unused bind '{name}'")
             } else {
-               "unused bind".to_string()
+               "unused bind".to_owned()
             })
             .primary(local.span, "no usage")
             .tip("remove this or rename it to start with '_'"),
@@ -265,7 +267,7 @@ impl<'a> Compiler<'a> {
                this.emit_scope(operation.right().span(), |this| {
                   this.scope().push(Span::dummy(), LocalName::wildcard());
 
-                  this.emit(operation.right())
+                  this.emit(operation.right());
                });
 
                this.scopes.extend(scopes);
@@ -498,7 +500,7 @@ impl<'a> Compiler<'a> {
                   .collect::<Vec<_>>();
 
                for part in &parts {
-                  match part {
+                  match *part {
                      node::InterpolatedPartRef::Content(content) => {
                         this.emit_push(
                            content.span(),
@@ -516,7 +518,7 @@ impl<'a> Compiler<'a> {
                         });
                      },
 
-                     _ => {},
+                     node::InterpolatedPartRef::Delimiter(_) => {},
                   }
                }
 
@@ -558,7 +560,7 @@ impl<'a> Compiler<'a> {
                      "undefined reference".to_owned()
                   })
                   .primary(span, "no definition"),
-               )
+               );
             },
 
             mut position => position.mark_used(),

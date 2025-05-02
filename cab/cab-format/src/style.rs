@@ -36,6 +36,7 @@ macro_rules! wrap {
    };
 }
 
+#[expect(clippy::module_name_repetitions)]
 pub trait StyleExt
 where
    Self: Sized,

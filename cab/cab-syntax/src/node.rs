@@ -4,6 +4,7 @@
 use std::{
    collections::VecDeque,
    ops,
+   ptr,
 };
 
 use cab_report::Report;
@@ -46,9 +47,10 @@ macro_rules! reffed {
          }
 
          impl $name {
+            #[must_use]
             pub fn as_ref(&self) -> [<$name Ref>]<'_> {
-               match self {
-                  $(Self::$variant(v) => [<$name Ref>]::$variant(v),)*
+               match *self {
+                  $(Self::$variant(ref variant) => [<$name Ref>]::$variant(variant),)*
                }
             }
          }
@@ -63,9 +65,10 @@ macro_rules! reffed {
          }
 
          impl [<$name Ref>]<'_> {
+            #[must_use]
             pub fn to_owned(self) -> $name {
                match self {
-                  $(Self::$variant(v) => $name::$variant(v.clone()),)*
+                  $(Self::$variant(variant) => $name::$variant(variant.clone()),)*
                }
             }
          }
@@ -92,10 +95,10 @@ macro_rules! node {
                return Err(());
             }
 
-            // SAFETY: node is &red::Node and we are casting it to $name.
+            // SAFETY: node is &red::Node and we are casting it to &$name.
             // $name holds red::Node with #[repr(transparent)], so the layout
             // is the exact same for &red::Node and &$name.
-            Ok(unsafe { &*(node as *const _ as *const $name) })
+            Ok(unsafe { &*ptr::from_ref(node).cast::<$name>() })
          }
       }
 
@@ -133,8 +136,8 @@ macro_rules! node {
          type Target = red::Node;
 
          fn deref(&self) -> &Self::Target {
-            match self {
-               $(Self::$variant(node) => &**node,)*
+            match *self {
+               $(Self::$variant(ref node) => &**node,)*
             }
          }
       }
@@ -175,8 +178,8 @@ macro_rules! node {
             type Target = red::Node;
 
             fn deref(&self) -> &Self::Target {
-               match self {
-                  $(Self::$variant(node) => &**node,)*
+               match *self {
+                  $(Self::$variant(ref node) => &**node,)*
                }
             }
          }
@@ -217,6 +220,7 @@ macro_rules! node {
 
 macro_rules! get_token {
    ($name:ident -> $($skip:literal @)? Option<$kind:ident>) => {
+      #[must_use]
       pub fn $name(&self) -> Option<&red::Token> {
          self.children_with_tokens()
             .filter_map(red::ElementRef::into_token)
@@ -226,6 +230,7 @@ macro_rules! get_token {
    };
 
    ($name:ident -> $($skip:literal @)? $kind:ident) => {
+      #[must_use]
       pub fn $name(&self) -> &red::Token {
          self.children_with_tokens()
             .filter_map(red::ElementRef::into_token)
@@ -236,6 +241,7 @@ macro_rules! get_token {
    };
 
    ($name:ident -> $($skip:literal @)? Option<$type:ty>) => {
+      #[must_use]
       pub fn $name(&self) -> $type {
          self.children_with_tokens()
             .filter_map(red::ElementRef::into_token)
@@ -245,6 +251,7 @@ macro_rules! get_token {
    };
 
    ($name:ident -> $($skip:literal @)? $type:ty) => {
+      #[must_use]
       pub fn $name(&self) -> $type {
          self.children_with_tokens()
             .filter_map(red::ElementRef::into_token)
@@ -257,6 +264,7 @@ macro_rules! get_token {
 
 macro_rules! get_node {
    ($name:ident -> $($skip:literal @)? Option<$type:ty>) => {
+      #[must_use]
       pub fn $name(&self) -> Option<$type> {
          self.children()
             .filter_map(|node| <$type>::try_from(node).ok())
@@ -266,6 +274,7 @@ macro_rules! get_node {
    };
 
    ($name:ident -> $($skip:literal @)? $type:ty) => {
+      #[must_use]
       pub fn $name(&self) -> $type {
          self.children()
             .filter_map(|node| <$type>::try_from(node).ok())
@@ -328,7 +337,7 @@ impl<'a> ExpressionRef<'a> {
    }
 
    /// Iterates over all subexpressions delimited with the same operator.
-   #[allow(irrefutable_let_patterns)]
+   #[expect(irrefutable_let_patterns)]
    pub fn same_items(self) -> impl Iterator<Item = ExpressionRef<'a>> {
       gen move {
          let mut expressions = VecDeque::from([self]);
@@ -390,7 +399,7 @@ impl Parenthesis {
                   Span::empty(self.token_parenthesis_left().span().end),
                   "expected an expression here",
                ),
-            )
+            );
          },
       }
 
@@ -507,6 +516,7 @@ impl TryFrom<Kind> for PrefixOperator {
 
 impl PrefixOperator {
    /// Returns the binding power of this operator.
+   #[must_use]
    pub fn binding_power(self) -> ((), u16) {
       match self {
          Self::Swwallation | Self::Negation => ((), 145),
@@ -637,6 +647,7 @@ impl TryFrom<Kind> for InfixOperator {
 
 impl InfixOperator {
    /// Returns the binding power of this operator.
+   #[must_use]
    pub fn binding_power(self) -> (u16, u16) {
       match self {
             Self::Select => (185, 180),
@@ -676,6 +687,7 @@ impl InfixOperator {
 
    /// Whether if this operator actually owns a token. Not owning a token means
    /// that the operator doesn't actually "exist".
+   #[must_use]
    pub fn is_token_owning(self) -> bool {
       self != Self::ImplicitApply
    }
@@ -722,7 +734,7 @@ impl InfixOperation {
       };
 
       for expression in expressions {
-         if let ExpressionRef::InfixOperation(operation) = expression
+         if let &ExpressionRef::InfixOperation(operation) = expression
             && let child_operator @ (InfixOperator::Apply | InfixOperator::Pipe) =
                operation.operator()
             && child_operator != operator
@@ -805,20 +817,24 @@ reffed! {
 
 impl InterpolatedPartRef<'_> {
    /// Whether or not this part is a delimiter.
+   #[must_use]
    pub fn is_delimiter(self) -> bool {
       matches!(self, Self::Delimiter(_))
    }
 
    /// Whether or not this part is a content.
+   #[must_use]
    pub fn is_content(self) -> bool {
       matches!(self, Self::Content(_))
    }
 
    /// Whether or not this part is an interpolation.
+   #[must_use]
    pub fn is_interpolation(self) -> bool {
       matches!(self, Self::Interpolation(_))
    }
 
+   #[must_use]
    pub fn span(self) -> Span {
       match self {
          Self::Delimiter(delimiter) => delimiter.span(),
@@ -902,6 +918,7 @@ node! {
 }
 
 impl PathRoot {
+   #[must_use]
    pub fn token_delimiter_left(&self) -> &red::Token {
       self.type_().token_delimiter_left()
    }
@@ -997,12 +1014,12 @@ impl Path {
                   interpolation.expression().validate(to);
                },
 
-               _ => {},
+               InterpolatedPartRef::Delimiter(_) => {},
             }
          }
 
          if !report.is_empty() {
-            to.push(report)
+            to.push(report);
          }
 
          if let Some(config) = root.config() {
@@ -1090,7 +1107,7 @@ impl IdentifierQuoted {
                interpolation.expression().validate(to);
             },
 
-            _ => {},
+            InterpolatedPartRef::Delimiter(_) => {},
          }
       }
 
@@ -1120,6 +1137,7 @@ node! {
 impl Identifier {
    /// Returns the value of this identifier. A value may either be a
    /// [`token::Identifier`] or a [`IdentifierQuoted`].
+   #[must_use]
    pub fn value(&self) -> IdentifierValueRef<'_> {
       let Some(first_token) = self.first_token() else {
          unreachable!()
@@ -1135,7 +1153,7 @@ impl Identifier {
          return IdentifierValueRef::Quoted(quoted);
       }
 
-      unreachable!("identifier node did not have an identifier or identifier starter token")
+      panic!("identifier node did not have an identifier or identifier starter token")
    }
 
    pub fn validate(&self, to: &mut Vec<Report>) {
@@ -1167,7 +1185,7 @@ impl SString {
          .scan(0, |index, part| {
             let value = *index;
 
-            *index += !part.is_delimiter() as usize;
+            *index += usize::from(!part.is_delimiter());
 
             Some((value, part))
          })
@@ -1183,9 +1201,9 @@ impl SString {
       while let Some((part_index, part)) = parts.next() {
          let mut part_is_multiline = false;
          let part_is_first = part_index == 0;
-         let part_is_last = parts.peek().is_none_or(|(_, part)| part.is_delimiter());
+         let part_is_last = parts.peek().is_none_or(|&(_, part)| part.is_delimiter());
 
-         match &part {
+         match part {
             InterpolatedPartRef::Interpolation(interpolation) => {
                interpolation.expression().validate(to);
 
@@ -1220,7 +1238,7 @@ impl SString {
                         string_first_line_span =
                            Some(Span::at(content.span().start, line.trim_end().len()));
                      } else if text.trim().is_empty()
-                        && let Some((_, part)) = parts.peek()
+                        && let Some(&(_, part)) = parts.peek()
                         && !part.is_delimiter()
                      {
                         string_first_line_span = Some(part.span());
@@ -1236,12 +1254,12 @@ impl SString {
                      }
                   }
 
-                  #[allow(clippy::nonminimal_bool)]
+                  #[expect(clippy::nonminimal_bool)]
                   if
                   // Ignore firstest and lastest lines.
                   !(line_is_firstest || line_is_lastest)
-                            // Ignore lines right after an interpolation end.
-                            && !(previous_span.is_some() && line_is_first)
+                     // Ignore lines right after an interpolation end.
+                     && !(previous_span.is_some() && line_is_first)
                   {
                      for c in line.chars() {
                         if !c.is_whitespace() {
@@ -1304,6 +1322,7 @@ node! {
 impl Parted for Rune {}
 
 impl Rune {
+   #[must_use]
    pub fn value(&self) -> char {
       let InterpolatedPartRef::Content(content) = self.parts().next().unwrap() else {
          unreachable!()
@@ -1358,7 +1377,9 @@ impl Rune {
                report.push_primary(interpolation.span(), "runes cannot contain interpolation");
             },
 
-            _ => continue,
+            InterpolatedPartRef::Delimiter(_) => continue,
+
+            InterpolatedPartRef::Interpolation(_) => unreachable!(),
          }
 
          got_content = true;
@@ -1385,6 +1406,7 @@ node! {
 impl Integer {
    get_token! { token_integer -> &token::Integer }
 
+   #[must_use]
    pub fn value(&self) -> num::BigInt {
       self.token_integer().value()
    }
@@ -1401,6 +1423,7 @@ node! {
 impl Float {
    get_token! { token_float -> &token::Float }
 
+   #[must_use]
    pub fn value(&self) -> f64 {
       self.token_float().value()
    }

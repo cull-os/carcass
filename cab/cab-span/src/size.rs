@@ -38,7 +38,7 @@ where
    Self: ops::Add<I, Output = Self>,
 {
    fn add_assign(&mut self, rhs: I) {
-      *self = *self + rhs
+      *self = *self + rhs;
    }
 }
 
@@ -48,7 +48,7 @@ where
 {
    #[track_caller]
    fn sub_assign(&mut self, rhs: I) {
-      *self = *self - rhs
+      *self = *self - rhs;
    }
 }
 
@@ -98,7 +98,7 @@ pub trait IntoSize {
 
 impl IntoSize for u8 {
    fn size(&self) -> Size {
-      1u32.into()
+      1_u32.into()
    }
 }
 

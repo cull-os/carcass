@@ -20,6 +20,7 @@ use crate::{
 };
 
 /// Creates a leaf that reads from stdin.
+#[must_use]
 pub fn stdin() -> impl Leaf {
    Stdin {
       content: OnceCell::new(),

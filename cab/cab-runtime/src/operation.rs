@@ -63,6 +63,7 @@ pub enum Argument {
 }
 
 impl Operation {
+   #[must_use]
    pub fn arguments(self) -> &'static [Argument] {
       use Argument::{
          ByteIndex,

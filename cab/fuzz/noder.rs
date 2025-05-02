@@ -62,7 +62,7 @@ fuzz_target!(|source: &str| -> Corpus {
 
    if !save_valid {
       return Corpus::Keep;
-   };
+   }
 
    print!("found a valid parse!");
 

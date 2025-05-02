@@ -78,7 +78,7 @@ impl<'a> Tokenizer<'a> {
    }
 
    fn context_push(&mut self, context: Context<'a>) {
-      self.context.push(context)
+      self.context.push(context);
    }
 
    fn context_pop(&mut self, context: Context) {
@@ -90,6 +90,7 @@ impl<'a> Tokenizer<'a> {
       &self.source[self.offset..]
    }
 
+   #[expect(clippy::min_ident_chars)]
    fn peek_character_nth(&self, n: usize) -> Option<char> {
       self.remaining().chars().nth(n)
    }
@@ -169,7 +170,7 @@ impl<'a> Tokenizer<'a> {
 
          if before.is_none_or(|before| remaining.starts_with(before))
             && remaining
-               .get(before.map(str::len).unwrap_or(0)..)
+               .get(before.map_or(0, str::len)..)
                .is_some_and(|remaining| remaining.starts_with(end))
          {
             self.context_pop(Context::Delimited { before, end });
@@ -182,7 +183,7 @@ impl<'a> Tokenizer<'a> {
             self.context_pop(Context::Delimited { before, end });
 
             return TOKEN_CONTENT;
-         };
+         }
 
          if let Some(kind) = self.consume_delimited_part() {
             return kind;
@@ -355,11 +356,17 @@ impl<'a> Tokenizer<'a> {
          '<' if self.try_consume_character('|') => TOKEN_LESS_PIPE,
          '|' if self.try_consume_character('>') => TOKEN_PIPE_MORE,
 
-         '(' if let Some(Context::Interpolation { parentheses }) = self.context.last_mut() => {
+         '(' if let Some(&mut Context::Interpolation {
+            ref mut parentheses,
+         }) = self.context.last_mut() =>
+         {
             *parentheses += 1;
             TOKEN_PARENTHESIS_LEFT
          },
-         ')' if let Some(Context::Interpolation { parentheses }) = self.context.last_mut() => {
+         ')' if let Some(&mut Context::Interpolation {
+            ref mut parentheses,
+         }) = self.context.last_mut() =>
+         {
             match parentheses.checked_sub(1) {
                Some(new) => {
                   *parentheses = new;
@@ -447,13 +454,13 @@ impl<'a> Tokenizer<'a> {
          },
 
          initial_letter if is_valid_initial_identifier_character(initial_letter) => {
-            self.consume_while(is_valid_identifier_character);
-
             const KEYWORDS: phf::Map<&'static str, Kind> = phf::phf_map! {
                 "if" => TOKEN_KEYWORD_IF,
                 "then" => TOKEN_KEYWORD_THEN,
                 "else" => TOKEN_KEYWORD_ELSE,
             };
+
+            self.consume_while(is_valid_identifier_character);
 
             KEYWORDS
                .get(self.consumed_since(start))
@@ -538,7 +545,7 @@ mod tests {
    }
 
    #[test]
-   fn test_empty_tokens() {
+   fn empty_tokens() {
       assert_token_matches!(
          r#""foo \(bar)""#,
          (TOKEN_STRING_START, r#"""#),
@@ -552,7 +559,7 @@ mod tests {
    }
 
    #[test]
-   fn test_number_errors() {
+   fn number_errors() {
       assert_token_matches!(
          "0b__e 0x0 0x123.0e 0o777.0e",
          (TOKEN_ERROR_NUMBER_NO_DIGIT, "0b__"),
@@ -567,7 +574,7 @@ mod tests {
    }
 
    #[test]
-   fn test_path() {
+   fn path() {
       assert_token_matches!(
          r"../foo\(𓃰)///baz",
          (TOKEN_PATH_CONTENT_START, ""),
@@ -581,7 +588,7 @@ mod tests {
    }
 
    #[test]
-   fn test_errors_are_individual() {
+   fn errors_are_individual() {
       assert_token_matches!(
          "~~~",
          (TOKEN_ERROR_UNKNOWN, "~"),

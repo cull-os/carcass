@@ -21,7 +21,7 @@ use cab_format::{
       LEFT_TO_TOP_BOTTOM,
       RIGHT_TO_BOTTOM,
       Style,
-      StyleExt,
+      StyleExt as _,
       Styled,
       TOP_LEFT_TO_RIGHT,
       TOP_TO_BOTTOM,
@@ -61,6 +61,7 @@ pub enum ReportSeverity {
 }
 
 impl ReportSeverity {
+   #[must_use]
    pub fn header(self) -> Styled<&'static str> {
       match self {
          ReportSeverity::Note => "note:",
@@ -109,18 +110,20 @@ impl Report {
       Self::new(ReportSeverity::Bug, title)
    }
 
+   #[must_use]
    pub fn is_empty(&self) -> bool {
       self.labels.is_empty() && self.points.is_empty()
    }
 
    pub fn push_label(&mut self, label: Label) {
-      self.labels.push(label)
+      self.labels.push(label);
    }
 
    pub fn push_primary(&mut self, span: impl Into<Span>, text: impl Into<Cow<'static, str>>) {
       self.labels.push(Label::primary(span, text));
    }
 
+   #[must_use]
    pub fn primary(mut self, span: impl Into<Span>, text: impl Into<Cow<'static, str>>) -> Self {
       self.push_primary(span, text);
       self
@@ -130,11 +133,13 @@ impl Report {
       self.labels.push(Label::secondary(span, text));
    }
 
+   #[must_use]
    pub fn secondary(mut self, span: impl Into<Span>, text: impl Into<Cow<'static, str>>) -> Self {
       self.push_secondary(span, text);
       self
    }
 
+   #[must_use]
    pub fn point(mut self, point: Point) -> Self {
       self.points.push(point);
       self
@@ -144,6 +149,7 @@ impl Report {
       self.points.push(Point::tip(text));
    }
 
+   #[must_use]
    pub fn tip(self, text: impl Into<Cow<'static, str>>) -> Self {
       self.point(Point::tip(text))
    }
@@ -152,6 +158,7 @@ impl Report {
       self.points.push(Point::help(text));
    }
 
+   #[must_use]
    pub fn help(self, text: impl Into<Cow<'static, str>>) -> Self {
       self.point(Point::help(text))
    }
@@ -172,7 +179,7 @@ fn extend_to_line_boundaries(source: &str, mut span: Span) -> Span {
          .get(*span.start as usize - 1)
          .is_some_and(|&c| c != b'\n')
    {
-      span.start -= 1u32;
+      span.start -= 1_u32;
    }
 
    while source
@@ -180,7 +187,7 @@ fn extend_to_line_boundaries(source: &str, mut span: Span) -> Span {
       .get(*span.end as usize)
       .is_some_and(|&c| c != b'\n')
    {
-      span.end += 1u32;
+      span.end += 1_u32;
    }
 
    span
@@ -195,7 +202,7 @@ fn resolve_style<'a>(
    severity: ReportSeverity,
 ) -> impl Iterator<Item = Styled<&'a str>> + 'a {
    gen move {
-      let mut content_offset = Size::new(0u32);
+      let mut content_offset = Size::new(0_u32);
       let mut style_offset: usize = 0;
 
       while content_offset < content.len().into() {
@@ -204,7 +211,7 @@ fn resolve_style<'a>(
                .iter()
                .copied()
                .enumerate()
-               .find(|(_, style)| {
+               .find(|&(_, style)| {
                   style.span.start <= content_offset && content_offset < style.span.end
                });
 
@@ -218,8 +225,8 @@ fn resolve_style<'a>(
                         .iter()
                         .copied()
                         .enumerate()
-                        .take_while(|(_, other)| other.span.start <= style.span.end)
-                        .find(|(_, other)| {
+                        .take_while(|&(_, other)| other.span.start <= style.span.end)
+                        .find(|&(_, other)| {
                            other.severity == LabelSeverity::Primary
                               && other.span.start > content_offset
                         })
@@ -253,7 +260,7 @@ fn resolve_style<'a>(
                let (relative_offset, next_offset) = styles[style_offset..]
                   .iter()
                   .enumerate()
-                  .filter(|(_, style)| style.span.start > content_offset)
+                  .filter(|&(_, style)| style.span.start > content_offset)
                   .map(|(relative_offset, style)| (relative_offset, style.span.start))
                   .next()
                   .unwrap_or((styles.len() - style_offset, content.len().into()));
@@ -380,12 +387,12 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
             style::GUTTER.fmt_prefix(writer)?;
             match () {
                // Don't write the current line number, just print spaces instead.
-               _ if !*line_number_should_write.borrow() => {
+               () if !*line_number_should_write.borrow() => {
                   write!(writer, "{:>line_number_width$}", "")?;
                },
 
                // Continuation line. Use dots instead of the number.
-               _ if *line_number_previous == Some(line_number) => {
+               () if *line_number_previous == Some(line_number) => {
                   let dot_width = number_width(line_number);
                   let space_width = line_number_width - dot_width;
 
@@ -398,7 +405,7 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
 
                // New line, but not right after the previous line. Also known as a non-incremental
                // jump.
-               _ if line_number_previous
+               () if line_number_previous
                   .is_some_and(|line_number_previous| line_number > line_number_previous + 1) =>
                {
                   writeln!(
@@ -410,7 +417,7 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
                },
 
                // New line.
-               _ => {
+               () => {
                   write!(writer, "{line_number:>line_number_width$}")?;
                },
             }
@@ -465,10 +472,9 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
 
       {
          // INDENT: "<strike-prefix> "
-         let strike_prefix = RefCell::new(SmallVec::<_, 2>::from_iter(iter::repeat_n(
-            None::<LineStrike>,
-            strike_prefix_width,
-         )));
+         let strike_prefix = RefCell::new(
+            iter::repeat_n(None::<LineStrike>, strike_prefix_width).collect::<SmallVec<_, 2>>(),
+         );
          indent!(
             writer,
             strike_prefix_width + 1,
@@ -582,8 +588,8 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
                // HACK: wrapln may split the current line into multiple
                // lines, so the label pointer may be too far left.
                // Just max it to 60 for now.
-               let span_start = label.span.start().min(Some(60u32.into()));
-               let span_end = label.span.end().min(60u32.into());
+               let span_start = label.span.start().min(Some(60_u32.into()));
+               let span_end = label.span.end().min(60_u32.into());
 
                // DEDENT: "<strike-prefix> "
                dedent!(writer);
@@ -597,8 +603,8 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
                         .rev()
                         .find_map(|(index, strike)| {
                            match strike {
-                              Some(strike) if strike.status == LineStrikeStatus::End => {
-                                 Some((index, *strike))
+                              &Some(strike) if strike.status == LineStrikeStatus::End => {
+                                 Some((index, strike))
                               },
 
                               _ => None,
@@ -620,7 +626,7 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
                               write!(
                                  writer,
                                  "{symbol}",
-                                 symbol = match slot {
+                                 symbol = match *slot {
                                     Some(strike) =>
                                        TOP_TO_BOTTOM.style(self.style(strike.severity)),
                                     None => ' '.styled(),
@@ -670,7 +676,7 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
                                     // If there is a label on the current line after this label that
                                     // has a start or end at the
                                     // current index, write it instead of out <left-to-right>
-                                    _ if let Some(label) =
+                                    () if let Some(label) =
                                        line.labels[..label_index].iter().rev().find(|label| {
                                           *label.span.end() == index && !label.span.is_empty()
                                              || label
@@ -686,10 +692,10 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
                                        }
                                     },
 
-                                    _ if !wrote =>
+                                    () if !wrote =>
                                        LEFT_TO_RIGHT.style(self.style(top_to_right.severity)),
 
-                                    _ => ' '.styled(),
+                                    () => ' '.styled(),
                                  },
                               )?;
                            }
@@ -698,8 +704,8 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
                               writer,
                               "{symbol}",
                               symbol = match () {
-                                 _ if !wrote => LEFT_TO_TOP_BOTTOM,
-                                 _ => TOP_TO_BOTTOM,
+                                 () if !wrote => LEFT_TO_TOP_BOTTOM,
+                                 () => TOP_TO_BOTTOM,
                               }
                               .style(self.style(top_to_right.severity)),
                            )?;
@@ -728,7 +734,7 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
                               write!(
                                  writer,
                                  "{symbol}",
-                                 symbol = match slot {
+                                 symbol = match *slot {
                                     Some(strike) =>
                                        TOP_TO_BOTTOM.style(self.style(strike.severity)),
                                     None => ' '.styled(),
@@ -748,17 +754,17 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
                         // + 1 for extra space.
                         // + 1 if the label is zero-width. The <top-left-to-right> will be placed
                         //   after the span.
-                        *span_end as usize + if span_start == span_end { 1 } else { 0 } + 1,
+                        *span_end as usize + usize::from(span_start == span_end) + 1,
                         with = |writer: &mut dyn fmt::Write| {
-                           for index in 0..*span_end - if span_start == span_end { 0 } else { 1 } {
+                           for index in 0..*span_end - u32::from(span_start != span_end) {
                               write!(
                                  writer,
                                  "{symbol}",
                                  symbol = match () {
-                                    _ if index == *span_start =>
+                                    () if index == *span_start =>
                                        TOP_TO_RIGHT.style(self.style(label.severity)),
 
-                                    _ if let Some(label) =
+                                    () if let Some(label) =
                                        line.labels[..label_index].iter().rev().find(|label| {
                                           *label.span.end() == index + 1 && !label.span.is_empty()
                                              || label
@@ -774,11 +780,11 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
                                        }
                                     },
 
-                                    _ if !wrote && index > *span_start => {
+                                    () if !wrote && index > *span_start => {
                                        LEFT_TO_RIGHT.style(self.style(label.severity))
                                     },
 
-                                    _ => ' '.styled(),
+                                    () => ' '.styled(),
                                  },
                               )?;
                            }
@@ -799,7 +805,7 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
                            )?;
 
                            wrote = true;
-                           Ok(*span_end as usize + if span_start == span_end { 1 } else { 0 })
+                           Ok(*span_end as usize + usize::from(span_start == span_end))
                         }
                      );
 
@@ -865,7 +871,7 @@ impl<Location: fmt::Display> ReportDisplay<Location> {
 
       // Sort by line, and when labels are on the same line, sort by column. The one
       // that ends the last will be the last.
-      labels.sort_by(|((a_start, a_end), _), ((b_start, b_end), _)| {
+      labels.sort_by(|&((a_start, a_end), _), &((b_start, b_end), _)| {
          a_start
             .line
             .cmp(&b_start.line)
@@ -914,9 +920,9 @@ impl<Location: fmt::Display> ReportDisplay<Location> {
                   ),
 
                   status: match () {
-                     _ if line_is_first => LineStrikeStatus::Start,
-                     _ if line_is_last => LineStrikeStatus::End,
-                     _ => LineStrikeStatus::Continue,
+                     () if line_is_first => LineStrikeStatus::Start,
+                     () if line_is_last => LineStrikeStatus::End,
+                     () => LineStrikeStatus::Continue,
                   },
 
                   severity: label.severity,
@@ -936,7 +942,7 @@ impl<Location: fmt::Display> ReportDisplay<Location> {
                      severity: label.severity,
                   });
 
-                  let up_to_start_width = width(&line_content[..*span.start as usize]);
+                  let up_to_start_width = width(&line_content[..*span.start as _]);
                   let label_width = width(&line_content[span.into_std()]);
 
                   line.labels.push(LineLabel {
@@ -952,7 +958,7 @@ impl<Location: fmt::Display> ReportDisplay<Location> {
                   let base = label_span_extended.start;
 
                   let Span { start, .. } = label.span;
-                  let end = source[*start as usize..]
+                  let end = source[*start as _..]
                      .find('\n')
                      .map_or(source.size(), |index| start + index);
 
@@ -961,7 +967,7 @@ impl<Location: fmt::Display> ReportDisplay<Location> {
                   line.styles.push(LineStyle {
                      span,
                      severity: label.severity,
-                  })
+                  });
                },
 
                // Multiline label's intermediary line.
@@ -990,7 +996,7 @@ impl<Location: fmt::Display> ReportDisplay<Location> {
                      severity: label.severity,
                   });
 
-                  let up_to_end_width = width(&line_content[..*end as usize]);
+                  let up_to_end_width = width(&line_content[..*end as _]);
 
                   line.labels.push(LineLabel {
                      span:     LineLabelSpan::UpTo(Span::up_to(up_to_end_width)),
@@ -1025,7 +1031,7 @@ impl<Location: fmt::Display> ReportDisplay<Location> {
          line.labels.sort_by_key(|style| {
             // Empty labels are printed offset one column to the right, so treat them like
             // it.
-            style.span.end() + if style.span.is_empty() { 1u32 } else { 0u32 }
+            style.span.end() + u32::from(style.span.is_empty())
          });
       }
 
