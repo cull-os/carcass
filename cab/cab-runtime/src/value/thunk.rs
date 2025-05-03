@@ -39,25 +39,26 @@ enum ThunkInner {
 pub struct Thunk(Arc<RwLock<ThunkInner>>);
 
 impl From<Thunk> for Value {
-   fn from(val: Thunk) -> Self {
-      Value::Thunk(val)
+   fn from(thunk: Thunk) -> Self {
+      Value::Thunk(thunk)
    }
 }
 
 impl Thunk {
    #[must_use]
    pub fn suspended(span: Span, code: Code) -> Self {
-      Self(Arc::new(RwLock::new(ThunkInner::Suspended {
-         span,
-         code,
-         locals: HashMap::with_hasher(FxBuildHasher),
-      })))
+      Self(
+         RwLock::new(ThunkInner::Suspended {
+            span,
+            code,
+            locals: HashMap::with_hasher(FxBuildHasher),
+         })
+         .into(),
+      )
    }
 
    #[must_use]
    pub fn suspended_native(native: impl FnOnce() -> Value + Send + Sync + 'static) -> Self {
-      Self(Arc::new(RwLock::new(ThunkInner::SuspendedNative(
-         Box::new(native),
-      ))))
+      Self(RwLock::new(ThunkInner::SuspendedNative(Box::new(native))).into())
    }
 }

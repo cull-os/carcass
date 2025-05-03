@@ -11,8 +11,8 @@ use super::Value;
 pub struct Attributes(HashTrieMap<Arc<str>, Value, FxBuildHasher>);
 
 impl From<Attributes> for Value {
-   fn from(val: Attributes) -> Self {
-      Value::Attributes(val)
+   fn from(attributes: Attributes) -> Self {
+      Value::Attributes(attributes)
    }
 }
 
