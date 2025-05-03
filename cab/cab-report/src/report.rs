@@ -535,6 +535,7 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
             line_number.borrow_mut().replace(line.number);
 
             // Write an empty line at the start.
+            // TODO: Move this to the header writing @ if let self.lines.first().
             if line_index == 0 {
                *line_number_should_write.borrow_mut() = false;
 
@@ -826,15 +827,16 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
       // Write the points.
       {
          if !self.points.is_empty() {
-            writer.write_indent()?;
             writeln!(writer)?;
+            writer.write_indent()?;
          }
 
          // DEDENT: "| "
          dedent!(writer, 2);
 
-         let mut points = self.points.iter().peekable();
-         while let Some(point) = points.next() {
+         for point in &self.points {
+            writeln!(writer)?;
+
             // INDENT: "= "
             indent!(writer, header = "=".style(style::GUTTER));
 
@@ -842,10 +844,6 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
             indent!(writer, header = &point.title);
 
             wrap(writer, [point.text.as_ref().styled()])?;
-
-            if points.peek().is_some() {
-               writeln!(writer)?;
-            }
          }
       }
 

@@ -238,7 +238,6 @@ impl ops::Index<ValueIndex> for Code {
 }
 
 impl Code {
-   #[expect(clippy::new_without_default)]
    #[must_use]
    pub fn new() -> Self {
       Self {

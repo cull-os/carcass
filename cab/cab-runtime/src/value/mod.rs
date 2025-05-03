@@ -3,6 +3,9 @@ use std::sync::Arc;
 mod attributes;
 pub use attributes::Attributes;
 
+mod path;
+pub use path::Path;
+
 mod thunk;
 pub use thunk::Thunk;
 
@@ -18,10 +21,11 @@ pub enum Value {
 
    Attributes(Attributes),
 
-   Path(Arc<str>),
+   Path(Path),
 
    Bind(Arc<str>),
    Reference(Arc<str>),
+   String(Arc<str>),
 
    Rune(char),
    Integer(num::BigInt),

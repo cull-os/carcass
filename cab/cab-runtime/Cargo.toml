@@ -15,6 +15,8 @@ cab-report.path = "../cab-report"
 cab-span.path   = "../cab-span"
 cab-syntax.path = "../cab-syntax"
 
+async-trait.workspace = true
+bytes.workspace       = true
 const-str.workspace   = true
 derive_more.workspace = true
 num.workspace         = true

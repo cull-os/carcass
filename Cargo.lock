@@ -215,6 +215,8 @@ dependencies = [
 name = "cab-runtime"
 version = "0.0.1"
 dependencies = [
+ "async-trait",
+ "bytes",
  "cab-format",
  "cab-report",
  "cab-span",
