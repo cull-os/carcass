@@ -37,6 +37,9 @@
         # You will need a nightly Rust compiler.
         pkgs.fenix.complete.toolchain
 
+        # Better tests.
+        pkgs.cargo-nextest
+
         # TOML formatting.
         pkgs.taplo
 
@@ -56,7 +59,11 @@
     };
 
     checks = lib.mapAttrs' (name: lib.nameValuePair "package-${name}") packages // {
-      "${projectName}-test" = pkgs.crane.cargoTest (cargoArguments // {
+      "${projectName}-doctest" = pkgs.crane.cargoDocTest (cargoArguments // {
+        inherit cargoArtifacts;
+      });
+
+      "${projectName}-nextest" = pkgs.crane.cargoNextest (cargoArguments // {
         inherit cargoArtifacts;
       });
 
