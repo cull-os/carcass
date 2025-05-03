@@ -6,7 +6,7 @@ absolute-paths-allowed-crates = [ "cstree" ]
 allowed-wildcard-imports      = [ "super", "Kind" ]
 
 [[disallowed-methods]]
-allow-invalid = true # <https://github.com/rust-lang/rust-clippy/pull/14397#issuecomment-2848328221>.
+allow-invalid = true                                                   # <https://github.com/rust-lang/rust-clippy/pull/14397#issuecomment-2848328221>.
 path          = "unicode_width::UnicodeWidthStr::width"
 reason        = "UnicodeWidthStr::width does not handle emoji or tabs"
 replacement   = "cab_format::width"
