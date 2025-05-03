@@ -97,6 +97,8 @@ impl Operation {
 
          Operation::AssertBoolean => &[],
 
+         Operation::RootSet => &[],
+
          Operation::Swwallation | Operation::Negation => &[],
 
          Operation::Not => &[],
