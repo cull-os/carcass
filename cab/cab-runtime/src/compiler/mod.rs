@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use cab_report::{
    Report,
    ReportSeverity,
@@ -19,10 +17,7 @@ use crate::{
    Operation,
    Value,
    ValueIndex,
-   value::{
-      self,
-      Path,
-   },
+   value,
 };
 
 mod optimizer;
@@ -194,7 +189,7 @@ impl<'a> Compiler<'a> {
       self.emit_push(
          span,
          // if code.references_parent {
-         Value::Blueprint(Arc::new(code)),
+         Value::Blueprint(code.into()),
          // } else {
          //     Value::Thunk(Arc::new(Mutex::new(Thunk::suspended(span, context.code))))
          // }
@@ -401,6 +396,47 @@ impl<'a> Compiler<'a> {
 
    fn emit_path(&mut self, path: &'a node::Path) {
       self.emit_thunk(path.span(), |this| {
+         if let Some(root) = path.root() {
+            let parts = root
+               .type_()
+               .parts()
+               .filter(|part| !part.is_delimiter())
+               .collect::<Vec<_>>();
+
+            for part in &parts {
+               match *part {
+                  node::InterpolatedPartRef::Content(content) => {
+                     this.emit_push(content.span(), Value::String(content.text().into()));
+                  },
+
+                  node::InterpolatedPartRef::Interpolation(interpolation) => {
+                     this.emit_scope(interpolation.span(), |this| {
+                        this.emit_force(interpolation.expression());
+                     });
+                  },
+
+                  node::InterpolatedPartRef::Delimiter(_) => {},
+               }
+            }
+
+            if parts.len() != 1 || !parts[0].is_content() {
+               this.push_operation(path.span(), Operation::Interpolate);
+               this.push_u64(parts.len() as _);
+            }
+
+            if let Some(config) = root.config() {
+               this.emit(config);
+            } else {
+               this.emit_push(root.span(), value::Attributes::new().into());
+            }
+
+            if let Some(path) = root.path() {
+               this.emit(path);
+            } else {
+               this.emit_push(root.span(), value::Path::rootless("".into()).into());
+            }
+         }
+
          let parts = path
             .content()
             .expect(EXPECT_VALIDATED)
@@ -413,7 +449,7 @@ impl<'a> Compiler<'a> {
                node::InterpolatedPartRef::Content(content) => {
                   this.emit_push(
                      content.span(),
-                     Value::Path(Path::rootless(content.text().into())),
+                     value::Path::rootless(content.text().into()).into(),
                   );
                },
 
@@ -432,8 +468,8 @@ impl<'a> Compiler<'a> {
             this.push_u64(parts.len() as _);
          }
 
-         if let Some(_root) = path.root() {
-            todo!()
+         if path.root().is_some() {
+            this.push_operation(path.span(), Operation::RootSet);
          }
       });
    }

@@ -9,6 +9,8 @@ use cab_report::{
    error,
 };
 
+use super::Value;
+
 #[async_trait]
 pub trait Root: Send + Sync + 'static {
    async fn list(self: Arc<Self>, content: &str) -> Result<Arc<[Path]>> {
@@ -34,6 +36,12 @@ pub trait Root: Send + Sync + 'static {
 pub struct Path {
    root:    Option<Arc<dyn Root>>,
    content: Arc<str>,
+}
+
+impl From<Path> for Value {
+   fn from(path: Path) -> Self {
+      Value::Path(path)
+   }
 }
 
 impl TryInto<Arc<str>> for Path {

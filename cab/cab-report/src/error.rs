@@ -149,7 +149,7 @@ impl Termination {
 #[macro_export]
 macro_rules! error {
    ($($t:tt)*) => {
-      $crate::Error(::std::sync::Arc::new($crate::private::anyhow::anyhow!($($t)*)))
+      $crate::Error(std::sync::Arc::new($crate::private::anyhow::anyhow!($($t)*)))
    };
 }
 

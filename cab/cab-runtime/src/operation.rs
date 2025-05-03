@@ -24,6 +24,8 @@ pub enum Operation {
 
    AssertBoolean,
 
+   RootSet,
+
    // PREFIX
    Swwallation,
    Negation,
