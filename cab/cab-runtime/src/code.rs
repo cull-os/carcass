@@ -124,7 +124,7 @@ impl fmt::Display for Code {
                      .style(style::GUTTER)
             );
 
-            writeln!(
+            write!(
                writer,
                "{code_index:#X}",
                code_index = code_index.red().bold(),
@@ -134,6 +134,7 @@ impl fmt::Display for Code {
          while **index.borrow() < code.bytes.len() {
             let (_, operation, size) = code.read_operation(*index.borrow());
 
+            writeln!(writer)?;
             write!(writer, "{operation:?}", operation = operation.yellow())?;
             index.borrow_mut().0 += size;
 
@@ -204,10 +205,6 @@ impl fmt::Display for Code {
                      .bright_black()
                      .bold(),
                )?;
-            }
-
-            if **index.borrow() < code.bytes.len() {
-               writeln!(writer)?;
             }
          }
 
