@@ -177,7 +177,7 @@ async fn main() -> report::Termination {
             Dump::Token { color } => {
                for (kind, slice) in syntax::tokenize(&source) {
                   if color {
-                     let style = syntax::COLORS[kind as usize];
+                     let style = format::COLORS[kind as usize];
 
                      write!(out, "{slice}", slice = slice.style(style))
                   } else {

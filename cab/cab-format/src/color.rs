@@ -1,13 +1,10 @@
-use cab_format::style::{
-   Color,
-   Style,
-};
+use crate::style;
 
-const fn style(r: u8, g: u8, b: u8) -> Style {
+const fn style(r: u8, g: u8, b: u8) -> style::Style {
    let color = if (0.2126 * r as f32 + 0.7152 * g as f32 + 0.0722 * b as f32) < 140.0 {
-      Color::Rgb(0xFF, 0xFF, 0xFF)
+      style::Color::Rgb(0xFF, 0xFF, 0xFF)
    } else {
-      Color::Rgb(0, 0, 0)
+      style::Color::Rgb(0, 0, 0)
    };
 
    color.on_rgb(r, g, b)
@@ -17,7 +14,7 @@ const fn style(r: u8, g: u8, b: u8) -> Style {
 /// individual tokens and brackets.
 ///
 /// Generated using <https://mokole.com/palette.html>.
-pub const COLORS: &[Style] = &[
+pub const COLORS: &[style::Style] = &[
    style(0x00, 0x00, 0x00),
    style(0x2F, 0x4F, 0x4F),
    style(0x55, 0x6B, 0x2F),
