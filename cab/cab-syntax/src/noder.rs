@@ -520,12 +520,20 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
 
          this.node_expression_binding_power(
             then_else_binding_power,
-            until | TOKEN_KEYWORD_THEN | TOKEN_KEYWORD_ELSE,
+            until | Kind::EXPRESSIONS | TOKEN_KEYWORD_THEN | TOKEN_KEYWORD_ELSE,
          );
 
-         this.next_expect(TOKEN_KEYWORD_THEN.into(), until | TOKEN_KEYWORD_ELSE);
+         this.next_expect(
+            TOKEN_KEYWORD_THEN.into(),
+            until | Kind::EXPRESSIONS | TOKEN_KEYWORD_ELSE,
+         );
 
-         this.node_expression_binding_power(then_else_binding_power, until | TOKEN_KEYWORD_ELSE);
+         this.node_expression_binding_power(
+            then_else_binding_power,
+            until | Kind::EXPRESSIONS | TOKEN_KEYWORD_ELSE,
+         );
+
+         this.next_expect(TOKEN_KEYWORD_ELSE.into(), until | Kind::EXPRESSIONS);
 
          this.node_expression_binding_power(then_else_binding_power, until);
       });
