@@ -549,12 +549,11 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
 
          Some(TOKEN_CURLYBRACE_LEFT) => self.node_attributes(until),
 
-         Some(
-            TOKEN_PATH_ROOT_TYPE_START
-            | TOKEN_PATH_CONTENT_START
-            | TOKEN_STRING_START
-            | TOKEN_RUNE_START,
-         ) => self.node_path(until),
+         Some(TOKEN_PATH_ROOT_TYPE_START | TOKEN_PATH_CONTENT_START) => self.node_path(until),
+
+         Some(TOKEN_STRING_START | TOKEN_RUNE_START) => {
+            self.node_delimited();
+         },
 
          Some(TOKEN_AT) => self.node_bind(until),
 
