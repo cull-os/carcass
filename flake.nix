@@ -40,9 +40,12 @@
 
     imports = let
       localModules = lib.filesystem.listFilesRecursive ./.
-        |> lib.filter (absolutePath: let
-            path = builtins.baseNameOf absolutePath;
-          in lib.hasPrefix "__" path && lib.hasSuffix "__" (lib.removeSuffix ".nix" path));
+        |> lib.filter (pathAbsolute: let
+            pathBase = builtins.baseNameOf     pathAbsolute;
+            pathStem = lib.removeSuffix ".nix" pathBase;
+          in pathStem != pathBase
+          && lib.hasPrefix "__" pathStem
+          && lib.hasSuffix "__" pathStem);
 
       outerModules = lib.removeAttrs inputs [ "self" ]
         |> lib.attrValues 
