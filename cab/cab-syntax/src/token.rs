@@ -170,6 +170,7 @@ impl Content {
             literal_start_offset = offset;
 
             yield ContentPart::Escape(match chars.next() {
+               Some((_, ' ')) => ' ',
                Some((_, '0')) => '\0',
                Some((_, 't')) => '\t',
                Some((_, 'n')) => '\n',
@@ -193,7 +194,8 @@ impl Content {
                      "invalid escape",
                   ));
 
-                  report.push_tip(r#"escapes must be one of: \0, \t, \n, \r, \`, \", \', \>, \\"#);
+                  report
+                     .push_tip(r#"escapes must be one of: \ (escaped space), \0, \t, \n, \r, \`, \", \', \>, \\"#);
 
                   continue;
                },
