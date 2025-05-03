@@ -48,9 +48,7 @@
           && lib.hasSuffix "__" pathStem);
 
       outerModules = lib.removeAttrs inputs [ "self" ]
-        |> lib.attrValues 
-        |> lib.filter (flake: flake ? flakeModule)
-        |> map        (flake: flake . flakeModule);
+        |> lib.catAttrs "flakeModule";
     in localModules ++ outerModules;
   });
 }
