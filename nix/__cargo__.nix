@@ -20,7 +20,7 @@
     cargoArtifacts = pkgs.crane.buildDepsOnly cargoArguments;
 
     packages = projectConfig.packages
-      |> map (packageName: lib.nameValuePair "${projectName}${lib.optionalString (packageName != projectName)  "-${packageName}"}" <| pkgs.crane.buildPackage <| cargoArguments // {
+      |> map (packageName: lib.nameValuePair "${projectName}${lib.optionalString (packageName != projectName) "-${packageName}"}" <| pkgs.crane.buildPackage <| cargoArguments // {
         inherit cargoArtifacts;
 
         pname          =              packageName;
@@ -34,9 +34,6 @@
 
     devShells.${projectName} = pkgs.crane.devShell {
       packages = projectConfig.shell.packages ++ [
-        # You will need a nightly Rust compiler.
-        pkgs.fenix.complete.toolchain
-
         # Better tests.
         pkgs.cargo-nextest
 
