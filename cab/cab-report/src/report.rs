@@ -13,6 +13,7 @@ use std::{
 use cab_format::{
    dedent,
    indent,
+   lnwrap,
    number_width,
    style::{
       self,
@@ -702,8 +703,7 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
                         }
                      );
 
-                     writeln!(writer)?;
-                     wrap(writer, [label
+                     lnwrap(writer, [label
                         .text
                         .as_ref()
                         .style(self.style(top_to_right.severity))])?;
@@ -796,8 +796,7 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
                         }
                      );
 
-                     writeln!(writer)?;
-                     wrap(writer, [label
+                     lnwrap(writer, [label
                         .text
                         .as_ref()
                         .style(self.style(label.severity))])?;
@@ -818,15 +817,13 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
          dedent!(writer, 2);
 
          for point in &self.points {
-            writeln!(writer)?;
-
             // INDENT: "= "
             indent!(writer, header = "=".style(style::GUTTER));
 
             // INDENT: "<tip|help|...>: "
             indent!(writer, header = &point.title);
 
-            wrap(writer, [point.text.as_ref().styled()])?;
+            lnwrap(writer, [point.text.as_ref().styled()])?;
          }
       }
 
