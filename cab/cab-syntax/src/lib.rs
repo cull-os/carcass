@@ -2,8 +2,6 @@
 
 #![feature(assert_matches, gen_blocks, if_let_guard, let_chains, trait_alias)]
 
-mod color;
-
 use std::ops;
 
 use enumset::{
@@ -12,7 +10,6 @@ use enumset::{
 };
 
 pub use self::{
-   color::COLORS,
    noder::{
       Oracle,
       Parse,

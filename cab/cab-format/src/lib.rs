@@ -1,5 +1,8 @@
 #![feature(iter_intersperse, if_let_guard, let_chains)]
 
+mod color;
+pub use color::COLORS;
+
 mod indent;
 pub use indent::{
    IndentWith,
