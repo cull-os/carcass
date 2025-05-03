@@ -48,6 +48,7 @@
           && lib.hasSuffix "__" pathStem);
 
       outerModules = lib.removeAttrs inputs [ "self" ]
+        |> lib.attrValues
         |> lib.catAttrs "flakeModule";
     in localModules ++ outerModules;
   });
