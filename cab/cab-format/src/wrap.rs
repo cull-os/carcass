@@ -15,13 +15,13 @@ use crate::{
    width,
 };
 
-/// [`wrap`], but with a newline after the text.
-pub fn wrapln<'a>(
+/// [`wrap`], but with a newline before the text.
+pub fn lnwrap<'a>(
    writer: &mut dyn fmt::Write,
    parts: impl IntoIterator<Item = yansi::Painted<&'a str>>,
 ) -> fmt::Result {
-   wrap(writer, parts)?;
-   writeln!(writer)
+   writeln!(writer)?;
+   wrap(writer, parts)
 }
 
 /// Writes the given iterator of colored words into the writer, splicing and

@@ -22,8 +22,8 @@ pub use width_::{
 
 mod wrap;
 pub use wrap::{
+   lnwrap,
    wrap,
-   wrapln,
 };
 
 pub fn init() {
