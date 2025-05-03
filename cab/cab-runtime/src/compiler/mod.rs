@@ -19,7 +19,10 @@ use crate::{
    Operation,
    Value,
    ValueIndex,
-   value,
+   value::{
+      self,
+      Path,
+   },
 };
 
 mod optimizer;
@@ -396,88 +399,44 @@ impl<'a> Compiler<'a> {
       }
    }
 
-   // fn emit_island(&mut self, island: &node::PathRoot) {
-   //    self.emit_thunk(island.span(), |this| {
-   //       let parts = island
-   //          .type_()
-   //          .parts()
-   //          .filter(|part| !part.is_delimiter())
-   //          .collect::<Vec<_>>();
+   fn emit_path(&mut self, path: &'a node::Path) {
+      self.emit_thunk(path.span(), |this| {
+         let parts = path
+            .content()
+            .expect(EXPECT_VALIDATED)
+            .parts()
+            .filter(|part| !part.is_delimiter())
+            .collect::<Vec<_>>();
 
-   //       if parts.len() != 1 || !parts[0].is_content() {
-   //          this
-   //             .code
-   //             .push_operation(island.span(),
-   // Operation::IslandHeaderInterpolate);          this.code.push_u64(parts.
-   // len() as _);       }
+         for part in &parts {
+            match *part {
+               node::InterpolatedPartRef::Content(content) => {
+                  this.emit_push(
+                     content.span(),
+                     Value::Path(Path::rootless(content.text().into())),
+                  );
+               },
 
-   //       for part in parts {
-   //          match part {
-   //             node::InterpolatedPartRef::Content(content) => {
-   //                this.emit_push(content.span(),
-   // Value::IslandHeader(content.text().into()));             },
+               node::InterpolatedPartRef::Interpolation(interpolation) => {
+                  this.emit_scope(interpolation.span(), |this| {
+                     this.emit_force(interpolation.expression());
+                  });
+               },
 
-   //             node::InterpolatedPartRef::Interpolation(interpolation) => {
-   //                this.emit_scope(interpolation.span(), |this| {
-   //                   this.emit_force(interpolation.expression());
-   //                })
-   //             },
+               node::InterpolatedPartRef::Delimiter(_) => {},
+            }
+         }
 
-   //             _ => {},
-   //          }
-   //       }
+         if parts.len() != 1 || !parts[0].is_content() {
+            this.push_operation(path.span(), Operation::Interpolate);
+            this.push_u64(parts.len() as _);
+         }
 
-   //       if let Some(config) = island.config() {
-   //          this.emit_scope(config.span(), |this| this.emit_force(config));
-   //       } else {
-   //          this.emit_push(
-   //             island.span(),
-   //
-   // Value::Attributes(HashTrieMap::new_with_hasher_and_ptr_kind(FxBuildHasher)),
-   //          );
-   //       }
-
-   //       if let Some(path) = island.path() {
-   //          this.emit_scope(path.span(), |this| this.emit_force(path));
-   //       } else {
-   //          this.emit_push(island.span(), Value::Path("/".into()));
-   //       }
-
-   //       this.code.push_operation(island.span(), Operation::Island);
-   //    });
-   // }
-
-   // fn emit_path(&mut self, path: &node::Path) {
-   //    self.emit_thunk(path.span(), |this| {
-   //       let parts = path
-   //          .parts()
-   //          .filter(|part| !part.is_delimiter())
-   //          .collect::<Vec<_>>();
-
-   //       if parts.len() != 1 || !parts[0].is_content() {
-   //          this
-   //             .code
-   //             .push_operation(path.span(), Operation::PathInterpolate);
-   //          this.code.push_u64(parts.len() as _);
-   //       }
-
-   //       for part in parts {
-   //          match part {
-   //             node::InterpolatedPartRef::Content(content) => {
-   //                this.emit_push(content.span(),
-   // Value::Path(content.text().into()));             },
-
-   //             node::InterpolatedPartRef::Interpolation(interpolation) => {
-   //                this.emit_scope(interpolation.span(), |this| {
-   //                   this.emit_force(interpolation.expression());
-   //                });
-   //             },
-
-   //             _ => {},
-   //          }
-   //       }
-   //    });
-   // }
+         if let Some(_root) = path.root() {
+            todo!()
+         }
+      });
+   }
 
    fn emit_identifier(&mut self, is_bind: bool, span: Span, identifier: &'a node::Identifier) {
       self.emit_thunk(span, |this| {
@@ -612,7 +571,7 @@ impl<'a> Compiler<'a> {
             self.emit_suffix_operation(suffix_operation);
          },
 
-         node::ExpressionRef::Path(_path) => todo!(),
+         node::ExpressionRef::Path(path) => self.emit_path(path),
 
          node::ExpressionRef::Bind(bind) => {
             let node::ExpressionRef::Identifier(identifier) = bind.identifier() else {

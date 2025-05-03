@@ -22,14 +22,15 @@ fn is_valid_identifier_character(c: char) -> bool {
    c.is_alphanumeric() || matches!(c, '_' | '-' | '\'')
 }
 
-fn is_valid_path_character(c: char) -> bool {
+fn is_valid_path_content_character(c: char) -> bool {
    c.is_alphanumeric() || matches!(c, '.' | '/' | '_' | '-' | '\\')
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Context<'a> {
-   Path,
-   PathEnd,
+   PathContentStart,
+   PathContent,
+   PathContentEnd,
    PathRootType,
    PathRootTypeEnd,
 
@@ -195,6 +196,7 @@ impl<'a> Tokenizer<'a> {
       loop {
          if let Some('>' | ':') = self.peek_character() {
             self.context_pop(Context::PathRootType);
+            self.context_push(Context::PathContentStart);
             self.context_push(Context::PathRootTypeEnd);
 
             return TOKEN_CONTENT;
@@ -212,14 +214,14 @@ impl<'a> Tokenizer<'a> {
       }
    }
 
-   fn consume_path(&mut self) -> Kind {
+   fn consume_path_content(&mut self) -> Kind {
       loop {
          if self
             .peek_character()
-            .is_none_or(|c| !is_valid_path_character(c))
+            .is_none_or(|c| !is_valid_path_content_character(c))
          {
-            self.context_pop(Context::Path);
-            self.context_push(Context::PathEnd);
+            self.context_pop(Context::PathContent);
+            self.context_push(Context::PathContentEnd);
 
             return TOKEN_CONTENT;
          }
@@ -260,11 +262,17 @@ impl<'a> Tokenizer<'a> {
             return Some(TOKEN_PATH_ROOT_TYPE_END);
          },
 
-         Some(Context::Path) => {
-            return Some(self.consume_path());
+         Some(Context::PathContentStart) => {
+            self.context_pop(Context::PathContentStart);
+            self.context_push(Context::PathContent);
+
+            return Some(TOKEN_PATH_CONTENT_START);
          },
-         Some(Context::PathEnd) => {
-            self.context_pop(Context::PathEnd);
+         Some(Context::PathContent) => {
+            return Some(self.consume_path_content());
+         },
+         Some(Context::PathContentEnd) => {
+            self.context_pop(Context::PathContentEnd);
 
             return Some(TOKEN_PATH_END);
          },
@@ -471,21 +479,25 @@ impl<'a> Tokenizer<'a> {
          // \(foo)/bar/baz.txt
          start @ '\\' => {
             self.offset -= start.len_utf8();
-            self.context_push(Context::Path);
+            self.context_push(Context::PathContent);
 
             TOKEN_PATH_CONTENT_START
          },
          // ./bar/baz.txt
          start @ '.' if let Some('.' | '/') = self.peek_character() => {
             self.offset -= start.len_utf8();
-            self.context_push(Context::Path);
+            self.context_push(Context::PathContent);
 
             TOKEN_PATH_CONTENT_START
          },
          // /bar/baz.txt
-         start @ '/' if self.peek_character().is_some_and(is_valid_path_character) => {
+         start @ '/'
+            if self
+               .peek_character()
+               .is_some_and(is_valid_path_content_character) =>
+         {
             self.offset -= start.len_utf8();
-            self.context_push(Context::Path);
+            self.context_push(Context::PathContent);
 
             TOKEN_PATH_CONTENT_START
          },

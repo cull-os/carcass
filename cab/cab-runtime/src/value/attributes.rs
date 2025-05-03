@@ -17,7 +17,6 @@ impl From<Attributes> for Value {
 }
 
 impl Attributes {
-   #[expect(clippy::new_without_default)]
    #[must_use]
    pub fn new() -> Self {
       Self(HashTrieMap::new_with_hasher_and_ptr_kind(FxBuildHasher))
