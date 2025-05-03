@@ -32,7 +32,6 @@ use cab_format::{
    },
    width,
    wrap,
-   wrapln,
 };
 use cab_span::{
    IntoSize as _,
@@ -372,27 +371,23 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
 
       // INDENT: "123 | "
       let line_number = RefCell::new(None::<u32>);
-      let line_number_should_write = RefCell::new(false);
       let line_number_previous = RefCell::new(None::<u32>);
       indent!(
          writer,
          line_number_width + 3,
          with = |writer: &mut dyn fmt::Write| {
-            let Some(line_number) = *line_number.borrow() else {
-               return Ok(0);
-            };
-
+            let line_number = *line_number.borrow();
             let mut line_number_previous = line_number_previous.borrow_mut();
 
             style::GUTTER.fmt_prefix(writer)?;
-            match () {
+            match line_number {
                // Don't write the current line number, just print spaces instead.
-               () if !*line_number_should_write.borrow() => {
+               None => {
                   write!(writer, "{:>line_number_width$}", "")?;
                },
 
                // Continuation line. Use dots instead of the number.
-               () if *line_number_previous == Some(line_number) => {
+               Some(line_number) if *line_number_previous == Some(line_number) => {
                   let dot_width = number_width(line_number);
                   let space_width = line_number_width - dot_width;
 
@@ -403,10 +398,11 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
                   }
                },
 
-               // New line, but not right after the previous line. Also known as a non-incremental
-               // jump.
-               () if line_number_previous
-                  .is_some_and(|line_number_previous| line_number > line_number_previous + 1) =>
+               // New line, but not right after the previous line.
+               Some(line_number)
+                  if line_number_previous.is_some_and(|line_number_previous| {
+                     line_number > line_number_previous + 1
+                  }) =>
                {
                   writeln!(
                      writer,
@@ -417,7 +413,7 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
                },
 
                // New line.
-               () => {
+               Some(line_number) => {
                   write!(writer, "{line_number:>line_number_width$}")?;
                },
             }
@@ -425,42 +421,45 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
             write!(writer, " {TOP_TO_BOTTOM} ")?;
             style::GUTTER.fmt_suffix(writer)?;
 
-            line_number_previous.replace(line_number);
+            if let Some(line_number) = line_number {
+               line_number_previous.replace(line_number);
+            }
+
             Ok(line_number_width + 3)
          }
       );
 
       if let Some(line) = self.lines.first() {
-         // DEDENT: "| "
-         dedent!(writer, 2);
+         {
+            // DEDENT: "| "
+            dedent!(writer, 2);
 
-         // INDENT: "┏━━━ ".
-         indent!(
-            writer,
-            header =
-               const_str::concat!(RIGHT_TO_BOTTOM, LEFT_TO_RIGHT, LEFT_TO_RIGHT, LEFT_TO_RIGHT)
-                  .style(style::GUTTER)
-         );
+            // INDENT: "┏━━━ ".
+            indent!(
+               writer,
+               header =
+                  const_str::concat!(RIGHT_TO_BOTTOM, LEFT_TO_RIGHT, LEFT_TO_RIGHT, LEFT_TO_RIGHT)
+                     .style(style::GUTTER)
+            );
+
+            writeln!(writer)?;
+
+            style::HEADER_PATH.fmt_prefix(writer)?;
+            write!(writer, "{location}", location = self.location)?;
+            style::HEADER_PATH.fmt_suffix(writer)?;
+
+            write!(
+               writer,
+               ":{line_number}:{column_number}",
+               line_number = line.number.style(style::HEADER_POSITION),
+               // TODO: This is an index, and not a grapheme width. Fix it.
+               column_number =
+                  (*line.styles.first().unwrap().span.start + 1).style(style::HEADER_POSITION),
+            )?;
+         }
 
          writeln!(writer)?;
-
-         style::HEADER_PATH.fmt_prefix(writer)?;
-         write!(writer, "{location}", location = self.location)?;
-         style::HEADER_PATH.fmt_suffix(writer)?;
-
-         writeln!(
-            writer,
-            ":{line_number}:{column_number}",
-            line_number = line.number.style(style::HEADER_POSITION),
-            column_number = line
-               .labels
-               .first()
-               .unwrap()
-               .span
-               .start()
-               .map_or(1, |span| *span + 1)
-               .style(style::HEADER_POSITION)
-         )?;
+         writer.write_indent()?;
       }
 
       let strike_prefix_width = self
@@ -530,21 +529,7 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
             }
          );
 
-         let mut lines = self.lines.iter().enumerate().peekable();
-         while let Some((line_index, line)) = lines.next() {
-            line_number.borrow_mut().replace(line.number);
-
-            // Write an empty line at the start.
-            // TODO: Move this to the header writing @ if let self.lines.first().
-            if line_index == 0 {
-               *line_number_should_write.borrow_mut() = false;
-
-               writer.write_indent()?;
-               writeln!(writer)?;
-
-               *line_number_previous.borrow_mut() = None;
-            }
-
+         for line in &self.lines {
             // Patch strike prefix and keep track of positions of strikes with their IDs.
             {
                let mut strike_prefix = strike_prefix.borrow_mut();
@@ -570,23 +555,23 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
 
             // Write the line.
             {
-               *line_number_should_write.borrow_mut() = true;
+               line_number.borrow_mut().replace(line.number);
 
                // Explicitly write the indent because the line may be empty.
+               writeln!(writer)?;
                writer.write_indent()?;
-               wrapln(
+               wrap(
                   writer,
                   resolve_style(&line.content, &line.styles, self.severity),
                )?;
 
-               *line_number_should_write.borrow_mut() = false;
+               *line_number.borrow_mut() = None;
             }
 
             // Write the line labels.
             // Reverse, because we want to print the labels that end the last first.
-            let mut labels = line.labels.iter().enumerate().rev().peekable();
-            while let Some((label_index, label)) = labels.next() {
-               // HACK: wrapln may split the current line into multiple
+            for (label_index, label) in line.labels.iter().enumerate().rev() {
+               // HACK: wrap may split the current line into multiple
                // lines, so the label pointer may be too far left.
                // Just max it to 60 for now.
                let span_start = label.span.start().min(Some(60_u32.into()));
@@ -717,6 +702,7 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
                         }
                      );
 
+                     writeln!(writer)?;
                      wrap(writer, [label
                         .text
                         .as_ref()
@@ -810,15 +796,12 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
                         }
                      );
 
+                     writeln!(writer)?;
                      wrap(writer, [label
                         .text
                         .as_ref()
                         .style(self.style(label.severity))])?;
                   },
-               }
-
-               if lines.peek().is_some() || labels.peek().is_some() {
-                  writeln!(writer)?;
                }
             }
          }
