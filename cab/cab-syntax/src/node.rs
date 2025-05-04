@@ -1324,7 +1324,7 @@ impl Parted for Rune {}
 impl Rune {
    #[must_use]
    pub fn value(&self) -> char {
-      let InterpolatedPartRef::Content(content) = self.parts().next().unwrap() else {
+      let InterpolatedPartRef::Content(content) = self.parts().nth(1).unwrap() else {
          unreachable!()
       };
 

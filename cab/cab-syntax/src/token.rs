@@ -22,6 +22,9 @@ use crate::{
    red,
 };
 
+const EXPECT_INTEGER_VALID: &str = "integer token must be valid";
+const EXPECT_FLOAT_VALID: &str = "float token must be valid";
+
 macro_rules! token {
    (
       #[from($kind:ident)]
@@ -47,7 +50,7 @@ macro_rules! token {
                return Err(());
             }
 
-            // SAFETY: token is &red::Token and we are casting it to $name.
+            // SAFETY: token is &red::Token and we are casting it to &$name.
             // $name holds red::Token with #[repr(transparent)], so the layout
             // is the exact same for &red::Token and &$name.
             Ok(unsafe { &*ptr::from_ref(token).cast::<$name>() })
@@ -127,7 +130,7 @@ impl Comment {
 
 token! {
    #[from(TOKEN_IDENTIFIER)]
-   /// A non-quoted raw identifier.
+   /// A plain identifier.
    struct Identifier;
 }
 
@@ -221,16 +224,17 @@ impl Integer {
    /// Returns the value of this integer, after resolving binary,
    /// octadecimal and hexadecimal notation if it exists.
    #[must_use]
+   #[rustfmt::skip]
    pub fn value(&self) -> num::BigInt {
       let text = self.text();
 
       match text.as_bytes().get(1).copied() {
-         Some(b'b' | b'B') => num::BigInt::from_str_radix(text.get(2..).unwrap(), 2),
-         Some(b'o' | b'O') => num::BigInt::from_str_radix(text.get(2..).unwrap(), 8),
-         Some(b'x' | b'X') => num::BigInt::from_str_radix(text.get(2..).unwrap(), 16),
+         Some(b'b' | b'B') => num::BigInt::from_str_radix(text.get(2..).expect(EXPECT_INTEGER_VALID), 2),
+         Some(b'o' | b'O') => num::BigInt::from_str_radix(text.get(2..).expect(EXPECT_INTEGER_VALID), 8),
+         Some(b'x' | b'X') => num::BigInt::from_str_radix(text.get(2..).expect(EXPECT_INTEGER_VALID), 16),
          _ => num::BigInt::from_str_radix(text, 10),
       }
-      .expect("integer token must be valid")
+      .expect(EXPECT_INTEGER_VALID)
    }
 }
 
@@ -249,11 +253,11 @@ impl Float {
       let text = self.text();
 
       match text.as_bytes().get(1).copied() {
-         Some(b'b' | b'B') => f64::from_str_radix(text.get(2..).unwrap(), 2),
-         Some(b'o' | b'O') => f64::from_str_radix(text.get(2..).unwrap(), 8),
-         Some(b'x' | b'X') => f64::from_str_radix(text.get(2..).unwrap(), 16),
+         Some(b'b' | b'B') => f64::from_str_radix(text.get(2..).expect(EXPECT_FLOAT_VALID), 2),
+         Some(b'o' | b'O') => f64::from_str_radix(text.get(2..).expect(EXPECT_FLOAT_VALID), 8),
+         Some(b'x' | b'X') => f64::from_str_radix(text.get(2..).expect(EXPECT_FLOAT_VALID), 16),
          _ => f64::from_str_radix(text, 10),
       }
-      .expect("float token must be valid")
+      .expect(EXPECT_FLOAT_VALID)
    }
 }
