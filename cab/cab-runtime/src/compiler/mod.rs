@@ -74,7 +74,7 @@ impl Compile {
       }
 
       if fail > 0 {
-         bail!("compilation failed due to {fail} previous errors");
+         bail!("compilation failed due to {fail} previous error(s)");
       }
 
       Ok(self.code)

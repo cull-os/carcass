@@ -24,6 +24,7 @@ pub type Result<T> = result::Result<T, Error>;
 /// The error type. Stores an error chain that can be appended to with
 /// [`Contextful`]. Can be formatted to show the chain with [`fmt::Debug`].
 #[derive(thiserror::Error, Clone)]
+#[error(transparent)]
 pub struct Error(#[doc(hidden)] pub Arc<anyhow::Error>);
 
 impl fmt::Debug for Error {
@@ -65,12 +66,6 @@ impl fmt::Debug for Error {
       }
 
       Ok(())
-   }
-}
-
-impl fmt::Display for Error {
-   fn fmt(&self, writer: &mut fmt::Formatter<'_>) -> fmt::Result {
-      <Self as fmt::Debug>::fmt(self, writer)
    }
 }
 
