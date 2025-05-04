@@ -5,7 +5,7 @@ use std::{
 
 use cab_report::{
    Report,
-   ReportSeverity,
+   StageError,
 };
 use cab_span::{
    IntoSize as _,
@@ -46,15 +46,10 @@ impl Parse {
    /// Returns [`Ok`] with the [`node::Expression`] if there are no error
    /// severity or above reports, returns [`Err`] with the list of reports
    /// otherwise.
-   pub fn result(self) -> result::Result<node::Expression, Vec<Report>> {
-      if self
-         .reports
-         .iter()
-         .all(|report| report.severity < ReportSeverity::Error)
-      {
-         Ok(self.expression)
-      } else {
-         Err(self.reports)
+   pub fn result(self) -> result::Result<node::Expression, StageError> {
+      match StageError::try_new("parsing", self.reports) {
+         Some(error) => Err(error),
+         None => Ok(self.expression),
       }
    }
 }

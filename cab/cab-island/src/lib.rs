@@ -65,7 +65,8 @@ macro_rules! display {
 
 impl dyn Entry {
    /// Converts this entry to a displayable type.
-   pub fn display(self: Arc<Self>) -> impl fmt::Display {
+   pub fn display(self: Arc<Self>) -> impl fmt::Display + Clone {
+      #[derive(Clone)]
       struct EntryDisplay(Arc<dyn Entry>);
 
       impl fmt::Display for EntryDisplay {
