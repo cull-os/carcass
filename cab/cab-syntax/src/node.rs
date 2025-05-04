@@ -328,7 +328,9 @@ impl<'a> ExpressionRef<'a> {
          Self::Path(path) => path.validate(to),
          Self::Bind(bind) => bind.validate(to),
          Self::Identifier(identifier) => identifier.validate(to),
-         Self::SString(string) => string.validate(to),
+         Self::SString(string) => {
+            string.validate(Some(to)).count();
+         },
          Self::Rune(rune) => rune.validate(to),
          Self::If(if_else) => if_else.validate(to),
 
@@ -1165,6 +1167,12 @@ impl Identifier {
 
 // STRING
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StringPart<'a> {
+   Literal(String),
+   Interpolation(&'a Interpolation),
+}
+
 node! {
    #[from(NODE_STRING)]
    /// A string.
@@ -1174,11 +1182,9 @@ node! {
 impl Parted for SString {}
 
 impl SString {
-   // What a behemoth. And the sad part is I can't figure out a way to make this
-   // simpler.
-   pub fn validate(&self, to: &mut Vec<Report>) {
-      let mut report = Report::error("invalid string");
-      let mut reported_mixed_indentation = false;
+   #[must_use]
+   pub fn indent(&self, mut to: Option<&mut Report>) -> (Option<char>, usize) {
+      let mut reported_mixed_indent = false;
 
       let mut parts = self
          .parts()
@@ -1191,34 +1197,18 @@ impl SString {
          })
          .peekable();
 
-      let mut string_is_multiline = false;
-      let mut string_first_line_span = None;
-      let mut string_last_line_span = None;
-
-      let mut indentation: Option<char> = None;
+      let mut indent: Option<char> = None;
+      let mut indent_width: Option<usize> = None;
 
       let mut previous_span = None;
       while let Some((part_index, part)) = parts.next() {
-         let mut part_is_multiline = false;
          let part_is_first = part_index == 0;
          let part_is_last = parts.peek().is_none_or(|&(_, part)| part.is_delimiter());
 
          match part {
-            InterpolatedPartRef::Interpolation(interpolation) => {
-               interpolation.expression().validate(to);
-
-               let span = interpolation.span();
-
-               if part_is_first {
-                  string_first_line_span = Some(span);
-               } else if part_is_last {
-                  string_last_line_span = Some(span);
-               }
-            },
+            InterpolatedPartRef::Interpolation(_) => {},
 
             InterpolatedPartRef::Content(content) => {
-               content.parts(Some(&mut report)).count();
-
                let text = content.text();
 
                let mut lines = text.split('\n').enumerate().peekable();
@@ -1229,31 +1219,6 @@ impl SString {
                   let line_is_firstest = part_is_first && line_is_first;
                   let line_is_lastest = part_is_last && line_is_last;
 
-                  if line_is_first && !line_is_last {
-                     part_is_multiline = true;
-                  }
-
-                  if line_is_firstest {
-                     if !line.trim().is_empty() {
-                        string_first_line_span =
-                           Some(Span::at(content.span().start, line.trim_end().len()));
-                     } else if text.trim().is_empty()
-                        && let Some(&(_, part)) = parts.peek()
-                        && !part.is_delimiter()
-                     {
-                        string_first_line_span = Some(part.span());
-                     }
-                  } else if line_is_lastest {
-                     if !line.trim().is_empty() {
-                        let last_line_len = line.trim_start().len();
-
-                        string_last_line_span =
-                           Some(Span::at_end(content.span().end, last_line_len));
-                     } else if !part_is_multiline && let Some(span) = previous_span {
-                        string_last_line_span = Some(span);
-                     }
-                  }
-
                   #[expect(clippy::nonminimal_bool)]
                   if
                   // Ignore firstest and lastest lines.
@@ -1261,23 +1226,36 @@ impl SString {
                      // Ignore lines right after an interpolation end.
                      && !(previous_span.is_some() && line_is_first)
                   {
+                     let mut line_indent_width: usize = 0;
+
                      for c in line.chars() {
                         if !c.is_whitespace() {
                            break;
                         }
 
-                        let Some(indentation) = indentation else {
-                           indentation = Some(c);
+                        let Some(indent) = indent else {
+                           indent = Some(c);
+                           line_indent_width = 1;
                            continue;
                         };
 
-                        if !reported_mixed_indentation && indentation != c {
-                           reported_mixed_indentation = true;
-                           report.push_primary(
-                              self.span(),
-                              "strings cannot mix different kinds of whitespace in indentation",
-                           );
+                        if indent == c {
+                           line_indent_width += 1;
+                        } else if let Some(to) = to.as_mut() {
+                           if !reported_mixed_indent {
+                              reported_mixed_indent = true;
+                              to.push_primary(
+                                 self.span(),
+                                 "strings cannot mix different kinds of whitespace in indents",
+                              );
+                           }
+
+                           break;
                         }
+                     }
+
+                     if indent_width.is_none_or(|indent_width| indent_width > line_indent_width) {
+                        indent_width.replace(line_indent_width);
                      }
                   }
                }
@@ -1287,26 +1265,141 @@ impl SString {
          }
 
          previous_span = Some(part.span());
-
-         if part_is_multiline {
-            string_is_multiline = true;
-         }
       }
 
-      if string_is_multiline {
-         for span in [string_first_line_span, string_last_line_span]
-            .into_iter()
-            .flatten()
+      (indent, indent_width.unwrap_or(0))
+   }
+
+   // What a behemoth. And the sad part is I can't figure out a way to make this
+   // simpler.
+   pub fn validate(
+      &self,
+      mut to: Option<&mut Vec<Report>>,
+   ) -> impl Iterator<Item = StringPart<'_>> {
+      gen move {
+         let mut report = to.is_some().then(|| Report::error("invalid string"));
+
+         let mut parts = self
+            .parts()
+            .scan(0, |index, part| {
+               let value = *index;
+
+               *index += usize::from(!part.is_delimiter());
+
+               Some((value, part))
+            })
+            .peekable();
+
+         let mut string_is_multiline = false;
+         let mut string_first_line_span = None;
+         let mut string_last_line_span = None;
+
+         let (indent, indent_width) = self.indent(report.as_mut());
+
+         let mut previous_span = None;
+         while let Some((part_index, part)) = parts.next() {
+            let mut part_is_multiline = false;
+            let part_is_first = part_index == 0;
+            let part_is_last = parts.peek().is_none_or(|&(_, part)| part.is_delimiter());
+
+            match part {
+               InterpolatedPartRef::Interpolation(interpolation) => {
+                  if let Some(to) = to.as_mut() {
+                     interpolation.expression().validate(to);
+                  }
+
+                  let span = interpolation.span();
+
+                  if part_is_first {
+                     string_first_line_span = Some(span);
+                  } else if part_is_last {
+                     string_last_line_span = Some(span);
+                  }
+
+                  yield StringPart::Interpolation(interpolation);
+               },
+
+               InterpolatedPartRef::Content(content) => {
+                  content.parts(report.as_mut()).count();
+
+                  let text = content.text();
+
+                  let mut lines = text.split('\n').enumerate().peekable();
+                  while let Some((line_index, line)) = lines.next() {
+                     let line_is_first = line_index == 0;
+                     let line_is_last = lines.peek().is_none();
+
+                     let line_is_firstest = part_is_first && line_is_first;
+                     let line_is_lastest = part_is_last && line_is_last;
+
+                     if line_is_first && !line_is_last {
+                        part_is_multiline = true;
+                     }
+
+                     if line_is_firstest {
+                        if !line.trim().is_empty() {
+                           string_first_line_span =
+                              Some(Span::at(content.span().start, line.trim_end().len()));
+                        } else if text.trim().is_empty()
+                           && let Some(&(_, part)) = parts.peek()
+                           && !part.is_delimiter()
+                        {
+                           string_first_line_span = Some(part.span());
+                        }
+                     } else if line_is_lastest {
+                        if !line.trim().is_empty() {
+                           let last_line_len = line.trim_start().len();
+
+                           string_last_line_span =
+                              Some(Span::at_end(content.span().end, last_line_len));
+                        } else if !part_is_multiline && let Some(span) = previous_span {
+                           string_last_line_span = Some(span);
+                        }
+                     }
+
+                     #[expect(clippy::nonminimal_bool)]
+                     let should_strip_indent = !(line_is_firstest || line_is_lastest)
+                        && !(previous_span.is_some() && line_is_first);
+
+                     yield StringPart::Literal(token::Content::normalize(if should_strip_indent {
+                        assert!(line[..indent_width].chars().all(|c| c == indent.unwrap()));
+                        &line[indent_width..]
+                     } else {
+                        line
+                     }));
+                  }
+               },
+
+               InterpolatedPartRef::Delimiter(_) => continue,
+            }
+
+            previous_span = Some(part.span());
+
+            if part_is_multiline {
+               string_is_multiline = true;
+            }
+         }
+
+         if let Some(report) = report.as_mut()
+            && string_is_multiline
          {
-            report.push_primary(
-               span,
-               "multiline strings' first and last lines must be empty",
-            );
+            for span in [string_first_line_span, string_last_line_span]
+               .into_iter()
+               .flatten()
+            {
+               report.push_primary(
+                  span,
+                  "multiline strings' first and last lines must be empty",
+               );
+            }
          }
-      }
 
-      if !report.is_empty() {
-         to.push(report);
+         if let Some(report) = report
+            && let Some(to) = to.as_mut()
+            && !report.is_empty()
+         {
+            to.push(report);
+         }
       }
    }
 }

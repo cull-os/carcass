@@ -152,6 +152,42 @@ token! {
 }
 
 impl Content {
+   #[must_use]
+   pub fn normalize(text: &str) -> String {
+      let mut string = String::with_capacity(text.len());
+
+      let mut literal_start_offset = 0;
+
+      let mut chars = text.char_indices().peekable();
+      while let Some((offset, c)) = chars.next() {
+         if c != '\\' {
+            continue;
+         }
+
+         string.push_str(&text[literal_start_offset..offset]);
+
+         literal_start_offset = offset;
+
+         string.push(match chars.next() {
+            Some((_, ' ')) => ' ',
+            Some((_, '0')) => '\0',
+            Some((_, 't')) => '\t',
+            Some((_, 'n')) => '\n',
+            Some((_, 'r')) => '\r',
+            Some((_, '`')) => '`',
+            Some((_, '"')) => '"',
+            Some((_, '\'')) => '\'',
+            Some((_, '\\')) => '\\',
+
+            _ => continue,
+         });
+      }
+
+      string.push_str(&text[literal_start_offset..text.len()]);
+
+      string
+   }
+
    /// Iterates over the parts of this content, yielding either literals or
    /// escapes.
    pub fn parts(&self, mut report: Option<&mut Report>) -> impl Iterator<Item = ContentPart<'_>> {

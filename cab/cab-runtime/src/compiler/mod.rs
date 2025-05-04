@@ -591,6 +591,52 @@ impl<'a> Compiler<'a> {
       });
    }
 
+   fn emit_string(&mut self, string: &'a node::SString) {
+      self.emit_thunk(string.span(), |this| {
+         let mut contents = string.parts().filter(|part| part.is_content());
+
+         let parts = string.validate(None);
+         let mut part_count: usize = 0;
+
+         let mut buffer = String::new();
+
+         for part in parts {
+            match part {
+               node::StringPart::Literal(s) => buffer.push_str(&s),
+
+               node::StringPart::Interpolation(interpolation) => {
+                  this.emit_push(
+                     contents.next().unwrap().span(),
+                     Value::String(buffer.as_str().into()),
+                  );
+
+                  part_count += 1;
+
+                  this.emit_scope(interpolation.span(), |this| {
+                     this.emit_force(interpolation.expression());
+                  });
+
+                  part_count += 1;
+               },
+            }
+         }
+
+         if !buffer.is_empty() {
+            this.emit_push(
+               contents.next().unwrap().span(),
+               Value::String(buffer.as_str().into()),
+            );
+
+            part_count += 1;
+         }
+
+         if part_count != 1 {
+            this.push_operation(string.span(), Operation::Interpolate);
+            this.push_u64(part_count as _);
+         }
+      });
+   }
+
    fn emit_if(&mut self, if_: &'a node::If) {
       self.emit_thunk(if_.span(), |this| {
          this.emit_force(if_.condition());
@@ -651,7 +697,7 @@ impl<'a> Compiler<'a> {
             self.emit_identifier(false, identifier.span(), identifier);
          },
 
-         node::ExpressionRef::SString(_string) => todo!(),
+         node::ExpressionRef::SString(string) => self.emit_string(string),
 
          node::ExpressionRef::Rune(rune) => {
             self.emit_push(rune.span(), Value::Rune(rune.value()));
