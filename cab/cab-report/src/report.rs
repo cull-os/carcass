@@ -436,14 +436,16 @@ impl<L: fmt::Display> fmt::Display for ReportLocated<L> {
                writer,
                header =
                   const_str::concat!(RIGHT_TO_BOTTOM, LEFT_TO_RIGHT, LEFT_TO_RIGHT, LEFT_TO_RIGHT)
-                     .style(style::GUTTER)
+                     .style(style::GUTTER),
+               continuation = const_str::concat!(TOP_TO_BOTTOM).style(style::GUTTER),
             );
 
             writeln!(writer)?;
 
-            style::HEADER_PATH.fmt_prefix(writer)?;
-            write!(writer, "{location}", location = self.location)?;
-            style::HEADER_PATH.fmt_suffix(writer)?;
+            wrap(
+               writer,
+               [self.location.to_string().as_str().style(style::HEADER_PATH)].into_iter(),
+            )?;
 
             write!(
                writer,
