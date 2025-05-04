@@ -26,7 +26,6 @@ use cab::{
 };
 use clap::Parser as _;
 
-const FAIL_STDERR: &str = "failed to write to stderr";
 const FAIL_STDOUT: &str = "failed to write to stdout";
 
 #[derive(clap::Parser)]
@@ -96,17 +95,20 @@ async fn main() -> report::Termination {
          let source = PositionStr::new(&source);
 
          let parse_oracle = syntax::parse_oracle();
-         let expression = parse_oracle
-            .parse(syntax::tokenize(&source))
-            .result()
-            .map_err(|error| error.locate(island::display!(leaf), &source))?;
+         let expression = parse_oracle.parse(syntax::tokenize(&source)).println(
+            &mut err,
+            island::display!(leaf),
+            &source,
+         )?;
 
          let compile_oracle = runtime::compile_oracler();
-         let code = compile_oracle
-            .compile(expression.as_ref())
-            .result()
-            .map_err(|error| error.locate(island::display!(leaf), &source))?;
+         let code = compile_oracle.compile(expression.as_ref()).println(
+            &mut err,
+            island::display!(leaf),
+            &source,
+         )?;
 
+         writeln!(out).context(FAIL_STDOUT)?;
          writeln!(out, "{code}").context(FAIL_STDOUT)?;
       },
 
@@ -144,18 +146,14 @@ async fn main() -> report::Termination {
 
             Dump::Syntax => {
                let parse_oracle = syntax::parse_oracle();
-               let parse = parse_oracle.parse(syntax::tokenize(&source));
+               let expression = parse_oracle.parse(syntax::tokenize(&source)).println(
+                  &mut err,
+                  island::display!(leaf),
+                  &source,
+               )?;
 
-               for report in parse.reports {
-                  writeln!(
-                     err,
-                     "{report}\n",
-                     report = report.locate(island::display!(leaf), &source)
-                  )
-                  .context(FAIL_STDERR)?;
-               }
-
-               write!(out, "{node:#?}", node = parse.node).context(FAIL_STDOUT)?;
+               write!(out, "{node:#?}", node = expression.parent().unwrap())
+                  .context(FAIL_STDOUT)?;
             },
          }
       },

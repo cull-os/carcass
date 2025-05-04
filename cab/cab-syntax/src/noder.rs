@@ -1,11 +1,18 @@
 use std::{
-   fmt::Write as _,
-   result,
+   fmt::{
+      self,
+      Write as _,
+   },
+   io,
 };
 
 use cab_report::{
+   Contextful as _,
+   PositionStr,
    Report,
-   StageError,
+   ReportSeverity,
+   Result,
+   bail,
 };
 use cab_span::{
    IntoSize as _,
@@ -43,14 +50,35 @@ pub struct Parse {
 }
 
 impl Parse {
-   /// Returns [`Ok`] with the [`node::Expression`] if there are no error
-   /// severity or above reports, returns [`Err`] with the list of reports
-   /// otherwise.
-   pub fn result(self) -> result::Result<node::Expression, StageError> {
-      match StageError::try_new("parsing", self.reports) {
-         Some(error) => Err(error),
-         None => Ok(self.expression),
+   pub fn println(
+      self,
+      writer: &mut impl io::Write,
+      location: impl fmt::Display + Clone,
+      source: &PositionStr<'_>,
+   ) -> Result<node::Expression> {
+      let mut fail = 0;
+
+      let mut reports = self.reports.into_iter().peekable();
+      while let Some(report) = reports.next() {
+         fail += usize::from(report.severity >= ReportSeverity::Error);
+
+         writeln!(
+            writer,
+            "{report}",
+            report = report.locate(location.clone(), source),
+         )
+         .context("failed to write report")?;
+
+         if reports.peek().is_some() {
+            writeln!(writer).context("failed to write report")?;
+         }
       }
+
+      if fail > 0 {
+         bail!("parsing failed due to {fail} previous errors");
+      }
+
+      Ok(self.expression)
    }
 }
 

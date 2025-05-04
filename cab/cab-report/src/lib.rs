@@ -39,8 +39,6 @@ pub use report::{
    Report,
    ReportLocated,
    ReportSeverity,
-   StageError,
-   StageErrorLocated,
 };
 
 #[doc(hidden)]
