@@ -143,54 +143,64 @@ pub fn indent_with<'scope>(
 
 #[macro_export]
 macro_rules! indent {
-   ($writer:ident,header = $header:expr) => {
-      let header = $header;
+   ($writer:ident,header = $header:expr $(,)?) => {
+      $crate::indent!($writer, header = $header, continuation = "")
+   };
 
-      let header_width = $crate::width({
+   ($writer:ident,header = $header:expr,continuation = $continuation:expr $(,)?) => {
+      let header = $header;
+      let continuation = $continuation;
+
+      let (header_width, continuation_width) = {
          trait AsStr {
-            fn as_str(&self) -> &str;
+            fn as_str2(&self) -> &str;
          }
 
          impl AsStr for &'_ str {
-            fn as_str(&self) -> &str {
+            fn as_str2(&self) -> &str {
                self
             }
          }
 
          impl AsStr for std::borrow::Cow<'_, str> {
-            fn as_str(&self) -> &str {
+            fn as_str2(&self) -> &str {
                self.as_ref()
             }
          }
 
          impl AsStr for $crate::style::Styled<&'_ str> {
-            fn as_str(&self) -> &str {
+            fn as_str2(&self) -> &str {
                self.value
             }
          }
 
          impl AsStr for $crate::style::Styled<std::borrow::Cow<'_, str>> {
-            fn as_str(&self) -> &str {
+            fn as_str2(&self) -> &str {
                self.value.as_ref()
             }
          }
 
-         header.as_str()
-      });
+         (
+            $crate::width(header.as_str2()),
+            $crate::width(continuation.as_str2()),
+         )
+      };
 
       let mut wrote = false;
       indent!(
          $writer,
          header_width + 1,
          with = |writer: &mut dyn std::fmt::Write| {
-            if wrote {
-               return Ok(0);
+            if !wrote {
+               write!(writer, "{header}")?;
+
+               wrote = true;
+               Ok(header_width)
+            } else {
+               write!(writer, "{continuation}")?;
+
+               Ok(continuation_width)
             }
-
-            write!(writer, "{header} ")?;
-
-            wrote = true;
-            Ok(header_width + 1)
          }
       );
    };
