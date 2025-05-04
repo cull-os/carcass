@@ -8,6 +8,7 @@ use std::{
       Write as _,
    },
    iter,
+   num::NonZeroUsize,
 };
 
 use cab_format::{
@@ -1031,18 +1032,25 @@ pub struct StageError {
    stage: Cow<'static, str>,
 
    reports: Vec<Report>,
+   fail:    NonZeroUsize,
 }
 
 impl StageError {
    pub fn try_new(stage: impl Into<Cow<'static, str>>, reports: Vec<Report>) -> Option<Self> {
-      reports
+      let fail = reports
          .iter()
-         .any(|report| report.severity >= ReportSeverity::Error)
-         .then(|| {
-            into!(stage);
+         .filter(|report| report.severity >= ReportSeverity::Error)
+         .count();
 
-            Self { stage, reports }
-         })
+      let fail = NonZeroUsize::new(fail)?;
+
+      into!(stage);
+
+      Some(Self {
+         stage,
+         reports,
+         fail,
+      })
    }
 
    pub fn locate<L: fmt::Display + Clone>(
@@ -1058,6 +1066,8 @@ impl StageError {
             .into_iter()
             .map(|report| report.locate(location.clone(), source))
             .collect(),
+
+         fail: self.fail,
       }
    }
 }
@@ -1067,28 +1077,25 @@ pub struct StageErrorLocated<L: fmt::Display> {
    stage: Cow<'static, str>,
 
    reports: Vec<ReportLocated<L>>,
+   fail:    NonZeroUsize,
 }
 
 impl<L: fmt::Display + Clone> fmt::Debug for StageErrorLocated<L> {
    #[expect(clippy::pattern_type_mismatch)]
    fn fmt(&self, writer: &mut fmt::Formatter<'_>) -> fmt::Result {
-      let Self { stage, reports } = self;
+      let Self {
+         stage,
+         reports,
+         fail,
+      } = self;
 
-      let mut fail = 0_usize;
+      write!(writer, "{stage} failed due to {fail} errors")?;
 
-      for (report_index, report) in reports.iter().enumerate() {
-         fail += usize::from(report.severity >= ReportSeverity::Error);
-
-         if report_index != 0 {
-            writeln!(writer)?;
-            writeln!(writer)?;
-         }
-
+      for report in reports {
+         writeln!(writer)?;
+         writeln!(writer)?;
          write!(writer, "{report}")?;
       }
-
-      writeln!(writer)?;
-      write!(writer, "{stage} failed due to {fail} previous errors")?;
 
       Ok(())
    }
