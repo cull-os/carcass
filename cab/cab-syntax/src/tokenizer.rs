@@ -100,7 +100,7 @@ impl<'a> Tokenizer<'a> {
       self.peek_character_nth(0)
    }
 
-   fn consume_while(&mut self, predicate: fn(char) -> bool) -> usize {
+   fn consume_while(&mut self, predicate: impl Fn(char) -> bool) -> usize {
       let len: usize = self
          .remaining()
          .chars()
@@ -112,28 +112,28 @@ impl<'a> Tokenizer<'a> {
       len
    }
 
-   fn try_consume_character(&mut self, pattern: char) -> bool {
-      let starts_with = self.peek_character() == Some(pattern);
+   fn try_consume_character(&mut self, c: char) -> bool {
+      let starts_with = self.peek_character() == Some(c);
 
       if starts_with {
-         self.offset += pattern.len_utf8();
+         self.offset += c.len_utf8();
       }
 
       starts_with
    }
 
-   fn try_consume_string(&mut self, pattern: &str) -> bool {
-      let starts_with = self.remaining().starts_with(pattern);
+   fn try_consume_string(&mut self, s: &str) -> bool {
+      let starts_with = self.remaining().starts_with(s);
 
       if starts_with {
-         self.offset += pattern.len();
+         self.offset += s.len();
       }
 
       starts_with
    }
 
-   fn consumed_since(&self, past_offset: usize) -> &'a str {
-      &self.source[past_offset..self.offset]
+   fn consumed_since(&self, offset: usize) -> &'a str {
+      &self.source[offset..self.offset]
    }
 
    fn consume_character(&mut self) -> Option<char> {
@@ -143,7 +143,10 @@ impl<'a> Tokenizer<'a> {
    }
 
    fn consume_delimited_part(&mut self) -> Option<Kind> {
-      match self.peek_character().unwrap() {
+      match self
+         .peek_character()
+         .expect("caller must ensure there is content")
+      {
          '\\' if self.peek_character_nth(1) == Some('(') => {
             self.context_push(Context::InterpolationStart);
 
@@ -233,16 +236,17 @@ impl<'a> Tokenizer<'a> {
    }
 
    fn consume_scientific(&mut self) -> Kind {
-      if self.try_consume_character('e') || self.try_consume_character('E') {
-         let _ = self.try_consume_character('+') || self.try_consume_character('-');
+      if !(self.try_consume_character('e') || self.try_consume_character('E')) {
+         return TOKEN_FLOAT;
+      }
 
-         let exponent_len = self.consume_while(|c| c.is_ascii_digit() || c == '_');
-         let exponent = self.consumed_since(self.offset - exponent_len);
-         if exponent.is_empty() || exponent.bytes().all(|c| c == b'_') {
-            TOKEN_ERROR_FLOAT_NO_EXPONENT
-         } else {
-            TOKEN_FLOAT
-         }
+      let _ = self.try_consume_character('+') || self.try_consume_character('-');
+
+      let exponent_len = self.consume_while(|c| c.is_ascii_digit() || c == '_');
+      let exponent = self.consumed_since(self.offset - exponent_len);
+
+      if exponent.is_empty() || exponent.bytes().all(|c| c == b'_') {
+         TOKEN_ERROR_FLOAT_NO_EXPONENT
       } else {
          TOKEN_FLOAT
       }
