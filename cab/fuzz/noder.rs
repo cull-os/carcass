@@ -8,6 +8,7 @@ use std::{
       Hash as _,
       Hasher as _,
    },
+   io,
    path::Path,
    sync::Arc,
 };
@@ -27,37 +28,25 @@ use libfuzzer_sys::{
 };
 
 fuzz_target!(|source: &str| -> Corpus {
-   let save_valid = matches!(
-      env::var("FUZZ_NODER_SAVE_VALID").as_deref(),
-      Ok("true" | "1")
-   );
-
-   let oracle = syntax::oracle();
-   let parse = oracle.parse(syntax::tokenize(source));
-
-   let island: Arc<dyn island::Leaf> = Arc::new(island::blob(source.to_owned()));
-
    format::init();
 
-   let node = match parse.result() {
-      Ok(node) => node,
+   let parse_oracle = syntax::parse_oracle();
+   let parse = parse_oracle.parse(syntax::tokenize(source));
 
-      Err(reports) => {
-         let source = report::PositionStr::new(source);
+   let island: Arc<dyn island::Leaf> = Arc::new(island::blob(source.to_owned()));
+   let source = report::PositionStr::new(source);
 
-         for report in reports {
-            println!(
-               "{report}",
-               report = report.with(island::display!(island), &source)
-            );
-         }
+   let save_valid = matches!(
+      env::var("FUZZ_NODER_SAVE_VALID").as_deref(),
+      Ok("true" | "1"),
+   );
 
-         return if save_valid {
-            Corpus::Reject
-         } else {
-            Corpus::Keep
-         };
-      },
+   let Ok(expression) = parse.println(&mut io::stdout(), island::display!(island), &source) else {
+      return if save_valid {
+         Corpus::Reject
+      } else {
+         Corpus::Keep
+      };
    };
 
    if !save_valid {
@@ -66,7 +55,7 @@ fuzz_target!(|source: &str| -> Corpus {
 
    print!("found a valid parse!");
 
-   let display = format!("{node:#?}", node = *node);
+   let display = format!("{node:#?}", node = *expression);
 
    let display_hash = {
       let mut hasher = hash::DefaultHasher::new();
@@ -95,7 +84,7 @@ fuzz_target!(|source: &str| -> Corpus {
       Corpus::Reject
    } else {
       println!(" wrote it to {name}", name = base_file.green().bold());
-      fs::write(source_file, source).unwrap();
+      fs::write(source_file, *source).unwrap();
       fs::write(display_file, display).unwrap();
 
       Corpus::Keep
