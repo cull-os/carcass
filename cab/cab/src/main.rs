@@ -108,7 +108,6 @@ async fn main() -> report::Termination {
             &source,
          )?;
 
-         writeln!(out).context(FAIL_STDOUT)?;
          writeln!(out, "{code}").context(FAIL_STDOUT)?;
       },
 

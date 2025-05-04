@@ -57,20 +57,15 @@ impl Compile {
    ) -> Result<Code> {
       let mut fail = 0;
 
-      let mut reports = self.reports.into_iter().peekable();
-      while let Some(report) = reports.next() {
+      for report in self.reports {
          fail += usize::from(report.severity >= ReportSeverity::Error);
 
-         writeln!(
+         write!(
             writer,
-            "{report}",
+            "{report}\n\n",
             report = report.locate(location.clone(), source),
          )
          .context("failed to write report")?;
-
-         if reports.peek().is_some() {
-            writeln!(writer).context("failed to write report")?;
-         }
       }
 
       if fail > 0 {
