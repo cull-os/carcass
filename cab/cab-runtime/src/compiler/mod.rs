@@ -1,6 +1,6 @@
 use cab_report::{
    Report,
-   ReportSeverity,
+   StageError,
 };
 use cab_span::{
    IntoSpan as _,
@@ -31,7 +31,7 @@ use scope::{
 
 const EXPECT_CODE: &str = "compiler must have at least one code at all times";
 const EXPECT_SCOPE: &str = "compiler must have at least one scope at all times";
-const EXPECT_VALIDATED: &str = "syntax must be validated";
+const EXPECT_VALID: &str = "syntax must be valid";
 const EXPECT_HANDLED: &str = "case was handled";
 
 pub struct Compile {
@@ -40,15 +40,10 @@ pub struct Compile {
 }
 
 impl Compile {
-   pub fn result(self) -> Result<Code, Vec<Report>> {
-      if self
-         .reports
-         .iter()
-         .all(|report| report.severity < ReportSeverity::Error)
-      {
-         Ok(self.code)
-      } else {
-         Err(self.reports)
+   pub fn result(self) -> Result<Code, StageError> {
+      match StageError::try_new("compilation", self.reports) {
+         Some(error) => Err(error),
+         None => Ok(self.code),
       }
    }
 }
@@ -198,7 +193,7 @@ impl<'a> Compiler<'a> {
 
    fn emit_parenthesis(&mut self, parenthesis: &'a node::Parenthesis) {
       self.emit_scope(parenthesis.span(), |this| {
-         this.emit(parenthesis.expression().expect(EXPECT_VALIDATED));
+         this.emit(parenthesis.expression().expect(EXPECT_VALID));
       });
    }
 
@@ -439,7 +434,7 @@ impl<'a> Compiler<'a> {
 
          let parts = path
             .content()
-            .expect(EXPECT_VALIDATED)
+            .expect(EXPECT_VALID)
             .parts()
             .filter(|part| !part.is_delimiter())
             .collect::<Vec<_>>();
@@ -594,7 +589,7 @@ impl<'a> Compiler<'a> {
       let expression = self.optimize(expression);
 
       match expression {
-         node::ExpressionRef::Error(_) => unreachable!("{EXPECT_VALIDATED}"),
+         node::ExpressionRef::Error(_) => unreachable!("{EXPECT_VALID}"),
 
          node::ExpressionRef::Parenthesis(parenthesis) => self.emit_parenthesis(parenthesis),
 
@@ -615,7 +610,7 @@ impl<'a> Compiler<'a> {
 
          node::ExpressionRef::Bind(bind) => {
             let node::ExpressionRef::Identifier(identifier) = bind.identifier() else {
-               unreachable!("{EXPECT_VALIDATED}")
+               unreachable!("{EXPECT_VALID}")
             };
             self.emit_identifier(true, bind.span(), identifier);
          },

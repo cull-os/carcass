@@ -163,12 +163,8 @@ impl Report {
       self.point(Point::help(text))
    }
 
-   pub fn with<Location: fmt::Display>(
-      self,
-      location: Location,
-      source: &PositionStr<'_>,
-   ) -> impl error::Error {
-      ReportDisplay::from(self, source, location)
+   pub fn locate<L: fmt::Display>(self, location: L, source: &PositionStr<'_>) -> ReportLocated<L> {
+      ReportLocated::from(self, source, location)
    }
 }
 
@@ -345,18 +341,18 @@ struct Line {
 }
 
 #[derive(Clone)]
-struct ReportDisplay<Location: fmt::Display> {
+pub struct ReportLocated<L: fmt::Display> {
    severity: ReportSeverity,
    title:    Cow<'static, str>,
 
-   location: Location,
+   location: L,
 
    lines: SmallVec<Line, 8>,
 
    points: SmallVec<Point, 2>,
 }
 
-impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
+impl<L: fmt::Display> fmt::Display for ReportLocated<L> {
    fn fmt(&self, writer: &mut fmt::Formatter<'_>) -> fmt::Result {
       {
          // INDENT: "<note|warn|error|bug>: "
@@ -831,16 +827,16 @@ impl<Location: fmt::Display> fmt::Display for ReportDisplay<Location> {
    }
 }
 
-impl<Location: fmt::Display> fmt::Debug for ReportDisplay<Location> {
+impl<L: fmt::Display> fmt::Debug for ReportLocated<L> {
    fn fmt(&self, writer: &mut fmt::Formatter<'_>) -> fmt::Result {
       fmt::Display::fmt(self, writer)
    }
 }
 
-impl<Location: fmt::Display> error::Error for ReportDisplay<Location> {}
+impl<L: fmt::Display> error::Error for ReportLocated<L> {}
 
-impl<Location: fmt::Display> ReportDisplay<Location> {
-   fn from(report: Report, source: &PositionStr<'_>, location: Location) -> Self {
+impl<L: fmt::Display> ReportLocated<L> {
+   fn from(report: Report, source: &PositionStr<'_>, location: L) -> Self {
       let mut labels: SmallVec<_, 2> = report
          .labels
          .into_iter()
@@ -1027,5 +1023,79 @@ impl<Location: fmt::Display> ReportDisplay<Location> {
 
    fn style(&self, severity: LabelSeverity) -> Style {
       severity.style_in(self.severity)
+   }
+}
+
+#[derive(Debug, Clone)]
+pub struct StageError {
+   stage: Cow<'static, str>,
+
+   reports: Vec<Report>,
+}
+
+impl StageError {
+   pub fn try_new(stage: impl Into<Cow<'static, str>>, reports: Vec<Report>) -> Option<Self> {
+      reports
+         .iter()
+         .any(|report| report.severity >= ReportSeverity::Error)
+         .then(|| {
+            into!(stage);
+
+            Self { stage, reports }
+         })
+   }
+
+   pub fn locate<L: fmt::Display + Clone>(
+      self,
+      location: L,
+      source: &PositionStr<'_>,
+   ) -> StageErrorLocated<L> {
+      StageErrorLocated {
+         stage: self.stage,
+
+         reports: self
+            .reports
+            .into_iter()
+            .map(|report| report.locate(location.clone(), source))
+            .collect(),
+      }
+   }
+}
+
+#[derive(thiserror::Error, Clone)]
+pub struct StageErrorLocated<L: fmt::Display> {
+   stage: Cow<'static, str>,
+
+   reports: Vec<ReportLocated<L>>,
+}
+
+impl<L: fmt::Display + Clone> fmt::Debug for StageErrorLocated<L> {
+   #[expect(clippy::pattern_type_mismatch)]
+   fn fmt(&self, writer: &mut fmt::Formatter<'_>) -> fmt::Result {
+      let Self { stage, reports } = self;
+
+      let mut fail = 0_usize;
+
+      for (report_index, report) in reports.iter().enumerate() {
+         fail += usize::from(report.severity >= ReportSeverity::Error);
+
+         if report_index != 0 {
+            writeln!(writer)?;
+            writeln!(writer)?;
+         }
+
+         write!(writer, "{report}")?;
+      }
+
+      writeln!(writer)?;
+      write!(writer, "{stage} failed due to {fail} previous errors")?;
+
+      Ok(())
+   }
+}
+
+impl<L: fmt::Display + Clone> fmt::Display for StageErrorLocated<L> {
+   fn fmt(&self, writer: &mut fmt::Formatter<'_>) -> fmt::Result {
+      <Self as fmt::Debug>::fmt(self, writer)
    }
 }

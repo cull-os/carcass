@@ -93,11 +93,13 @@ impl ops::Try for Termination {
    }
 }
 
-impl<T, E: Into<Error>> ops::FromResidual<result::Result<T, E>> for Termination {
+impl<T, E: error::Error + Send + Sync + 'static> ops::FromResidual<result::Result<T, E>>
+   for Termination
+{
    fn from_residual(result: result::Result<T, E>) -> Self {
       match result {
          Ok(_) => Self::success(),
-         Err(error) => Self(Some(error.into())),
+         Err(error) => Self(Some(Error(Arc::new(error.into())))),
       }
    }
 }

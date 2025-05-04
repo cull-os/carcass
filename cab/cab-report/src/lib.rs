@@ -37,7 +37,10 @@ pub use position::{
 mod report;
 pub use report::{
    Report,
+   ReportLocated,
    ReportSeverity,
+   StageError,
+   StageErrorLocated,
 };
 
 #[doc(hidden)]

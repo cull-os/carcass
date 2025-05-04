@@ -20,8 +20,6 @@ use cab::{
       self,
       Contextful as _,
       PositionStr,
-      ReportSeverity,
-      bail,
    },
    runtime,
    syntax,
@@ -79,7 +77,6 @@ async fn main() -> report::Termination {
    let (mut out, mut err) = (io::stdout(), io::stderr());
 
    match cli.command {
-      // Pretty bad but will clean up later.
       Command::Compile { expression: source } => {
          let leaf: Arc<dyn island::Leaf> = if source == "-" {
             Arc::new(island::stdin())
@@ -99,58 +96,16 @@ async fn main() -> report::Termination {
          let source = PositionStr::new(&source);
 
          let parse_oracle = syntax::parse_oracle();
-         let parse = parse_oracle.parse(syntax::tokenize(&source));
-
-         let mut fail: usize = 0;
-         for report in parse.reports {
-            if report.severity >= ReportSeverity::Error {
-               fail += 1;
-            }
-
-            writeln!(
-               err,
-               "{report}\n",
-               report = report.with(island::display!(leaf), &source),
-            )
-            .context(FAIL_STDERR)?;
-         }
-
-         if fail > 0 {
-            writeln!(err).context(FAIL_STDERR)?;
-            bail!(
-               "compilation failed due to {fail} previous error{s}",
-               s = if fail == 1 { "" } else { "s" }
-            );
-         }
-
-         let expression = parse.expression;
+         let expression = parse_oracle
+            .parse(syntax::tokenize(&source))
+            .result()
+            .map_err(|error| error.locate(island::display!(leaf), &source))?;
 
          let compile_oracle = runtime::compile_oracler();
-         let compile = compile_oracle.compile(expression.as_ref());
-
-         let mut fail: usize = 0;
-         for report in compile.reports {
-            if report.severity >= ReportSeverity::Error {
-               fail += 1;
-            }
-
-            writeln!(
-               err,
-               "{report}\n",
-               report = report.with(island::display!(leaf), &source),
-            )
-            .context(FAIL_STDERR)?;
-         }
-
-         if fail > 0 {
-            writeln!(err).context(FAIL_STDERR)?;
-            bail!(
-               "compilation failed due to {fail} previous error{s}",
-               s = if fail == 1 { "" } else { "s" }
-            );
-         }
-
-         let code = compile.code;
+         let code = compile_oracle
+            .compile(expression.as_ref())
+            .result()
+            .map_err(|error| error.locate(island::display!(leaf), &source))?;
 
          writeln!(out, "{code}").context(FAIL_STDOUT)?;
       },
@@ -195,7 +150,7 @@ async fn main() -> report::Termination {
                   writeln!(
                      err,
                      "{report}\n",
-                     report = report.with(island::display!(leaf), &source)
+                     report = report.locate(island::display!(leaf), &source)
                   )
                   .context(FAIL_STDERR)?;
                }

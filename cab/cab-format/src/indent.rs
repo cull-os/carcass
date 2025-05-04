@@ -86,6 +86,7 @@ impl IndentWriter<'_> {
    ///
    /// Panics if the writer isn't at the start of the line or if the indent
    /// writer wrote more than the indent.
+   #[track_caller]
    pub fn write_indent(&mut self) -> fmt::Result {
       assert_eq!(self.place, IndentPlace::Start);
 
