@@ -95,13 +95,12 @@ pub fn wrap<'a>(
       let split_index = word
          .value
          .grapheme_indices(true)
-         .scan(0, |index, state @ (_, grapheme)| {
-            let value = Some((*index, state));
-            *index += width(grapheme);
-            value
+         .scan(0, |width, state @ (_, grapheme)| {
+            *width += self::width(grapheme);
+            Some((*width, state))
          })
-         .find_map(|(index, (split_index, _))| {
-            (index + 1 > line_width_remainder).then_some(split_index)
+         .find_map(|(width, (split_index, _))| {
+            (width > line_width_remainder).then_some(split_index)
          })
          .unwrap();
 
