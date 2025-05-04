@@ -1372,14 +1372,14 @@ impl Rune {
                }
             },
 
-            InterpolatedPartRef::Interpolation(interpolation) if !reported_interpolation => {
-               reported_interpolation = true;
-               report.push_primary(interpolation.span(), "runes cannot contain interpolation");
+            InterpolatedPartRef::Interpolation(interpolation) => {
+               if !reported_interpolation {
+                  reported_interpolation = true;
+                  report.push_primary(interpolation.span(), "runes cannot contain interpolation");
+               }
             },
 
             InterpolatedPartRef::Delimiter(_) => continue,
-
-            InterpolatedPartRef::Interpolation(_) => unreachable!(),
          }
 
          got_content = true;
