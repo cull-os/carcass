@@ -15,6 +15,8 @@ use crate::{
    width,
 };
 
+const LINE_WIDTH_NEEDED: usize = 8;
+
 /// [`wrap`], but with a newline before the text.
 pub fn lnwrap<'a>(
    writer: &mut dyn fmt::Write,
@@ -38,10 +40,11 @@ pub fn wrap<'a>(
    let line_width_start = LINE_WIDTH.load(atomic::Ordering::Acquire);
    let mut line_width = line_width_start;
 
-   let line_width_max = if line_width_start < *LINE_WIDTH_MAX {
+   let line_width_max = if line_width_start + LINE_WIDTH_NEEDED < *LINE_WIDTH_MAX {
       *LINE_WIDTH_MAX
    } else {
-      // If we can't even write any text just assume the line is uncapped.
+      // If we can't even write LINE_WIDTH_NEEDED amount just assume the line is
+      // uncapped.
       usize::MAX
    };
 
