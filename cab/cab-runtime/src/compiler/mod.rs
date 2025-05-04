@@ -1,6 +1,15 @@
+use std::{
+   fmt,
+   io,
+};
+
 use cab_report::{
+   Contextful as _,
+   PositionStr,
    Report,
-   StageError,
+   ReportSeverity,
+   Result,
+   bail,
 };
 use cab_span::{
    IntoSpan as _,
@@ -40,11 +49,35 @@ pub struct Compile {
 }
 
 impl Compile {
-   pub fn result(self) -> Result<Code, StageError> {
-      match StageError::try_new("compilation", self.reports) {
-         Some(error) => Err(error),
-         None => Ok(self.code),
+   pub fn println(
+      self,
+      writer: &mut impl io::Write,
+      location: impl fmt::Display + Clone,
+      source: &PositionStr<'_>,
+   ) -> Result<Code> {
+      let mut fail = 0;
+
+      let mut reports = self.reports.into_iter().peekable();
+      while let Some(report) = reports.next() {
+         fail += usize::from(report.severity >= ReportSeverity::Error);
+
+         writeln!(
+            writer,
+            "{report}",
+            report = report.locate(location.clone(), source),
+         )
+         .context("failed to write report")?;
+
+         if reports.peek().is_some() {
+            writeln!(writer).context("failed to write report")?;
+         }
       }
+
+      if fail > 0 {
+         bail!("compilation failed due to {fail} previous errors");
+      }
+
+      Ok(self.code)
    }
 }
 

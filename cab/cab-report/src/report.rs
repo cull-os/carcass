@@ -8,7 +8,6 @@ use std::{
       Write as _,
    },
    iter,
-   num::NonZeroUsize,
 };
 
 use cab_format::{
@@ -1024,85 +1023,5 @@ impl<L: fmt::Display> ReportLocated<L> {
 
    fn style(&self, severity: LabelSeverity) -> Style {
       severity.style_in(self.severity)
-   }
-}
-
-#[derive(Debug, Clone)]
-pub struct StageError {
-   stage: Cow<'static, str>,
-
-   reports: Vec<Report>,
-   fail:    NonZeroUsize,
-}
-
-impl StageError {
-   pub fn try_new(stage: impl Into<Cow<'static, str>>, reports: Vec<Report>) -> Option<Self> {
-      let fail = reports
-         .iter()
-         .filter(|report| report.severity >= ReportSeverity::Error)
-         .count();
-
-      let fail = NonZeroUsize::new(fail)?;
-
-      into!(stage);
-
-      Some(Self {
-         stage,
-         reports,
-         fail,
-      })
-   }
-
-   pub fn locate<L: fmt::Display + Clone>(
-      self,
-      location: L,
-      source: &PositionStr<'_>,
-   ) -> StageErrorLocated<L> {
-      StageErrorLocated {
-         stage: self.stage,
-
-         reports: self
-            .reports
-            .into_iter()
-            .map(|report| report.locate(location.clone(), source))
-            .collect(),
-
-         fail: self.fail,
-      }
-   }
-}
-
-#[derive(thiserror::Error, Clone)]
-pub struct StageErrorLocated<L: fmt::Display> {
-   stage: Cow<'static, str>,
-
-   reports: Vec<ReportLocated<L>>,
-   fail:    NonZeroUsize,
-}
-
-impl<L: fmt::Display + Clone> fmt::Debug for StageErrorLocated<L> {
-   #[expect(clippy::pattern_type_mismatch)]
-   fn fmt(&self, writer: &mut fmt::Formatter<'_>) -> fmt::Result {
-      let Self {
-         stage,
-         reports,
-         fail,
-      } = self;
-
-      write!(writer, "{stage} failed due to {fail} errors")?;
-
-      for report in reports {
-         writeln!(writer)?;
-         writeln!(writer)?;
-         write!(writer, "{report}")?;
-      }
-
-      Ok(())
-   }
-}
-
-impl<L: fmt::Display + Clone> fmt::Display for StageErrorLocated<L> {
-   fn fmt(&self, writer: &mut fmt::Formatter<'_>) -> fmt::Result {
-      <Self as fmt::Debug>::fmt(self, writer)
    }
 }
