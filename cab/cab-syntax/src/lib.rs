@@ -11,9 +11,9 @@ use enumset::{
 
 pub use self::{
    noder::{
-      Oracle,
       Parse,
-      oracle,
+      ParseOracle,
+      parse_oracle,
    },
    tokenizer::tokenize,
 };

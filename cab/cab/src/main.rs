@@ -98,8 +98,8 @@ async fn main() -> report::Termination {
 
          let source = PositionStr::new(&source);
 
-         let syntax_oracle = syntax::oracle();
-         let parse = syntax_oracle.parse(syntax::tokenize(&source));
+         let parse_oracle = syntax::parse_oracle();
+         let parse = parse_oracle.parse(syntax::tokenize(&source));
 
          let mut fail: usize = 0;
          for report in parse.reports {
@@ -188,8 +188,8 @@ async fn main() -> report::Termination {
             },
 
             Dump::Syntax => {
-               let oracle = syntax::oracle();
-               let parse = oracle.parse(syntax::tokenize(&source));
+               let parse_oracle = syntax::parse_oracle();
+               let parse = parse_oracle.parse(syntax::tokenize(&source));
 
                for report in parse.reports {
                   writeln!(

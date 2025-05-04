@@ -60,19 +60,19 @@ impl Parse {
 }
 
 /// A parse oracle that holds a cache for token deduplication.
-pub struct Oracle {
+pub struct ParseOracle {
    cache: green::NodeCache,
 }
 
 /// Returns a fresh parse oracle with an empty cache.
 #[must_use]
-pub fn oracle() -> Oracle {
-   Oracle {
+pub fn parse_oracle() -> ParseOracle {
+   ParseOracle {
       cache: green::NodeCache::from_interner(green::interner()),
    }
 }
 
-impl Oracle {
+impl ParseOracle {
    pub fn parse<'a>(&self, tokens: impl Iterator<Item = (Kind, &'a str)>) -> Parse {
       let mut noder = Noder::with_interner_and_tokens(self.cache.interner().clone(), tokens);
 

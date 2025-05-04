@@ -65,7 +65,7 @@ async fn main() -> report::Termination {
             .or_else(|_| which("diff"))
             .context("failed to find diff tool")?;
 
-         let oracle = syntax::oracle();
+         let parse_oracle = syntax::parse_oracle();
 
          fs::read_dir("cab-syntax/test/data")
             .context("failed to list cab-syntax/test/data")?
@@ -98,7 +98,7 @@ async fn main() -> report::Termination {
                   })?;
 
                let actual_display = {
-                  let node = oracle.parse(syntax::tokenize(&source)).node;
+                  let node = parse_oracle.parse(syntax::tokenize(&source)).node;
                   format!("{node:#?}")
                };
 
