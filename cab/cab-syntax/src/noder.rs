@@ -58,24 +58,19 @@ impl Parse {
    ) -> Result<node::Expression> {
       let mut fail = 0;
 
-      let mut reports = self.reports.into_iter().peekable();
-      while let Some(report) = reports.next() {
+      for report in self.reports {
          fail += usize::from(report.severity >= ReportSeverity::Error);
 
          writeln!(
             writer,
-            "{report}",
+            "{report}\n",
             report = report.locate(location.clone(), source),
          )
          .context("failed to write report")?;
-
-         if reports.peek().is_some() {
-            writeln!(writer).context("failed to write report")?;
-         }
       }
 
       if fail > 0 {
-         bail!("parsing failed due to {fail} previous errors");
+         bail!("parsing failed due to {fail} previous error(s)",);
       }
 
       Ok(self.expression)
