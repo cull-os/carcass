@@ -27,8 +27,6 @@ pub use wrap::{
 };
 
 pub fn init() {
-   let _ = *private::LINE_WIDTH_MAX;
-
    style::init();
 }
 
