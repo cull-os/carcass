@@ -746,7 +746,7 @@ impl<L: fmt::Display> fmt::Display for ReportLocated<L> {
                                  writer,
                                  "{symbol}",
                                  symbol = match () {
-                                    () if index == *span_start =>
+                                    () if !wrote && index == *span_start =>
                                        TOP_TO_RIGHT.style(self.style(label.severity)),
 
                                     () if let Some(label) =
