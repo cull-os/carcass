@@ -45,8 +45,8 @@ pub fn wrap<'a>(
       *LINE_WIDTH_MAX
    } else {
       // If we can't even write LINE_WIDTH_NEEDED amount just assume the line is
-      // uncapped.
-      usize::MAX
+      // double the worst case width.
+      (*LINE_WIDTH_MAX + LINE_WIDTH_NEEDED.get()) * 2
    };
 
    let mut parts = parts
