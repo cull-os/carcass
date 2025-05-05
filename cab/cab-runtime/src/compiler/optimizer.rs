@@ -45,7 +45,7 @@ impl<'a> From<node::ExpressionRef<'a>> for Boolean<'a> {
                   match segment {
                      Segment::Content { content, .. } => Some(content.into()),
 
-                     _ => None,
+                     Segment::Interpolation(_) => None,
                   }
                })
                .collect()
