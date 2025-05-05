@@ -763,7 +763,7 @@ impl SuffixOperation {
 
 node! {
    #[from(NODE_INTERPOLATION)]
-   /// Interpolation. Is a content part that has a single expression within.
+   /// Interpolation. Is a content segment that has a single expression within.
    struct Interpolation;
 }
 
