@@ -1,4 +1,5 @@
 use std::{
+   borrow::Cow,
    fmt,
    io,
 };
@@ -541,7 +542,7 @@ impl<'a> Compiler<'a> {
                      .into_iter()
                      .filter_map(|segment| {
                         match segment {
-                           Segment::Content { content, .. } => todo!(), // Some(content.as_str()),
+                           Segment::Content { content, .. } => Some(Cow::Owned(content)),
 
                            Segment::Interpolation(_) => None,
                         }
