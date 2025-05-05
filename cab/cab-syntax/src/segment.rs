@@ -97,6 +97,7 @@ impl SegmentRawRef<'_> {
    }
 }
 
+#[derive(Debug)]
 enum Straight<'a> {
    Content {
       span:          Span,
@@ -108,6 +109,7 @@ enum Straight<'a> {
    Interpolation(&'a node::Interpolation),
 }
 
+#[derive(Debug)]
 pub struct Segments<'a> {
    span: Span,
 
@@ -139,7 +141,7 @@ impl<'a> IntoIterator for Segments<'a> {
                   is_from_start,
                   is_last,
                } => {
-                  let unindented = if is_last {
+                  let unindented = if is_last && is_from_start {
                      text.trim_start()
                   } else if is_from_start {
                      assert!(text[..indent_width].chars().all(|c| c == indent.unwrap()));
