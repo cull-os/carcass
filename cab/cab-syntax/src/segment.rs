@@ -102,29 +102,10 @@ enum Straight<'a> {
       span:          Span,
       text:          &'a str,
       is_from_start: bool,
+      is_last:       bool,
    },
 
    Interpolation(&'a node::Interpolation),
-}
-
-impl Straight<'_> {
-   fn unindent(&self, (indent, indent_width): Indent) -> &str {
-      let &Self::Content {
-         text,
-         is_from_start,
-         ..
-      } = self
-      else {
-         unreachable!()
-      };
-
-      if is_from_start {
-         assert!(text[..indent_width].chars().all(|c| c == indent.unwrap()));
-         &text[indent_width..]
-      } else {
-         text
-      }
-   }
 }
 
 pub struct Segments<'a> {
@@ -148,12 +129,24 @@ impl<'a> IntoIterator for Segments<'a> {
          let mut buffer = String::new();
          let mut buffer_span = None::<Span>;
 
-         let indent = self.calculate_indent();
+         let (indent, indent_width) = self.calculate_indent();
 
          for straight in self.straights {
             match straight {
-               straight @ Straight::Content { span, .. } => {
-                  let unindented = straight.unindent(indent);
+               Straight::Content {
+                  span,
+                  text,
+                  is_from_start,
+                  is_last,
+               } => {
+                  let unindented = if is_last {
+                     text.trim_start()
+                  } else if is_from_start {
+                     assert!(text[..indent_width].chars().all(|c| c == indent.unwrap()));
+                     &text[indent_width..]
+                  } else {
+                     text
+                  };
 
                   buffer.push_str(&escape_string(unindented).unwrap());
                   buffer_span.replace(buffer_span.map_or(span, |span_| span_.cover(span)));
@@ -187,6 +180,7 @@ impl Segments<'_> {
          let &Straight::Content {
             text,
             is_from_start: true,
+            is_last: false,
             ..
          } = straight
          else {
@@ -360,6 +354,8 @@ pub trait Segmented: ops::Deref<Target = red::Node> {
 
                      is_from_start: !(segment_is_first && line_is_first)
                         && !(previous_segment_span.is_some() && line_is_first),
+
+                     is_last: segment_is_last && line_is_last,
                   });
 
                   offset += line.len() + '\n'.len_utf8();
