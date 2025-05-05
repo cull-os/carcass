@@ -445,16 +445,22 @@ impl<L: fmt::Display> fmt::Display for ReportLocated<L> {
 
             wrap(
                writer,
-               [self.location.to_string().as_str().style(style::HEADER_PATH)].into_iter(),
-            )?;
-
-            write!(
-               writer,
-               ":{line_number}:{column_number}",
-               line_number = line.number.style(style::HEADER_POSITION),
-               // TODO: This is an index, and not a grapheme width. Fix it.
-               column_number =
-                  (*line.styles.first().unwrap().span.start + 1).style(style::HEADER_POSITION),
+               [
+                  self.location.to_string().as_str().style(style::HEADER_PATH),
+                  ":".styled(),
+                  line
+                     .number
+                     .to_string()
+                     .as_str()
+                     .style(style::HEADER_POSITION),
+                  ":".styled(),
+                  // TODO: This is an index, and not a grapheme width. Fix it.
+                  (*line.styles.first().unwrap().span.start + 1)
+                     .to_string()
+                     .as_str()
+                     .style(style::HEADER_POSITION),
+               ]
+               .into_iter(),
             )?;
          }
 
