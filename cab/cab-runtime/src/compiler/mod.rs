@@ -587,49 +587,49 @@ impl<'a> Compiler<'a> {
    }
 
    fn emit_string(&mut self, string: &'a node::SString) {
-      self.emit_thunk(string.span(), |this| {
-         let mut contents = string.parts().filter(|part| part.is_content());
+      // self.emit_thunk(string.span(), |this| {
+      //    let mut contents = string.parts().filter(|part| part.is_content());
 
-         let parts = string.validate(None);
-         let mut part_count: usize = 0;
+      //    let parts = string.validate(None);
+      //    let mut part_count: usize = 0;
 
-         let mut buffer = String::new();
+      //    let mut buffer = String::new();
 
-         for part in parts {
-            match part {
-               node::StringPart::Literal(s) => buffer.push_str(&s),
+      //    for part in parts {
+      //       match part {
+      //          node::StringPart::Literal(s) => buffer.push_str(&s),
 
-               node::StringPart::Interpolation(interpolation) => {
-                  this.emit_push(
-                     contents.next().unwrap().span(),
-                     Value::String(buffer.as_str().into()),
-                  );
+      //          node::StringPart::Interpolation(interpolation) => {
+      //             this.emit_push(
+      //                contents.next().unwrap().span(),
+      //                Value::String(buffer.as_str().into()),
+      //             );
 
-                  part_count += 1;
+      //             part_count += 1;
 
-                  this.emit_scope(interpolation.span(), |this| {
-                     this.emit_force(interpolation.expression());
-                  });
+      //             this.emit_scope(interpolation.span(), |this| {
+      //                this.emit_force(interpolation.expression());
+      //             });
 
-                  part_count += 1;
-               },
-            }
-         }
+      //             part_count += 1;
+      //          },
+      //       }
+      //    }
 
-         if !buffer.is_empty() {
-            this.emit_push(
-               contents.next().unwrap().span(),
-               Value::String(buffer.as_str().into()),
-            );
+      //    if !buffer.is_empty() {
+      //       this.emit_push(
+      //          contents.next().unwrap().span(),
+      //          Value::String(buffer.as_str().into()),
+      //       );
 
-            part_count += 1;
-         }
+      //       part_count += 1;
+      //    }
 
-         if part_count != 1 {
-            this.push_operation(string.span(), Operation::Interpolate);
-            this.push_u64(part_count as _);
-         }
-      });
+      //    if part_count != 1 {
+      //       this.push_operation(string.span(), Operation::Interpolate);
+      //       this.push_u64(part_count as _);
+      //    }
+      // });
    }
 
    fn emit_if(&mut self, if_: &'a node::If) {

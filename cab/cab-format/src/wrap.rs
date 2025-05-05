@@ -4,7 +4,7 @@ use std::{
    sync::atomic,
 };
 
-use cab_util::call;
+use cab_util::into_iter;
 use unicode_segmentation::UnicodeSegmentation as _;
 
 use crate::{
@@ -36,7 +36,7 @@ pub fn wrap<'a>(
    use None as Space;
    use Some as Word;
 
-   call!(into_iter; parts);
+   into_iter!(parts);
 
    let line_width_start = LINE_WIDTH.load(atomic::Ordering::Acquire);
    let mut line_width = line_width_start;

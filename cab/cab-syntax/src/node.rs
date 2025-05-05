@@ -12,8 +12,16 @@ use cab_span::{
    IntoSpan as _,
    Span,
 };
+use cab_util::{
+   Lazy,
+   force,
+   lazy,
+   read,
+   ready,
+};
 use derive_more::Deref;
 use paste::paste;
+use smallvec::SmallVec;
 
 use crate::{
    Kind::{
@@ -21,10 +29,7 @@ use crate::{
       *,
    },
    red,
-   token::{
-      self,
-      ContentPart,
-   },
+   token,
 };
 
 macro_rules! reffed {
@@ -328,9 +333,7 @@ impl<'a> ExpressionRef<'a> {
          Self::Path(path) => path.validate(to),
          Self::Bind(bind) => bind.validate(to),
          Self::Identifier(identifier) => identifier.validate(to),
-         Self::SString(string) => {
-            string.validate(Some(to)).count();
-         },
+         Self::SString(string) => string.validate(to),
          Self::Rune(rune) => rune.validate(to),
          Self::If(if_else) => if_else.validate(to),
 
@@ -860,6 +863,45 @@ impl Interpolation {
    get_token! { interpolation_token_end -> Option<TOKEN_INTERPOLATION_END> }
 }
 
+pub enum Segment<'a> {
+   Content {
+      span:          Span,
+      text:          &'a str,
+      is_from_start: bool,
+   },
+
+   Interpolation(&'a Interpolation),
+}
+
+pub struct Segments<'a> {
+   pub is_multiline: bool,
+
+   pub line_span_first: Option<Span>,
+   pub line_span_last:  Option<Span>,
+
+   inner: SmallVec<Segment<'a>, 4>,
+}
+
+impl Segments<'_> {
+   pub fn validate(&self, report: &mut Lazy!(Report), to: &mut Vec<Report>) {
+      for segment in &self.inner {
+         match *segment {
+            Segment::Content { span, text, .. } => {
+               token::Content::validate(span, text, report);
+            },
+
+            Segment::Interpolation(interpolation) => {
+               interpolation.expression().validate(to);
+            },
+         }
+      }
+   }
+
+   pub fn iter(&self) -> impl Iterator<Item = &Segment<'_>> {
+      self.inner.iter()
+   }
+}
+
 /// A trait that can be implemented on any node that iterates over interpolated
 /// parts.
 pub trait Parted: ops::Deref<Target = red::Node> {
@@ -883,6 +925,112 @@ pub trait Parted: ops::Deref<Target = red::Node> {
             },
          }
       })
+   }
+
+   fn segments(&self) -> Segments<'_> {
+      let mut is_multiline = false;
+
+      let mut line_span_first = None::<Span>;
+      let mut line_span_last = None::<Span>;
+
+      let mut segments = SmallVec::new();
+
+      let mut part_previous_span = None::<Span>;
+      let mut parts = self
+         .parts()
+         .scan(0, |index, part| {
+            let value = *index;
+
+            *index += usize::from(!part.is_delimiter());
+
+            Some((value, part))
+         })
+         .peekable();
+
+      while let Some((part_index, part)) = parts.next() {
+         let mut part_is_multiline = false;
+
+         let part_is_first = part_index == 0;
+         let part_is_last = parts.peek().is_none_or(|&(_, part)| part.is_delimiter());
+
+         match part {
+            InterpolatedPartRef::Delimiter(_) => continue,
+
+            InterpolatedPartRef::Content(content) => {
+               let span = content.span();
+
+               let mut offset: usize = 0;
+               let mut lines = content.text().split('\n').enumerate().peekable();
+               while let Some((line_index, line)) = lines.next() {
+                  let line_is_first = line_index == 0;
+                  let line_is_last = lines.peek().is_none();
+
+                  if line_is_first && !line_is_last {
+                     part_is_multiline = true;
+                  }
+
+                  if part_is_first && line_is_first {
+                     if !line.trim().is_empty() {
+                        line_span_first.replace(Span::at(span.start, line.trim_end().len()));
+                     } else if let Some(&(_, part)) = parts.peek()
+                        && !part.is_delimiter()
+                     {
+                        line_span_first.replace(span.cover(part.span()));
+                     }
+                  }
+
+                  if part_is_last && line_is_last {
+                     if !line.trim().is_empty() {
+                        line_span_last.replace(Span::at_end(span.end, line.trim_start().len()));
+                     } else if let Some(previous_span) = part_previous_span {
+                        line_span_last.replace(span.cover(previous_span));
+                     }
+                  }
+
+                  #[expect(clippy::nonminimal_bool)]
+                  segments.push(Segment::Content {
+                     span: Span::at(content.span().start + offset, line.len()),
+
+                     text: &content.text()[offset..offset + line.len()],
+
+                     is_from_start: !(part_is_first && line_is_first)
+                        && !(part_previous_span.is_some() && line_is_first),
+                  });
+
+                  offset += line.len();
+               }
+            },
+
+            InterpolatedPartRef::Interpolation(interpolation) => {
+               let span = interpolation.span();
+
+               if part_is_first {
+                  line_span_first.replace(span);
+               }
+
+               if part_is_last {
+                  line_span_last.replace(span);
+               }
+
+               segments.push(Segment::Interpolation(interpolation));
+            },
+         }
+
+         part_previous_span.replace(part.span());
+
+         if part_is_multiline {
+            is_multiline = true;
+         }
+      }
+
+      Segments {
+         is_multiline,
+
+         line_span_first,
+         line_span_last,
+
+         inner: segments,
+      }
    }
 }
 
@@ -992,36 +1140,14 @@ impl Path {
 
    pub fn validate(&self, to: &mut Vec<Report>) {
       if let Some(root) = self.root() {
-         let mut report = Report::error("invalid path root");
-         let mut reported_control_character = false;
+         let mut report = lazy!(Report::error("invalid path root"));
 
-         for part in root.type_().parts() {
-            match part {
-               InterpolatedPartRef::Content(content) => {
-                  content.parts(Some(&mut report)).count();
+         let segments = root.type_().segments();
+         segments.validate(&mut report, to);
 
-                  let text = content.text();
-
-                  if !reported_control_character && text.chars().any(char::is_control) {
-                     reported_control_character = true;
-                     report.push_primary(content.span(), "here");
-                     report.push_tip(
-                        "path roots cannot contain control characters (non-escaped newlines, \
-                         tabs, ...)",
-                     );
-                  }
-               },
-
-               InterpolatedPartRef::Interpolation(interpolation) => {
-                  interpolation.expression().validate(to);
-               },
-
-               InterpolatedPartRef::Delimiter(_) => {},
-            }
-         }
-
-         if !report.is_empty() {
-            to.push(report);
+         if segments.is_multiline {
+            force!(report).push_primary(root.type_().span(), "here");
+            force!(report).push_tip("path roots cannot contain newlines");
          }
 
          if let Some(config) = root.config() {
@@ -1030,6 +1156,10 @@ impl Path {
 
          if let Some(path) = root.path() {
             path.validate(to);
+         }
+
+         if let Some(report) = read!(report) {
+            to.push(report);
          }
       }
 
@@ -1085,35 +1215,17 @@ impl Parted for IdentifierQuoted {}
 
 impl IdentifierQuoted {
    pub fn validate(&self, to: &mut Vec<Report>) {
-      let mut report = Report::error("invalid identifier");
-      let mut reported_control_character = false;
+      let mut report = lazy!(Report::error("invalid identifier"));
 
-      for part in self.parts() {
-         match part {
-            InterpolatedPartRef::Content(content) => {
-               content.parts(Some(&mut report)).count();
+      let segments = self.segments();
+      segments.validate(&mut report, to);
 
-               let text = content.text();
-
-               if !reported_control_character && text.chars().any(char::is_control) {
-                  reported_control_character = true;
-                  report.push_primary(content.span(), "contains control characters");
-                  report.push_help(
-                     "quoted identifiers cannot contain control characters (non-escaped newlines, \
-                      tabs, ...)",
-                  );
-               }
-            },
-
-            InterpolatedPartRef::Interpolation(interpolation) => {
-               interpolation.expression().validate(to);
-            },
-
-            InterpolatedPartRef::Delimiter(_) => {},
-         }
+      if segments.is_multiline {
+         force!(report).push_primary(self.span(), "here");
+         force!(report).push_tip("quoted identifiers cannot contain newlines");
       }
 
-      if !report.is_empty() {
+      if let Some(report) = read!(report) {
          to.push(report);
       }
    }
@@ -1182,224 +1294,61 @@ node! {
 impl Parted for SString {}
 
 impl SString {
-   #[must_use]
-   pub fn indent(&self, mut to: Option<&mut Report>) -> (Option<char>, usize) {
-      let mut reported_mixed_indent = false;
+   pub fn validate(&self, to: &mut Vec<Report>) {
+      let mut report = lazy!(Report::error("invalid string"));
 
-      let mut parts = self
-         .parts()
-         .scan(0, |index, part| {
-            let value = *index;
+      let segments = self.segments();
+      segments.validate(&mut report, to);
 
-            *index += usize::from(!part.is_delimiter());
+      let &Segments {
+         is_multiline,
+         line_span_first,
+         line_span_last,
+         ..
+      } = &segments;
 
-            Some((value, part))
-         })
-         .peekable();
+      let mut indent = None::<char>;
+      for segment in segments.iter() {
+         let &Segment::Content {
+            text,
+            is_from_start: true,
+            ..
+         } = segment
+         else {
+            continue;
+         };
 
-      let mut indent: Option<char> = None;
-      let mut indent_width: Option<usize> = None;
+         for c in text.chars() {
+            if !c.is_whitespace() {
+               break;
+            }
 
-      let mut previous_span = None;
-      while let Some((part_index, part)) = parts.next() {
-         let part_is_first = part_index == 0;
-         let part_is_last = parts.peek().is_none_or(|&(_, part)| part.is_delimiter());
+            let Some(indent) = indent else {
+               indent.replace(c);
+               continue;
+            };
 
-         match part {
-            InterpolatedPartRef::Interpolation(_) => {},
-
-            InterpolatedPartRef::Content(content) => {
-               let text = content.text();
-
-               let mut lines = text.split('\n').enumerate().peekable();
-               while let Some((line_index, line)) = lines.next() {
-                  let line_is_first = line_index == 0;
-                  let line_is_last = lines.peek().is_none();
-
-                  let line_is_firstest = part_is_first && line_is_first;
-                  let line_is_lastest = part_is_last && line_is_last;
-
-                  #[expect(clippy::nonminimal_bool)]
-                  if
-                  // Ignore firstest and lastest lines.
-                  !(line_is_firstest || line_is_lastest)
-                     // Ignore lines right after an interpolation end.
-                     && !(previous_span.is_some() && line_is_first)
-                  {
-                     let mut line_indent_width: usize = 0;
-
-                     for c in line.chars() {
-                        if !c.is_whitespace() {
-                           break;
-                        }
-
-                        let Some(indent) = indent else {
-                           indent = Some(c);
-                           line_indent_width = 1;
-                           continue;
-                        };
-
-                        if indent == c {
-                           line_indent_width += 1;
-                        } else if let Some(to) = to.as_mut() {
-                           if !reported_mixed_indent {
-                              reported_mixed_indent = true;
-                              to.push_primary(
-                                 self.span(),
-                                 "strings cannot mix different kinds of whitespace in indents",
-                              );
-                           }
-
-                           break;
-                        }
-                     }
-
-                     if indent_width.is_none_or(|indent_width| indent_width > line_indent_width) {
-                        indent_width.replace(line_indent_width);
-                     }
-                  }
-               }
-            },
-
-            InterpolatedPartRef::Delimiter(_) => continue,
+            if indent != c {
+               force!(report).push_primary(
+                  self.span(),
+                  "strings cannot mix different kinds of whitespace in indents",
+               );
+               break;
+            }
          }
-
-         previous_span = Some(part.span());
       }
 
-      (indent, indent_width.unwrap_or(0))
-   }
-
-   // What a behemoth. And the sad part is I can't figure out a way to make this
-   // simpler.
-   pub fn validate(
-      &self,
-      mut to: Option<&mut Vec<Report>>,
-   ) -> impl Iterator<Item = StringPart<'_>> {
-      gen move {
-         let mut report = to.is_some().then(|| Report::error("invalid string"));
-
-         let mut parts = self
-            .parts()
-            .scan(0, |index, part| {
-               let value = *index;
-
-               *index += usize::from(!part.is_delimiter());
-
-               Some((value, part))
-            })
-            .peekable();
-
-         let mut string_is_multiline = false;
-         let mut string_first_line_span = None;
-         let mut string_last_line_span = None;
-
-         let (indent, indent_width) = self.indent(report.as_mut());
-
-         let mut previous_span = None;
-         while let Some((part_index, part)) = parts.next() {
-            let mut part_is_multiline = false;
-            let part_is_first = part_index == 0;
-            let part_is_last = parts.peek().is_none_or(|&(_, part)| part.is_delimiter());
-
-            match part {
-               InterpolatedPartRef::Interpolation(interpolation) => {
-                  if let Some(to) = to.as_mut() {
-                     interpolation.expression().validate(to);
-                  }
-
-                  let span = interpolation.span();
-
-                  if part_is_first {
-                     string_first_line_span = Some(span);
-                  } else if part_is_last {
-                     string_last_line_span = Some(span);
-                  }
-
-                  yield StringPart::Interpolation(interpolation);
-               },
-
-               InterpolatedPartRef::Content(content) => {
-                  content.parts(report.as_mut()).count();
-
-                  let text = content.text();
-
-                  let mut lines = text.split('\n').enumerate().peekable();
-                  while let Some((line_index, line)) = lines.next() {
-                     let line_is_first = line_index == 0;
-                     let line_is_last = lines.peek().is_none();
-
-                     let line_is_firstest = part_is_first && line_is_first;
-                     let line_is_lastest = part_is_last && line_is_last;
-
-                     if line_is_first && !line_is_last {
-                        part_is_multiline = true;
-                     }
-
-                     if line_is_firstest {
-                        if !line.trim().is_empty() {
-                           string_first_line_span =
-                              Some(Span::at(content.span().start, line.trim_end().len()));
-                        } else if text.trim().is_empty()
-                           && let Some(&(_, part)) = parts.peek()
-                           && !part.is_delimiter()
-                        {
-                           string_first_line_span = Some(part.span());
-                        }
-                     } else if line_is_lastest {
-                        if !line.trim().is_empty() {
-                           let last_line_len = line.trim_start().len();
-
-                           string_last_line_span =
-                              Some(Span::at_end(content.span().end, last_line_len));
-                        } else if !part_is_multiline && let Some(span) = previous_span {
-                           string_last_line_span = Some(span);
-                        }
-                     }
-
-                     #[expect(clippy::nonminimal_bool)]
-                     let should_strip_indent = !(line_is_firstest || line_is_lastest)
-                        && !(previous_span.is_some() && line_is_first);
-
-                     yield StringPart::Literal(token::Content::normalize(if should_strip_indent {
-                        assert!(line[..indent_width].chars().all(|c| c == indent.unwrap()));
-                        &line[indent_width..]
-                     } else {
-                        line
-                     }));
-                  }
-               },
-
-               InterpolatedPartRef::Delimiter(_) => continue,
-            }
-
-            previous_span = Some(part.span());
-
-            if part_is_multiline {
-               string_is_multiline = true;
-            }
+      if is_multiline {
+         for span in [line_span_first, line_span_last].into_iter().flatten() {
+            force!(report).push_primary(
+               span,
+               "multiline strings' first and last lines must be empty",
+            );
          }
+      }
 
-         if let Some(report) = report.as_mut()
-            && string_is_multiline
-         {
-            for span in [string_first_line_span, string_last_line_span]
-               .into_iter()
-               .flatten()
-            {
-               report.push_primary(
-                  span,
-                  "multiline strings' first and last lines must be empty",
-               );
-            }
-         }
-
-         if let Some(report) = report
-            && let Some(to) = to.as_mut()
-            && !report.is_empty()
-         {
-            to.push(report);
-         }
+      if let Some(report) = read!(report) {
+         to.push(report);
       }
    }
 }
@@ -1417,72 +1366,58 @@ impl Parted for Rune {}
 impl Rune {
    #[must_use]
    pub fn value(&self) -> char {
-      let InterpolatedPartRef::Content(content) = self.parts().nth(1).unwrap() else {
+      let segments = self.segments();
+
+      let Some(&Segment::Content { text, .. }) = segments.iter().next() else {
          unreachable!()
       };
 
-      let part = content.parts(None).next().unwrap();
-
-      match part {
-         ContentPart::Literal(s) => s.chars().next().unwrap(),
-         ContentPart::Escape(c) => c,
-      }
+      token::Content::value(text).chars().next().unwrap()
    }
 
    pub fn validate(&self, to: &mut Vec<Report>) {
-      let mut report = Report::error("invalid rune");
-      let mut reported_invalid_len = false;
-      let mut reported_control_character = false;
-      let mut reported_interpolation = false;
+      let mut report = lazy!(Report::error("invalid rune"));
 
-      let mut got_content = false;
+      let segments = self.segments();
+      segments.validate(&mut report, to);
 
-      for part in self.parts() {
-         match part {
-            InterpolatedPartRef::Content(content) => {
-               let text = content.text();
+      if segments.is_multiline {
+         force!(report).push_primary(self.span(), "runes cannot cannot contain newlines");
+      }
 
-               if !reported_invalid_len && {
-                  let mut parts = content.parts(Some(&mut report));
-
-                  match (parts.next(), parts.next()) {
-                     (Some(ContentPart::Literal(text)), None) if text.chars().count() == 1 => false,
-                     (Some(ContentPart::Escape(_)), None) => false,
-
-                     _ => true,
-                  }
-               } {
-                  reported_invalid_len = true;
-                  report.push_primary(content.span(), "invalid rune literal len");
-               }
-
-               if !reported_control_character && text.chars().any(char::is_control) {
-                  reported_control_character = true;
-                  report.push_primary(
-                     content.span(),
-                     "runes cannot contain control characters (non-escaped newlines, tabs, ...)",
-                  );
-               }
-            },
-
-            InterpolatedPartRef::Interpolation(interpolation) => {
-               if !reported_interpolation {
-                  reported_interpolation = true;
-                  report.push_primary(interpolation.span(), "runes cannot contain interpolation");
-               }
-            },
-
-            InterpolatedPartRef::Delimiter(_) => continue,
+      for segment in segments.iter() {
+         if let &Segment::Interpolation(interpolation) = segment {
+            force!(report).push_primary(interpolation.span(), "runes cannot contain interpolation");
+            break;
          }
-
-         got_content = true;
       }
 
-      if !got_content {
-         report.push_primary(self.span(), "runes cannot be empty");
+      let mut segments = segments.iter().peekable();
+      match segments.next() {
+         None if !ready!(report) => {
+            force!(report).push_primary(self.span(), "empty rune");
+         },
+
+         Some(&Segment::Content { text, .. })
+            if !ready!(report)
+               && token::Content::value(text).is_empty()
+               && segments.peek().is_none() =>
+         {
+            force!(report).push_primary(self.span(), "empty rune");
+         },
+
+         Some(&Segment::Content { text, .. })
+            if !ready!(report)
+               && (token::Content::value(text).chars().nth(1).is_some()
+                  || segments.next().is_some()) =>
+         {
+            force!(report).push_primary(self.span(), "too long");
+         },
+
+         _ => {},
       }
 
-      if !report.is_empty() {
+      if let Some(report) = read!(report) {
          to.push(report);
       }
    }

@@ -1,3 +1,5 @@
+mod lazy;
+
 /// A macro to make mass redeclarations of a collection of identifiers using a
 /// single method more concise.
 ///
@@ -18,6 +20,14 @@ macro_rules! call {
    }
 }
 
+/// [`call!`], but the identifier is mutable.
+#[macro_export]
+macro_rules! call_mut {
+   ($method:ident; $($identifier:ident),*) => {
+      $(let mut $identifier = $identifier.$method();)*
+   }
+}
+
 /// [`call!`] but with the method set to `as_`.
 #[macro_export]
 macro_rules! as_ {
@@ -34,6 +44,14 @@ macro_rules! as_ref {
    }
 }
 
+/// [`call_mut!`] but with the method set to `borrow_mut`.
+#[macro_export]
+macro_rules! borrow_mut {
+   ($($t:tt),*) => {
+      $crate::call_mut!(borrow_mut; $($t),*);
+   }
+}
+
 /// [`call!`] but with the method set to `clone`.
 #[macro_export]
 macro_rules! clone {
@@ -47,6 +65,14 @@ macro_rules! clone {
 macro_rules! into {
    ($($t:tt),*) => {
       $crate::call!(into; $($t),*);
+   }
+}
+
+/// [`call_mut!`] but with the method set to `into_iter`.
+#[macro_export]
+macro_rules! into_iter {
+   ($($t:tt),*) => {
+      $crate::call_mut!(into_iter; $($t),*);
    }
 }
 

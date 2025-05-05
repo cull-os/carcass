@@ -248,6 +248,7 @@ dependencies = [
  "cab-format",
  "cab-report",
  "cab-span",
+ "cab-util",
  "cstree",
  "derive_more",
  "enumset",

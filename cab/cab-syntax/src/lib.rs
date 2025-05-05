@@ -1,6 +1,14 @@
 //! Token, tokenizer, node, noder implementations.
 
-#![feature(assert_matches, gen_blocks, if_let_guard, let_chains, trait_alias)]
+#![feature(
+   assert_matches,
+   gen_blocks,
+   if_let_guard,
+   lazy_get,
+   lazy_cell_into_inner,
+   let_chains,
+   trait_alias
+)]
 
 use std::ops;
 

@@ -6,13 +6,11 @@ use std::{
    ptr,
 };
 
-use cab_report::{
-   Label,
-   Report,
-};
-use cab_span::{
-   IntoSpan as _,
-   Span,
+use cab_report::Report;
+use cab_span::Span;
+use cab_util::{
+   Lazy,
+   force_ref,
 };
 use derive_more::Deref;
 use num::Num as _;
@@ -22,6 +20,7 @@ use crate::{
    red,
 };
 
+const EXPECT_CONTENT_VALID: &str = "content token must be valid";
 const EXPECT_INTEGER_VALID: &str = "integer token must be valid";
 const EXPECT_FLOAT_VALID: &str = "float token must be valid";
 
@@ -145,6 +144,23 @@ pub enum ContentPart<'a> {
    Escape(char),
 }
 
+#[must_use]
+pub fn escape(c: char) -> Option<char> {
+   Some(match c {
+      ' ' => ' ',
+      '0' => '\0',
+      't' => '\t',
+      'n' => '\n',
+      'r' => '\r',
+      '`' => '`',
+      '"' => '\"',
+      '\'' => '\'',
+      '\\' => '\\',
+
+      _ => return None,
+   })
+}
+
 token! {
    #[from(TOKEN_CONTENT)]
    /// Content of a delimited stringlike.
@@ -153,7 +169,7 @@ token! {
 
 impl Content {
    #[must_use]
-   pub fn normalize(text: &str) -> String {
+   pub fn value(text: &str) -> String {
       let mut string = String::with_capacity(text.len());
 
       let mut literal_start_offset = 0;
@@ -165,85 +181,37 @@ impl Content {
          }
 
          string.push_str(&text[literal_start_offset..offset]);
-
          literal_start_offset = offset;
 
-         string.push(match chars.next() {
-            Some((_, ' ')) => ' ',
-            Some((_, '0')) => '\0',
-            Some((_, 't')) => '\t',
-            Some((_, 'n')) => '\n',
-            Some((_, 'r')) => '\r',
-            Some((_, '`')) => '`',
-            Some((_, '"')) => '"',
-            Some((_, '\'')) => '\'',
-            Some((_, '\\')) => '\\',
-
-            _ => continue,
-         });
+         let c = chars.next().expect(EXPECT_CONTENT_VALID).1;
+         string.push(escape(c).expect(EXPECT_CONTENT_VALID));
+         literal_start_offset += '\\'.len_utf8() + c.len_utf8();
       }
 
       string.push_str(&text[literal_start_offset..text.len()]);
-
       string
    }
 
-   /// Iterates over the parts of this content, yielding either literals or
-   /// escapes.
-   pub fn parts(&self, mut report: Option<&mut Report>) -> impl Iterator<Item = ContentPart<'_>> {
-      gen move {
-         let mut reported = false;
-
-         let mut literal_start_offset = 0;
-
-         let text = self.text();
-
-         let mut chars = text.char_indices().peekable();
-         while let Some((offset, c)) = chars.next() {
-            if c != '\\' {
-               continue;
-            }
-
-            yield ContentPart::Literal(&text[literal_start_offset..offset]);
-
-            literal_start_offset = offset;
-
-            yield ContentPart::Escape(match chars.next() {
-               Some((_, ' ')) => ' ',
-               Some((_, '0')) => '\0',
-               Some((_, 't')) => '\t',
-               Some((_, 'n')) => '\n',
-               Some((_, 'r')) => '\r',
-               Some((_, '`')) => '`',
-               Some((_, '"')) => '"',
-               Some((_, '\'')) => '\'',
-               Some((_, '\\')) => '\\',
-
-               next @ (Some(_) | None)
-                  if let Some(report) = report.as_mut()
-                     && !reported =>
-               {
-                  reported = true;
-
-                  report.push_label(Label::primary(
-                     Span::at(
-                        self.span().start + offset,
-                        1 + next.map_or(0, |(_, c)| c.len_utf8()),
-                     ),
-                     "invalid escape",
-                  ));
-
-                  report
-                     .push_tip(r#"escapes must be one of: \ (escaped space), \0, \t, \n, \r, \`, \", \', \>, \\"#);
-
-                  continue;
-               },
-
-               _ => continue,
-            });
+   pub fn validate(span: Span, text: &str, report: &mut Lazy!(Report)) {
+      let mut chars = text.char_indices().peekable();
+      while let Some((offset, c)) = chars.next() {
+         if c != '\\' {
+            continue;
          }
 
-         yield ContentPart::Literal(&text[literal_start_offset..text.len()]);
+         match chars.next() {
+            Some((_, c)) if escape(c).is_some() => {},
+
+            next @ (Some(_) | None) => {
+               force_ref!(report).push_primary(
+                  Span::at(
+                     span.start + offset,
+                     1 + next.map_or(0, |(_, c)| c.len_utf8()),
+                  ),
+                  "invalid escape",
+               );
+            },
+         }
       }
    }
 }

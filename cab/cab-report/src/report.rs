@@ -40,6 +40,7 @@ use cab_span::{
    Span,
 };
 use cab_util::{
+   borrow_mut,
    into,
    unwrap,
 };
@@ -374,7 +375,7 @@ impl<L: fmt::Display> fmt::Display for ReportLocated<L> {
          line_number_width + 3,
          with = |writer: &mut dyn fmt::Write| {
             let line_number = *line_number.borrow();
-            let mut line_number_previous = line_number_previous.borrow_mut();
+            borrow_mut!(line_number_previous);
 
             style::GUTTER.fmt_prefix(writer)?;
             match line_number {
@@ -531,7 +532,7 @@ impl<L: fmt::Display> fmt::Display for ReportLocated<L> {
          for line in &self.lines {
             // Patch strike prefix and keep track of positions of strikes with their IDs.
             {
-               let mut strike_prefix = strike_prefix.borrow_mut();
+               borrow_mut!(strike_prefix);
 
                for strike_new @ LineStrike { id, .. } in line.strikes.iter().copied() {
                   match strike_prefix
