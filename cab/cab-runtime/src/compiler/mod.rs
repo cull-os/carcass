@@ -23,6 +23,7 @@ use cab_syntax::{
       Segmented as _,
    },
 };
+use smallvec::SmallVec;
 
 use crate::{
    ByteIndex,
@@ -424,7 +425,11 @@ impl<'a> Compiler<'a> {
    fn emit_path(&mut self, path: &'a node::Path) {
       self.emit_thunk(path.span(), |this| {
          if let Some(root) = path.root() {
-            let segments = root.type_().segments().into_iter().collect::<Vec<_>>();
+            let segments = root
+               .type_()
+               .segments()
+               .into_iter()
+               .collect::<SmallVec<_, 4>>();
 
             for segment in &segments {
                match *segment {
@@ -463,7 +468,7 @@ impl<'a> Compiler<'a> {
             .expect(EXPECT_VALID)
             .segments()
             .into_iter()
-            .collect::<Vec<_>>();
+            .collect::<SmallVec<_, 4>>();
 
          for segment in &segments {
             match *segment {
@@ -505,7 +510,7 @@ impl<'a> Compiler<'a> {
             },
 
             node::IdentifierValueRef::Quoted(quoted) => {
-               let segments = quoted.segments().into_iter().collect::<Vec<_>>();
+               let segments = quoted.segments().into_iter().collect::<SmallVec<_, 4>>();
 
                for segment in &segments {
                   match *segment {
@@ -576,7 +581,7 @@ impl<'a> Compiler<'a> {
 
    fn emit_string(&mut self, string: &'a node::SString) {
       self.emit_thunk(string.span(), |this| {
-         let segments = string.segments().into_iter().collect::<Vec<_>>();
+         let segments = string.segments().into_iter().collect::<SmallVec<_, 4>>();
 
          for segment in &segments {
             match *segment {
