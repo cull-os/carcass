@@ -8,6 +8,7 @@ use std::{
       Write as _,
    },
    iter,
+   ops::Add as _,
 };
 
 use cab_format::{
@@ -454,8 +455,8 @@ impl<L: fmt::Display> fmt::Display for ReportLocated<L> {
                      .as_str()
                      .style(style::HEADER_POSITION),
                   ":".styled(),
-                  // TODO: This is an index, and not a grapheme width. Fix it.
-                  (*line.styles.first().unwrap().span.start + 1)
+                  width(&line.content[..*line.styles.first().unwrap().span.start as _])
+                     .add(1)
                      .to_string()
                      .as_str()
                      .style(style::HEADER_POSITION),
