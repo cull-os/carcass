@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use cab_span::Span;
 use derive_more::Deref;
 use smallvec::{
@@ -13,7 +15,7 @@ const BY_NAME_EXPECT: &str = "by-name locals must have at least one item per ent
 pub struct LocalIndex(usize);
 
 #[derive(Debug, Clone, Eq)]
-pub struct LocalName<'a>(SmallVec<&'a str, 4>);
+pub struct LocalName<'a>(SmallVec<Cow<'a, str>, 4>);
 
 impl PartialEq for LocalName<'_> {
    fn eq(&self, other: &Self) -> bool {
@@ -38,7 +40,7 @@ impl LocalName<'_> {
             let mut offset = 0;
 
             for segment in &segments[..segments.len() - 1] {
-               match name[offset..].find(segment) {
+               match name[offset..].find(segment.as_ref()) {
                   Some(idx) => offset += idx + segment.len(),
 
                   None => return false,
@@ -47,7 +49,7 @@ impl LocalName<'_> {
 
             let last = segments.last().expect("len was statically checked");
 
-            name.ends_with(last) && name.len() - last.len() >= offset
+            name.ends_with(last.as_ref()) && name.len() - last.len() >= offset
          },
 
          (Err(segments), Err(other_segments)) => {
@@ -55,33 +57,33 @@ impl LocalName<'_> {
                let first = &segments[0];
                let other_first = &other_segments[0];
 
-               first.starts_with(other_first) || other_first.starts_with(first)
+               first.starts_with(other_first.as_ref()) || other_first.starts_with(first.as_ref())
             } && {
                let last = segments.last().expect("len was statically checked");
                let other_last = other_segments.last().expect("len was statically checked");
 
-               last.starts_with(other_last) || other_last.starts_with(last)
+               last.starts_with(other_last.as_ref()) || other_last.starts_with(last.as_ref())
             })
          },
       }
    }
 }
 
-impl<'this, 'a> TryInto<&'a str> for &'this LocalName<'a> {
-   type Error = &'this [&'a str];
+impl<'a> TryInto<&'a str> for &'a LocalName<'a> {
+   type Error = &'a [Cow<'a, str>];
 
    fn try_into(self) -> Result<&'a str, Self::Error> {
       match self.0.len() {
          0 => Ok(""),
-         1 => Ok(self.0[0]),
+         1 => Ok(&self.0[0]),
          _ => Err(&self.0),
       }
    }
 }
 
 impl<'a> LocalName<'a> {
-   pub fn new(segments: SmallVec<&'a str, 4>) -> Self {
-      Self(segments)
+   pub fn new(segments: SmallVec<impl Into<Cow<'a, str>>, 4>) -> Self {
+      Self(segments.into_iter().map(Into::into).collect())
    }
 
    pub fn plain(s: &'a str) -> Self {
