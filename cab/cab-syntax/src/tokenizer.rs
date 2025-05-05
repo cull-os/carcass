@@ -142,7 +142,7 @@ impl<'a> Tokenizer<'a> {
       Some(next)
    }
 
-   fn consume_delimited_part(&mut self) -> Option<Kind> {
+   fn consume_delimited_segment(&mut self) -> Option<Kind> {
       match self
          .peek_character()
          .expect("caller must ensure there is content")
@@ -189,7 +189,7 @@ impl<'a> Tokenizer<'a> {
             return TOKEN_CONTENT;
          }
 
-         if let Some(kind) = self.consume_delimited_part() {
+         if let Some(kind) = self.consume_delimited_segment() {
             return kind;
          }
       }
@@ -211,7 +211,7 @@ impl<'a> Tokenizer<'a> {
             return TOKEN_CONTENT;
          }
 
-         if let Some(kind) = self.consume_delimited_part() {
+         if let Some(kind) = self.consume_delimited_segment() {
             return kind;
          }
       }
@@ -229,7 +229,7 @@ impl<'a> Tokenizer<'a> {
             return TOKEN_CONTENT;
          }
 
-         if let Some(kind) = self.consume_delimited_part() {
+         if let Some(kind) = self.consume_delimited_segment() {
             return kind;
          }
       }
