@@ -12,7 +12,10 @@ use crate::{
       LINE_WIDTH,
       LINE_WIDTH_MAX,
    },
-   style::StyleExt as _,
+   style::{
+      StyleExt as _,
+      Styled,
+   },
    width,
 };
 
@@ -21,7 +24,7 @@ const LINE_WIDTH_NEEDED: NonZeroUsize = NonZeroUsize::new(8).unwrap();
 /// [`wrap`], but with a newline before the text.
 pub fn lnwrap<'a>(
    writer: &mut dyn fmt::Write,
-   parts: impl IntoIterator<Item = yansi::Painted<&'a str>>,
+   parts: impl IntoIterator<Item = Styled<&'a str>>,
 ) -> fmt::Result {
    writeln!(writer)?;
    wrap(writer, parts)
@@ -31,7 +34,7 @@ pub fn lnwrap<'a>(
 /// wrapping at the max line width.
 pub fn wrap<'a>(
    writer: &mut dyn fmt::Write,
-   parts: impl IntoIterator<Item = yansi::Painted<&'a str>>,
+   parts: impl IntoIterator<Item = Styled<&'a str>>,
 ) -> fmt::Result {
    use None as Space;
    use Some as Word;
