@@ -6,12 +6,6 @@ use std::{
    ptr,
 };
 
-use cab_report::Report;
-use cab_span::Span;
-use cab_util::{
-   Lazy,
-   force_ref,
-};
 use derive_more::Deref;
 use num::Num as _;
 
@@ -20,7 +14,6 @@ use crate::{
    red,
 };
 
-const EXPECT_CONTENT_VALID: &str = "content token must be valid";
 const EXPECT_INTEGER_VALID: &str = "integer token must be valid";
 const EXPECT_FLOAT_VALID: &str = "float token must be valid";
 
@@ -135,85 +128,9 @@ token! {
 
 // CONTENT
 
-/// A part of a content. Can either be a literal or an escape.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ContentPart<'a> {
-   /// A literal. Exactly the same as the source code.
-   Literal(&'a str),
-   /// An escape. Encoded by the source code.
-   Escape(char),
-}
-
-#[must_use]
-pub fn escape(c: char) -> Option<char> {
-   Some(match c {
-      ' ' => ' ',
-      '0' => '\0',
-      't' => '\t',
-      'n' => '\n',
-      'r' => '\r',
-      '`' => '`',
-      '"' => '\"',
-      '\'' => '\'',
-      '\\' => '\\',
-
-      _ => return None,
-   })
-}
-
 token! {
    #[from(TOKEN_CONTENT)]
-   /// Content of a delimited stringlike.
    struct Content;
-}
-
-impl Content {
-   #[must_use]
-   pub fn value(text: &str) -> String {
-      let mut string = String::with_capacity(text.len());
-
-      let mut literal_start_offset = 0;
-
-      let mut chars = text.char_indices().peekable();
-      while let Some((offset, c)) = chars.next() {
-         if c != '\\' {
-            continue;
-         }
-
-         string.push_str(&text[literal_start_offset..offset]);
-         literal_start_offset = offset;
-
-         let c = chars.next().expect(EXPECT_CONTENT_VALID).1;
-         string.push(escape(c).expect(EXPECT_CONTENT_VALID));
-         literal_start_offset += '\\'.len_utf8() + c.len_utf8();
-      }
-
-      string.push_str(&text[literal_start_offset..text.len()]);
-      string
-   }
-
-   pub fn validate(span: Span, text: &str, report: &mut Lazy!(Report)) {
-      let mut chars = text.char_indices().peekable();
-      while let Some((offset, c)) = chars.next() {
-         if c != '\\' {
-            continue;
-         }
-
-         match chars.next() {
-            Some((_, c)) if escape(c).is_some() => {},
-
-            next @ (Some(_) | None) => {
-               force_ref!(report).push_primary(
-                  Span::at(
-                     span.start + offset,
-                     1 + next.map_or(0, |(_, c)| c.len_utf8()),
-                  ),
-                  "invalid escape",
-               );
-            },
-         }
-      }
-   }
 }
 
 // INTEGER

@@ -29,36 +29,36 @@ impl LocalName<'_> {
       ) {
          (Ok(name), Ok(other_name)) => name == other_name,
 
-         // Return true if `name` *can* contain all `parts` in order,
+         // Return true if `name` *can* contain all `segments` in order,
          // possibly with arbitrary text in between.
          //
          // Can never return false positives, aka can never return true for two
          // names that will *never* match.
-         (Ok(name), Err(parts)) | (Err(parts), Ok(name)) => {
+         (Ok(name), Err(segments)) | (Err(segments), Ok(name)) => {
             let mut offset = 0;
 
-            for part in &parts[..parts.len() - 1] {
-               match name[offset..].find(part) {
-                  Some(idx) => offset += idx + part.len(),
+            for segment in &segments[..segments.len() - 1] {
+               match name[offset..].find(segment) {
+                  Some(idx) => offset += idx + segment.len(),
 
                   None => return false,
                }
             }
 
-            let last = parts.last().expect("len was statically checked");
+            let last = segments.last().expect("len was statically checked");
 
             name.ends_with(last) && name.len() - last.len() >= offset
          },
 
-         (Err(parts), Err(other_parts)) => {
+         (Err(segments), Err(other_segments)) => {
             ({
-               let first = &parts[0];
-               let other_first = &other_parts[0];
+               let first = &segments[0];
+               let other_first = &other_segments[0];
 
                first.starts_with(other_first) || other_first.starts_with(first)
             } && {
-               let last = parts.last().expect("len was statically checked");
-               let other_last = other_parts.last().expect("len was statically checked");
+               let last = segments.last().expect("len was statically checked");
+               let other_last = other_segments.last().expect("len was statically checked");
 
                last.starts_with(other_last) || other_last.starts_with(last)
             })
@@ -80,8 +80,8 @@ impl<'this, 'a> TryInto<&'a str> for &'this LocalName<'a> {
 }
 
 impl<'a> LocalName<'a> {
-   pub fn new(parts: SmallVec<&'a str, 4>) -> Self {
-      Self(parts)
+   pub fn new(segments: SmallVec<&'a str, 4>) -> Self {
+      Self(segments)
    }
 
    pub fn plain(s: &'a str) -> Self {

@@ -15,9 +15,12 @@ use cab_span::{
    IntoSpan as _,
    Span,
 };
-use cab_syntax::node::{
-   self,
-   Parted as _,
+use cab_syntax::{
+   node,
+   segment::{
+      Segment,
+      Segmented as _,
+   },
 };
 
 use crate::{
@@ -420,31 +423,25 @@ impl<'a> Compiler<'a> {
    fn emit_path(&mut self, path: &'a node::Path) {
       self.emit_thunk(path.span(), |this| {
          if let Some(root) = path.root() {
-            let parts = root
-               .type_()
-               .parts()
-               .filter(|part| !part.is_delimiter())
-               .collect::<Vec<_>>();
+            let segments = root.type_().segments().into_iter().collect::<Vec<_>>();
 
-            for part in &parts {
-               match *part {
-                  node::InterpolatedPartRef::Content(content) => {
-                     this.emit_push(content.span(), Value::String(content.text().into()));
+            for segment in &segments {
+               match *segment {
+                  Segment::Content { span, ref content } => {
+                     this.emit_push(span, Value::String(content.as_str().into()));
                   },
 
-                  node::InterpolatedPartRef::Interpolation(interpolation) => {
+                  Segment::Interpolation(interpolation) => {
                      this.emit_scope(interpolation.span(), |this| {
                         this.emit_force(interpolation.expression());
                      });
                   },
-
-                  node::InterpolatedPartRef::Delimiter(_) => {},
                }
             }
 
-            if parts.len() != 1 || !parts[0].is_content() {
+            if segments.len() != 1 || !segments[0].is_content() {
                this.push_operation(path.span(), Operation::Interpolate);
-               this.push_u64(parts.len() as _);
+               this.push_u64(segments.len() as _);
             }
 
             if let Some(config) = root.config() {
@@ -460,35 +457,30 @@ impl<'a> Compiler<'a> {
             }
          }
 
-         let parts = path
+         let segments = path
             .content()
             .expect(EXPECT_VALID)
-            .parts()
-            .filter(|part| !part.is_delimiter())
+            .segments()
+            .into_iter()
             .collect::<Vec<_>>();
 
-         for part in &parts {
-            match *part {
-               node::InterpolatedPartRef::Content(content) => {
-                  this.emit_push(
-                     content.span(),
-                     value::Path::rootless(content.text().into()).into(),
-                  );
+         for segment in &segments {
+            match *segment {
+               Segment::Content { span, ref content } => {
+                  this.emit_push(span, value::Path::rootless(content.as_str().into()).into());
                },
 
-               node::InterpolatedPartRef::Interpolation(interpolation) => {
+               Segment::Interpolation(interpolation) => {
                   this.emit_scope(interpolation.span(), |this| {
                      this.emit_force(interpolation.expression());
                   });
                },
-
-               node::InterpolatedPartRef::Delimiter(_) => {},
             }
          }
 
-         if parts.len() != 1 || !parts[0].is_content() {
+         if segments.len() != 1 || !segments[0].is_content() {
             this.push_operation(path.span(), Operation::Interpolate);
-            this.push_u64(parts.len() as _);
+            this.push_u64(segments.len() as _);
          }
 
          if path.root().is_some() {
@@ -512,37 +504,32 @@ impl<'a> Compiler<'a> {
             },
 
             node::IdentifierValueRef::Quoted(quoted) => {
-               let parts = quoted
-                  .parts()
-                  .filter(|part| !part.is_delimiter())
-                  .collect::<Vec<_>>();
+               let segments = quoted.segments().into_iter().collect::<Vec<_>>();
 
-               for part in &parts {
-                  match *part {
-                     node::InterpolatedPartRef::Content(content) => {
+               for segment in &segments {
+                  match *segment {
+                     Segment::Content { span, ref content } => {
                         this.emit_push(
-                           content.span(),
+                           span,
                            if is_bind {
-                              Value::Bind(content.text().into())
+                              Value::Bind(content.as_str().into())
                            } else {
-                              Value::Reference(content.text().into())
+                              Value::Reference(content.as_str().into())
                            },
                         );
                      },
 
-                     node::InterpolatedPartRef::Interpolation(interpolation) => {
+                     Segment::Interpolation(interpolation) => {
                         this.emit_scope(interpolation.span(), |this| {
                            this.emit_force(interpolation.expression());
                         });
                      },
-
-                     node::InterpolatedPartRef::Delimiter(_) => {},
                   }
                }
 
-               if parts.len() != 1 || !parts[0].is_content() {
+               if segments.len() != 1 || !segments[0].is_content() {
                   this.push_operation(span, Operation::Interpolate);
-                  this.push_u64(parts.len() as _);
+                  this.push_u64(segments.len() as _);
                }
 
                if !is_bind {
@@ -550,11 +537,11 @@ impl<'a> Compiler<'a> {
                }
 
                LocalName::new(
-                  parts
+                  segments
                      .into_iter()
-                     .filter_map(|part| {
-                        match part {
-                           node::InterpolatedPartRef::Content(content) => Some(content.text()),
+                     .filter_map(|segment| {
+                        match segment {
+                           Segment::Content { content, .. } => todo!(), // Some(content.as_str()),
 
                            _ => None,
                         }
@@ -587,49 +574,28 @@ impl<'a> Compiler<'a> {
    }
 
    fn emit_string(&mut self, string: &'a node::SString) {
-      // self.emit_thunk(string.span(), |this| {
-      //    let mut contents = string.parts().filter(|part| part.is_content());
+      self.emit_thunk(string.span(), |this| {
+         let segments = string.segments().into_iter().collect::<Vec<_>>();
 
-      //    let parts = string.validate(None);
-      //    let mut part_count: usize = 0;
+         for segment in &segments {
+            match *segment {
+               Segment::Content { span, ref content } => {
+                  this.emit_push(span, Value::String(content.as_str().into()));
+               },
 
-      //    let mut buffer = String::new();
+               Segment::Interpolation(interpolation) => {
+                  this.emit_scope(interpolation.span(), |this| {
+                     this.emit_force(interpolation.expression());
+                  });
+               },
+            }
+         }
 
-      //    for part in parts {
-      //       match part {
-      //          node::StringPart::Literal(s) => buffer.push_str(&s),
-
-      //          node::StringPart::Interpolation(interpolation) => {
-      //             this.emit_push(
-      //                contents.next().unwrap().span(),
-      //                Value::String(buffer.as_str().into()),
-      //             );
-
-      //             part_count += 1;
-
-      //             this.emit_scope(interpolation.span(), |this| {
-      //                this.emit_force(interpolation.expression());
-      //             });
-
-      //             part_count += 1;
-      //          },
-      //       }
-      //    }
-
-      //    if !buffer.is_empty() {
-      //       this.emit_push(
-      //          contents.next().unwrap().span(),
-      //          Value::String(buffer.as_str().into()),
-      //       );
-
-      //       part_count += 1;
-      //    }
-
-      //    if part_count != 1 {
-      //       this.push_operation(string.span(), Operation::Interpolate);
-      //       this.push_u64(part_count as _);
-      //    }
-      // });
+         if segments.len() != 1 || !segments[0].is_content() {
+            this.push_operation(string.span(), Operation::Interpolate);
+            this.push_u64(segments.len() as _);
+         }
+      });
    }
 
    fn emit_if(&mut self, if_: &'a node::If) {

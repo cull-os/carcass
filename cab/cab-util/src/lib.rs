@@ -1,4 +1,10 @@
 mod lazy;
+mod reffed;
+
+#[doc(hidden)]
+pub mod private {
+   pub use paste::paste;
+}
 
 /// A macro to make mass redeclarations of a collection of identifiers using a
 /// single method more concise.

@@ -6,6 +6,7 @@
    if_let_guard,
    lazy_get,
    lazy_cell_into_inner,
+   impl_trait_in_assoc_type,
    let_chains,
    trait_alias
 )]
@@ -28,6 +29,8 @@ pub use self::{
 
 pub mod node;
 mod noder;
+
+pub mod segment;
 
 pub mod token;
 mod tokenizer;
