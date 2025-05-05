@@ -165,10 +165,12 @@ impl<'a> IntoIterator for Segments<'a> {
             }
          }
 
-         yield Segment::Content {
-            span:    buffer_span.take().unwrap(),
-            content: buffer,
-         };
+         if let Some(span) = buffer_span {
+            yield Segment::Content {
+               span,
+               content: buffer,
+            };
+         }
       }
    }
 }
