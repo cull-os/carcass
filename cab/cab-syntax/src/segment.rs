@@ -272,7 +272,6 @@ impl Segments<'_> {
             };
 
             if indent != c {
-               dbg!(indent, c);
                force_ref!(report).push_primary(
                   self.span,
                   "cannot mix different kinds of whitespace in indents",
