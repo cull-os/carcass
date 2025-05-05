@@ -1,11 +1,16 @@
+use std::borrow::Cow;
+
 use cab_report::Report;
 use cab_span::{
    IntoSpan as _,
    Span,
 };
-use cab_syntax::node::{
-   self,
-   Parted as _,
+use cab_syntax::{
+   node,
+   segment::{
+      Segment,
+      Segmented as _,
+   },
 };
 use smallvec::{
    SmallVec,
@@ -29,15 +34,16 @@ impl<'a> From<node::ExpressionRef<'a>> for Boolean<'a> {
          return Self::Other(expression);
       };
 
-      let content: SmallVec<&str, 4> = match identifier.value() {
-         node::IdentifierValueRef::Plain(plain) => smallvec![plain.text()],
+      let content: SmallVec<Cow<'_, str>, 4> = match identifier.value() {
+         node::IdentifierValueRef::Plain(plain) => smallvec![plain.text().into()],
 
          node::IdentifierValueRef::Quoted(quoted) => {
             quoted
-               .parts()
-               .filter_map(|part| {
-                  match part {
-                     node::InterpolatedPartRef::Content(content) => Some(content.text()),
+               .segments()
+               .into_iter()
+               .filter_map(|segment| {
+                  match segment {
+                     Segment::Content { content, .. } => Some(content.into()),
 
                      _ => None,
                   }
@@ -50,7 +56,7 @@ impl<'a> From<node::ExpressionRef<'a>> for Boolean<'a> {
          return Self::Other(expression);
       }
 
-      match content[0] {
+      match content[0].as_ref() {
          "true" => Self::True(expression),
          "false" => Self::False(expression),
          _ => Self::Other(expression),

@@ -272,6 +272,9 @@ dependencies = [
 [[package]]
 name = "cab-util"
 version = "0.0.1"
+dependencies = [
+ "paste",
+]
 
 [[package]]
 name = "cc"
