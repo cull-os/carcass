@@ -901,7 +901,10 @@ impl Path {
       }
 
       if let Some(content) = self.content() {
-         content.segments().validate(&mut report, to);
+         let segments = content.segments();
+         segments.validate(&mut report, to);
+
+         assert!(!segments.is_multiline);
       }
 
       if let Some(report) = read!(report) {
