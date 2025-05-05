@@ -16,6 +16,7 @@ use cab_util::{
    force,
    lazy,
    read,
+   ready,
    reffed,
 };
 use derive_more::Deref;
@@ -1070,24 +1071,26 @@ impl Rune {
          force!(report).push_primary(self.span(), "runes cannot cannot contain newlines");
       }
 
-      let mut got: usize = 0;
-      for segment in segments {
-         match segment {
-            Segment::Content { content, .. } => {
-               got += content.chars().count();
-            },
+      if !ready!(report) {
+         let mut got: usize = 0;
+         for segment in segments {
+            match segment {
+               Segment::Content { content, .. } => {
+                  got += content.chars().count();
+               },
 
-            Segment::Interpolation(interpolation) => {
-               force!(report)
-                  .push_primary(interpolation.span(), "runes cannot contain interpolation");
-            },
+               Segment::Interpolation(interpolation) => {
+                  force!(report)
+                     .push_primary(interpolation.span(), "runes cannot contain interpolation");
+               },
+            }
          }
-      }
 
-      match got {
-         0 => force!(report).push_primary(self.span(), "empty rune"),
-         1 => {},
-         _ => force!(report).push_primary(self.span(), "too long"),
+         match got {
+            0 => force!(report).push_primary(self.span(), "empty rune"),
+            1 => {},
+            _ => force!(report).push_primary(self.span(), "too long"),
+         }
       }
 
       if let Some(report) = read!(report) {
