@@ -543,7 +543,7 @@ impl<'a> Compiler<'a> {
                         match segment {
                            Segment::Content { content, .. } => todo!(), // Some(content.as_str()),
 
-                           _ => None,
+                           Segment::Interpolation(_) => None,
                         }
                      })
                      .collect(),

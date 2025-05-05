@@ -209,7 +209,8 @@ impl<'a> IntoIterator for Segments<'a> {
 
 impl Segments<'_> {
    fn calculate_indent(&self) -> Indent {
-      let mut indent = None::<(char, usize)>;
+      let mut indent = None::<char>;
+      let mut indent_width = None::<usize>;
 
       for straight in &self.straights {
          let &Straight::Content {
@@ -221,25 +222,29 @@ impl Segments<'_> {
             continue;
          };
 
+         let mut line_indent_width: usize = 0;
+
          for c in text.chars() {
             if !c.is_whitespace() {
                break;
             }
 
-            let &mut Some((indent, ref mut indent_width)) = &mut indent else {
-               indent.replace((c, 1));
-               continue;
-            };
+            line_indent_width += 1;
 
-            assert_eq!(indent, c);
-            *indent_width += 1;
+            match indent {
+               None => indent = Some(c),
+               Some(indent) => assert_eq!(indent, c),
+            }
+         }
+
+         if let Some(width) = indent_width {
+            indent_width.replace(width.min(line_indent_width));
+         } else {
+            indent_width.replace(line_indent_width);
          }
       }
 
-      match indent {
-         Some((c, width)) => (Some(c), width),
-         None => (None, 0),
-      }
+      (indent, indent_width.unwrap_or(0))
    }
 
    pub fn validate(&self, report: &mut Lazy!(Report), to: &mut Vec<Report>) {
