@@ -881,9 +881,11 @@ impl Path {
    get_node! { content -> Option<&PathContent> }
 
    pub fn validate(&self, to: &mut Vec<Report>) {
-      let mut report = lazy!(Report::error("invalid path root"));
+      let mut report = lazy!(Report::error("invalid path"));
 
       if let Some(root) = self.root() {
+         let mut report = lazy!(Report::error("invalid path root"));
+
          let segments = root.type_().segments();
          segments.validate(&mut report, to);
 
@@ -899,10 +901,19 @@ impl Path {
          if let Some(path) = root.path() {
             path.validate(to);
          }
+
+         if let Some(report) = read!(report) {
+            to.push(report);
+         }
       }
 
       if let Some(content) = self.content() {
-         let segments = content.segments();
+         let mut segments = content.segments();
+
+         // FIXME: ../foo/bar\<newline-here> gets detected as a multiline
+         // segment, even though it is actually escaped (and errors) later.
+         segments.is_multiline = false;
+
          segments.validate(&mut report, to);
 
          assert!(!segments.is_multiline);
