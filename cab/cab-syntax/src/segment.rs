@@ -125,35 +125,6 @@ impl Straight<'_> {
          text
       }
    }
-
-   fn validate(&self, report: &mut Lazy!(Report), to: &mut Vec<Report>) {
-      match *self {
-         Straight::Content { span, text, .. } => {
-            let mut chars = text.char_indices().peekable();
-            while let Some((offset, c)) = chars.next() {
-               if c != '\\' {
-                  continue;
-               }
-
-               match chars.next() {
-                  Some((_, c)) if escape_character(c).is_some() => {},
-
-                  next @ (Some(_) | None) => {
-                     force_ref!(report).push_primary(
-                        Span::at(
-                           span.start + offset,
-                           1 + next.map_or(0, |(_, c)| c.len_utf8()),
-                        ),
-                        "invalid escape",
-                     );
-                  },
-               }
-            }
-         },
-
-         Straight::Interpolation(interpolation) => interpolation.expression().validate(to),
-      }
-   }
 }
 
 pub struct Segments<'a> {
@@ -249,7 +220,32 @@ impl Segments<'_> {
 
    pub fn validate(&self, report: &mut Lazy!(Report), to: &mut Vec<Report>) {
       for straight in &self.straights {
-         straight.validate(report, to);
+         match *straight {
+            Straight::Content { span, text, .. } => {
+               let mut chars = text.char_indices().peekable();
+               while let Some((offset, c)) = chars.next() {
+                  if c != '\\' {
+                     continue;
+                  }
+
+                  match chars.next() {
+                     Some((_, c)) if escape_character(c).is_some() => {},
+
+                     next @ (Some(_) | None) => {
+                        force_ref!(report).push_primary(
+                           Span::at(
+                              span.start + offset,
+                              1 + next.map_or(0, |(_, c)| c.len_utf8()),
+                           ),
+                           "invalid escape",
+                        );
+                     },
+                  }
+               }
+            },
+
+            Straight::Interpolation(interpolation) => interpolation.expression().validate(to),
+         }
 
          let Straight::Content {
             text,
