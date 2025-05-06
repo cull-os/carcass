@@ -528,7 +528,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
    }
 
    fn node_if(&mut self, until: EnumSet<Kind>) {
-      let then_else_binding_power = node::InfixOperator::Same.binding_power().0 + 1;
+      let if_then_else_binding_power = node::InfixOperator::Same.binding_power().0 + 1;
 
       self.node(NODE_IF, |this| {
          this.next_expect(
@@ -537,7 +537,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
          );
 
          this.node_expression_binding_power(
-            then_else_binding_power,
+            if_then_else_binding_power,
             until | Kind::EXPRESSIONS | TOKEN_KEYWORD_THEN | TOKEN_KEYWORD_ELSE,
          );
 
@@ -547,13 +547,13 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
          );
 
          this.node_expression_binding_power(
-            then_else_binding_power,
+            if_then_else_binding_power,
             until | Kind::EXPRESSIONS | TOKEN_KEYWORD_ELSE,
          );
 
          this.next_expect(TOKEN_KEYWORD_ELSE.into(), until | Kind::EXPRESSIONS);
 
-         this.node_expression_binding_power(then_else_binding_power, until);
+         this.node_expression_binding_power(if_then_else_binding_power, until);
       });
    }
 
