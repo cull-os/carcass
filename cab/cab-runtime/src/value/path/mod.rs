@@ -6,7 +6,6 @@ use cab_report::{
    Error,
    Result,
    bail,
-   error,
 };
 
 use super::Value;
@@ -15,16 +14,6 @@ use super::Value;
 pub trait Root: Send + Sync + 'static {
    async fn list(self: Arc<Self>, content: &str) -> Result<Arc<[Path]>> {
       bail!("TODO list '{content:?}' error")
-   }
-
-   async fn get(self: Arc<Self>, content: &str) -> Result<Path> {
-      let list = self.list(content).await?;
-
-      list
-         .iter()
-         .find(|entry| &*entry.content == content)
-         .cloned()
-         .ok_or_else(|| error!("TODO get '{content:?}' error"))
    }
 
    async fn read(self: Arc<Self>, content: &str) -> Result<Bytes> {
@@ -70,6 +59,37 @@ impl Path {
       Self {
          root: None,
          content,
+      }
+   }
+}
+
+impl Path {
+   pub async fn read(&self) -> Result<Bytes> {
+      let Some(root) = self.root.clone() else {
+         bail!("tried to read rootless path");
+      };
+
+      root.read(&self.content).await
+   }
+
+   pub async fn list(&self) -> Result<Arc<[Path]>> {
+      let Some(root) = self.root.clone() else {
+         bail!("tried to list rootless path");
+      };
+
+      root.list(&self.content).await
+   }
+
+   #[must_use]
+   pub fn get(&self, content: &str) -> Self {
+      let mut content_ = String::with_capacity(self.content.len() + content.len());
+
+      content_.push_str(&self.content);
+      content_.push_str(content);
+
+      Self {
+         root:    self.root.clone(),
+         content: content_.into(),
       }
    }
 }
