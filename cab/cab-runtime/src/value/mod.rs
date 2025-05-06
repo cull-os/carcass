@@ -4,7 +4,10 @@ mod attributes;
 pub use attributes::Attributes;
 
 mod path;
-pub use path::Path;
+pub use path::{
+   Path,
+   Root,
+};
 
 mod thunk;
 pub use thunk::Thunk;
