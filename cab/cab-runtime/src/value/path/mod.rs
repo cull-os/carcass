@@ -12,6 +12,12 @@ use super::Value;
 
 #[async_trait]
 pub trait Root: Send + Sync + 'static {
+   fn type_(&self) -> String;
+
+   fn config(&self) -> Value;
+
+   fn path(&self) -> Value;
+
    async fn list(self: Arc<Self>, content: &str) -> Result<Arc<[Path]>> {
       bail!("TODO list '{content:?}' error")
    }
@@ -64,6 +70,19 @@ impl Path {
 }
 
 impl Path {
+   #[must_use]
+   pub fn get(&self, content: &str) -> Self {
+      let mut content_ = String::with_capacity(self.content.len() + content.len());
+
+      content_.push_str(&self.content);
+      content_.push_str(content);
+
+      Self {
+         root:    self.root.clone(),
+         content: content_.into(),
+      }
+   }
+
    pub async fn read(&self) -> Result<Bytes> {
       let Some(root) = self.root.clone() else {
          bail!("tried to read rootless path");
@@ -78,18 +97,5 @@ impl Path {
       };
 
       root.list(&self.content).await
-   }
-
-   #[must_use]
-   pub fn get(&self, content: &str) -> Self {
-      let mut content_ = String::with_capacity(self.content.len() + content.len());
-
-      content_.push_str(&self.content);
-      content_.push_str(content);
-
-      Self {
-         root:    self.root.clone(),
-         content: content_.into(),
-      }
    }
 }
