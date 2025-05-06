@@ -1,4 +1,4 @@
-//! Text and report formatting utilities and data types.
+//! Report utilities.
 
 #![feature(
    gen_blocks,

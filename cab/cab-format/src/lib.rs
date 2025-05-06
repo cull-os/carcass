@@ -1,3 +1,5 @@
+//! Text formatting.
+
 #![feature(iter_intersperse, if_let_guard, let_chains)]
 
 mod color;
@@ -26,6 +28,7 @@ pub use wrap::{
    wrap,
 };
 
+/// Initialize data required to format text.
 pub fn init() {
    style::init();
 }

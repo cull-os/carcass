@@ -2,6 +2,8 @@ use cab_util::as_;
 use num::traits::AsPrimitive;
 use unicode_segmentation::UnicodeSegmentation as _;
 
+/// Calculates the width of the number when formatted with the default
+/// formatter.
 #[expect(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 pub fn number_width(number: impl AsPrimitive<f64>) -> usize {
    as_!(number);
@@ -13,6 +15,9 @@ pub fn number_width(number: impl AsPrimitive<f64>) -> usize {
    }
 }
 
+/// Calculates the width of the number when formatted with the hex formatter.
+///
+/// Width does not include `0x` prefix, so beware.
 #[expect(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 pub fn number_hex_width(number: impl AsPrimitive<f64>) -> usize {
    as_!(number);
@@ -28,6 +33,7 @@ pub fn is_emoji(s: &str) -> bool {
    !s.is_ascii() && s.chars().any(unic_emoji_char::is_emoji)
 }
 
+/// Calculates the width of the string on a best-effort basis.
 #[must_use]
 pub fn width(s: &str) -> usize {
    s.graphemes(true)

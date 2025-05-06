@@ -1,3 +1,5 @@
+//! Text styling.
+
 #[doc(inline)]
 pub use yansi::{
    Attribute,
