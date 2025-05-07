@@ -179,6 +179,7 @@ dependencies = [
  "derive_more",
  "itertools",
  "num",
+ "paste",
  "terminal_size",
  "unic-emoji-char",
  "unicode-segmentation",

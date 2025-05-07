@@ -5,6 +5,7 @@ use std::{
 };
 
 use itertools::Itertools as _;
+use paste::paste;
 
 use crate::width;
 
@@ -102,55 +103,71 @@ pub fn stderr() -> View<impl fmt::Write> {
    fd(io::stderr())
 }
 
-pub trait DisplayView {
-   fn fmt(&self, writer: &mut dyn WriteView) -> fmt::Result;
+macro_rules! impl_view {
+   ($type:ident, $ident:ident) => {
+      paste! {
+         pub trait [<$type View>] {
+            fn $ident(&self, writer: &mut dyn WriteView) -> fmt::Result;
 
-   fn width(&self, width: usize) -> impl fmt::Display + '_
-   where
-      Self: Sized,
-   {
-      struct DisplayTerminal<'a, D: DisplayView> {
-         display: &'a D,
-         width:   usize,
-      }
+            fn [<$ident _width>](&self, width: usize) -> impl fmt::$type + '_
+            where
+               Self: Sized,
+            {
+               struct Terminal<'a, D: [<$type View>]> {
+                  $ident: &'a D,
+                  width:   usize,
+               }
 
-      impl<D: DisplayView> fmt::Display for DisplayTerminal<'_, D> {
-         fn fmt(&self, writer: &mut fmt::Formatter<'_>) -> fmt::Result {
-            let mut viewed = View::from(writer);
+               impl<D: [<$type View>]> fmt::$type for Terminal<'_, D> {
+                  fn fmt(&self, writer: &mut fmt::Formatter<'_>) -> fmt::Result {
+                     let mut viewed = View::from(writer);
 
-            viewed.width = self.width;
+                     viewed.width = self.width;
 
-            DisplayView::fmt(self.display, &mut viewed)
+                     [<$type View>]::$ident(self.$ident, &mut viewed)
+                  }
+               }
+
+               Terminal {
+                  $ident: self,
+                  width,
+               }
+            }
+
+            fn [<$ident _terminal_width>](&self) -> impl fmt::$type + '_
+            where
+               Self: Sized,
+            {
+               if let Some((width, _)) = terminal_size::terminal_size() {
+                  self.[<$ident _width>](width.0 as _)
+               } else {
+                  self.[<$ident _width>](usize::MAX)
+               }
+            }
+
+            fn [<$ident _free_width>](&self) -> impl fmt::$type + '_
+            where
+               Self: Sized,
+            {
+               self.[<$ident _width>](usize::MAX)
+            }
          }
       }
+   };
+}
 
-      DisplayTerminal {
-         display: self,
-         width,
-      }
-   }
+impl_view!(Display, display);
 
-   fn terminal_width(&self) -> impl fmt::Display + '_
-   where
-      Self: Sized,
-   {
-      if let Some((width, _)) = terminal_size::terminal_size() {
-         self.width(width.0 as _)
-      } else {
-         self.width(usize::MAX)
-      }
-   }
-
-   fn free_width(&self) -> impl fmt::Display + '_
-   where
-      Self: Sized,
-   {
-      self.width(usize::MAX)
+impl<D: fmt::Display> DisplayView for D {
+   fn display(&self, writer: &mut dyn WriteView) -> fmt::Result {
+      write!(writer, "{self}")
    }
 }
 
-impl<D: fmt::Display> DisplayView for D {
-   fn fmt(&self, writer: &mut dyn WriteView) -> fmt::Result {
-      write!(writer, "{self}")
+impl_view!(Debug, debug);
+
+impl<D: fmt::Debug> DebugView for D {
+   fn debug(&self, writer: &mut dyn WriteView) -> fmt::Result {
+      write!(writer, "{self:?}")
    }
 }

@@ -68,7 +68,7 @@ pub struct Code {
 }
 
 impl DisplayView for Code {
-   fn fmt(&self, writer: &mut dyn WriteView) -> fmt::Result {
+   fn display(&self, writer: &mut dyn WriteView) -> fmt::Result {
       let mut codes = VecDeque::from([(0_u64, self)]);
 
       while let Some((code_index, code)) = codes.pop_back() {

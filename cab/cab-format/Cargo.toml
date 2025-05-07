@@ -16,6 +16,7 @@ cab-util.path = "../cab-util"
 derive_more.workspace          = true
 itertools.workspace            = true
 num.workspace                  = true
+paste.workspace                = true
 terminal_size.workspace        = true
 unic-emoji-char.workspace      = true
 unicode-segmentation.workspace = true

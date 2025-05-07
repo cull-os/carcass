@@ -356,7 +356,7 @@ pub struct ReportLocated<L: DisplayView> {
 }
 
 impl<L: DisplayView> DisplayView for ReportLocated<L> {
-   fn fmt(&self, writer: &mut dyn WriteView) -> fmt::Result {
+   fn display(&self, writer: &mut dyn WriteView) -> fmt::Result {
       {
          // INDENT: "<note|warn|error|bug>: "
          indent!(writer, header = self.severity.header());
@@ -450,7 +450,7 @@ impl<L: DisplayView> DisplayView for ReportLocated<L> {
                [
                   self
                      .location
-                     .free_width()
+                     .display_free_width()
                      .to_string()
                      .as_str()
                      .style(style::HEADER_PATH),
