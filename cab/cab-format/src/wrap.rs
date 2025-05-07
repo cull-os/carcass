@@ -1,17 +1,16 @@
 use std::{
-   fmt,
+   fmt::{
+      self,
+      Write as _,
+   },
    num::NonZeroUsize,
-   sync::atomic,
 };
 
 use cab_util::into_iter;
 use unicode_segmentation::UnicodeSegmentation as _;
 
 use crate::{
-   private::{
-      LINE_WIDTH,
-      LINE_WIDTH_MAX,
-   },
+   Write,
    style::{
       StyleExt as _,
       Styled,
@@ -23,7 +22,7 @@ const LINE_WIDTH_NEEDED: NonZeroUsize = NonZeroUsize::new(8).unwrap();
 
 /// [`wrap`], but with a newline before the text.
 pub fn lnwrap<'a>(
-   writer: &mut dyn fmt::Write,
+   writer: &mut dyn Write,
    parts: impl IntoIterator<Item = Styled<&'a str>>,
 ) -> fmt::Result {
    writeln!(writer)?;
@@ -33,7 +32,7 @@ pub fn lnwrap<'a>(
 /// Writes the given iterator of colored words into the writer, splicing and
 /// wrapping at the max line width.
 pub fn wrap<'a>(
-   writer: &mut dyn fmt::Write,
+   writer: &mut dyn Write,
    parts: impl IntoIterator<Item = Styled<&'a str>>,
 ) -> fmt::Result {
    use None as Space;
@@ -41,15 +40,15 @@ pub fn wrap<'a>(
 
    into_iter!(parts);
 
-   let line_width_start = LINE_WIDTH.load(atomic::Ordering::Acquire);
+   let line_width_start = writer.width();
    let mut line_width = line_width_start;
 
-   let line_width_max = if line_width_start + LINE_WIDTH_NEEDED.get() <= *LINE_WIDTH_MAX {
-      *LINE_WIDTH_MAX
+   let line_width_max = if line_width_start + LINE_WIDTH_NEEDED.get() <= writer.width_max() {
+      writer.width_max()
    } else {
       // If we can't even write LINE_WIDTH_NEEDED amount just assume the line is
       // double the worst case width.
-      (*LINE_WIDTH_MAX + LINE_WIDTH_NEEDED.get()) * 2
+      (writer.width_max() + LINE_WIDTH_NEEDED.get()) * 2
    };
 
    let mut parts = parts

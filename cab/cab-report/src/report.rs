@@ -2,7 +2,6 @@ use std::{
    borrow::Cow,
    cell::RefCell,
    cmp,
-   error,
    fmt::{
       self,
       Write as _,
@@ -12,6 +11,8 @@ use std::{
 };
 
 use cab_format::{
+   Display,
+   Write,
    dedent,
    indent,
    lnwrap,
@@ -165,7 +166,7 @@ impl Report {
       self.point(Point::help(text))
    }
 
-   pub fn locate<L: fmt::Display>(self, location: L, source: &PositionStr<'_>) -> ReportLocated<L> {
+   pub fn locate<L: Display>(self, location: L, source: &PositionStr<'_>) -> ReportLocated<L> {
       ReportLocated::from(self, source, location)
    }
 }
@@ -343,7 +344,7 @@ struct Line {
 }
 
 #[derive(Clone)]
-pub struct ReportLocated<L: fmt::Display> {
+pub struct ReportLocated<L: Display + 'static> {
    severity: ReportSeverity,
    title:    Cow<'static, str>,
 
@@ -354,8 +355,8 @@ pub struct ReportLocated<L: fmt::Display> {
    points: SmallVec<Point, 2>,
 }
 
-impl<L: fmt::Display> fmt::Display for ReportLocated<L> {
-   fn fmt(&self, writer: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl<L: Display + 'static> Display for ReportLocated<L> {
+   fn fmt(&self, writer: &mut dyn Write) -> fmt::Result {
       {
          // INDENT: "<note|warn|error|bug>: "
          indent!(writer, header = self.severity.header());
@@ -374,11 +375,11 @@ impl<L: fmt::Display> fmt::Display for ReportLocated<L> {
       indent!(
          writer,
          line_number_width + 3,
-         with = |writer: &mut dyn fmt::Write| {
+         with = |mut writer: &mut dyn Write| {
             let line_number = *line_number.borrow();
             borrow_mut!(line_number_previous);
 
-            style::GUTTER.fmt_prefix(writer)?;
+            style::GUTTER.fmt_prefix(&mut writer)?;
             match line_number {
                // Don't write the current line number, just print spaces instead.
                None => {
@@ -418,7 +419,7 @@ impl<L: fmt::Display> fmt::Display for ReportLocated<L> {
             }
 
             write!(writer, " {TOP_TO_BOTTOM} ")?;
-            style::GUTTER.fmt_suffix(writer)?;
+            style::GUTTER.fmt_suffix(&mut writer)?;
 
             if let Some(line_number) = line_number {
                line_number_previous.replace(line_number);
@@ -442,12 +443,15 @@ impl<L: fmt::Display> fmt::Display for ReportLocated<L> {
                continuation = const_str::concat!(TOP_TO_BOTTOM).style(style::GUTTER),
             );
 
-            writeln!(writer)?;
+            writeln!(writer as &mut dyn Write)?;
 
             wrap(
                writer,
                [
-                  self.location.to_string().as_str().style(style::HEADER_PATH),
+                  (&self.location as &dyn Display)
+                     .to_string()
+                     .as_str()
+                     .style(style::HEADER_PATH),
                   ":".styled(),
                   line
                      .number
@@ -465,7 +469,7 @@ impl<L: fmt::Display> fmt::Display for ReportLocated<L> {
             )?;
          }
 
-         writeln!(writer)?;
+         writeln!(writer as &mut dyn Write)?;
          writer.write_indent()?;
       }
 
@@ -484,7 +488,7 @@ impl<L: fmt::Display> fmt::Display for ReportLocated<L> {
          indent!(
             writer,
             strike_prefix_width + 1,
-            with = |writer: &mut dyn fmt::Write| {
+            with = |writer: &mut dyn Write| {
                const STRIKE_OVERRIDE_DEFAULT: Styled<char> = Styled::new(' ');
 
                let mut strike_override = None::<Styled<char>>;
@@ -565,7 +569,7 @@ impl<L: fmt::Display> fmt::Display for ReportLocated<L> {
                line_number.borrow_mut().replace(line.number);
 
                // Explicitly write the indent because the line may be empty.
-               writeln!(writer)?;
+               writeln!(writer as &mut dyn Write)?;
                writer.write_indent()?;
                wrap(
                   writer,
@@ -612,7 +616,7 @@ impl<L: fmt::Display> fmt::Display for ReportLocated<L> {
                      indent!(
                         writer,
                         strike_prefix_width,
-                        with = |writer: &mut dyn fmt::Write| {
+                        with = |writer: &mut dyn Write| {
                            // Write all strikes up to the index of the one we are going to redirect
                            // to the right.
                            for slot in strike_prefix.borrow().iter().take(top_to_right_index) {
@@ -660,7 +664,7 @@ impl<L: fmt::Display> fmt::Display for ReportLocated<L> {
                         //
                         // + 1 because we want a space after the <top-to-bottom>.
                         *span_end as usize + 2,
-                        with = |writer: &mut dyn fmt::Write| {
+                        with = |writer: &mut dyn Write| {
                            for index in 0..*span_end {
                               write!(
                                  writer,
@@ -722,7 +726,7 @@ impl<L: fmt::Display> fmt::Display for ReportLocated<L> {
                      indent!(
                         writer,
                         strike_prefix_width + 1,
-                        with = |writer: &mut dyn fmt::Write| {
+                        with = |writer: &mut dyn Write| {
                            for slot in &*strike_prefix.borrow() {
                               write!(
                                  writer,
@@ -748,7 +752,7 @@ impl<L: fmt::Display> fmt::Display for ReportLocated<L> {
                         // + 1 if the label is zero-width. The <top-left-to-right> will be placed
                         //   after the span.
                         *span_end as usize + usize::from(span_start == span_end) + 1,
-                        with = |writer: &mut dyn fmt::Write| {
+                        with = |writer: &mut dyn Write| {
                            for index in 0..*span_end - u32::from(span_start != span_end) {
                               write!(
                                  writer,
@@ -815,7 +819,7 @@ impl<L: fmt::Display> fmt::Display for ReportLocated<L> {
       // Write the points.
       {
          if !self.points.is_empty() {
-            writeln!(writer)?;
+            writeln!(writer as &mut dyn Write)?;
             writer.write_indent()?;
          }
 
@@ -837,15 +841,7 @@ impl<L: fmt::Display> fmt::Display for ReportLocated<L> {
    }
 }
 
-impl<L: fmt::Display> fmt::Debug for ReportLocated<L> {
-   fn fmt(&self, writer: &mut fmt::Formatter<'_>) -> fmt::Result {
-      fmt::Display::fmt(self, writer)
-   }
-}
-
-impl<L: fmt::Display> error::Error for ReportLocated<L> {}
-
-impl<L: fmt::Display> ReportLocated<L> {
+impl<L: Display> ReportLocated<L> {
    fn from(report: Report, source: &PositionStr<'_>, location: L) -> Self {
       let mut labels: SmallVec<_, 2> = report
          .labels
