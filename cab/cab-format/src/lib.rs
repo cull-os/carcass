@@ -99,7 +99,7 @@ impl<W: fmt::Write> From<W> for View<W> {
    }
 }
 
-pub struct WriteFmt<T>(T);
+struct WriteFmt<T>(T);
 
 impl<W: io::Write> fmt::Write for WriteFmt<W> {
    fn write_str(&mut self, s: &str) -> fmt::Result {
@@ -107,11 +107,13 @@ impl<W: io::Write> fmt::Write for WriteFmt<W> {
    }
 }
 
+/// Constructs a new handle to the standard output of the current process.
 #[must_use]
 pub fn stdout() -> View<impl fmt::Write> {
    View::from(WriteFmt(io::stdout()))
 }
 
+/// Constructs a new handle to the standard error of the current process.
 #[must_use]
 pub fn stderr() -> View<impl fmt::Write> {
    View::from(WriteFmt(io::stderr()))

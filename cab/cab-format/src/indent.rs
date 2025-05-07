@@ -17,6 +17,8 @@ pub enum IndentPlace {
 /// will be printed as spaces.
 ///
 /// If it is higher than that number, the [`IndentWriter`] will panic.
+///
+/// [`indent!`]: crate::indent!
 pub type IndentWith<'a> = &'a mut dyn FnMut(&mut dyn WriteView) -> Result<usize, fmt::Error>;
 
 /// An indent writer.
