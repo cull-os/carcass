@@ -14,6 +14,7 @@ cab-span.path = "../cab-span"
 cab-util.path = "../cab-util"
 
 derive_more.workspace          = true
+itertools.workspace            = true
 num.workspace                  = true
 scopeguard.workspace           = true
 terminal_size.workspace        = true
