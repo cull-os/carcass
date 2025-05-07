@@ -44,7 +44,5 @@ pub fn init() {
 
 #[doc(hidden)]
 pub mod private {
-   pub use scopeguard::guard;
-
    pub use super::indent::IndentPlace;
 }
