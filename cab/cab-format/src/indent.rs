@@ -37,10 +37,10 @@ pub struct IndentWriter<'a> {
 
 impl fmt::Write for IndentWriter<'_> {
    fn write_str(&mut self, s: &str) -> fmt::Result {
-      use None as New;
+      use None as Newline;
       use Some as Line;
 
-      for line in s.split('\n').map(Line).intersperse(New) {
+      for line in s.split('\n').map(Line).intersperse(Newline) {
          match self.place {
             IndentPlace::Start
                if let Line(line) = line
@@ -58,7 +58,7 @@ impl fmt::Write for IndentWriter<'_> {
          }
 
          match line {
-            New => self.place = IndentPlace::End,
+            Newline => self.place = IndentPlace::End,
 
             Line(line) => {
                write!(self.writer, "{line}")?;
