@@ -67,7 +67,7 @@ impl Compile {
 
          report
             .locate(location.clone(), source)
-            .fmt(writer)
+            .display(writer)
             .context("failed to write report")?;
 
          write!(writer, "\n\n").context("failed to write report")?;

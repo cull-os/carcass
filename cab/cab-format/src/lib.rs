@@ -1,6 +1,6 @@
 //! Text formatting.
 
-#![feature(if_let_guard, let_chains)]
+#![feature(gen_blocks, if_let_guard, let_chains)]
 #![allow(unstable_name_collisions)] // Itertools::intersperse
 
 mod color;
@@ -22,8 +22,17 @@ pub use width_::{
    width,
 };
 
+mod document;
+pub use document::{
+   Tag,
+   TagCondition,
+   TagData,
+   Tags,
+};
+
 mod view;
 pub use view::{
+   DebugView,
    DisplayView,
    View,
    WriteView,

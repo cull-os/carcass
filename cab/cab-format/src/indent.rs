@@ -175,13 +175,13 @@ macro_rules! indent {
    };
 
    ($writer:ident, $count:expr) => {
-      $crate::indent!($writer, $count, with = |_| Ok(0));
+      $crate::indent!($writer, $count, with = |_| Ok(0_usize));
    };
 
    ($writer:ident, $count:expr,with = $with:expr) => {
       let $writer = &mut $crate::IndentWriter {
          writer: $writer,
-         with:   &mut $with as $crate::IndentWith<'_>,
+         with:   &mut $with,
          count:  $count,
          place:  $crate::private::IndentPlace::Start,
       };

@@ -106,7 +106,7 @@ async fn main() -> report::Termination {
             &source,
          )?;
 
-         code.fmt(&mut out).context(FAIL_STDOUT)?;
+         code.display(&mut out).context(FAIL_STDOUT)?;
       },
 
       Command::Dump { path, command } => {
