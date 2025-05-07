@@ -1,13 +1,6 @@
 //! Report utilities.
 
-#![feature(
-   gen_blocks,
-   if_let_guard,
-   iter_intersperse,
-   let_chains,
-   trait_alias,
-   try_trait_v2
-)]
+#![feature(gen_blocks, if_let_guard, let_chains, trait_alias, try_trait_v2)]
 
 #[cfg(feature = "error")] mod error;
 #[cfg(feature = "error")]
