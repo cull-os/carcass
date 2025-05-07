@@ -12,6 +12,8 @@ use std::{
 };
 
 use cab_format::{
+   DisplayView,
+   WriteView,
    dedent,
    indent,
    number_hex_width,
@@ -65,8 +67,8 @@ pub struct Code {
    values: Vec<Value>,
 }
 
-impl fmt::Display for Code {
-   fn fmt(&self, writer: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl DisplayView for Code {
+   fn fmt(&self, writer: &mut dyn WriteView) -> fmt::Result {
       let mut codes = VecDeque::from([(0_u64, self)]);
 
       while let Some((code_index, code)) = codes.pop_back() {
@@ -78,7 +80,7 @@ impl fmt::Display for Code {
          indent!(
             writer,
             index_width + 3,
-            with = |writer: &mut dyn fmt::Write| {
+            with = |writer: &mut dyn WriteView| {
                let index = *index.borrow();
 
                let style = if highlighted.borrow().contains(&index) {

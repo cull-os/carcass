@@ -1,9 +1,6 @@
-use std::fmt::{
-   self,
-   Write as _,
-};
+use std::fmt;
 
-use crate::Write;
+use crate::WriteView;
 
 #[doc(hidden)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -13,21 +10,19 @@ pub enum IndentPlace {
    End,
 }
 
-/// The type that is accepted by [`indent_with`] to print indent prefixes.
+/// The type that is accepted by [`indent!`] to print indent prefixes.
 ///
 /// Returns a number, which is the amount of spaces (indents) it has written.
 /// If the number is smaller than the [`IndentWriter`] count, the diff
 /// will be printed as spaces.
 ///
 /// If it is higher than that number, the [`IndentWriter`] will panic.
-pub type IndentWith<'a> = &'a mut dyn FnMut(&mut dyn Write) -> Result<usize, fmt::Error>;
+pub type IndentWith<'a> = &'a mut dyn FnMut(&mut dyn WriteView) -> Result<usize, fmt::Error>;
 
 /// An indent writer.
-///
-/// TODO: Explain how it behaves properly.
 pub struct IndentWriter<'a> {
    #[doc(hidden)]
-   pub writer: &'a mut dyn Write,
+   pub writer: &'a mut dyn WriteView,
    #[doc(hidden)]
    pub with:   IndentWith<'a>,
    #[doc(hidden)]
@@ -36,20 +31,8 @@ pub struct IndentWriter<'a> {
    pub place:  IndentPlace,
 }
 
-impl Write for IndentWriter<'_> {
-   fn width(&self) -> usize {
-      self.writer.width()
-   }
-
-   fn width_set(&mut self, width: usize) {
-      self.writer.width_set(width);
-   }
-
-   fn width_max(&self) -> usize {
-      self.writer.width_max()
-   }
-
-   fn write_width(&mut self, s: &str) -> fmt::Result {
+impl fmt::Write for IndentWriter<'_> {
+   fn write_str(&mut self, s: &str) -> fmt::Result {
       use None as New;
       use Some as Line;
 
@@ -83,6 +66,20 @@ impl Write for IndentWriter<'_> {
    }
 }
 
+impl WriteView for IndentWriter<'_> {
+   fn width(&self) -> usize {
+      if self.place == IndentPlace::Start {
+         self.writer.width() + self.count
+      } else {
+         self.writer.width()
+      }
+   }
+
+   fn width_max(&self) -> usize {
+      self.writer.width_max()
+   }
+}
+
 impl IndentWriter<'_> {
    /// Asserts that it is at the start of the line and writes the indent.
    ///
@@ -106,38 +103,6 @@ impl IndentWriter<'_> {
       self.place = IndentPlace::Middle;
 
       Ok(())
-   }
-}
-
-/// Creates an [`IndentWriter`] with the given [`Write`] and indent count.
-pub fn indent(writer: &mut dyn Write, count: usize) -> IndentWriter<'_> {
-   static mut ZERO_INDENTER: IndentWith<'static> = &mut |_| Ok(0);
-
-   IndentWriter {
-      writer,
-      // SAFETY: ZERO_INDENTER does not modify anything and the pointee of self.writer in Writer
-      // is never replaced. Therefore we can use it, because without writes you can't have
-      // race conditions.
-      with: unsafe { ZERO_INDENTER },
-      count,
-      place: IndentPlace::Start,
-   }
-}
-
-/// Creates an [`IndentWriter`] with the given [`Write`], indent count and
-/// [`IndentWith`].
-///
-/// Consult the documentation on [`IndentWith`] to learn what it is used for.
-pub fn indent_with<'a>(
-   writer: &'a mut dyn Write,
-   count: usize,
-   with: IndentWith<'a>,
-) -> IndentWriter<'a> {
-   IndentWriter {
-      writer,
-      with,
-      count,
-      place: IndentPlace::Start,
    }
 }
 
@@ -190,7 +155,7 @@ macro_rules! indent {
       indent!(
          $writer,
          header_width + 1,
-         with = |writer: &mut dyn $crate::Write| {
+         with = |writer: &mut dyn $crate::WriteView| {
             if !wrote {
                write!(writer, "{header}")?;
 

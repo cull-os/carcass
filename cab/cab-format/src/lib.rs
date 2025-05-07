@@ -2,8 +2,12 @@
 
 #![feature(iter_intersperse, if_let_guard, let_chains)]
 
+use std::{
+   fmt,
+   io,
+};
+
 mod color;
-use std::fmt;
 
 pub use color::COLORS;
 
@@ -11,8 +15,6 @@ mod indent;
 pub use indent::{
    IndentWith,
    IndentWriter,
-   indent,
-   indent_with,
 };
 
 pub mod style;
@@ -35,52 +37,22 @@ pub fn init() {
    style::init();
 }
 
-pub trait Write {
+pub trait WriteView: fmt::Write {
    fn width(&self) -> usize;
-   fn width_set(&mut self, width: usize);
 
    fn width_max(&self) -> usize;
-
-   fn write_width(&mut self, s: &str) -> fmt::Result;
 }
 
-impl fmt::Write for dyn Write + '_ {
-   fn write_str(&mut self, s: &str) -> fmt::Result {
-      self.write_width(s)
-   }
-}
-
-pub trait Display {
-   fn fmt(&self, writer: &mut dyn Write) -> fmt::Result;
-}
-
-impl fmt::Display for dyn Display {
-   fn fmt(&self, writer: &mut fmt::Formatter<'_>) -> fmt::Result {
-      Display::fmt(self, &mut WriteImpl::from(writer as &mut dyn fmt::Write))
-   }
-}
-
-struct WriteImpl<'a> {
-   writer: &'a mut dyn fmt::Write,
+#[derive(Debug, Clone)]
+pub struct View<W: fmt::Write> {
+   writer: W,
 
    width:     usize,
    width_max: usize,
 }
 
-impl Write for WriteImpl<'_> {
-   fn width(&self) -> usize {
-      self.width
-   }
-
-   fn width_max(&self) -> usize {
-      self.width_max
-   }
-
-   fn width_set(&mut self, width: usize) {
-      self.width = width;
-   }
-
-   fn write_width(&mut self, s: &str) -> fmt::Result {
+impl<W: fmt::Write> fmt::Write for View<W> {
+   fn write_str(&mut self, s: &str) -> fmt::Result {
       use None as Newline;
       use Some as Line;
 
@@ -91,11 +63,11 @@ impl Write for WriteImpl<'_> {
                self.writer.write_str(line)?;
 
                if segments.peek().is_none() {
-                  self.width_set(self.width() + width(line));
+                  self.width += width(line);
                }
             },
 
-            Newline => self.width_set(0),
+            Newline => self.width = 0,
          }
       }
 
@@ -103,25 +75,90 @@ impl Write for WriteImpl<'_> {
    }
 }
 
-impl<'a> From<&'a mut dyn fmt::Write> for WriteImpl<'a> {
-   fn from(writer: &'a mut dyn fmt::Write) -> Self {
+impl<W: fmt::Write> WriteView for View<W> {
+   fn width(&self) -> usize {
+      self.width
+   }
+
+   fn width_max(&self) -> usize {
+      self.width_max
+   }
+}
+
+impl<W: fmt::Write> From<W> for View<W> {
+   fn from(writer: W) -> Self {
       Self {
          writer,
+
          width: 0,
          width_max: usize::MAX,
       }
    }
 }
 
-impl WriteImpl<'_> {
-   #[must_use]
-   fn width_max_viewport(mut self) -> Self {
-      let Some((width, _)) = terminal_size::terminal_size() else {
-         return self;
+pub struct WriteFmt<T>(T);
+
+impl<W: io::Write> fmt::Write for WriteFmt<W> {
+   fn write_str(&mut self, s: &str) -> fmt::Result {
+      self.0.write_all(s.as_bytes()).map_err(|_| fmt::Error)
+   }
+}
+
+#[must_use]
+pub fn stdout() -> View<impl fmt::Write> {
+   View::from(WriteFmt(io::stdout()))
+}
+
+#[must_use]
+pub fn stderr() -> View<impl fmt::Write> {
+   View::from(WriteFmt(io::stderr()))
+}
+
+pub trait DisplayView {
+   fn fmt(&self, writer: &mut dyn WriteView) -> fmt::Result;
+
+   fn view_width(&self, width: usize) -> impl fmt::Display + '_
+   where
+      Self: Sized,
+   {
+      struct DisplayTerminal<'a, D: DisplayView> {
+         display: &'a D,
+         width:   usize,
+      }
+
+      impl<D: DisplayView> fmt::Display for DisplayTerminal<'_, D> {
+         fn fmt(&self, writer: &mut fmt::Formatter<'_>) -> fmt::Result {
+            let mut viewed = View::from(writer);
+
+            viewed.width = self.width;
+
+            DisplayView::fmt(self.display, &mut viewed)
+         }
+      }
+
+      DisplayTerminal {
+         display: self,
+         width,
+      }
+   }
+
+   fn view_terminal(&self) -> impl fmt::Display + '_
+   where
+      Self: Sized,
+   {
+      let width = if let Some((width, _)) = terminal_size::terminal_size() {
+         width.0 as _
+      } else {
+         usize::MAX
       };
 
-      self.width_max = width.0 as _;
-      self
+      self.view_width(width)
+   }
+}
+
+impl<D: fmt::Display> DisplayView for D {
+   fn fmt(&self, writer: &mut dyn WriteView) -> fmt::Result {
+      write!(writer, "{self}")
    }
 }
 

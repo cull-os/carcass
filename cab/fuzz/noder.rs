@@ -8,7 +8,6 @@ use std::{
       Hash as _,
       Hasher as _,
    },
-   io,
    path::Path,
    sync::Arc,
 };
@@ -41,7 +40,8 @@ fuzz_target!(|source: &str| -> Corpus {
       Ok("true" | "1"),
    );
 
-   let Ok(expression) = parse.println(&mut io::stdout(), island::display!(island), &source) else {
+   let Ok(expression) = parse.println(&mut format::stdout(), &island::display!(island), &source)
+   else {
       return if save_valid {
          Corpus::Reject
       } else {
