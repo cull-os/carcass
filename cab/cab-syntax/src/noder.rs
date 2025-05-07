@@ -48,7 +48,7 @@ pub struct Parse {
 }
 
 impl Parse {
-   pub fn println(
+   pub fn extractlnln(
       self,
       writer: &mut impl WriteView,
       location: &(impl DisplayView + Clone),

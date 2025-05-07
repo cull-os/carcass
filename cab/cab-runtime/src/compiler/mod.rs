@@ -54,7 +54,7 @@ pub struct Compile {
 }
 
 impl Compile {
-   pub fn println(
+   pub fn extractlnln(
       self,
       writer: &mut impl WriteView,
       location: &(impl DisplayView + Clone),
