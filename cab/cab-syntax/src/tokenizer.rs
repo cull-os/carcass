@@ -316,7 +316,7 @@ impl<'a> Tokenizer<'a> {
          c if c.is_whitespace() => {
             self.consume_while(char::is_whitespace);
 
-            TOKEN_WHITESPACE
+            TOKEN_SPACE
          },
 
          '#' if self.peek_character() == Some('=') => {
@@ -580,11 +580,11 @@ mod tests {
          "0b__e 0x0 0x123.0e 0o777.0e",
          (TOKEN_ERROR_NUMBER_NO_DIGIT, "0b__"),
          (TOKEN_IDENTIFIER, "e"),
-         (TOKEN_WHITESPACE, " "),
+         (TOKEN_SPACE, " "),
          (TOKEN_INTEGER, "0x0"),
-         (TOKEN_WHITESPACE, " "),
+         (TOKEN_SPACE, " "),
          (TOKEN_FLOAT, "0x123.0e"), // e is a valid hexadecimal digit.
-         (TOKEN_WHITESPACE, " "),
+         (TOKEN_SPACE, " "),
          (TOKEN_ERROR_FLOAT_NO_EXPONENT, "0o777.0e")
       );
    }
