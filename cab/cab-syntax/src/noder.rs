@@ -1,11 +1,12 @@
-use std::{
-   fmt::{
-      self,
-      Write as _,
-   },
-   io,
+use std::fmt::{
+   self,
+   Write as _,
 };
 
+use cab_format::{
+   Display,
+   Write,
+};
 use cab_report::{
    Contextful as _,
    PositionStr,
@@ -52,8 +53,8 @@ pub struct Parse {
 impl Parse {
    pub fn println(
       self,
-      writer: &mut impl io::Write,
-      location: impl fmt::Display + Clone,
+      writer: &mut impl Write,
+      location: impl Display + Clone + 'static,
       source: &PositionStr<'_>,
    ) -> Result<node::Expression> {
       let mut fail = 0;
@@ -62,7 +63,7 @@ impl Parse {
          fail += usize::from(report.severity >= ReportSeverity::Error);
 
          write!(
-            writer,
+            writer as &dyn fmt::Write,
             "{report}\n\n",
             report = report.locate(location.clone(), source),
          )

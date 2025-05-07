@@ -1,9 +1,9 @@
-use std::{
-   fmt,
-   sync::atomic,
+use std::fmt::{
+   self,
+   Write as _,
 };
 
-use crate::private::LINE_WIDTH;
+use crate::Write;
 
 #[doc(hidden)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -20,32 +20,36 @@ pub enum IndentPlace {
 /// will be printed as spaces.
 ///
 /// If it is higher than that number, the [`IndentWriter`] will panic.
-pub type IndentWith<'scope> =
-   &'scope mut dyn FnMut(&mut dyn fmt::Write) -> Result<usize, fmt::Error>;
+pub type IndentWith<'a> = &'a mut dyn FnMut(&mut dyn Write) -> Result<usize, fmt::Error>;
 
 /// An indent writer.
 ///
 /// TODO: Explain how it behaves properly.
-pub struct IndentWriter<'scope> {
+pub struct IndentWriter<'a> {
    #[doc(hidden)]
-   pub writer: &'scope mut dyn fmt::Write,
+   pub writer: &'a mut dyn Write,
    #[doc(hidden)]
-   pub with:   IndentWith<'scope>,
+   pub with:   IndentWith<'a>,
    #[doc(hidden)]
    pub count:  usize,
    #[doc(hidden)]
    pub place:  IndentPlace,
 }
 
-impl Drop for IndentWriter<'_> {
-   fn drop(&mut self) {
-      let width = LINE_WIDTH.load(atomic::Ordering::SeqCst);
-      LINE_WIDTH.store(width.saturating_sub(self.count), atomic::Ordering::SeqCst);
+impl Write for IndentWriter<'_> {
+   fn width(&self) -> usize {
+      self.writer.width()
    }
-}
 
-impl fmt::Write for IndentWriter<'_> {
-   fn write_str(&mut self, s: &str) -> fmt::Result {
+   fn width_set(&mut self, width: usize) {
+      self.writer.width_set(width);
+   }
+
+   fn width_max(&self) -> usize {
+      self.writer.width_max()
+   }
+
+   fn write_width(&mut self, s: &str) -> fmt::Result {
       use None as New;
       use Some as Line;
 
@@ -105,11 +109,9 @@ impl IndentWriter<'_> {
    }
 }
 
-/// Creates an [`IndentWriter`] with the given [`fmt::Write`] and indent count.
-pub fn indent(writer: &mut dyn fmt::Write, count: usize) -> IndentWriter<'_> {
+/// Creates an [`IndentWriter`] with the given [`Write`] and indent count.
+pub fn indent(writer: &mut dyn Write, count: usize) -> IndentWriter<'_> {
    static mut ZERO_INDENTER: IndentWith<'static> = &mut |_| Ok(0);
-
-   LINE_WIDTH.fetch_add(count, atomic::Ordering::SeqCst);
 
    IndentWriter {
       writer,
@@ -122,17 +124,15 @@ pub fn indent(writer: &mut dyn fmt::Write, count: usize) -> IndentWriter<'_> {
    }
 }
 
-/// Creates an [`IndentWriter`] with the given [`fmt::Write`], indent count and
+/// Creates an [`IndentWriter`] with the given [`Write`], indent count and
 /// [`IndentWith`].
 ///
 /// Consult the documentation on [`IndentWith`] to learn what it is used for.
-pub fn indent_with<'scope>(
-   writer: &'scope mut dyn fmt::Write,
+pub fn indent_with<'a>(
+   writer: &'a mut dyn Write,
    count: usize,
-   with: IndentWith<'scope>,
-) -> IndentWriter<'scope> {
-   LINE_WIDTH.fetch_add(count, atomic::Ordering::SeqCst);
-
+   with: IndentWith<'a>,
+) -> IndentWriter<'a> {
    IndentWriter {
       writer,
       with,
@@ -190,7 +190,7 @@ macro_rules! indent {
       indent!(
          $writer,
          header_width + 1,
-         with = |writer: &mut dyn std::fmt::Write| {
+         with = |writer: &mut dyn $crate::Write| {
             if !wrote {
                write!(writer, "{header}")?;
 
@@ -206,22 +206,23 @@ macro_rules! indent {
    };
 
    ($writer:ident, $count:expr) => {
-      let $writer = &mut $crate::indent($writer, $count);
+      $crate::indent!($writer, $count, with = |_| Ok(0));
    };
 
    ($writer:ident, $count:expr,with = $with:expr) => {
-      let with = &mut $with;
-
-      let $writer = &mut $crate::indent_with($writer, $count, with);
+      let $writer = &mut $crate::IndentWriter {
+         writer: $writer,
+         with:   &mut $with as $crate::IndentWith<'_>,
+         count:  $count,
+         place:  $crate::private::IndentPlace::Start,
+      };
    };
 }
 
 #[macro_export]
 macro_rules! dedent {
    ($writer:ident) => {
-      let writer: &mut $crate::IndentWriter<'_> = $writer;
-
-      $crate::dedent!($writer, writer.count, discard = true);
+      $crate::dedent!($writer, $writer.count, discard = true);
    };
 
    ($writer:ident, $dedent:expr) => {
@@ -229,28 +230,15 @@ macro_rules! dedent {
    };
 
    ($writer:ident, $dedent:expr,discard = $discard:literal) => {
-      let dedent: usize = $dedent;
-      let discard: bool = $discard;
-
-      let old_count = $crate::private::LINE_WIDTH.load(std::sync::atomic::Ordering::SeqCst);
-      $crate::private::LINE_WIDTH.store(
-         old_count.saturating_sub(dedent),
-         std::sync::atomic::Ordering::SeqCst,
-      );
-
-      let _guard = $crate::private::guard((), |_| {
-         $crate::private::LINE_WIDTH.store(old_count, std::sync::atomic::Ordering::SeqCst);
-      });
-
       let $writer = &mut $crate::IndentWriter {
          writer: $writer.writer,
 
          count: $writer
             .count
-            .checked_sub(dedent)
+            .checked_sub($dedent)
             .expect("dedent must be smaller than indent"),
 
-         with: if discard {
+         with: if $discard {
             &mut move |_| Ok(0)
          } else {
             $writer.with
