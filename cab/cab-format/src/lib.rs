@@ -67,7 +67,10 @@ impl<W: fmt::Write> fmt::Write for View<W> {
                }
             },
 
-            Newline => self.width = 0,
+            Newline => {
+               self.writer.write_char('\n')?;
+               self.width = 0;
+            },
          }
       }
 

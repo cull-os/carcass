@@ -59,12 +59,12 @@ impl Parse {
       for report in self.reports {
          fail += usize::from(report.severity >= ReportSeverity::Error);
 
-         write!(writer, "\n\n").context("failed to write report")?;
-
          report
             .locate(location.clone(), source)
             .fmt(writer)
             .context("failed to write report")?;
+
+         write!(writer, "\n\n").context("failed to write report")?;
       }
 
       if fail > 0 {
