@@ -1,6 +1,7 @@
 //! Text formatting.
 
-#![feature(iter_intersperse, if_let_guard, let_chains)]
+#![feature(if_let_guard, let_chains)]
+#![allow(unstable_name_collisions)] // Itertools::intersperse
 
 mod color;
 

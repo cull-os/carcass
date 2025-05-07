@@ -1,5 +1,7 @@
 use std::fmt;
 
+use itertools::Itertools as _;
+
 use crate::WriteView;
 
 #[doc(hidden)]

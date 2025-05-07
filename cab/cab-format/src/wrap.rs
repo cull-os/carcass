@@ -4,6 +4,7 @@ use std::{
 };
 
 use cab_util::into_iter;
+use itertools::Itertools as _;
 use unicode_segmentation::UnicodeSegmentation as _;
 
 use crate::{
@@ -32,6 +33,42 @@ pub fn wrap<'a>(
    writer: &mut dyn WriteView,
    parts: impl IntoIterator<Item = Styled<&'a str>>,
 ) -> fmt::Result {
+   use None as Newline;
+   use Some as Word;
+
+   let mut parts = parts
+      .into_iter()
+      .flat_map(|part| {
+         part
+            .value
+            .split('\n')
+            .map(move |word| Word(word.style(part.style)))
+            .intersperse(Newline)
+      })
+      .peekable();
+
+   while parts.peek().is_some() {
+      wrap_line(
+         writer,
+         parts
+            .by_ref()
+            .take_while_inclusive(|&part| matches!(part, Word(_)))
+            .map(|part| {
+               match part {
+                  Word(word) => word,
+                  Newline => "\n".styled(),
+               }
+            }),
+      )?;
+   }
+
+   Ok(())
+}
+
+fn wrap_line<'a>(
+   writer: &mut dyn WriteView,
+   parts: impl IntoIterator<Item = Styled<&'a str>>,
+) -> fmt::Result {
    use None as Space;
    use Some as Word;
 
@@ -51,7 +88,7 @@ pub fn wrap<'a>(
       .flat_map(|part| {
          part
             .value
-            .split([' ', '\n']) // TODO: Handle newlines properly.
+            .split(' ')
             .map(move |word| Word(word.style(part.style)))
             .intersperse(Space)
       })

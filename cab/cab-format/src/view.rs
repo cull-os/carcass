@@ -1,7 +1,10 @@
 use std::{
    fmt,
    io,
+   os::fd::AsFd,
 };
+
+use itertools::Itertools as _;
 
 use crate::width;
 
@@ -31,7 +34,7 @@ impl<W: fmt::Write> fmt::Write for View<W> {
                self.writer.write_str(line)?;
 
                if segments.peek().is_none() {
-                  self.width += width(line);
+                  self.width = self.width.saturating_add(width(line));
                }
             },
 
@@ -75,16 +78,28 @@ impl<W: io::Write> fmt::Write for WriteFmt<W> {
    }
 }
 
-/// Constructs a new handle to the standard output of the current process.
-#[must_use]
-pub fn stdout() -> View<impl fmt::Write> {
-   View::from(WriteFmt(io::stdout()))
+/// Constructs a new view to the given file descriptor.
+pub fn fd(fd: impl AsFd + io::Write) -> View<impl fmt::Write> {
+   let view_size = terminal_size::terminal_size_of(&fd);
+   let mut view = View::from(WriteFmt(fd));
+
+   if let Some((width, _)) = view_size {
+      view.width_max = width.0 as _;
+   }
+
+   view
 }
 
-/// Constructs a new handle to the standard error of the current process.
+/// Constructs a new view to the standard output of the current process.
+#[must_use]
+pub fn stdout() -> View<impl fmt::Write> {
+   fd(io::stdout())
+}
+
+/// Constructs a new view to the standard error of the current process.
 #[must_use]
 pub fn stderr() -> View<impl fmt::Write> {
-   View::from(WriteFmt(io::stderr()))
+   fd(io::stderr())
 }
 
 pub trait DisplayView {
