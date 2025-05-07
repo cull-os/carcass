@@ -68,7 +68,7 @@ enum Dump {
 async fn main() -> report::Termination {
    let cli = Cli::parse();
 
-   format::init();
+   cab::init();
 
    let mut out = format::stdout();
    let mut err = format::stderr();
