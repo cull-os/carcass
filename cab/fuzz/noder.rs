@@ -40,7 +40,8 @@ fuzz_target!(|source: &str| -> Corpus {
       Ok("true" | "1"),
    );
 
-   let Ok(expression) = parse.println(&mut format::stdout(), &island::display!(island), &source)
+   let Ok(expression) =
+      parse.extractlnln(&mut format::stdout(), &island::display!(island), &source)
    else {
       return if save_valid {
          Corpus::Reject

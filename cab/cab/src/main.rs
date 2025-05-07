@@ -93,14 +93,14 @@ async fn main() -> report::Termination {
          let source = report::PositionStr::new(&source);
 
          let parse_oracle = syntax::parse_oracle();
-         let expression = parse_oracle.parse(syntax::tokenize(&source)).println(
+         let expression = parse_oracle.parse(syntax::tokenize(&source)).extractlnln(
             &mut err,
             &island::display!(leaf),
             &source,
          )?;
 
          let compile_oracle = runtime::compile_oracler();
-         let code = compile_oracle.compile(expression.as_ref()).println(
+         let code = compile_oracle.compile(expression.as_ref()).extractlnln(
             &mut err,
             &island::display!(leaf),
             &source,
@@ -143,7 +143,7 @@ async fn main() -> report::Termination {
 
             Dump::Syntax => {
                let parse_oracle = syntax::parse_oracle();
-               let expression = parse_oracle.parse(syntax::tokenize(&source)).println(
+               let expression = parse_oracle.parse(syntax::tokenize(&source)).extractlnln(
                   &mut err,
                   &island::display!(leaf),
                   &source,
