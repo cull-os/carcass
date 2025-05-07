@@ -27,7 +27,7 @@ use libfuzzer_sys::{
 };
 
 fuzz_target!(|source: &str| -> Corpus {
-   format::init();
+   cab::init();
 
    let parse_oracle = syntax::parse_oracle();
    let parse = parse_oracle.parse(syntax::tokenize(source));

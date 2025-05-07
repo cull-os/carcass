@@ -5,10 +5,7 @@ use std::{
 };
 
 use cab::{
-   format::{
-      self,
-      style::StyleExt as _,
-   },
+   format::style::StyleExt as _,
    report::{
       self,
       Contextful as _,
@@ -52,7 +49,7 @@ enum Check {
 async fn main() -> report::Termination {
    let cli = Cli::parse();
 
-   format::init();
+   cab::init();
 
    match cli.command {
       Command::Check {
