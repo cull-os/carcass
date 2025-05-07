@@ -17,7 +17,6 @@ use cab::{
    report::{
       self,
       Contextful as _,
-      PositionStr,
    },
    runtime,
    syntax,
@@ -91,7 +90,7 @@ async fn main() -> report::Termination {
             )
          })?;
 
-         let source = PositionStr::new(&source);
+         let source = report::PositionStr::new(&source);
 
          let parse_oracle = syntax::parse_oracle();
          let expression = parse_oracle.parse(syntax::tokenize(&source)).println(
@@ -126,7 +125,7 @@ async fn main() -> report::Termination {
             )
          })?;
 
-         let source = PositionStr::new(&source);
+         let source = report::PositionStr::new(&source);
 
          match command {
             Dump::Token { color } => {

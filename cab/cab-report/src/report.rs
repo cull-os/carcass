@@ -450,7 +450,7 @@ impl<L: DisplayView> DisplayView for ReportLocated<L> {
                [
                   self
                      .location
-                     .view_terminal()
+                     .free_width()
                      .to_string()
                      .as_str()
                      .style(style::HEADER_PATH),
