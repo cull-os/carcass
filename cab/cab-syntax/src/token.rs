@@ -63,16 +63,16 @@ macro_rules! token {
    };
 }
 
-// WHITESPACE
+// SPACE
 
 token! {
-   #[from(TOKEN_WHITESPACE)]
-   /// Whitespace. Anything that matches [`char::is_whitespace`].
-   struct Whitespace;
+   #[from(TOKEN_SPACE)]
+   /// Space. Anything that matches [`char::is_whitespace`].
+   struct Space;
 }
 
-impl Whitespace {
-   /// Returns the amount of lines this whitespace.
+impl Space {
+   /// Returns the amount of lines this space.
    #[must_use]
    pub fn newline_count(&self) -> usize {
       self.text().bytes().filter(|&c| c == b'\n').count() + 1

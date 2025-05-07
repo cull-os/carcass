@@ -102,8 +102,8 @@ pub enum Kind {
    TOKEN_ERROR_UNKNOWN,
 
    /// Anything that matches [`char::is_whitespace`].
-   #[display("whitespace")]
-   TOKEN_WHITESPACE,
+   #[display("space")]
+   TOKEN_SPACE,
 
    /// Anything that starts with a `#`.
    ///
@@ -415,7 +415,7 @@ impl Kind {
    /// Whether if the token should be ignored by the noder.
    #[must_use]
    pub fn is_trivia(self) -> bool {
-      matches!(self, TOKEN_COMMENT | TOKEN_WHITESPACE)
+      matches!(self, TOKEN_COMMENT | TOKEN_SPACE)
    }
 
    /// Whether if this token is erroneous.
