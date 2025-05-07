@@ -1,8 +1,5 @@
 use std::{
-   fmt::{
-      self,
-      Write as _,
-   },
+   fmt,
    num::NonZeroUsize,
 };
 
@@ -10,7 +7,7 @@ use cab_util::into_iter;
 use unicode_segmentation::UnicodeSegmentation as _;
 
 use crate::{
-   Write,
+   WriteView,
    style::{
       StyleExt as _,
       Styled,
@@ -18,11 +15,11 @@ use crate::{
    width,
 };
 
-const LINE_WIDTH_NEEDED: NonZeroUsize = NonZeroUsize::new(8).unwrap();
+const WIDTH_NEEDED: NonZeroUsize = NonZeroUsize::new(8).unwrap();
 
 /// [`wrap`], but with a newline before the text.
 pub fn lnwrap<'a>(
-   writer: &mut dyn Write,
+   writer: &mut dyn WriteView,
    parts: impl IntoIterator<Item = Styled<&'a str>>,
 ) -> fmt::Result {
    writeln!(writer)?;
@@ -30,9 +27,9 @@ pub fn lnwrap<'a>(
 }
 
 /// Writes the given iterator of colored words into the writer, splicing and
-/// wrapping at the max line width.
+/// wrapping at the max width.
 pub fn wrap<'a>(
-   writer: &mut dyn Write,
+   writer: &mut dyn WriteView,
    parts: impl IntoIterator<Item = Styled<&'a str>>,
 ) -> fmt::Result {
    use None as Space;
@@ -40,22 +37,21 @@ pub fn wrap<'a>(
 
    into_iter!(parts);
 
-   let line_width_start = writer.width();
-   let mut line_width = line_width_start;
+   let width_start = writer.width();
 
-   let line_width_max = if line_width_start + LINE_WIDTH_NEEDED.get() <= writer.width_max() {
+   let width_max = if width_start + WIDTH_NEEDED.get() <= writer.width_max() {
       writer.width_max()
    } else {
-      // If we can't even write LINE_WIDTH_NEEDED amount just assume the line is
+      // If we can't even write WIDTH_NEEDED amount just assume the width is
       // double the worst case width.
-      (writer.width_max() + LINE_WIDTH_NEEDED.get()) * 2
+      (writer.width_max() + WIDTH_NEEDED.get()) * 2
    };
 
    let mut parts = parts
       .flat_map(|part| {
          part
             .value
-            .split(' ')
+            .split([' ', '\n']) // TODO: Handle newlines properly.
             .map(move |word| Word(word.style(part.style)))
             .intersperse(Space)
       })
@@ -63,9 +59,8 @@ pub fn wrap<'a>(
 
    while let Some(part) = parts.peek_mut() {
       let Word(word) = part.as_mut() else {
-         if line_width != 0 && line_width < line_width_max {
+         if writer.width() != 0 && writer.width() < width_max {
             write!(writer, " ")?;
-            line_width += 1;
          }
 
          parts.next();
@@ -75,28 +70,24 @@ pub fn wrap<'a>(
       let word_width = width(word.value);
 
       // Word fits in current line.
-      if line_width + word_width <= line_width_max {
+      if writer.width() + word_width <= width_max {
          write!(writer, "{word}")?;
-         line_width += word_width;
 
          parts.next();
          continue;
       }
 
       // Word fits in the next line.
-      if line_width_start + word_width <= line_width_max {
+      if width_start + word_width <= width_max {
          writeln!(writer)?;
-         line_width = line_width_start;
-
          write!(writer, "{word}")?;
-         line_width += word_width;
 
          parts.next();
          continue;
       }
 
       // Word doesn't fit in the next line.
-      let line_width_remainder = line_width_max - line_width;
+      let width_remainder = width_max - writer.width();
 
       let split_index = word
          .value
@@ -105,16 +96,13 @@ pub fn wrap<'a>(
             *width += self::width(grapheme);
             Some((*width, state))
          })
-         .find_map(|(width, (split_index, _))| {
-            (width > line_width_remainder).then_some(split_index)
-         })
+         .find_map(|(width, (split_index, _))| (width > width_remainder).then_some(split_index))
          .unwrap();
 
       let (word_this, word_rest) = word.value.split_at(split_index);
 
       word.value = word_this;
       writeln!(writer, "{word}")?;
-      line_width = line_width_start;
 
       word.value = word_rest;
    }

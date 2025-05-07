@@ -1,9 +1,9 @@
-use std::{
-   borrow::Cow,
-   fmt,
-   io,
-};
+use std::borrow::Cow;
 
+use cab_format::{
+   DisplayView,
+   WriteView,
+};
 use cab_report::{
    Contextful as _,
    PositionStr,
@@ -56,8 +56,8 @@ pub struct Compile {
 impl Compile {
    pub fn println(
       self,
-      writer: &mut impl io::Write,
-      location: impl fmt::Display + Clone,
+      writer: &mut impl WriteView,
+      location: &(impl DisplayView + Clone),
       source: &PositionStr<'_>,
    ) -> Result<Code> {
       let mut fail = 0;
@@ -65,12 +65,12 @@ impl Compile {
       for report in self.reports {
          fail += usize::from(report.severity >= ReportSeverity::Error);
 
-         write!(
-            writer,
-            "{report}\n\n",
-            report = report.locate(location.clone(), source),
-         )
-         .context("failed to write report")?;
+         write!(writer, "\n\n").context("failed to write report")?;
+
+         report
+            .locate(location.clone(), source)
+            .fmt(writer)
+            .context("failed to write report")?;
       }
 
       if fail > 0 {

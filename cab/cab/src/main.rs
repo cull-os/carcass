@@ -1,8 +1,5 @@
 use std::{
-   io::{
-      self,
-      Write as _,
-   },
+   fmt::Write as _,
    path::{
       Path,
       PathBuf,
@@ -13,6 +10,7 @@ use std::{
 use cab::{
    format::{
       self,
+      DisplayView as _,
       style::StyleExt as _,
    },
    island,
@@ -73,7 +71,8 @@ async fn main() -> report::Termination {
 
    format::init();
 
-   let (mut out, mut err) = (io::stdout(), io::stderr());
+   let mut out = format::stdout();
+   let mut err = format::stderr();
 
    match cli.command {
       Command::Compile { expression: source } => {
@@ -97,18 +96,18 @@ async fn main() -> report::Termination {
          let parse_oracle = syntax::parse_oracle();
          let expression = parse_oracle.parse(syntax::tokenize(&source)).println(
             &mut err,
-            island::display!(leaf),
+            &island::display!(leaf),
             &source,
          )?;
 
          let compile_oracle = runtime::compile_oracler();
          let code = compile_oracle.compile(expression.as_ref()).println(
             &mut err,
-            island::display!(leaf),
+            &island::display!(leaf),
             &source,
          )?;
 
-         writeln!(out, "{code}").context(FAIL_STDOUT)?;
+         code.fmt(&mut out).context(FAIL_STDOUT)?;
       },
 
       Command::Dump { path, command } => {
@@ -147,7 +146,7 @@ async fn main() -> report::Termination {
                let parse_oracle = syntax::parse_oracle();
                let expression = parse_oracle.parse(syntax::tokenize(&source)).println(
                   &mut err,
-                  island::display!(leaf),
+                  &island::display!(leaf),
                   &source,
                )?;
 

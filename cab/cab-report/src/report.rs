@@ -11,8 +11,8 @@ use std::{
 };
 
 use cab_format::{
-   Display,
-   Write,
+   DisplayView,
+   WriteView,
    dedent,
    indent,
    lnwrap,
@@ -166,7 +166,7 @@ impl Report {
       self.point(Point::help(text))
    }
 
-   pub fn locate<L: Display>(self, location: L, source: &PositionStr<'_>) -> ReportLocated<L> {
+   pub fn locate<L: DisplayView>(self, location: L, source: &PositionStr<'_>) -> ReportLocated<L> {
       ReportLocated::from(self, source, location)
    }
 }
@@ -344,7 +344,7 @@ struct Line {
 }
 
 #[derive(Clone)]
-pub struct ReportLocated<L: Display + 'static> {
+pub struct ReportLocated<L: DisplayView> {
    severity: ReportSeverity,
    title:    Cow<'static, str>,
 
@@ -355,8 +355,8 @@ pub struct ReportLocated<L: Display + 'static> {
    points: SmallVec<Point, 2>,
 }
 
-impl<L: Display + 'static> Display for ReportLocated<L> {
-   fn fmt(&self, writer: &mut dyn Write) -> fmt::Result {
+impl<L: DisplayView> DisplayView for ReportLocated<L> {
+   fn fmt(&self, writer: &mut dyn WriteView) -> fmt::Result {
       {
          // INDENT: "<note|warn|error|bug>: "
          indent!(writer, header = self.severity.header());
@@ -375,11 +375,11 @@ impl<L: Display + 'static> Display for ReportLocated<L> {
       indent!(
          writer,
          line_number_width + 3,
-         with = |mut writer: &mut dyn Write| {
+         with = |writer: &mut dyn WriteView| {
             let line_number = *line_number.borrow();
             borrow_mut!(line_number_previous);
 
-            style::GUTTER.fmt_prefix(&mut writer)?;
+            style::GUTTER.fmt_prefix(writer)?;
             match line_number {
                // Don't write the current line number, just print spaces instead.
                None => {
@@ -419,7 +419,7 @@ impl<L: Display + 'static> Display for ReportLocated<L> {
             }
 
             write!(writer, " {TOP_TO_BOTTOM} ")?;
-            style::GUTTER.fmt_suffix(&mut writer)?;
+            style::GUTTER.fmt_suffix(writer)?;
 
             if let Some(line_number) = line_number {
                line_number_previous.replace(line_number);
@@ -443,12 +443,14 @@ impl<L: Display + 'static> Display for ReportLocated<L> {
                continuation = const_str::concat!(TOP_TO_BOTTOM).style(style::GUTTER),
             );
 
-            writeln!(writer as &mut dyn Write)?;
+            writeln!(writer)?;
 
             wrap(
                writer,
                [
-                  (&self.location as &dyn Display)
+                  self
+                     .location
+                     .view_terminal()
                      .to_string()
                      .as_str()
                      .style(style::HEADER_PATH),
@@ -469,7 +471,7 @@ impl<L: Display + 'static> Display for ReportLocated<L> {
             )?;
          }
 
-         writeln!(writer as &mut dyn Write)?;
+         writeln!(writer)?;
          writer.write_indent()?;
       }
 
@@ -488,7 +490,7 @@ impl<L: Display + 'static> Display for ReportLocated<L> {
          indent!(
             writer,
             strike_prefix_width + 1,
-            with = |writer: &mut dyn Write| {
+            with = |writer: &mut dyn WriteView| {
                const STRIKE_OVERRIDE_DEFAULT: Styled<char> = Styled::new(' ');
 
                let mut strike_override = None::<Styled<char>>;
@@ -569,7 +571,7 @@ impl<L: Display + 'static> Display for ReportLocated<L> {
                line_number.borrow_mut().replace(line.number);
 
                // Explicitly write the indent because the line may be empty.
-               writeln!(writer as &mut dyn Write)?;
+               writeln!(writer)?;
                writer.write_indent()?;
                wrap(
                   writer,
@@ -616,7 +618,7 @@ impl<L: Display + 'static> Display for ReportLocated<L> {
                      indent!(
                         writer,
                         strike_prefix_width,
-                        with = |writer: &mut dyn Write| {
+                        with = |writer: &mut dyn WriteView| {
                            // Write all strikes up to the index of the one we are going to redirect
                            // to the right.
                            for slot in strike_prefix.borrow().iter().take(top_to_right_index) {
@@ -664,7 +666,7 @@ impl<L: Display + 'static> Display for ReportLocated<L> {
                         //
                         // + 1 because we want a space after the <top-to-bottom>.
                         *span_end as usize + 2,
-                        with = |writer: &mut dyn Write| {
+                        with = |writer: &mut dyn WriteView| {
                            for index in 0..*span_end {
                               write!(
                                  writer,
@@ -726,7 +728,7 @@ impl<L: Display + 'static> Display for ReportLocated<L> {
                      indent!(
                         writer,
                         strike_prefix_width + 1,
-                        with = |writer: &mut dyn Write| {
+                        with = |writer: &mut dyn WriteView| {
                            for slot in &*strike_prefix.borrow() {
                               write!(
                                  writer,
@@ -752,7 +754,7 @@ impl<L: Display + 'static> Display for ReportLocated<L> {
                         // + 1 if the label is zero-width. The <top-left-to-right> will be placed
                         //   after the span.
                         *span_end as usize + usize::from(span_start == span_end) + 1,
-                        with = |writer: &mut dyn Write| {
+                        with = |writer: &mut dyn WriteView| {
                            for index in 0..*span_end - u32::from(span_start != span_end) {
                               write!(
                                  writer,
@@ -819,7 +821,7 @@ impl<L: Display + 'static> Display for ReportLocated<L> {
       // Write the points.
       {
          if !self.points.is_empty() {
-            writeln!(writer as &mut dyn Write)?;
+            writeln!(writer)?;
             writer.write_indent()?;
          }
 
@@ -841,7 +843,7 @@ impl<L: Display + 'static> Display for ReportLocated<L> {
    }
 }
 
-impl<L: Display> ReportLocated<L> {
+impl<L: DisplayView> ReportLocated<L> {
    fn from(report: Report, source: &PositionStr<'_>, location: L) -> Self {
       let mut labels: SmallVec<_, 2> = report
          .labels
