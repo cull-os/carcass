@@ -120,7 +120,7 @@ pub fn stderr() -> View<impl fmt::Write> {
 pub trait DisplayView {
    fn fmt(&self, writer: &mut dyn WriteView) -> fmt::Result;
 
-   fn view_width(&self, width: usize) -> impl fmt::Display + '_
+   fn width(&self, width: usize) -> impl fmt::Display + '_
    where
       Self: Sized,
    {
@@ -145,17 +145,22 @@ pub trait DisplayView {
       }
    }
 
-   fn view_terminal(&self) -> impl fmt::Display + '_
+   fn terminal_width(&self) -> impl fmt::Display + '_
    where
       Self: Sized,
    {
-      let width = if let Some((width, _)) = terminal_size::terminal_size() {
-         width.0 as _
+      if let Some((width, _)) = terminal_size::terminal_size() {
+         self.width(width.0 as _)
       } else {
-         usize::MAX
-      };
+         self.width(usize::MAX)
+      }
+   }
 
-      self.view_width(width)
+   fn free_width(&self) -> impl fmt::Display + '_
+   where
+      Self: Sized,
+   {
+      self.width(usize::MAX)
    }
 }
 
