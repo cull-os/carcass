@@ -68,21 +68,25 @@ impl DebugView for Tags<'_> {
             Tag::Space => write!(writer, "<space/>")?,
             Tag::Newline(count) => write!(writer, "<newline count={count}>")?,
 
-            Tag::Group => {
+            ref tag @ (Tag::Group | Tag::Indent) => {
+               let text = match *tag {
+                  Tag::Group => "group",
+                  Tag::Indent => "indent",
+                  _ => unreachable!(),
+               };
+
                if children.len() == 0 {
-                  write!(writer, "<group/>")?;
+                  write!(writer, "<{text}/>")?;
                   continue;
                }
 
-               write!(writer, "<group>")?;
+               write!(writer, "<{text}>")?;
                {
                   indent!(writer, INDENT_SIZE);
                   data.debug(writer)?;
                }
-               write!(writer, "</group>")?;
+               write!(writer, "</{text}>")?;
             },
-
-            Tag::Indent => todo!(),
          }
       }
 
