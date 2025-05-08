@@ -11,7 +11,6 @@ use std::{
 
 use cab_util::into;
 use derive_more::Deref;
-use itertools::Itertools as _;
 
 use crate::{
    DebugView,
@@ -40,7 +39,7 @@ impl<'a, I: Into<Cow<'a, str>>> From<I> for Tag<'a> {
 impl Tag<'_> {
    #[must_use]
    pub fn is_node(&self) -> bool {
-      matches!(*self, Self::Group { .. } | Self::Indent { .. })
+      matches!(*self, Self::Group(..) | Self::Indent(..))
    }
 }
 
@@ -87,10 +86,10 @@ impl DebugView for Tags<'_> {
                Tag::Space => write!(writer, "<space{condition}/>")?,
                Tag::Newline(count) => write!(writer, "<newline count={count}{condition}>")?,
 
-               ref tag @ (Tag::Group { .. } | Tag::Indent { .. }) => {
+               ref tag @ (Tag::Group(..) | Tag::Indent(..)) => {
                   let text = match *tag {
-                     Tag::Group { .. } => "group",
-                     Tag::Indent { .. } => "indent",
+                     Tag::Group(..) => "group",
+                     Tag::Indent(..) => "indent",
                      _ => unreachable!(),
                   };
 
@@ -128,9 +127,6 @@ impl DisplayView for Tags<'_> {
 
       impl fmt::Write for Renderer<'_> {
          fn write_str(&mut self, s: &str) -> fmt::Result {
-            use None as Newline;
-            use Some as Word;
-
             if s.is_empty() {
                return Ok(());
             }
@@ -139,12 +135,12 @@ impl DisplayView for Tags<'_> {
                self.write_char(' ')?;
             }
 
-            for part in s.split('\n').map(Word).intersperse(Newline) {
-               let Word(word) = part else {
+            for line in s.split_inclusive('\n') {
+               if line == "\n" {
                   self.newlines += 1;
-                  self.write_char('\n')?;
+                  self.writer.write_char('\n')?;
                   continue;
-               };
+               }
 
                if mem::take(&mut self.newlines) > 0 {
                   for _ in 0..self.indent {
@@ -152,9 +148,9 @@ impl DisplayView for Tags<'_> {
                   }
                }
 
-               self.writer.write_str(word)?;
+               self.writer.write_str(line)?;
 
-               if word.ends_with('\n') {
+               if line.ends_with('\n') {
                   self.newlines = 1;
                }
             }
@@ -171,7 +167,6 @@ impl DisplayView for Tags<'_> {
                   TagCondition::Broken => parent_is_broken,
                   TagCondition::Always => true,
                };
-               dbg!(data, parent_is_broken, condition);
 
                match data.tag {
                   Tag::Text(ref s) => {
@@ -194,9 +189,9 @@ impl DisplayView for Tags<'_> {
                      }
                   },
 
-                  Tag::Group { .. } => {
+                  Tag::Group(..) => {
                      let measure = data.measure.get();
-                     self.render(children, measure.width < usize::MAX)?;
+                     self.render(children, measure.width == usize::MAX)?;
                   },
 
                   Tag::Indent(count) => {
@@ -223,13 +218,14 @@ impl DisplayView for Tags<'_> {
          space: false,
          newlines: 0,
       }
-      .render(self.children(), true)
+      .render(self.children(), false)
    }
 }
 
 impl TagData<'_> {
    fn measure(&self, children: TagsIter<'_>) {
       let tag_width = match self.tag {
+         Tag::Indent(..) if self.condition == TagCondition::Broken => 0,
          _ if self.condition == TagCondition::Broken => 0,
 
          Tag::Text(ref s) if s.contains('\n') => usize::MAX,
@@ -238,7 +234,7 @@ impl TagData<'_> {
          Tag::Space => 1,
          Tag::Newline(_) => usize::MAX,
 
-         Tag::Group { .. } | Tag::Indent { .. } => 0,
+         Tag::Group(..) | Tag::Indent(..) => 0,
       };
 
       let width = children
@@ -279,45 +275,46 @@ impl<'a> Tags<'a> {
       Self(Vec::new())
    }
 
-   fn layout(&self, width_max: usize) {
+   fn layout(&self, column_max: usize) {
+      #[derive(Debug)]
       struct Layout {
          indent: usize,
 
-         width:     usize,
-         width_max: usize,
+         column:     usize,
+         column_max: usize,
       }
 
       impl Layout {
          fn layout(&mut self, children: TagsIter<'_>) {
             for (data, children) in children {
                let mut measure = data.measure.get();
-               measure.column = self.width;
+               measure.column = self.column;
 
                let condition = data.condition != TagCondition::Flat;
 
                match data.tag {
                   Tag::Text(ref s) if let Some(nl) = s.rfind('\n') => {
-                     self.width = self.indent + width(&s[nl..]);
+                     self.column = self.indent + width(&s[nl..]);
                   },
 
-                  Tag::Text(_) => self.width += measure.width,
+                  Tag::Text(_) => self.column += measure.width,
 
-                  Tag::Space => self.width += 1,
+                  Tag::Space => self.column += 1,
 
                   Tag::Newline(0) => {},
-                  Tag::Newline(_) => self.width = self.indent,
+                  Tag::Newline(_) => self.column = self.indent,
 
                   Tag::Group(max) => {
-                     let width = match self.width.saturating_add(measure.width) {
-                        width if width > self.width_max => usize::MAX,
+                     let width = match self.column.saturating_add(measure.width) {
+                        width if width > self.column_max => usize::MAX,
                         width if width > max => usize::MAX,
                         width => width,
                      };
 
                      if width < usize::MAX {
-                        self.width += width;
+                        self.column += width;
                      } else {
-                        measure.width = width;
+                        measure.width = usize::MAX;
                         self.layout(children);
                      }
                   },
@@ -325,10 +322,12 @@ impl<'a> Tags<'a> {
                   Tag::Indent(count) => {
                      if condition {
                         self.indent = self.indent.checked_add_signed(count).unwrap();
-                        self.layout(children);
+                     }
+
+                     self.layout(children);
+
+                     if condition {
                         self.indent = self.indent.checked_sub_signed(count).unwrap();
-                     } else {
-                        self.layout(children);
                      }
                   },
                }
@@ -344,8 +343,8 @@ impl<'a> Tags<'a> {
 
       Layout {
          indent: 0,
-         width: 0,
-         width_max,
+         column: 0,
+         column_max,
       }
       .layout(self.children());
    }
