@@ -22,8 +22,8 @@ pub use width_::{
    width,
 };
 
-mod document;
-pub use document::{
+mod tag;
+pub use tag::{
    Tag,
    TagCondition,
    Tags,
