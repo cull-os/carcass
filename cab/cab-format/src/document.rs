@@ -6,33 +6,29 @@ use std::{
 };
 
 use cab_util::into;
-use derive_more::{
-   Deref,
-   DerefMut,
-};
+use derive_more::Deref;
 
 use crate::{
    DebugView,
    DisplayView,
    WriteView,
    indent,
+   width,
 };
-
-const INDENT_SIZE: usize = 3;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Tag<'a> {
    Text(Cow<'a, str>),
    Space,
    Newline(usize),
-   Group,
-   Indent,
+   Group { max: usize },
+   Indent(isize),
 }
 
 impl Tag<'_> {
    #[must_use]
    pub fn is_node(&self) -> bool {
-      matches!(*self, Self::Group | Self::Indent)
+      matches!(*self, Self::Group { .. } | Self::Indent(..))
    }
 }
 
@@ -50,28 +46,28 @@ struct Measure {
 }
 
 #[derive(Debug, Clone)]
-pub struct TagData<'a> {
+struct TagData<'a> {
    tag:       Tag<'a>,
    len:       usize,
    condition: TagCondition,
    measure:   Cell<Measure>,
 }
 
-#[derive(Deref, DerefMut, Clone)]
+#[derive(Clone)]
 pub struct Tags<'a>(Vec<TagData<'a>>);
 
 impl DebugView for Tags<'_> {
    fn debug(&self, writer: &mut dyn WriteView) -> fmt::Result {
-      for (data, children) in self.iter() {
+      for (data, children) in self.children() {
          match data.tag {
             Tag::Text(ref s) => write!(writer, "<text>{s:?}</text>")?,
             Tag::Space => write!(writer, "<space/>")?,
             Tag::Newline(count) => write!(writer, "<newline count={count}>")?,
 
-            ref tag @ (Tag::Group | Tag::Indent) => {
+            ref tag @ (Tag::Group { .. } | Tag::Indent(..)) => {
                let text = match *tag {
-                  Tag::Group => "group",
-                  Tag::Indent => "indent",
+                  Tag::Group { .. } => "group",
+                  Tag::Indent(..) => "indent",
                   _ => unreachable!(),
                };
 
@@ -82,7 +78,7 @@ impl DebugView for Tags<'_> {
 
                write!(writer, "<{text}>")?;
                {
-                  indent!(writer, INDENT_SIZE);
+                  indent!(writer, 3);
                   data.debug(writer)?;
                }
                write!(writer, "</{text}>")?;
@@ -94,24 +90,135 @@ impl DebugView for Tags<'_> {
    }
 }
 
+impl DisplayView for Tags<'_> {
+   fn display(&self, writer: &mut dyn WriteView) -> fmt::Result {
+      self.layout(writer.width_max());
+
+      for (_data, _children) in self.children() {}
+
+      todo!()
+   }
+}
+
+impl TagData<'_> {
+   fn measure(&self, children: TagsIter<'_>) {
+      let tag_width = match self.tag {
+         _ if self.condition == TagCondition::Broken => 0,
+
+         Tag::Text(ref s) if s.contains('\n') => usize::MAX,
+         Tag::Text(ref s) => width(s),
+
+         Tag::Space => 1,
+         Tag::Newline(_) => usize::MAX,
+
+         Tag::Group { .. } | Tag::Indent(..) => 0,
+      };
+
+      let width = children
+         .map(|(child, children)| {
+            child.measure(children);
+            child.measure.get().width
+         })
+         .fold(tag_width, usize::saturating_add);
+
+      self.measure.set(Measure { width, column: 0 });
+   }
+}
+
+#[derive(Deref)]
+struct TagsIter<'a>(slice::Iter<'a, TagData<'a>>);
+
+impl<'a> Iterator for TagsIter<'a> {
+   type Item = (&'a TagData<'a>, TagsIter<'a>);
+
+   fn next(&mut self) -> Option<Self::Item> {
+      let this = self.0.next()?;
+
+      if this.len == 0 {
+         return Some((this, TagsIter([].iter())));
+      }
+
+      let (children, rest) = self.0.as_slice().split_at(this.len);
+
+      self.0 = rest.iter();
+
+      Some((this, TagsIter(children.iter())))
+   }
+}
+
 impl<'a> Tags<'a> {
    #[must_use]
    pub fn new() -> Self {
       Self(Vec::new())
    }
 
-   #[must_use]
-   pub fn render(&self) -> impl DisplayView + '_ {
-      #[derive(Deref, DerefMut)]
-      struct Tags_<'a>(&'a Tags<'a>);
+   fn layout(&self, width_max: usize) {
+      struct Layout {
+         indent: usize,
 
-      impl DisplayView for Tags_<'_> {
-         fn display(&self, writer: &mut dyn WriteView) -> fmt::Result {
-            todo!()
+         width:     usize,
+         width_max: usize,
+      }
+
+      impl Layout {
+         fn layout(&mut self, children: TagsIter<'_>) {
+            for (data, children) in children {
+               let mut measure = data.measure.get();
+               measure.column = self.width;
+
+               let condition = data.condition != TagCondition::Flat;
+
+               match data.tag {
+                  Tag::Text(ref s) if let Some(nl) = s.rfind('\n') => {
+                     self.width = self.indent + width(&s[nl..]);
+                  },
+
+                  Tag::Text(_) => self.width += measure.width,
+
+                  Tag::Space => self.width += 1,
+
+                  Tag::Newline(0) => {},
+                  Tag::Newline(_) => self.width = self.indent,
+
+                  Tag::Group { max } => {
+                     let width = match self.width.saturating_add(measure.width) {
+                        width if width > self.width_max => usize::MAX,
+                        width if width > max => usize::MAX,
+                        width => width,
+                     };
+
+                     if width < usize::MAX {
+                        self.width += width;
+                     } else {
+                        measure.width = width;
+                        self.layout(children);
+                     }
+                  },
+
+                  Tag::Indent(count) => {
+                     if condition {
+                        self.indent = self.indent.checked_add_signed(count).unwrap();
+                        self.layout(children);
+                        self.indent = self.indent.checked_sub_signed(count).unwrap();
+                     }
+                  },
+               }
+
+               data.measure.set(measure);
+            }
          }
       }
 
-      Tags_(self)
+      for (data, children) in self.children() {
+         data.measure(children);
+      }
+
+      Layout {
+         indent: 0,
+         width: 0,
+         width_max,
+      }
+      .layout(self.children());
    }
 
    pub fn write(&mut self, tag: impl Into<Tag<'a>>) {
@@ -135,10 +242,10 @@ impl<'a> Tags<'a> {
       into!(tag);
       let tag_is_node = tag.is_node();
       let tag_should_pop =
-         tag == Tag::Space && self.last().is_some_and(|data| data.tag == Tag::Space);
+         tag == Tag::Space && self.0.last().is_some_and(|data| data.tag == Tag::Space);
 
-      let index = self.len();
-      self.push(TagData {
+      let index = self.0.len();
+      self.0.push(TagData {
          tag,
          len: 0,
          condition,
@@ -148,38 +255,24 @@ impl<'a> Tags<'a> {
          }),
       });
 
-      let len = self.len();
+      let len = self.0.len();
       closure(self);
-      let len = len - self.len();
+      let len = len - self.0.len();
 
       assert!(
          tag_is_node || len == 0,
          "inserted children for non-node {tag:?}",
-         tag = self[index].tag
+         tag = self.0[index].tag
       );
 
       if tag_should_pop {
-         self.pop();
+         self.0.pop();
       } else {
-         self[index].len = len;
+         self.0[index].len = len;
       }
    }
 
-   fn iter(&'a self) -> impl Iterator<Item = (&'a TagData<'a>, slice::Iter<'a, TagData<'a>>)> {
-      gen {
-         let mut content = (**self).iter();
-
-         while let Some(data) = content.next() {
-            if data.len == 0 {
-               yield (data, [].iter());
-               continue;
-            }
-
-            let (this, rest) = content.as_slice().split_at(data.len);
-            content = rest.iter();
-
-            yield (data, this.iter());
-         }
-      }
+   fn children(&self) -> TagsIter<'_> {
+      TagsIter(self.0.iter())
    }
 }

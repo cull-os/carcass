@@ -1,6 +1,6 @@
 //! Text formatting.
 
-#![feature(gen_blocks, if_let_guard, let_chains)]
+#![feature(gen_blocks, if_let_guard, let_chains, mixed_integer_ops_unsigned_sub)]
 #![allow(unstable_name_collisions)] // Itertools::intersperse
 
 mod color;
@@ -26,7 +26,6 @@ mod document;
 pub use document::{
    Tag,
    TagCondition,
-   TagData,
    Tags,
 };
 
