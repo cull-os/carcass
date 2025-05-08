@@ -64,6 +64,32 @@ struct TagData<'a> {
    measure:   Cell<Measure>,
 }
 
+impl TagData<'_> {
+   fn measure(&self, children: TagsIter<'_>) {
+      let tag_width = match self.tag {
+         Tag::Indent(..) if self.condition == TagCondition::Broken => 0,
+         _ if self.condition == TagCondition::Broken => 0,
+
+         Tag::Text(ref s) if s.contains('\n') => usize::MAX,
+         Tag::Text(ref s) => width(s),
+
+         Tag::Space => 1,
+         Tag::Newline(_) => usize::MAX,
+
+         Tag::Group(..) | Tag::Indent(..) => 0,
+      };
+
+      let width = children
+         .map(|(child, children)| {
+            child.measure(children);
+            child.measure.get().width
+         })
+         .fold(tag_width, usize::saturating_add);
+
+      self.measure.set(Measure { width, column: 0 });
+   }
+}
+
 #[derive(Clone)]
 pub struct Tags<'a>(Vec<TagData<'a>>);
 
@@ -210,7 +236,7 @@ impl DisplayView for Tags<'_> {
          }
       }
 
-      self.layout(writer.width_max());
+      self.layout(writer.width_max().saturating_sub(writer.width()));
 
       Renderer {
          writer,
@@ -219,32 +245,6 @@ impl DisplayView for Tags<'_> {
          newlines: 0,
       }
       .render(self.children(), false)
-   }
-}
-
-impl TagData<'_> {
-   fn measure(&self, children: TagsIter<'_>) {
-      let tag_width = match self.tag {
-         Tag::Indent(..) if self.condition == TagCondition::Broken => 0,
-         _ if self.condition == TagCondition::Broken => 0,
-
-         Tag::Text(ref s) if s.contains('\n') => usize::MAX,
-         Tag::Text(ref s) => width(s),
-
-         Tag::Space => 1,
-         Tag::Newline(_) => usize::MAX,
-
-         Tag::Group(..) | Tag::Indent(..) => 0,
-      };
-
-      let width = children
-         .map(|(child, children)| {
-            child.measure(children);
-            child.measure.get().width
-         })
-         .fold(tag_width, usize::saturating_add);
-
-      self.measure.set(Measure { width, column: 0 });
    }
 }
 
@@ -277,14 +277,14 @@ impl<'a> Tags<'a> {
 
    fn layout(&self, column_max: usize) {
       #[derive(Debug)]
-      struct Layout {
+      struct Layer {
          indent: usize,
 
          column:     usize,
          column_max: usize,
       }
 
-      impl Layout {
+      impl Layer {
          fn layout(&mut self, children: TagsIter<'_>) {
             for (data, children) in children {
                let mut measure = data.measure.get();
@@ -341,7 +341,7 @@ impl<'a> Tags<'a> {
          data.measure(children);
       }
 
-      Layout {
+      Layer {
          indent: 0,
          column: 0,
          column_max,
