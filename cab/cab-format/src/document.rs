@@ -26,8 +26,15 @@ pub enum Tag<'a> {
    Text(Cow<'a, str>),
    Space,
    Newline(usize),
-   Group { max: usize },
-   Indent { count: isize },
+   Group(usize),
+   Indent(isize),
+}
+
+impl<'a, I: Into<Cow<'a, str>>> From<I> for Tag<'a> {
+   fn from(value: I) -> Self {
+      into!(value);
+      Self::Text(value)
+   }
 }
 
 impl Tag<'_> {
@@ -63,35 +70,50 @@ pub struct Tags<'a>(Vec<TagData<'a>>);
 
 impl DebugView for Tags<'_> {
    fn debug(&self, writer: &mut dyn WriteView) -> fmt::Result {
-      for (data, children) in self.children() {
-         match data.tag {
-            Tag::Text(ref s) => write!(writer, "<text>{s:?}</text>")?,
-            Tag::Space => write!(writer, "<space/>")?,
-            Tag::Newline(count) => write!(writer, "<newline count={count}>")?,
+      fn debug(writer: &mut dyn WriteView, children: TagsIter<'_>) -> fmt::Result {
+         for (index, (data, children)) in children.enumerate() {
+            if index != 0 {
+               writeln!(writer)?;
+            }
 
-            ref tag @ (Tag::Group { .. } | Tag::Indent { .. }) => {
-               let text = match *tag {
-                  Tag::Group { .. } => "group",
-                  Tag::Indent { .. } => "indent",
-                  _ => unreachable!(),
-               };
+            let condition = match data.condition {
+               TagCondition::Flat => " if=flat",
+               TagCondition::Broken => " if=broken",
+               TagCondition::Always => "",
+            };
 
-               if children.len() == 0 {
-                  write!(writer, "<{text}/>")?;
-                  continue;
-               }
+            match data.tag {
+               Tag::Text(ref s) => write!(writer, "<text{condition}>{s:?}</text>")?,
+               Tag::Space => write!(writer, "<space{condition}/>")?,
+               Tag::Newline(count) => write!(writer, "<newline count={count}{condition}>")?,
 
-               write!(writer, "<{text}>")?;
-               {
-                  indent!(writer, 3);
-                  data.debug(writer)?;
-               }
-               write!(writer, "</{text}>")?;
-            },
+               ref tag @ (Tag::Group { .. } | Tag::Indent { .. }) => {
+                  let text = match *tag {
+                     Tag::Group { .. } => "group",
+                     Tag::Indent { .. } => "indent",
+                     _ => unreachable!(),
+                  };
+
+                  if children.len() == 0 {
+                     write!(writer, "<{text}{condition}/>")?;
+                     continue;
+                  }
+
+                  writeln!(writer, "<{text}{condition}>")?;
+                  {
+                     indent!(writer, 3);
+                     debug(writer, children)?;
+                     writeln!(writer)?;
+                  }
+                  write!(writer, "</{text}>")?;
+               },
+            }
          }
+
+         Ok(())
       }
 
-      Ok(())
+      debug(writer, self.children())
    }
 }
 
@@ -120,7 +142,7 @@ impl DisplayView for Tags<'_> {
             for part in s.split('\n').map(Word).intersperse(Newline) {
                let Word(word) = part else {
                   self.newlines += 1;
-                  self.writer.write_char('\n')?;
+                  self.write_char('\n')?;
                   continue;
                };
 
@@ -149,15 +171,20 @@ impl DisplayView for Tags<'_> {
                   TagCondition::Broken => parent_is_broken,
                   TagCondition::Always => true,
                };
+               dbg!(data, parent_is_broken, condition);
 
                match data.tag {
                   Tag::Text(ref s) => {
                      if condition {
-                        self.writer.write_str(s)?;
+                        self.write_str(s)?;
                      }
                   },
 
-                  Tag::Space => self.space |= condition,
+                  Tag::Space => {
+                     if condition {
+                        self.space = true;
+                     }
+                  },
 
                   Tag::Newline(count) => {
                      if condition {
@@ -172,16 +199,19 @@ impl DisplayView for Tags<'_> {
                      self.render(children, measure.width < usize::MAX)?;
                   },
 
-                  Tag::Indent { count } => {
+                  Tag::Indent(count) => {
                      if condition {
                         self.indent = self.indent.checked_add_signed(count).unwrap();
                         self.render(children, parent_is_broken)?;
                         self.indent = self.indent.checked_sub_signed(count).unwrap();
+                     } else {
+                        self.render(children, parent_is_broken)?;
                      }
                   },
                }
             }
-            todo!()
+
+            Ok(())
          }
       }
 
@@ -277,7 +307,7 @@ impl<'a> Tags<'a> {
                   Tag::Newline(0) => {},
                   Tag::Newline(_) => self.width = self.indent,
 
-                  Tag::Group { max } => {
+                  Tag::Group(max) => {
                      let width = match self.width.saturating_add(measure.width) {
                         width if width > self.width_max => usize::MAX,
                         width if width > max => usize::MAX,
@@ -292,11 +322,13 @@ impl<'a> Tags<'a> {
                      }
                   },
 
-                  Tag::Indent { count } => {
+                  Tag::Indent(count) => {
                      if condition {
                         self.indent = self.indent.checked_add_signed(count).unwrap();
                         self.layout(children);
                         self.indent = self.indent.checked_sub_signed(count).unwrap();
+                     } else {
+                        self.layout(children);
                      }
                   },
                }
@@ -323,18 +355,18 @@ impl<'a> Tags<'a> {
    }
 
    pub fn write_if(&mut self, tag: impl Into<Tag<'a>>, condition: TagCondition) {
-      self.write_with_if(tag, |_| {}, condition);
+      self.write_if_with(tag, condition, |_| {});
    }
 
    pub fn write_with(&mut self, tag: impl Into<Tag<'a>>, closure: impl FnOnce(&mut Self)) {
-      self.write_with_if(tag, closure, TagCondition::Always);
+      self.write_if_with(tag, TagCondition::Always, closure);
    }
 
-   pub fn write_with_if(
+   pub fn write_if_with(
       &mut self,
       tag: impl Into<Tag<'a>>,
-      closure: impl FnOnce(&mut Self),
       condition: TagCondition,
+      closure: impl FnOnce(&mut Self),
    ) {
       into!(tag);
       let tag_is_node = tag.is_node();
@@ -354,7 +386,7 @@ impl<'a> Tags<'a> {
 
       let len = self.0.len();
       closure(self);
-      let len = len - self.0.len();
+      let len = self.0.len() - len;
 
       assert!(
          tag_is_node || len == 0,
