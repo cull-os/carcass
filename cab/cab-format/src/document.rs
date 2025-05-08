@@ -1,12 +1,17 @@
 use std::{
    borrow::Cow,
    cell::Cell,
-   fmt,
+   fmt::{
+      self,
+      Write as _,
+   },
+   mem,
    slice,
 };
 
 use cab_util::into;
 use derive_more::Deref;
+use itertools::Itertools as _;
 
 use crate::{
    DebugView,
@@ -22,13 +27,13 @@ pub enum Tag<'a> {
    Space,
    Newline(usize),
    Group { max: usize },
-   Indent(isize),
+   Indent { count: isize },
 }
 
 impl Tag<'_> {
    #[must_use]
    pub fn is_node(&self) -> bool {
-      matches!(*self, Self::Group { .. } | Self::Indent(..))
+      matches!(*self, Self::Group { .. } | Self::Indent { .. })
    }
 }
 
@@ -64,10 +69,10 @@ impl DebugView for Tags<'_> {
             Tag::Space => write!(writer, "<space/>")?,
             Tag::Newline(count) => write!(writer, "<newline count={count}>")?,
 
-            ref tag @ (Tag::Group { .. } | Tag::Indent(..)) => {
+            ref tag @ (Tag::Group { .. } | Tag::Indent { .. }) => {
                let text = match *tag {
                   Tag::Group { .. } => "group",
-                  Tag::Indent(..) => "indent",
+                  Tag::Indent { .. } => "indent",
                   _ => unreachable!(),
                };
 
@@ -92,11 +97,103 @@ impl DebugView for Tags<'_> {
 
 impl DisplayView for Tags<'_> {
    fn display(&self, writer: &mut dyn WriteView) -> fmt::Result {
+      struct Renderer<'a> {
+         writer:   &'a mut dyn WriteView,
+         indent:   usize,
+         space:    bool,
+         newlines: usize,
+      }
+
+      impl fmt::Write for Renderer<'_> {
+         fn write_str(&mut self, s: &str) -> fmt::Result {
+            use None as Newline;
+            use Some as Word;
+
+            if s.is_empty() {
+               return Ok(());
+            }
+
+            if mem::take(&mut self.space) && !s.starts_with('\n') {
+               self.write_char(' ')?;
+            }
+
+            for part in s.split('\n').map(Word).intersperse(Newline) {
+               let Word(word) = part else {
+                  self.newlines += 1;
+                  self.writer.write_char('\n')?;
+                  continue;
+               };
+
+               if mem::take(&mut self.newlines) > 0 {
+                  for _ in 0..self.indent {
+                     self.writer.write_char(' ')?;
+                  }
+               }
+
+               self.writer.write_str(word)?;
+
+               if word.ends_with('\n') {
+                  self.newlines = 1;
+               }
+            }
+
+            Ok(())
+         }
+      }
+
+      impl Renderer<'_> {
+         fn render(&mut self, children: TagsIter<'_>, parent_is_broken: bool) -> fmt::Result {
+            for (data, children) in children {
+               let condition = match data.condition {
+                  TagCondition::Flat => !parent_is_broken,
+                  TagCondition::Broken => parent_is_broken,
+                  TagCondition::Always => true,
+               };
+
+               match data.tag {
+                  Tag::Text(ref s) => {
+                     if condition {
+                        self.writer.write_str(s)?;
+                     }
+                  },
+
+                  Tag::Space => self.space |= condition,
+
+                  Tag::Newline(count) => {
+                     if condition {
+                        for _ in self.newlines..count {
+                           self.write_char('\n')?;
+                        }
+                     }
+                  },
+
+                  Tag::Group { .. } => {
+                     let measure = data.measure.get();
+                     self.render(children, measure.width < usize::MAX)?;
+                  },
+
+                  Tag::Indent { count } => {
+                     if condition {
+                        self.indent = self.indent.checked_add_signed(count).unwrap();
+                        self.render(children, parent_is_broken)?;
+                        self.indent = self.indent.checked_sub_signed(count).unwrap();
+                     }
+                  },
+               }
+            }
+            todo!()
+         }
+      }
+
       self.layout(writer.width_max());
 
-      for (_data, _children) in self.children() {}
-
-      todo!()
+      Renderer {
+         writer,
+         indent: 0,
+         space: false,
+         newlines: 0,
+      }
+      .render(self.children(), true)
    }
 }
 
@@ -111,7 +208,7 @@ impl TagData<'_> {
          Tag::Space => 1,
          Tag::Newline(_) => usize::MAX,
 
-         Tag::Group { .. } | Tag::Indent(..) => 0,
+         Tag::Group { .. } | Tag::Indent { .. } => 0,
       };
 
       let width = children
@@ -195,7 +292,7 @@ impl<'a> Tags<'a> {
                      }
                   },
 
-                  Tag::Indent(count) => {
+                  Tag::Indent { count } => {
                      if condition {
                         self.indent = self.indent.checked_add_signed(count).unwrap();
                         self.layout(children);
