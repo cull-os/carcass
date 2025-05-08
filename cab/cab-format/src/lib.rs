@@ -24,6 +24,7 @@ pub use width_::{
 
 mod tag;
 pub use tag::{
+   DisplayTags,
    Tag,
    TagCondition,
    Tags,
