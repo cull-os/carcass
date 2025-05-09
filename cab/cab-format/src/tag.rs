@@ -295,7 +295,7 @@ impl<'a> Tags<'a> {
 }
 
 pub trait DisplayTags {
-   fn display_tags(&self, tags: &mut Tags<'_>);
+   fn display_tags<'a>(&'a self, tags: &mut Tags<'a>);
 
    fn display(&self, writer: &mut dyn WriteView) -> fmt::Result {
       struct Renderer<'a> {

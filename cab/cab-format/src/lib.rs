@@ -3,8 +3,9 @@
 #![feature(gen_blocks, if_let_guard, let_chains, mixed_integer_ops_unsigned_sub)]
 #![allow(unstable_name_collisions)] // Itertools::intersperse
 
-mod color;
+pub const INDENT_WIDTH: isize = 3;
 
+mod color;
 pub use color::COLORS;
 
 mod indent;

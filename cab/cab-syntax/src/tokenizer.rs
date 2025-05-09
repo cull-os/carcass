@@ -12,6 +12,17 @@ pub fn tokenize(source: &str) -> impl Iterator<Item = (Kind, &str)> {
    Tokenizer::new(source)
 }
 
+/// Returns whether if this identifier can be represented without quotes.
+pub fn is_valid_plain_identifier(s: &str) -> bool {
+   let mut chars = s.chars();
+
+   chars
+      .by_ref()
+      .next()
+      .is_some_and(is_valid_identifier_character)
+      && chars.all(is_valid_identifier_character)
+}
+
 fn is_valid_initial_identifier_character(c: char) -> bool {
    let invalid = c.is_ascii_digit() || c == '-' || c == '\'';
 
