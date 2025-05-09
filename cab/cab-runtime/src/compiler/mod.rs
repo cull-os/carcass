@@ -231,12 +231,10 @@ impl<'a> Compiler<'a> {
    }
 
    fn emit_list(&mut self, list: &'a node::List) {
-      for (index, item) in list.items().enumerate() {
-         self.emit_scope(item.span(), |this| this.emit_force(item));
+      self.emit_push(list.span(), Value::Nil);
 
-         if index == 0 {
-            self.emit_push(list.span(), Value::Nil);
-         }
+      for item in list.items() {
+         self.emit_scope(item.span(), |this| this.emit_force(item));
 
          self.push_operation(list.span(), Operation::Construct);
       }
