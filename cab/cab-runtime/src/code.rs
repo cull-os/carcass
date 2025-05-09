@@ -12,7 +12,10 @@ use std::{
 };
 
 use cab_format::{
+   COLORS,
+   DisplayTags as _,
    DisplayView,
+   INDENT_WIDTH,
    WriteView,
    dedent,
    indent,
@@ -133,11 +136,38 @@ impl DisplayView for Code {
             )?;
          }
 
+         let mut indent: usize = 0;
+
          while **index.borrow() < code.bytes.len() {
             let (_, operation, size) = code.read_operation(*index.borrow());
 
+            indent!(
+               writer,
+               (indent - usize::from(operation == Operation::ScopeEnd)) * INDENT_WIDTH as usize,
+            );
+
             writeln!(writer)?;
+
+            if operation == Operation::ScopeEnd {
+               indent -= 1;
+               write!(
+                  writer,
+                  "{right} ",
+                  right = "}".style(COLORS[indent % COLORS.len()])
+               )?;
+            }
+
             write!(writer, "{operation:?}", operation = operation.yellow())?;
+
+            if operation == Operation::ScopeStart {
+               write!(
+                  writer,
+                  " {left}",
+                  left = "{".style(COLORS[indent % COLORS.len()])
+               )?;
+               indent += 1;
+            }
+
             index.borrow_mut().0 += size;
 
             let mut arguments = operation.arguments().iter().enumerate().peekable();
@@ -161,25 +191,30 @@ impl DisplayView for Code {
 
                      write!(
                         writer,
-                        "{value_index:#X}",
+                        "{value_index:#X} ",
                         value_index = value_index.blue().bold(),
                      )?;
                      index.borrow_mut().0 += size;
 
-                     #[expect(clippy::pattern_type_mismatch)]
-                     if let Value::Blueprint(code) = &code[ValueIndex(
+                     match code[ValueIndex(
                         value_index
                            .try_into()
                            .expect("value index must fit in usize"),
                      )] {
-                        codes.push_front((value_index_unique, code));
+                        Value::Blueprint(ref code) => {
+                           codes.push_front((value_index_unique, code));
+                           write!(
+                              writer,
+                              "{arrow} {unique:#X}",
+                              arrow = "->".bright_black().bold(),
+                              unique = value_index_unique.red().bold(),
+                           )?;
+                        },
 
-                        write!(
-                           writer,
-                           " {arrow} {unique:#X}",
-                           arrow = "->".white(),
-                           unique = value_index_unique.red().bold(),
-                        )?;
+                        ref value => {
+                           write!(writer, "{colon} ", colon = "::".bright_black().bold())?;
+                           value.display(writer)?;
+                        },
                      }
                   },
 
