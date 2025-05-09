@@ -174,11 +174,11 @@ macro_rules! indent {
       );
    };
 
-   ($writer:ident, $count:expr) => {
+   ($writer:ident, $count:expr $(,)?) => {
       $crate::indent!($writer, $count, with = |_| Ok(0_usize));
    };
 
-   ($writer:ident, $count:expr,with = $with:expr) => {
+   ($writer:ident, $count:expr,with = $with:expr $(,)?) => {
       let $writer = &mut $crate::IndentWriter {
          writer: $writer,
          with:   &mut $with,
@@ -190,15 +190,15 @@ macro_rules! indent {
 
 #[macro_export]
 macro_rules! dedent {
-   ($writer:ident) => {
+   ($writer:ident $(,)?) => {
       $crate::dedent!($writer, $writer.count, discard = true);
    };
 
-   ($writer:ident, $dedent:expr) => {
+   ($writer:ident, $dedent:expr $(,)?) => {
       $crate::dedent!($writer, $dedent, discard = true);
    };
 
-   ($writer:ident, $dedent:expr,discard = $discard:literal) => {
+   ($writer:ident, $dedent:expr,discard = $discard:literal $(,)?) => {
       let $writer = &mut $crate::IndentWriter {
          writer: $writer.writer,
 
