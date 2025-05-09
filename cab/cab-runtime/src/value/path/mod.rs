@@ -71,7 +71,11 @@ impl DisplayTags for Path {
          tags.write(">");
       }
 
-      tags.write(&*self.content);
+      if self.content.is_empty() {
+         tags.write("<empty path>");
+      } else {
+         tags.write(&*self.content);
+      }
    }
 }
 

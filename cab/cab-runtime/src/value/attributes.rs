@@ -31,8 +31,12 @@ impl DisplayTags for Attributes {
 
       tags.write_with(Tag::Group(40), |tags| {
          tags.write("{");
-         tags.write_if(Space, Flat);
+
+         if !self.0.is_empty() {
+            tags.write_if(Space, Flat);
+         }
          tags.write_if(Newline(1), Broken);
+
          tags.write_if_with(Indent(INDENT_WIDTH), Broken, |tags| {
             let mut entries = self.0.iter().collect::<Vec<_>>();
             entries.sort_by_key(|&(name, _)| name);
@@ -60,8 +64,12 @@ impl DisplayTags for Attributes {
                tags.write_if(Space, Flat);
             }
          });
+
          tags.write_if(Newline(1), Broken);
-         tags.write_if(Space, Flat);
+         if !self.0.is_empty() {
+            tags.write_if(Space, Flat);
+         }
+
          tags.write("}");
       });
    }
