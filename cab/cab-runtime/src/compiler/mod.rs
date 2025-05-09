@@ -234,7 +234,7 @@ impl<'a> Compiler<'a> {
       self.emit_push(list.span(), Value::Nil);
 
       for item in list.items() {
-         self.emit_scope(item.span(), |this| this.emit_force(item));
+         self.emit_scope(item.span(), |this| this.emit(item));
 
          self.push_operation(list.span(), Operation::Construct);
       }
