@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use bytes::Bytes;
+use cab_format::DisplayTags;
 use cab_report::{
    Error,
    Result,
@@ -12,11 +13,11 @@ use super::Value;
 
 #[async_trait]
 pub trait Root: Send + Sync + 'static {
-   fn type_(&self) -> String;
+   fn type_(&self) -> &Arc<str>;
 
-   fn config(&self) -> Value;
+   fn config(&self) -> &Value;
 
-   fn path(&self) -> Value;
+   fn path(&self) -> &Value;
 
    async fn list(self: Arc<Self>, content: &str) -> Result<Arc<[Path]>> {
       bail!("TODO list '{content:?}' error")
@@ -31,6 +32,47 @@ pub trait Root: Send + Sync + 'static {
 pub struct Path {
    root:    Option<Arc<dyn Root>>,
    content: Arc<str>,
+}
+
+impl DisplayTags for Path {
+   fn display_tags<'a>(&'a self, tags: &mut cab_format::Tags<'a>) {
+      if let Some(ref root) = self.root {
+         tags.write("<");
+
+         let config = root.config();
+         let path = root.path();
+
+         match *config {
+            Value::Attributes(ref attributes) if attributes.is_empty() => {
+               match *path {
+                  Value::Path(ref path) if path.content.is_empty() => {},
+
+                  ref path => {
+                     tags.write("::");
+                     path.display_tags(tags);
+                  },
+               }
+            },
+
+            ref config => {
+               config.display_tags(tags);
+
+               match *path {
+                  Value::Path(ref path) if path.content.is_empty() => {},
+
+                  ref path => {
+                     tags.write(":");
+                     path.display_tags(tags);
+                  },
+               }
+            },
+         }
+
+         tags.write(">");
+      }
+
+      tags.write(&*self.content);
+   }
 }
 
 impl From<Path> for Value {

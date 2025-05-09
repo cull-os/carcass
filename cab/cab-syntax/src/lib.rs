@@ -24,7 +24,10 @@ pub use self::{
       ParseOracle,
       parse_oracle,
    },
-   tokenizer::tokenize,
+   tokenizer::{
+      is_valid_plain_identifier,
+      tokenize,
+   },
 };
 
 pub mod node;
