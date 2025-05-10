@@ -1,6 +1,7 @@
 [package]
 name                 = "cab"
 description          = "A reproducible contextful-expression language"
+authors.workspace = true
 edition.workspace    = true
 license.workspace    = true
 publish.workspace    = true

@@ -1,10 +1,11 @@
 [workspace]
-members  = [ "fuzz", "cab/cab*" ]
+members  = [ "ust", "fuzz", "cab/cab*" ]
 resolver = "3"
 
 metadata.crane.name = "cab"
 
 [workspace.package]
+authors    = [ "RGBCube <git@rgbcu.be>" ]
 edition    = "2024"                               # Keep in sync with .rustfmt.toml.
 license    = "MIT"
 publish    = false
@@ -100,6 +101,7 @@ wildcard_enum_match_arm           = "allow"
 anyhow = "1.0.95"
 async-once-cell = "0.5.4"
 async-trait = "0.1.86"
+itoa = "1.0.15"
 bytes = "1.10.0"
 clap = { version = "4.5.4", features = [ "derive" ] }
 const-str = "0.6.2"
