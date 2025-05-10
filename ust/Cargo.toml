@@ -1,0 +1,19 @@
+[package]
+name              = "ust"
+description       = "Universal styling"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+publish           = true
+categories        = [ "command-line-interface", "game-development", "graphics", "web-programming" ]
+keywords          = [ "styling", "color", "terminal", "ansi", "universal" ]
+repository        = "https://github.com/cull-os/carcass/tree/master/ust"
+version           = "0.0.1"
+
+[lints]
+workspace = true
+
+[dependencies]
+derive_more.workspace = true
+enumset.workspace     = true
+itoa.workspace        = true
