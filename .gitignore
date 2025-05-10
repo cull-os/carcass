@@ -24,6 +24,7 @@
 
 # LINTERS
 !.clippy.toml
+!.deny.toml
 
 # PROJECTS
 !cab/
