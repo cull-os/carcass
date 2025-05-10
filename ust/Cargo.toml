@@ -8,7 +8,7 @@ publish           = true
 categories        = [ "command-line-interface", "game-development", "graphics", "web-programming" ]
 keywords          = [ "styling", "color", "terminal", "ansi", "universal" ]
 repository        = "https://github.com/cull-os/carcass/tree/master/ust"
-version           = "0.0.1"
+version           = "0.0.2"
 
 [lints]
 workspace = true
