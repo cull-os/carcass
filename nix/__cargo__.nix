@@ -47,7 +47,7 @@
       env.CLIPPY_CONF_DIR = pkgs.writeTextDir "clippy.toml" <| lib.readFile ../.clippy.toml;
 
       shellHook = ''
-        # So we can do `{bin}` instead of `./target/{optimization}/{bin}`
+        # So we can do `{bin}` instead of `./target/debug/{bin}`
         root=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
         export PATH="$PATH":"$root/target/debug"
 
@@ -93,10 +93,11 @@
         inherit src;
       };
 
-      # TODO: Find out why this doesn't work.
-      # "${projectName}-deny" = pkgs.crane.cargoDeny {
-      #   inherit src;
-      # };
+      "${projectName}-deny" = pkgs.crane.cargoDeny {
+        inherit src;
+
+        cargoDenyChecks = "--config ${../.deny.toml}";
+      };
     };
   });
 }
