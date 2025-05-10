@@ -168,6 +168,7 @@ dependencies = [
  "cab-syntax",
  "clap",
  "tokio",
+ "ust",
 ]
 
 [[package]]
@@ -1203,7 +1204,7 @@ checksum = "ebc1c04c71510c7f702b52b7c350734c9ff1295c464a03335b00bb84fc54f853"
 
 [[package]]
 name = "ust"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "derive_more",
  "enumset",
