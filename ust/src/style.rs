@@ -2,12 +2,12 @@ use derive_more::{
    Deref,
    DerefMut,
 };
-use enumset::{
-   EnumSet,
-   EnumSetType,
+use enumflags2::{
+   BitFlags,
+   bitflags,
 };
 
-#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Color {
    #[default]
    Primary,
@@ -31,33 +31,65 @@ pub enum Color {
    BrightWhite,
 }
 
-#[derive(EnumSetType, Debug, PartialOrd, Ord, Hash)]
-#[repr(u8)]
-pub enum Attr {
-   Bold,
-   Dim,
-   Italic,
-   Underline,
-   Blink,
-   RapidBlink,
-   Invert,
-   Conceal,
-   Strike,
+impl Color {
+   pub const fn fg(self) -> Style {
+      Style::new().fg(self)
+   }
+
+   pub const fn bg(self) -> Style {
+      Style::new().bg(self)
+   }
 }
 
-#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[bitflags]
+#[repr(u16)]
+pub enum Attr {
+   Bold       = 1 << 0,
+   Dim        = 1 << 1,
+   Italic     = 1 << 2,
+   Underline  = 1 << 3,
+   Blink      = 1 << 4,
+   RapidBlink = 1 << 5,
+   Invert     = 1 << 6,
+   Conceal    = 1 << 7,
+   Strike     = 1 << 8,
+}
+
+impl Attr {
+   pub const fn style(self) -> Style {
+      Style::new().attr(self)
+   }
+}
+
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Style {
    pub fg:    Color,
    pub bg:    Color,
-   pub attrs: EnumSet<Attr>,
+   pub attrs: BitFlags<Attr>,
 }
 
 macro_rules! set {
    ($($name:ident : $field:ident $symbol:tt $value:expr;)*) => {
       $(
          #[must_use]
-         pub fn $name(mut self) -> Style {
+         pub const fn $name(mut self) -> Style {
             self.$field $symbol $value;
+            self
+         }
+      )*
+   };
+}
+
+macro_rules! set_attr {
+   ($($name:ident : $attr:expr;)*) => {
+      $(
+         #[must_use]
+         pub const fn $name(mut self) -> Style {
+            self.attrs = self.attrs.union_c(BitFlags::<Attr>::from_bits_truncate_c(
+               $attr as u16,
+               BitFlags::CONST_TOKEN,
+            ));
             self
          }
       )*
@@ -66,66 +98,76 @@ macro_rules! set {
 
 impl Style {
    #[must_use]
-   pub fn new() -> Self {
-      Self::default()
+   pub const fn new() -> Self {
+      Self {
+         fg:    Color::Primary,
+         bg:    Color::Primary,
+         attrs: BitFlags::EMPTY,
+      }
    }
 
    #[must_use]
-   pub fn fg(mut self, color: Color) -> Self {
+   pub const fn fg(mut self, color: Color) -> Self {
       self.fg = color;
       self
    }
 
    #[must_use]
-   pub fn unfg(mut self) -> Self {
-      self.fg = Color::default();
+   pub const fn unfg(mut self) -> Self {
+      self.fg = Color::Primary;
       self
    }
 
    #[must_use]
-   pub fn bg(mut self, color: Color) -> Self {
+   pub const fn bg(mut self, color: Color) -> Self {
       self.bg = color;
       self
    }
 
    #[must_use]
-   pub fn unbg(mut self) -> Self {
-      self.bg = Color::default();
+   pub const fn unbg(mut self) -> Self {
+      self.bg = Color::Primary;
       self
    }
 
    #[must_use]
-   pub fn attr(mut self, attrs: impl Into<EnumSet<Attr>>) -> Self {
-      self.attrs.insert_all(attrs.into());
+   pub const fn attr(mut self, attr: Attr) -> Self {
+      self.attrs = self.attrs.union_c(BitFlags::<Attr>::from_bits_truncate_c(
+         attr as u16,
+         BitFlags::CONST_TOKEN,
+      ));
       self
    }
 
    #[must_use]
-   pub fn unattr(mut self, attrs: impl Into<EnumSet<Attr>>) -> Self {
-      self.attrs.remove_all(attrs.into());
+   pub const fn unattr(mut self, attr: Attr) -> Self {
+      self.attrs = self.attrs.intersection_c(
+         BitFlags::<Attr>::from_bits_truncate_c(attr as u16, BitFlags::CONST_TOKEN)
+            .not_c(BitFlags::CONST_TOKEN),
+      );
       self
    }
 
    #[must_use]
-   pub fn fixed(mut self, color: u8) -> Self {
+   pub const fn fixed(mut self, color: u8) -> Self {
       self.fg = Color::Fixed(color);
       self
    }
 
    #[must_use]
-   pub fn on_fixed(mut self, color: u8) -> Self {
+   pub const fn on_fixed(mut self, color: u8) -> Self {
       self.bg = Color::Fixed(color);
       self
    }
 
    #[must_use]
-   pub fn rgb(mut self, r: u8, b: u8, g: u8) -> Self {
+   pub const fn rgb(mut self, r: u8, b: u8, g: u8) -> Self {
       self.fg = Color::Rgb(r, g, b);
       self
    }
 
    #[must_use]
-   pub fn on_rgb(mut self, r: u8, b: u8, g: u8) -> Self {
+   pub const fn on_rgb(mut self, r: u8, b: u8, g: u8) -> Self {
       self.bg = Color::Rgb(r, g, b);
       self
    }
@@ -166,24 +208,26 @@ impl Style {
       on_bright_magenta: bg = Color::BrightMagenta;
       on_bright_cyan:    bg = Color::BrightCyan;
       on_bright_white:   bg = Color::BrightWhite;
+   }
 
-      bold:        attrs |= Attr::Bold;
-      dim:         attrs |= Attr::Dim;
-      italic:      attrs |= Attr::Italic;
-      underline:   attrs |= Attr::Underline;
-      blink:       attrs |= Attr::Blink;
-      rapid_blink: attrs |= Attr::RapidBlink;
-      invert:      attrs |= Attr::Invert;
-      conceal:     attrs |= Attr::Conceal;
-      strike:      attrs |= Attr::Strike;
+   set_attr! {
+      bold:        Attr::Bold;
+      dim:         Attr::Dim;
+      italic:      Attr::Italic;
+      underline:   Attr::Underline;
+      blink:       Attr::Blink;
+      rapid_blink: Attr::RapidBlink;
+      invert:      Attr::Invert;
+      conceal:     Attr::Conceal;
+      strike:      Attr::Strike;
    }
 }
 
-#[derive(Deref, DerefMut, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Deref, DerefMut, Debug, Clone, PartialEq, Eq)]
 pub struct Styled<T> {
    #[deref]
    #[deref_mut]
-   value:     T,
+   pub value: T,
    pub style: Style,
 }
 
@@ -191,7 +235,7 @@ macro_rules! styled {
    ($($method:ident),* $(,)?) => {
       $(
          #[must_use]
-         pub fn $method(mut self) -> Self {
+         pub const fn $method(mut self) -> Self {
             self.style = self.style.$method();
             self
          }
@@ -200,48 +244,44 @@ macro_rules! styled {
 }
 
 impl<T> Styled<T> {
-   pub fn into_inner(self) -> T {
-      self.value
-   }
-
    #[must_use]
-   pub fn fg(mut self, color: Color) -> Self {
+   pub const fn fg(mut self, color: Color) -> Self {
       self.style = self.style.fg(color);
       self
    }
 
    #[must_use]
-   pub fn bg(mut self, color: Color) -> Self {
+   pub const fn bg(mut self, color: Color) -> Self {
       self.style = self.style.bg(color);
       self
    }
 
    #[must_use]
-   pub fn attr(mut self, attrs: impl Into<EnumSet<Attr>>) -> Self {
-      self.style = self.style.attr(attrs);
+   pub const fn attr(mut self, attr: Attr) -> Self {
+      self.style = self.style.attr(attr);
       self
    }
 
    #[must_use]
-   pub fn fixed(mut self, color: u8) -> Self {
+   pub const fn fixed(mut self, color: u8) -> Self {
       self.style = self.style.fixed(color);
       self
    }
 
    #[must_use]
-   pub fn on_fixed(mut self, color: u8) -> Self {
+   pub const fn on_fixed(mut self, color: u8) -> Self {
       self.style = self.style.on_fixed(color);
       self
    }
 
    #[must_use]
-   pub fn rgb(mut self, r: u8, b: u8, g: u8) -> Self {
+   pub const fn rgb(mut self, r: u8, b: u8, g: u8) -> Self {
       self.style = self.style.rgb(r, g, b);
       self
    }
 
    #[must_use]
-   pub fn on_rgb(mut self, r: u8, b: u8, g: u8) -> Self {
+   pub const fn on_rgb(mut self, r: u8, b: u8, g: u8) -> Self {
       self.style = self.style.on_rgb(r, g, b);
       self
    }
@@ -312,11 +352,12 @@ pub trait StyledExt
 where
    Self: Sized,
 {
+   fn style(self, style: Style) -> Styled<Self> {
+      Styled { value: self, style }
+   }
+
    fn styled(self) -> Styled<Self> {
-      Styled {
-         value: self,
-         style: Style::default(),
-      }
+      self.style(Style::default())
    }
 
    #[must_use]
@@ -334,9 +375,9 @@ where
    }
 
    #[must_use]
-   fn attr(self, attrs: impl Into<EnumSet<Attr>>) -> Styled<Self> {
+   fn attr(self, attr: Attr) -> Styled<Self> {
       let mut styled = self.styled();
-      styled.style = styled.style.attr(attrs);
+      styled.style = styled.style.attr(attr);
       styled
    }
 
