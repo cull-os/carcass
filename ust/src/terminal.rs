@@ -1,0 +1,1280 @@
+use std::{
+   borrow::Cow,
+   cell::RefCell,
+   cmp,
+   fmt::{
+      self,
+      Write as _,
+   },
+   iter,
+   os,
+};
+
+use cab_span::{
+   IntoSize as _,
+   Size,
+   Span,
+};
+use cab_util::{
+   as_,
+   borrow_mut,
+};
+use num::traits::AsPrimitive;
+use scopeguard::{
+   ScopeGuard,
+   guard,
+};
+use smallvec::SmallVec;
+use unicode_segmentation::UnicodeSegmentation as _;
+
+use crate::{
+   Display,
+   IndentWith,
+   SPACES,
+   ToStr,
+   Write,
+   report,
+   style::{
+      self,
+      StyledExt as _,
+   },
+};
+
+/// Calculates the width of the number when formatted with the default
+/// formatter.
+#[expect(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+pub fn number_width(number: impl AsPrimitive<f64>) -> usize {
+   as_!(number);
+
+   if number == 0.0 {
+      1
+   } else {
+      number.log10() as usize + 1
+   }
+}
+
+/// Calculates the width of the number when formatted with the hex formatter.
+///
+/// Width does not include `0x` prefix, so beware.
+#[expect(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+pub fn number_hex_width(number: impl AsPrimitive<f64>) -> usize {
+   as_!(number);
+
+   if number == 0.0 {
+      1
+   } else {
+      number.log(16.0) as usize + 1
+   }
+}
+
+fn is_emoji(s: &str) -> bool {
+   !s.is_ascii() && s.chars().any(unic_emoji_char::is_emoji)
+}
+
+/// Calculates the width of the string on a best-effort basis.
+#[must_use]
+pub fn width(s: &str) -> usize {
+   s.graphemes(true)
+      .map(|grapheme| {
+         match grapheme {
+            "\t" => 4,
+            s if is_emoji(s) => 2,
+            #[expect(clippy::disallowed_methods)]
+            s => unicode_width::UnicodeWidthStr::width(s),
+         }
+      })
+      .sum::<usize>()
+}
+
+const STYLE_RESET: &str = "\x1B[0m";
+
+const STYLE_GUTTER: style::Style = style::Style::new().blue();
+const STYLE_HEADER_PATH: style::Style = style::Style::new().green();
+const STYLE_HEADER_POSITION: style::Style = style::Style::new().blue();
+
+const RIGHT_TO_BOTTOM: char = '┏';
+const TOP_TO_BOTTOM: char = '┃';
+const TOP_TO_BOTTOM_PARTIAL: char = '┇';
+const DOT: char = '·';
+const TOP_TO_RIGHT: char = '┗';
+const LEFT_TO_RIGHT: char = '━';
+const LEFT_TO_TOP_BOTTOM: char = '┫';
+
+const TOP_TO_BOTTOM_LEFT: char = '▏';
+const TOP_LEFT_TO_RIGHT: char = '╲';
+const TOP_TO_BOTTOM_RIGHT: char = '▕';
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum StyleColorVariant {
+   Fg,
+   Bg,
+}
+
+fn style_color_fg(color: style::Color) -> &'static str {
+   match color {
+      style::Color::Primary => "39",
+      style::Color::Fixed(_) | style::Color::Rgb(..) => "38",
+      style::Color::Black => "30",
+      style::Color::Red => "31",
+      style::Color::Green => "32",
+      style::Color::Yellow => "33",
+      style::Color::Blue => "34",
+      style::Color::Magenta => "35",
+      style::Color::Cyan => "36",
+      style::Color::White => "37",
+      style::Color::BrightBlack => "90",
+      style::Color::BrightRed => "91",
+      style::Color::BrightGreen => "92",
+      style::Color::BrightYellow => "93",
+      style::Color::BrightBlue => "94",
+      style::Color::BrightMagenta => "95",
+      style::Color::BrightCyan => "96",
+      style::Color::BrightWhite => "97",
+   }
+}
+
+fn style_color_bg(color: style::Color) -> &'static str {
+   match color {
+      style::Color::Primary => "49",
+      style::Color::Fixed(_) | style::Color::Rgb(..) => "48",
+      style::Color::Black => "40",
+      style::Color::Red => "41",
+      style::Color::Green => "42",
+      style::Color::Yellow => "43",
+      style::Color::Blue => "44",
+      style::Color::Magenta => "45",
+      style::Color::Cyan => "46",
+      style::Color::White => "47",
+      style::Color::BrightBlack => "100",
+      style::Color::BrightRed => "101",
+      style::Color::BrightGreen => "102",
+      style::Color::BrightYellow => "103",
+      style::Color::BrightBlue => "104",
+      style::Color::BrightMagenta => "105",
+      style::Color::BrightCyan => "106",
+      style::Color::BrightWhite => "107",
+   }
+}
+
+fn style_attr(attr: style::Attr) -> &'static str {
+   match attr {
+      style::Attr::Bold => "1",
+      style::Attr::Dim => "2",
+      style::Attr::Italic => "3",
+      style::Attr::Underline => "4",
+      style::Attr::Blink => "5",
+      style::Attr::RapidBlink => "6",
+      style::Attr::Invert => "7",
+      style::Attr::Conceal => "8",
+      style::Attr::Strike => "9",
+   }
+}
+
+fn style_unattr(attr: style::Attr) -> &'static str {
+   match attr {
+      style::Attr::Bold => "22",
+      style::Attr::Dim => "22",
+      style::Attr::Italic => "23",
+      style::Attr::Underline => "24",
+      style::Attr::Blink => "25",
+      style::Attr::RapidBlink => "25",
+      style::Attr::Invert => "27",
+      style::Attr::Conceal => "28",
+      style::Attr::Strike => "29",
+   }
+}
+
+fn write_style_color(
+   writer: &mut impl fmt::Write,
+   color: style::Color,
+   variant: StyleColorVariant,
+) -> fmt::Result {
+   writer.write_str(match variant {
+      StyleColorVariant::Fg => style_color_fg(color),
+      StyleColorVariant::Bg => style_color_bg(color),
+   })?;
+
+   match color {
+      style::Color::Fixed(num) => {
+         let mut buffer = itoa::Buffer::new();
+
+         writer.write_str(";5;")?;
+         writer.write_str(buffer.format(num))
+      },
+
+      style::Color::Rgb(r, g, b) => {
+         let mut buffer = itoa::Buffer::new();
+
+         writer.write_str(";2;")?;
+         writer.write_str(buffer.format(r))?;
+         writer.write_str(";")?;
+         writer.write_str(buffer.format(g))?;
+         writer.write_str(";")?;
+         writer.write_str(buffer.format(b))
+      },
+
+      _ => Ok(()),
+   }
+}
+
+fn extend_to_line_boundaries(source: &str, mut span: Span) -> Span {
+   while *span.start > 0
+      && source
+         .as_bytes()
+         .get(*span.start as usize - 1)
+         .is_some_and(|&c| c != b'\n')
+   {
+      span.start -= 1_u32;
+   }
+
+   while source
+      .as_bytes()
+      .get(*span.end as usize)
+      .is_some_and(|&c| c != b'\n')
+   {
+      span.end += 1_u32;
+   }
+
+   span
+}
+
+/// Given a list of spans which refer to the given content and their associated
+/// severities (primary and secondary), resolves the colors for every part,
+/// giving the primary color precedence over the secondary color in an overlap.
+fn resolve_style<'a>(
+   content: &'a str,
+   styles: &'a [LineStyle],
+   severity: report::ReportSeverity,
+) -> impl Iterator<Item = style::Styled<&'a str>> + 'a {
+   gen move {
+      let mut content_offset = Size::new(0_u32);
+      let mut style_offset: usize = 0;
+
+      while content_offset < content.len().into() {
+         let current_style =
+            styles[style_offset..]
+               .iter()
+               .copied()
+               .enumerate()
+               .find(|&(_, style)| {
+                  style.span.start <= content_offset && content_offset < style.span.end
+               });
+
+         match current_style {
+            Some((style_offset_diff, style)) => {
+               style_offset += style_offset_diff;
+
+               let contained_primary = (style.severity == report::LabelSeverity::Secondary)
+                  .then(|| {
+                     styles[style_offset..]
+                        .iter()
+                        .copied()
+                        .enumerate()
+                        .take_while(|&(_, other)| other.span.start <= style.span.end)
+                        .find(|&(_, other)| {
+                           other.severity == report::LabelSeverity::Primary
+                              && other.span.start > content_offset
+                        })
+                  })
+                  .flatten();
+
+               match contained_primary {
+                  Some((style_offset_diff, contained_style)) => {
+                     style_offset += style_offset_diff;
+
+                     yield content[Span::std(content_offset, contained_style.span.start)]
+                        .style(style.severity.style_in(severity));
+
+                     yield content[contained_style.span.into_std()]
+                        .style(contained_style.severity.style_in(severity));
+
+                     yield content[Span::std(contained_style.span.end, style.span.end)]
+                        .style(style.severity.style_in(severity));
+                  },
+
+                  None => {
+                     yield content[Span::std(content_offset, style.span.end)]
+                        .style(style.severity.style_in(severity));
+                  },
+               }
+
+               content_offset = style.span.end;
+            },
+
+            None => {
+               let (relative_offset, next_offset) = styles[style_offset..]
+                  .iter()
+                  .enumerate()
+                  .filter(|&(_, style)| style.span.start > content_offset)
+                  .map(|(relative_offset, style)| (relative_offset, style.span.start))
+                  .next()
+                  .unwrap_or((styles.len() - style_offset, content.len().into()));
+
+               style_offset += relative_offset;
+
+               yield content[Span::std(content_offset, next_offset)].styled();
+               content_offset = next_offset;
+            },
+         }
+      }
+   }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct LineStrikeId(u8);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LineStrikeStatus {
+   Start,
+   Continue,
+   End,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct LineStrike {
+   id:       LineStrikeId,
+   status:   LineStrikeStatus,
+   severity: report::LabelSeverity,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct LineStyle {
+   span:     Span,
+   severity: report::LabelSeverity,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LineLabelSpan {
+   /// Guaranteed to start at 0.
+   UpTo(Span),
+   Inline(Span),
+}
+
+impl LineLabelSpan {
+   fn start(self) -> Option<Size> {
+      match self {
+         LineLabelSpan::UpTo(_) => None,
+         LineLabelSpan::Inline(span) => Some(span.start),
+      }
+   }
+
+   fn end(self) -> Size {
+      match self {
+         LineLabelSpan::UpTo(span) => span.end,
+         LineLabelSpan::Inline(span) => span.end,
+      }
+   }
+
+   fn is_empty(self) -> bool {
+      self.start().is_some_and(|start| start == self.end())
+   }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct LineLabel {
+   span:     LineLabelSpan,
+   text:     Cow<'static, str>,
+   severity: report::LabelSeverity,
+}
+
+#[derive(Debug, Clone)]
+struct Line {
+   number: u32,
+
+   strikes: SmallVec<LineStrike, 2>,
+
+   content: String,
+   styles:  SmallVec<LineStyle, 4>,
+
+   labels: SmallVec<LineLabel, 2>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum IndentPlace {
+   Start,
+   Middle,
+   End,
+}
+
+struct Writer<W: fmt::Write> {
+   inner: W,
+
+   style: style::Style,
+
+   indents: SmallVec<IndentWith<Self>, 4>,
+   place:   IndentPlace,
+
+   width:     usize,
+   width_max: usize,
+}
+
+impl<W: fmt::Write> Writer<W> {
+   #[track_caller]
+   pub fn write_indent(&mut self) -> fmt::Result {
+      assert_eq!(self.place, IndentPlace::Start);
+
+      for indent in &mut self.indents {
+         indent(&mut self.inner);
+      }
+
+      self.place = IndentPlace::Middle;
+
+      Ok(())
+   }
+}
+
+impl<W: fmt::Write> fmt::Write for Writer<W> {
+   fn write_str(&mut self, s: &str) -> fmt::Result {
+      use None as Newline;
+      use Some as Line;
+
+      if self.style != style::Style::default() {
+         self.inner.write_str(STYLE_RESET)?;
+         self.style = style::Style::default();
+      }
+
+      let mut lines = s.split('\n').map(Line).intersperse(Newline).peekable();
+      while let Some(segment) = lines.next() {
+         match self.place {
+            IndentPlace::Start
+               if let Line(line) = segment
+                  && !line.is_empty() =>
+            {
+               self.write_indent()?;
+            },
+
+            IndentPlace::End => {
+               self.inner.write_char('\n');
+               self.place = IndentPlace::Start;
+            },
+
+            IndentPlace::Start | IndentPlace::Middle => {},
+         }
+
+         match segment {
+            Line(line) => {
+               self.inner.write_str(line)?;
+
+               if lines.peek().is_none() {
+                  self.width = self.width.saturating_add(width(line));
+               }
+            },
+
+            Newline => {
+               self.place = IndentPlace::End;
+               self.width = 0;
+            },
+         }
+      }
+
+      Ok(())
+   }
+}
+
+impl<W: fmt::Write> Write for Writer<W> {
+   fn finish(&mut self) -> fmt::Result {
+      if self.style != style::Style::default() {
+         self.inner.write_str(STYLE_RESET)
+      } else {
+         Ok(())
+      }
+   }
+
+   fn width(&self) -> usize {
+      self.width
+   }
+
+   fn width_max(&self) -> usize {
+      self.width_max
+   }
+
+   fn dedent(&mut self) {
+      self.indents.pop().expect("dendented without indents");
+   }
+
+   fn indent_with<'a>(
+      &'a mut self,
+      with: IndentWith<Self>,
+   ) -> ScopeGuard<&'a mut Self, impl FnOnce(&'a mut Self)> {
+      self.indents.push(with);
+
+      guard(self, |this| {
+         this.indents.pop();
+      })
+   }
+
+   fn write_style(&mut self, style: style::Style) -> fmt::Result {
+      struct Splicer {
+         written: bool,
+      }
+
+      impl Splicer {
+         fn splice(&mut self, writer: &mut impl fmt::Write) -> fmt::Result {
+            if self.written {
+               writer.write_char(';')
+            } else {
+               self.written = true;
+               writer.write_str("\x1B[")
+            }
+         }
+
+         fn finish(self, writer: &mut impl fmt::Write) -> fmt::Result {
+            if self.written {
+               writer.write_char('m')
+            } else {
+               Ok(())
+            }
+         }
+      }
+
+      let style::Style {
+         fg: fg_old,
+         bg: bg_old,
+         attrs: attrs_old,
+      } = self.style;
+
+      let style::Style {
+         fg: fg_new,
+         bg: bg_new,
+         attrs: attrs_new,
+      } = style;
+
+      let mut splicer = Splicer { written: false };
+
+      if fg_old != fg_new {
+         self.style.fg = fg_new;
+
+         splicer.splice(&mut self.inner)?;
+         write_style_color(&mut self.inner, fg_new, StyleColorVariant::Fg)?;
+      }
+
+      if bg_old != bg_new {
+         self.style.bg = bg_new;
+
+         splicer.splice(&mut self.inner)?;
+         write_style_color(&mut self.inner, bg_new, StyleColorVariant::Bg)?;
+      }
+
+      let attrs_both = attrs_new & attrs_old;
+
+      for attr_deleted in attrs_old & !attrs_both {
+         splicer.splice(&mut self.inner)?;
+         self.inner.write_str(style_unattr(attr_deleted))?;
+      }
+
+      for attr_added in attrs_new & !attrs_both {
+         splicer.splice(&mut self.inner)?;
+         self.inner.write_str(style_attr(attr_added))?;
+      }
+
+      splicer.finish(&mut self.inner)
+   }
+
+   fn write_styled<T: fmt::Display>(&mut self, styled: &style::Styled<T>) -> fmt::Result {
+      self.write_style(styled.style)?;
+      write!(self.inner, "{value}", value = **styled)
+   }
+
+   fn write_report(
+      &mut self,
+      report: &report::Report,
+      location: &impl crate::Display<Self>,
+      source: &report::PositionStr<'_>,
+   ) -> fmt::Result
+   where
+      Self: Sized,
+   {
+      let report::Report {
+         severity,
+         title,
+         labels,
+         points,
+      } = report;
+
+      let mut labels: SmallVec<_, 2> = report
+         .labels
+         .into_iter()
+         .map(|label| (source.positions(label.span), label))
+         .collect();
+
+      // Sort by line, and when labels are on the same line, sort by column. The one
+      // that ends the last will be the last.
+      labels.sort_by(|&((a_start, a_end), _), &((b_start, b_end), _)| {
+         a_start
+            .line
+            .cmp(&b_start.line)
+            .then_with(|| a_end.column.cmp(&b_end.column))
+      });
+
+      let mut lines = SmallVec::<Line, 8>::new();
+
+      'labels: for (label_index, ((label_start, label_end), label)) in
+         labels.into_iter().enumerate()
+      {
+         let label_span_extended = extend_to_line_boundaries(**source, label.span);
+
+         for (line_number, line_content) in
+            (label_start.line..).zip(source[label_span_extended.into_std()].split('\n'))
+         {
+            let line = match lines.iter_mut().find(|line| line.number == line_number) {
+               Some(item) => item,
+
+               None => {
+                  lines.push(Line {
+                     number: line_number,
+
+                     strikes: SmallVec::new(),
+
+                     content: line_content.to_owned(),
+                     styles:  SmallVec::new(),
+
+                     labels: SmallVec::new(),
+                  });
+
+                  lines.last_mut().expect("line was pushed")
+               },
+            };
+
+            let line_is_first = line_number == label_start.line;
+            let line_is_last = line_number == label_end.line;
+
+            // Not in a single line label.
+            if !(line_is_first && line_is_last) {
+               line.strikes.push(LineStrike {
+                  id: LineStrikeId(
+                     label_index
+                        .try_into()
+                        .expect("overlapping label count must not exceed u8::MAX"),
+                  ),
+
+                  status: match () {
+                     () if line_is_first => LineStrikeStatus::Start,
+                     () if line_is_last => LineStrikeStatus::End,
+                     () => LineStrikeStatus::Continue,
+                  },
+
+                  severity: label.severity,
+               });
+            }
+
+            match (line_is_first, line_is_last) {
+               // Single line label.
+               (true, true) => {
+                  let base = label_span_extended.start;
+
+                  let Span { start, end } = label.span;
+                  let span = Span::new(start - base, end - base);
+
+                  line.styles.push(LineStyle {
+                     span,
+                     severity: label.severity,
+                  });
+
+                  let up_to_start_width = width(&line_content[..*span.start as _]);
+                  let label_width = width(&line_content[span.into_std()]);
+
+                  line.labels.push(LineLabel {
+                     span:     LineLabelSpan::Inline(Span::at(up_to_start_width, label_width)),
+                     text:     label.text,
+                     severity: label.severity,
+                  });
+                  continue 'labels;
+               },
+
+               // Multiline label's first line.
+               (true, false) => {
+                  let base = label_span_extended.start;
+
+                  let Span { start, .. } = label.span;
+                  let end = source[*start as _..]
+                     .find('\n')
+                     .map_or(source.size(), |index| start + index);
+
+                  let span = Span::new(start - base, end - base);
+
+                  line.styles.push(LineStyle {
+                     span,
+                     severity: label.severity,
+                  });
+               },
+
+               // Multiline label's intermediary line.
+               (false, false) => {
+                  line.styles.push(LineStyle {
+                     span:     Span::up_to(line.content.len()),
+                     severity: label.severity,
+                  });
+               },
+
+               // Multiline label's last line.
+               (false, true) => {
+                  let roof = label_span_extended.end;
+
+                  // Line being:
+                  // <<<pointed-at>>><<<rest>>>
+                  //                 ^^^^^^^^^^ length of this
+                  let rest = roof - label.span.end;
+
+                  let end = line.content.as_str().size() - rest;
+
+                  let span = Span::up_to(end);
+
+                  line.styles.push(LineStyle {
+                     span,
+                     severity: label.severity,
+                  });
+
+                  let up_to_end_width = width(&line_content[..*end as _]);
+
+                  line.labels.push(LineLabel {
+                     span:     LineLabelSpan::UpTo(Span::up_to(up_to_end_width)),
+                     text:     label.text,
+                     severity: label.severity,
+                  });
+                  continue 'labels;
+               },
+            }
+         }
+      }
+
+      for line in &mut lines {
+         line.styles.sort_by(|a_style, b_style| {
+            match (
+               a_style.span.start.cmp(&b_style.span.start),
+               a_style.severity,
+               b_style.severity,
+            ) {
+               (
+                  cmp::Ordering::Equal,
+                  report::LabelSeverity::Primary,
+                  report::LabelSeverity::Secondary,
+               ) => cmp::Ordering::Less,
+
+               (
+                  cmp::Ordering::Equal,
+                  report::LabelSeverity::Secondary,
+                  report::LabelSeverity::Primary,
+               ) => cmp::Ordering::Greater,
+
+               (ordering, ..) => ordering,
+            }
+         });
+
+         line.labels.sort_by_key(|style| {
+            // Empty labels are printed offset one column to the right, so treat them like
+            // it.
+            style.span.end() + u32::from(style.span.is_empty())
+         });
+      }
+
+      drop(labels);
+
+      let writer = &mut self;
+
+      {
+         let header = match severity {
+            report::ReportSeverity::Note => "note:",
+            report::ReportSeverity::Warn => "warn:",
+            report::ReportSeverity::Error => "error:",
+            report::ReportSeverity::Bug => "bug:",
+         }
+         .style(severity.style_in());
+         let header_width = width(*header);
+
+         // INDENT: "<note|warn|error|bug>: "
+         let mut wrote = false;
+         let writer = writer.indent_with(Box::new(move |writer| {
+            if wrote {
+               writer.write_str(&SPACES[..header_width])
+            } else {
+               wrote = true;
+               writer.write_styled(&header)
+            }
+         }));
+
+         wrap(writer, [title.as_ref().bold()])?;
+      }
+
+      let line_number_width = lines.last().map_or(0, |line| number_width(line.number));
+
+      // INDENT: "123 | "
+      let line_number = RefCell::new(None::<u32>);
+      let line_number_previous = RefCell::new(None::<u32>);
+      let writer = writer.indent_with(Box::new(move |writer| {
+         let line_number = *line_number.borrow();
+         borrow_mut!(line_number_previous);
+
+         writer.write_style(STYLE_GUTTER)?;
+         match line_number {
+            // Don't write the current line number, just print spaces instead.
+            None => {
+               write!(writer, "{:>line_number_width$}", "")?;
+            },
+
+            // Continuation line. Use dots instead of the number.
+            Some(line_number) if *line_number_previous == Some(line_number) => {
+               let dot_width = number_width(line_number);
+               let space_width = line_number_width - dot_width;
+
+               write!(writer, "{:>space_width$}", "")?;
+
+               for _ in 0..dot_width {
+                  writer.write_char(DOT)?;
+               }
+            },
+
+            // New line, but not right after the previous line.
+            Some(line_number)
+               if line_number_previous
+                  .is_some_and(|line_number_previous| line_number > line_number_previous + 1) =>
+            {
+               writeln!(
+                  writer,
+                  "{:>line_number_width$} {TOP_TO_BOTTOM_PARTIAL} ",
+                  "",
+               )?;
+               write!(writer, "{line_number:>line_number_width$}")?;
+            },
+
+            // New line.
+            Some(line_number) => {
+               write!(writer, "{line_number:>line_number_width$}")?;
+            },
+         }
+
+         write!(writer, " {TOP_TO_BOTTOM} ")?;
+
+         if let Some(line_number) = line_number {
+            line_number_previous.replace(line_number);
+         }
+
+         Ok(())
+      }));
+
+      if let Some(line) = lines.first() {
+         {
+            // DEDENT: "| "
+            dedent!(writer, 2);
+
+            // INDENT: "┏━━━ ".
+            indent!(
+               writer,
+               header =
+                  const_str::concat!(RIGHT_TO_BOTTOM, LEFT_TO_RIGHT, LEFT_TO_RIGHT, LEFT_TO_RIGHT)
+                     .style(GUTTER_STYLE),
+               continuation = const_str::concat!(TOP_TO_BOTTOM).style(GUTTER_STYLE),
+            );
+
+            writeln!(writer)?;
+
+            wrap(
+               writer,
+               [
+                  location
+                     .display_free_width()
+                     .to_string()
+                     .as_str()
+                     .style(style::HEADER_PATH),
+                  ":".styled(),
+                  line
+                     .number
+                     .to_string()
+                     .as_str()
+                     .style(style::HEADER_POSITION),
+                  ":".styled(),
+                  width(&line.content[..*line.styles.first().unwrap().span.start as _])
+                     .add(1)
+                     .to_string()
+                     .as_str()
+                     .style(style::HEADER_POSITION),
+               ]
+               .into_iter(),
+            )?;
+         }
+
+         writeln!(writer)?;
+         writer.write_indent()?;
+      }
+
+      let strike_prefix_width = lines
+         .iter()
+         .map(|line| line.strikes.len())
+         .max()
+         .unwrap_or(0);
+
+      {
+         // INDENT: "<strike-prefix> "
+         let strike_prefix = RefCell::new(
+            iter::repeat_n(None::<LineStrike>, strike_prefix_width).collect::<SmallVec<_, 2>>(),
+         );
+         indent!(
+            writer,
+            strike_prefix_width + 1,
+            with = |writer: &mut dyn WriteView| {
+               const STRIKE_OVERRIDE_DEFAULT: Styled<char> = Styled::new(' ');
+
+               let mut strike_override = None::<Styled<char>>;
+
+               for slot in &*strike_prefix.borrow() {
+                  let Some(strike) = *slot else {
+                     write!(
+                        writer,
+                        "{symbol}",
+                        symbol = strike_override.unwrap_or(STRIKE_OVERRIDE_DEFAULT),
+                     )?;
+                     continue;
+                  };
+
+                  match strike.status {
+                     LineStrikeStatus::Start => {
+                        write!(
+                           writer,
+                           "{symbol}",
+                           symbol = RIGHT_TO_BOTTOM.style(strike.severity.style_in(severity)),
+                        )?;
+
+                        strike_override =
+                           Some(LEFT_TO_RIGHT.style(strike.severity.style_in(severity)));
+                     },
+
+                     LineStrikeStatus::Continue | LineStrikeStatus::End
+                        if let Some(strike) = strike_override =>
+                     {
+                        write!(writer, "{strike}")?;
+                     },
+
+                     LineStrikeStatus::Continue | LineStrikeStatus::End => {
+                        write!(
+                           writer,
+                           "{symbol}",
+                           symbol = TOP_TO_BOTTOM.style(strike.severity.style_in(severity)),
+                        )?;
+                     },
+                  }
+               }
+
+               write!(
+                  writer,
+                  "{symbol}",
+                  symbol = strike_override.unwrap_or(STRIKE_OVERRIDE_DEFAULT),
+               )?;
+
+               Ok(strike_prefix_width + 1)
+            }
+         );
+
+         for line in &lines {
+            // Patch strike prefix and keep track of positions of strikes with their IDs.
+            {
+               borrow_mut!(strike_prefix);
+
+               for strike_new @ LineStrike { id, .. } in line.strikes.iter().copied() {
+                  match strike_prefix
+                     .iter_mut()
+                     .flatten()
+                     .find(|strike| strike.id == id)
+                  {
+                     Some(strike) => *strike = strike_new,
+
+                     None => {
+                        strike_prefix
+                           .iter_mut()
+                           .find(|slot| slot.is_none())
+                           .unwrap()
+                           .replace(strike_new);
+                     },
+                  }
+               }
+            }
+
+            // Write the line.
+            {
+               line_number.borrow_mut().replace(line.number);
+
+               // Explicitly write the indent because the line may be empty.
+               writeln!(writer)?;
+               writer.write_indent()?;
+               wrap(
+                  writer,
+                  resolve_style(&line.content, &line.styles, *severity),
+               )?;
+
+               *line_number.borrow_mut() = None;
+            }
+
+            // Write the line labels.
+            // Reverse, because we want to print the labels that end the last first.
+            for (label_index, label) in line.labels.iter().enumerate().rev() {
+               // HACK: wrap may split the current line into multiple
+               // lines, so the label pointer may be too far left.
+               // Just max it to 60 for now.
+               let span_start = label.span.start().min(Some(60_u32.into()));
+               let span_end = label.span.end().min(60_u32.into());
+
+               // DEDENT: "<strike-prefix> "
+               dedent!(writer);
+
+               match label.span {
+                  LineLabelSpan::UpTo(_) => {
+                     let (top_to_right_index, top_to_right) = strike_prefix
+                        .borrow()
+                        .iter()
+                        .enumerate()
+                        .rev()
+                        .find_map(|(index, strike)| {
+                           match strike {
+                              &Some(strike) if strike.status == LineStrikeStatus::End => {
+                                 Some((index, strike))
+                              },
+
+                              _ => None,
+                           }
+                        })
+                        .unwrap();
+
+                     assert_eq!(top_to_right.severity, label.severity);
+
+                     // INDENT: "<strike-prefix>"
+                     let mut wrote = false;
+                     indent!(
+                        writer,
+                        strike_prefix_width,
+                        with = |writer: &mut dyn WriteView| {
+                           // Write all strikes up to the index of the one we are going to
+                           // redirect to the right.
+                           for slot in strike_prefix.borrow().iter().take(top_to_right_index) {
+                              write!(
+                                 writer,
+                                 "{symbol}",
+                                 symbol = match *slot {
+                                    Some(strike) =>
+                                       TOP_TO_BOTTOM.style(strike.severity.style_in(severity)),
+                                    None => ' '.styled(),
+                                 },
+                              )?;
+                           }
+
+                           if wrote {
+                              return Ok(top_to_right_index);
+                           }
+
+                           write!(
+                              writer,
+                              "{symbol}",
+                              symbol = TOP_TO_RIGHT.style(top_to_right.severity.style_in(severity)),
+                           )?;
+
+                           for _ in 0..strike_prefix_width - top_to_right_index - 1 {
+                              write!(
+                                 writer,
+                                 "{symbol}",
+                                 symbol =
+                                    LEFT_TO_RIGHT.style(top_to_right.severity.style_in(severity)),
+                              )?;
+                           }
+
+                           wrote = true;
+                           Ok(strike_prefix_width)
+                        }
+                     );
+
+                     // INDENT: "<left-to-right><left-to-bottom>"
+                     // INDENT: "               <top--to-bottom>"
+                     let mut wrote = false;
+                     indent!(
+                        writer,
+                        // + 1 because the span is zero-indexed and we didn't indent the space
+                        //   after <strike-prefix> before.
+                        //
+                        // + 1 because we want a space after the <top-to-bottom>.
+                        *span_end as usize + 2,
+                        with = |writer: &mut dyn WriteView| {
+                           for index in 0..*span_end {
+                              write!(
+                                 writer,
+                                 "{symbol}",
+                                 symbol = match () {
+                                    // If there is a label on the current line after this label
+                                    // that has a start or
+                                    // end at the
+                                    // current index, write it instead of out <left-to-right>
+                                    () if let Some(label) =
+                                       line.labels[..label_index].iter().rev().find(|label| {
+                                          *label.span.end() == index && !label.span.is_empty()
+                                             || label
+                                                .span
+                                                .start()
+                                                .is_some_and(|start| *start + 1 == index)
+                                       }) =>
+                                    {
+                                       if label.span.is_empty() {
+                                          TOP_TO_BOTTOM_LEFT
+                                             .style(label.severity.style_in(severity))
+                                       } else {
+                                          TOP_TO_BOTTOM.style(label.severity.style_in(severity))
+                                       }
+                                    },
+
+                                    () if !wrote =>
+                                       LEFT_TO_RIGHT.style(top_to_right.severity.style_in(severity)),
+
+                                    () => ' '.styled(),
+                                 },
+                              )?;
+                           }
+
+                           write!(
+                              writer,
+                              "{symbol}",
+                              symbol = match () {
+                                 () if !wrote => LEFT_TO_TOP_BOTTOM,
+                                 () => TOP_TO_BOTTOM,
+                              }
+                              .style(top_to_right.severity.style_in(severity)),
+                           )?;
+
+                           wrote = true;
+                           strike_prefix.borrow_mut()[top_to_right_index] = None;
+                           Ok(*span_end as usize + 1)
+                        }
+                     );
+
+                     lnwrap(writer, [label
+                        .text
+                        .as_ref()
+                        .style(top_to_right.severity.style_in(severity))])?;
+                  },
+
+                  LineLabelSpan::Inline(_) => {
+                     unwrap!(span_start);
+
+                     // INDENT: "<strike-prefix> "
+                     indent!(
+                        writer,
+                        strike_prefix_width + 1,
+                        with = |writer: &mut dyn WriteView| {
+                           for slot in &*strike_prefix.borrow() {
+                              write!(
+                                 writer,
+                                 "{symbol}",
+                                 symbol = match *slot {
+                                    Some(strike) =>
+                                       TOP_TO_BOTTOM.style(strike.severity.style_in(severity)),
+                                    None => ' '.styled(),
+                                 },
+                              )?;
+                           }
+
+                           Ok(strike_prefix_width)
+                        }
+                     );
+
+                     // INDENT: "               <top-to-right><left-to-right><left-to-bottom> "
+                     // INDENT: "                                            <top--to-bottom> "
+                     let mut wrote = false;
+                     indent!(
+                        writer,
+                        // + 1 for extra space.
+                        // + 1 if the label is zero-width. The <top-left-to-right> will be placed
+                        //   after the span.
+                        *span_end as usize + usize::from(span_start == span_end) + 1,
+                        with = |writer: &mut dyn WriteView| {
+                           for index in 0..*span_end - u32::from(span_start != span_end) {
+                              write!(
+                                 writer,
+                                 "{symbol}",
+                                 symbol = match () {
+                                    () if !wrote && index == *span_start =>
+                                       TOP_TO_RIGHT.style(label.severity.style_in(severity)),
+
+                                    () if let Some(label) =
+                                       line.labels[..label_index].iter().rev().find(|label| {
+                                          *label.span.end() == index + 1 && !label.span.is_empty()
+                                             || label
+                                                .span
+                                                .start()
+                                                .is_some_and(|start| *start == index)
+                                       }) =>
+                                    {
+                                       if label.span.is_empty() {
+                                          TOP_TO_BOTTOM_LEFT
+                                             .style(label.severity.style_in(severity))
+                                       } else {
+                                          TOP_TO_BOTTOM.style(label.severity.style_in(severity))
+                                       }
+                                    },
+
+                                    () if !wrote && index > *span_start => {
+                                       LEFT_TO_RIGHT.style(label.severity.style_in(severity))
+                                    },
+
+                                    () => ' '.styled(),
+                                 },
+                              )?;
+                           }
+
+                           write!(
+                              writer,
+                              "{symbol}",
+                              symbol = match *span_end - *span_start {
+                                 0 if wrote => TOP_TO_BOTTOM_RIGHT,
+                                 _ if wrote => TOP_TO_BOTTOM,
+
+                                 0 => TOP_LEFT_TO_RIGHT,
+                                 1 => TOP_TO_BOTTOM,
+
+                                 _ => LEFT_TO_TOP_BOTTOM,
+                              }
+                              .style(label.severity.style_in(severity)),
+                           )?;
+
+                           wrote = true;
+                           Ok(*span_end as usize + usize::from(span_start == span_end))
+                        }
+                     );
+
+                     lnwrap(writer, [label
+                        .text
+                        .as_ref()
+                        .style(label.severity.style_in(severity))])?;
+                  },
+               }
+            }
+         }
+      }
+
+      // Write the points.
+      {
+         if !points.is_empty() {
+            writeln!(writer)?;
+            writer.write_indent()?;
+         }
+
+         // DEDENT: "| "
+         dedent!(writer, 2);
+
+         for point in points {
+            // INDENT: "= "
+            indent!(writer, header = "=".style(GUTTER_STYLE));
+
+            // INDENT: "<tip|help|...>: "
+            indent!(writer, header = &point.title);
+
+            lnwrap(writer, [point.text.as_ref().styled()])?;
+         }
+      }
+
+      Ok(())
+   }
+}
+
+pub fn writer(inner: impl os::fd::AsFd + fmt::Write) -> impl Write {
+   Writer {
+      width: 0,
+      width_max: terminal_size::terminal_size_of(&inner.as_fd())
+         .map_or(usize::MAX, |(width, _)| width.0 as usize),
+
+      inner,
+      style: style::Style::default(),
+   }
+}
