@@ -17,8 +17,9 @@ workspace = true
 cab-span.path = "../cab/cab-span"
 cab-util.path = "../cab/cab-util"
 
-enumflags2.workspace            = true
+const-str.workspace            = true
 derive_more.workspace          = true
+enumflags2.workspace           = true
 itoa.workspace                 = true
 num.workspace                  = true
 scopeguard.workspace           = true

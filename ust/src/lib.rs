@@ -11,6 +11,7 @@ use std::{
 };
 
 use scopeguard::ScopeGuard;
+use style::StyledExt;
 
 pub mod report;
 pub mod style;
@@ -21,31 +22,31 @@ pub trait Display<'a, W: Write> {
    fn display_styled(&self, w: &mut W) -> fmt::Result;
 }
 
-trait ToStr {
-   fn to_str(&self) -> &str;
+trait IntoWidth {
+   fn width(&self) -> usize;
 }
 
-impl ToStr for &'_ str {
-   fn to_str(&self) -> &str {
-      self
+impl IntoWidth for &'_ str {
+   fn width(&self) -> usize {
+      terminal::width(self)
    }
 }
 
-impl ToStr for Cow<'_, str> {
-   fn to_str(&self) -> &str {
-      self.as_ref()
+impl IntoWidth for Cow<'_, str> {
+   fn width(&self) -> usize {
+      terminal::width(self.as_ref())
    }
 }
 
-impl ToStr for style::Styled<&'_ str> {
-   fn to_str(&self) -> &str {
-      self.value
+impl IntoWidth for style::Styled<&'_ str> {
+   fn width(&self) -> usize {
+      terminal::width(self.value)
    }
 }
 
-impl ToStr for style::Styled<Cow<'_, str>> {
-   fn to_str(&self) -> &str {
-      self.value.as_ref()
+impl IntoWidth for style::Styled<Cow<'_, str>> {
+   fn width(&self) -> usize {
+      terminal::width(self.value.as_ref())
    }
 }
 
@@ -72,10 +73,45 @@ pub trait Write: fmt::Write {
       usize::MAX
    }
 
-   fn dedent(&mut self);
+   fn dedent<'a>(&'a mut self) -> ScopeGuard<&'a mut Self, impl FnOnce(&'a mut Self)>;
 
    fn indent<'a>(&'a mut self, count: u8) -> ScopeGuard<&'a mut Self, impl FnOnce(&'a mut Self)> {
       self.indent_with(Box::new(move |this| this.write_str(&SPACES[..count as _])))
+   }
+
+   fn indent_by<'a>(
+      &'a mut self,
+      header: style::Styled<&str>,
+      continuation: style::Styled<&str>,
+   ) -> ScopeGuard<&'a mut Self, impl FnOnce(&'a mut Self)>
+   where
+      Self: Sized,
+   {
+      let header = header.value.to_owned().style(header.style);
+      let continuation = continuation.value.to_owned().style(continuation.style);
+
+      let mut wrote = false;
+
+      self.indent_with(Box::new(move |this| {
+         if wrote {
+            this.write_str(&continuation)
+         } else {
+            wrote = true;
+            this.write_styled(&header)
+         }
+      }))
+   }
+
+   fn indent_header<'a>(
+      &'a mut self,
+      header: style::Styled<&str>,
+   ) -> ScopeGuard<&'a mut Self, impl FnOnce(&'a mut Self)>
+   where
+      Self: Sized,
+   {
+      let continuation = SPACES[..header.width()].styled();
+
+      self.indent_by(header, continuation)
    }
 
    fn indent_with<'a>(

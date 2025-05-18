@@ -1228,6 +1228,7 @@ version = "0.0.2"
 dependencies = [
  "cab-span",
  "cab-util",
+ "const-str",
  "derive_more",
  "enumflags2",
  "itoa",

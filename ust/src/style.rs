@@ -244,6 +244,13 @@ macro_rules! styled {
 }
 
 impl<T> Styled<T> {
+   pub const fn new(value: T) -> Self {
+      Self {
+         value,
+         style: Style::new(),
+      }
+   }
+
    #[must_use]
    pub const fn fg(mut self, color: Color) -> Self {
       self.style = self.style.fg(color);
@@ -352,12 +359,14 @@ pub trait StyledExt
 where
    Self: Sized,
 {
-   fn style(self, style: Style) -> Styled<Self> {
-      Styled { value: self, style }
+   fn styled(self) -> Styled<Self> {
+      Styled::new(self)
    }
 
-   fn styled(self) -> Styled<Self> {
-      self.style(Style::default())
+   fn style(self, style: Style) -> Styled<Self> {
+      let mut styled = self.styled();
+      styled.style = style;
+      styled
    }
 
    #[must_use]
