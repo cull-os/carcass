@@ -7,6 +7,7 @@ use std::{
       Write as _,
    },
    iter,
+   ops::Add as _,
    os,
 };
 
@@ -37,7 +38,7 @@ use crate::{
    report,
    style::{
       self,
-      StyledExt as _,
+      StyledExt,
    },
 };
 
@@ -778,10 +779,10 @@ impl<W: fmt::Write> Write for Writer<W> {
          // INDENT: "<note|warn|error|bug>: "
          let writer = writer.indent_header(
             match severity {
-               report::ReportSeverity::Note => "note:",
-               report::ReportSeverity::Warn => "warn:",
-               report::ReportSeverity::Error => "error:",
-               report::ReportSeverity::Bug => "bug:",
+               report::ReportSeverity::Note => "note: ",
+               report::ReportSeverity::Warn => "warn: ",
+               report::ReportSeverity::Error => "error: ",
+               report::ReportSeverity::Bug => "bug: ",
             }
             .style(severity.style_in()),
          );
@@ -855,9 +856,15 @@ impl<W: fmt::Write> Write for Writer<W> {
 
             // INDENT: "┏━━━ ".
             let writer = writer.indent_by(
-               const_str::concat!(RIGHT_TO_BOTTOM, LEFT_TO_RIGHT, LEFT_TO_RIGHT, LEFT_TO_RIGHT)
-                  .style(STYLE_GUTTER),
-               const_str::concat!(TOP_TO_BOTTOM, "    ").style(STYLE_GUTTER),
+               const_str::concat!(
+                  RIGHT_TO_BOTTOM,
+                  LEFT_TO_RIGHT,
+                  LEFT_TO_RIGHT,
+                  LEFT_TO_RIGHT,
+                  ' '
+               )
+               .style(STYLE_GUTTER),
+               const_str::concat!(TOP_TO_BOTTOM, "     ").style(STYLE_GUTTER),
             );
 
             writeln!(writer)?;
@@ -869,19 +876,19 @@ impl<W: fmt::Write> Write for Writer<W> {
                      .display_free_width()
                      .to_string()
                      .as_str()
-                     .style(style::HEADER_PATH),
+                     .style(STYLE_HEADER_PATH),
                   ":".styled(),
                   line
                      .number
                      .to_string()
                      .as_str()
-                     .style(style::HEADER_POSITION),
+                     .style(STYLE_HEADER_POSITION),
                   ":".styled(),
                   width(&line.content[..*line.styles.first().unwrap().span.start as _])
                      .add(1)
                      .to_string()
                      .as_str()
-                     .style(style::HEADER_POSITION),
+                     .style(STYLE_HEADER_POSITION),
                ]
                .into_iter(),
             )?;
@@ -1181,15 +1188,24 @@ impl<W: fmt::Write> Write for Writer<W> {
             writer.write_indent()?;
          }
 
-         // DEDENT: "| "
-         dedent!(writer, 2);
+         // DEDENT: "123 | "
+         let writer = writer.dedent();
+
+         // INDENT: "123 ", but spaces.
+         let writer = writer.indent(line_number_width as u8 + 1);
 
          for point in points {
             // INDENT: "= "
-            indent!(writer, header = "=".style(GUTTER_STYLE));
+            let writer = writer.indent_header("= ".style(STYLE_GUTTER));
 
             // INDENT: "<tip|help|...>: "
-            indent!(writer, header = &point.title);
+            let writer = writer.indent_header(
+               match point.severity {
+                  report::PointSeverity::Tip => "tip: ",
+                  report::PointSeverity::Help => "help: ",
+               }
+               .style(point.severity.style_in()),
+            );
 
             lnwrap(writer, [point.text.as_ref().styled()])?;
          }
@@ -1201,11 +1217,15 @@ impl<W: fmt::Write> Write for Writer<W> {
 
 pub fn writer(inner: impl os::fd::AsFd + fmt::Write) -> impl Write {
    Writer {
+      style: style::Style::default(),
+
+      indents: SmallVec::new(),
+      place: IndentPlace::Start,
+
       width: 0,
       width_max: terminal_size::terminal_size_of(&inner.as_fd())
          .map_or(usize::MAX, |(width, _)| width.0 as usize),
 
       inner,
-      style: style::Style::default(),
    }
 }

@@ -176,6 +176,16 @@ pub enum PointSeverity {
    Help,
 }
 
+impl PointSeverity {
+   pub fn style_in(self) -> Style {
+      match self {
+         PointSeverity::Tip => Color::Cyan,
+         PointSeverity::Help => Color::Magenta,
+      }
+      .fg()
+   }
+}
+
 /// A spanless label, also known as a point. Displayed at the end of the report.
 #[derive(Debug, Clone)]
 pub struct Point {
