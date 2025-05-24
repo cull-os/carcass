@@ -18,7 +18,7 @@ pub mod style;
 
 pub mod terminal;
 
-pub trait Display<'a, W: Write> {
+pub trait Display<W: Write> {
    fn display_styled(&self, w: &mut W) -> fmt::Result;
 }
 
@@ -133,7 +133,7 @@ pub trait Write: fmt::Write {
    fn write_report(
       &mut self,
       report: &report::Report,
-      location: &impl Display<'_, Self>,
+      location: &impl Display<Self>,
       source: &report::PositionStr<'_>,
    ) -> fmt::Result
    where
