@@ -10,6 +10,7 @@ use std::{
    num::NonZeroUsize,
    ops::Add as _,
    os,
+   rc::Rc,
 };
 
 use cab_span::{
@@ -33,9 +34,7 @@ use smallvec::SmallVec;
 use unicode_segmentation::UnicodeSegmentation as _;
 
 use crate::{
-   Display,
    IndentWith,
-   IntoWidth,
    SPACES,
    Write,
    report,
@@ -553,8 +552,8 @@ impl<W: fmt::Write> Writer<W> {
    pub fn write_indent(&mut self) -> fmt::Result {
       assert_eq!(self.place, IndentPlace::Start);
 
-      for (count, indent) in &mut self.indents {
-         indent(&mut self.inner);
+      for (_count, _indent) in &mut self.indents {
+         // indent(&mut self.inner);
       }
 
       self.place = IndentPlace::Middle;
@@ -726,7 +725,7 @@ impl<W: fmt::Write> Write for Writer<W> {
    fn write_report(
       &mut self,
       report: &report::Report,
-      location: &impl crate::Display<Self>,
+      location: style::Styled<&str>,
       source: &report::PositionStr<'_>,
    ) -> fmt::Result
    where
@@ -739,9 +738,8 @@ impl<W: fmt::Write> Write for Writer<W> {
          ref points,
       } = *report;
 
-      let mut labels: SmallVec<_, 2> = report
-         .labels
-         .into_iter()
+      let mut labels: SmallVec<_, 2> = labels
+         .iter()
          .map(|label| (source.positions(label.span), label))
          .collect();
 
@@ -756,9 +754,7 @@ impl<W: fmt::Write> Write for Writer<W> {
 
       let mut lines = SmallVec::<Line, 8>::new();
 
-      'labels: for (label_index, ((label_start, label_end), label)) in
-         labels.into_iter().enumerate()
-      {
+      for (label_index, ((label_start, label_end), label)) in labels.into_iter().enumerate() {
          let label_span_extended = extend_to_line_boundaries(**source, label.span);
 
          for (line_number, line_content) in
@@ -823,10 +819,9 @@ impl<W: fmt::Write> Write for Writer<W> {
 
                   line.labels.push(LineLabel {
                      span:     LineLabelSpan::Inline(Span::at(up_to_start_width, label_width)),
-                     text:     label.text,
+                     text:     label.text.clone(),
                      severity: label.severity,
                   });
-                  continue 'labels;
                },
 
                // Multiline label's first line.
@@ -876,10 +871,9 @@ impl<W: fmt::Write> Write for Writer<W> {
 
                   line.labels.push(LineLabel {
                      span:     LineLabelSpan::UpTo(Span::up_to(up_to_end_width)),
-                     text:     label.text,
+                     text:     label.text.clone(),
                      severity: label.severity,
                   });
-                  continue 'labels;
                },
             }
          }
@@ -915,13 +909,11 @@ impl<W: fmt::Write> Write for Writer<W> {
          });
       }
 
-      drop(labels);
-
       let writer = self;
 
       {
          // INDENT: "<note|warn|error|bug>: "
-         let writer = writer.indent_header(
+         let mut writer = writer.indent_header(
             match severity {
                report::ReportSeverity::Note => "note: ",
                report::ReportSeverity::Warn => "warn: ",
@@ -939,7 +931,7 @@ impl<W: fmt::Write> Write for Writer<W> {
       // INDENT: "123 | "
       let line_number = RefCell::new(None::<u32>);
       let line_number_previous = RefCell::new(None::<u32>);
-      let writer = writer.indent_with(
+      let mut writer = writer.indent_with(
          line_number_width as u8 + 3,
          Box::new(move |writer| {
             let line_number = *line_number.borrow();
@@ -997,13 +989,13 @@ impl<W: fmt::Write> Write for Writer<W> {
       if let Some(line) = lines.first() {
          {
             // DEDENT: "123 | "
-            let writer = writer.dedent();
+            let mut writer = writer.dedent();
 
             // INDENT: "123 ", but spaces.
-            let writer = writer.indent(line_number_width as u8 + 1);
+            let mut writer = writer.indent(line_number_width as u8 + 1);
 
             // INDENT: "┏━━━ ".
-            let writer = writer.indent_by(
+            let mut writer = writer.indent_by(
                const_str::concat!(
                   RIGHT_TO_BOTTOM,
                   LEFT_TO_RIGHT,
@@ -1020,11 +1012,7 @@ impl<W: fmt::Write> Write for Writer<W> {
             wrap(
                *writer,
                [
-                  location
-                     .display_free_width()
-                     .to_string()
-                     .as_str()
-                     .style(STYLE_HEADER_PATH),
+                  location,
                   ":".styled(),
                   line
                      .number
@@ -1054,19 +1042,22 @@ impl<W: fmt::Write> Write for Writer<W> {
 
       {
          // INDENT: "<strike-prefix> "
-         let strike_prefix = RefCell::new(
+         let strike_prefix = Rc::new(RefCell::new(
             iter::repeat_n(None::<LineStrike>, strike_prefix_width).collect::<SmallVec<_, 2>>(),
-         );
-         let writer = writer.indent_with(
+         ));
+
+         let strike_prefix_ = strike_prefix.clone();
+         let mut writer = writer.indent_with(
             strike_prefix_width as u8 + 1,
-            Box::new(|writer| {
+            Box::new(move |writer| {
                const STRIKE_OVERRIDE_DEFAULT: style::Styled<char> = style::Styled::new(' ');
 
                let mut strike_override = None::<style::Styled<char>>;
 
-               for slot in &*strike_prefix.borrow() {
+               for slot in &*strike_prefix_.borrow() {
                   let Some(strike) = *slot else {
-                     writer.write_styled(&strike_override.unwrap_or(STRIKE_OVERRIDE_DEFAULT));
+                     writer
+                        .write_styled(strike_override.as_ref().unwrap_or(&STRIKE_OVERRIDE_DEFAULT));
                      continue;
                   };
 
@@ -1081,7 +1072,7 @@ impl<W: fmt::Write> Write for Writer<W> {
                      },
 
                      LineStrikeStatus::Continue | LineStrikeStatus::End
-                        if let Some(strike) = strike_override =>
+                        if let Some(strike) = strike_override.as_ref() =>
                      {
                         writer.write_styled(&strike)?;
                      },
@@ -1147,7 +1138,7 @@ impl<W: fmt::Write> Write for Writer<W> {
                let span_end = label.span.end().min(60_u32.into());
 
                // DEDENT: "<strike-prefix> "
-               let writer = writer.dedent();
+               let mut writer = writer.dedent();
 
                match label.span {
                   LineLabelSpan::UpTo(_) => {
@@ -1170,13 +1161,14 @@ impl<W: fmt::Write> Write for Writer<W> {
                      assert_eq!(top_to_right.severity, label.severity);
 
                      // INDENT: "<strike-prefix>"
+                     let strike_prefix_ = strike_prefix.clone();
                      let mut wrote = false;
-                     let writer = writer.indent_with(
+                     let mut writer = writer.indent_with(
                         strike_prefix_width as u8,
-                        Box::new(|writer| {
+                        Box::new(move |writer| {
                            // Write all strikes up to the index of the one we are going to
                            // redirect to the right.
-                           for slot in strike_prefix.borrow().iter().take(top_to_right_index) {
+                           for slot in strike_prefix_.borrow().iter().take(top_to_right_index) {
                               writer.write_styled(&match *slot {
                                  Some(strike) => {
                                     TOP_TO_BOTTOM.style(strike.severity.style_in(severity))
@@ -1208,7 +1200,7 @@ impl<W: fmt::Write> Write for Writer<W> {
                      // INDENT: "<left-to-right><left-to-bottom>"
                      // INDENT: "               <top--to-bottom>"
                      let mut wrote = false;
-                     let writer = writer.indent_with(
+                     let mut writer = writer.indent_with(
                         *span_end as u8 + 2,
                         Box::new(move |writer| {
                            for index in 0..*span_end {
@@ -1267,10 +1259,11 @@ impl<W: fmt::Write> Write for Writer<W> {
                      unwrap!(span_start);
 
                      // INDENT: "<strike-prefix> "
-                     let writer = writer.indent_with(
+                     let strike_prefix_ = strike_prefix.clone();
+                     let mut writer = writer.indent_with(
                         strike_prefix_width as u8 + 1,
-                        Box::new(|writer| {
-                           for slot in &*strike_prefix.borrow() {
+                        Box::new(move |writer| {
+                           for slot in &*strike_prefix_.borrow() {
                               writer.write_styled(&match *slot {
                                  Some(strike) => {
                                     TOP_TO_BOTTOM.style(strike.severity.style_in(severity))
@@ -1289,51 +1282,54 @@ impl<W: fmt::Write> Write for Writer<W> {
                      // + 1 if the label is zero-width. The <top-left-to-right> will be placed after
                      //   the span.
                      let mut wrote = false;
-                     let writer = writer.indent(Box::new(|writer| {
-                        for index in 0..*span_end - u32::from(span_start != span_end) {
-                           writer.write_styled(&match () {
-                              () if !wrote && index == *span_start => {
-                                 TOP_TO_RIGHT.style(label.severity.style_in(severity))
-                              },
+                     let mut writer = writer.indent_with(
+                        *span_end as u8 + u8::from(span_start == span_end) + 1,
+                        Box::new(move |writer| {
+                           for index in 0..*span_end - u32::from(span_start != span_end) {
+                              writer.write_styled(&match () {
+                                 () if !wrote && index == *span_start => {
+                                    TOP_TO_RIGHT.style(label.severity.style_in(severity))
+                                 },
 
-                              () if let Some(label) =
-                                 line.labels[..label_index].iter().rev().find(|label| {
-                                    *label.span.end() == index + 1 && !label.span.is_empty()
-                                       || label.span.start().is_some_and(|start| *start == index)
-                                 }) =>
-                              {
-                                 if label.span.is_empty() {
-                                    TOP_TO_BOTTOM_LEFT.style(label.severity.style_in(severity))
-                                 } else {
-                                    TOP_TO_BOTTOM.style(label.severity.style_in(severity))
-                                 }
-                              },
+                                 () if let Some(label) =
+                                    line.labels[..label_index].iter().rev().find(|label| {
+                                       *label.span.end() == index + 1 && !label.span.is_empty()
+                                          || label.span.start().is_some_and(|start| *start == index)
+                                    }) =>
+                                 {
+                                    if label.span.is_empty() {
+                                       TOP_TO_BOTTOM_LEFT.style(label.severity.style_in(severity))
+                                    } else {
+                                       TOP_TO_BOTTOM.style(label.severity.style_in(severity))
+                                    }
+                                 },
 
-                              () if !wrote && index > *span_start => {
-                                 LEFT_TO_RIGHT.style(label.severity.style_in(severity))
-                              },
+                                 () if !wrote && index > *span_start => {
+                                    LEFT_TO_RIGHT.style(label.severity.style_in(severity))
+                                 },
 
-                              () => ' '.styled(),
-                           })?;
-                        }
-
-                        writer.write_styled(
-                           &match *span_end - *span_start {
-                              0 if wrote => TOP_TO_BOTTOM_RIGHT,
-                              _ if wrote => TOP_TO_BOTTOM,
-
-                              0 => TOP_LEFT_TO_RIGHT,
-                              1 => TOP_TO_BOTTOM,
-
-                              _ => LEFT_TO_TOP_BOTTOM,
+                                 () => ' '.styled(),
+                              })?;
                            }
-                           .style(label.severity.style_in(severity)),
-                        )?;
-                        writer.write_char(' ')?;
 
-                        wrote = true;
-                        Ok(*span_end as usize + usize::from(span_start == span_end) + 1)
-                     }));
+                           writer.write_styled(
+                              &match *span_end - *span_start {
+                                 0 if wrote => TOP_TO_BOTTOM_RIGHT,
+                                 _ if wrote => TOP_TO_BOTTOM,
+
+                                 0 => TOP_LEFT_TO_RIGHT,
+                                 1 => TOP_TO_BOTTOM,
+
+                                 _ => LEFT_TO_TOP_BOTTOM,
+                              }
+                              .style(label.severity.style_in(severity)),
+                           )?;
+                           writer.write_char(' ')?;
+
+                           wrote = true;
+                           Ok(())
+                        }),
+                     );
 
                      lnwrap(*writer, [label
                         .text
@@ -1353,17 +1349,17 @@ impl<W: fmt::Write> Write for Writer<W> {
          }
 
          // DEDENT: "123 | "
-         let writer = writer.dedent();
+         let mut writer = writer.dedent();
 
          // INDENT: "123 ", but spaces.
-         let writer = writer.indent(line_number_width as u8 + 1);
+         let mut writer = writer.indent(line_number_width as u8 + 1);
 
          for point in points {
             // INDENT: "= "
-            let writer = writer.indent_header("= ".style(STYLE_GUTTER));
+            let mut writer = writer.indent_header("= ".style(STYLE_GUTTER));
 
             // INDENT: "<tip|help|...>: "
-            let writer = writer.indent_header(
+            let mut writer = writer.indent_header(
                match point.severity {
                   report::PointSeverity::Tip => "tip: ",
                   report::PointSeverity::Help => "help: ",

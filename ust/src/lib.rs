@@ -133,7 +133,7 @@ pub trait Write: fmt::Write {
    fn write_report(
       &mut self,
       report: &report::Report,
-      location: &impl Display<Self>,
+      location: style::Styled<&str>,
       source: &report::PositionStr<'_>,
    ) -> fmt::Result
    where
