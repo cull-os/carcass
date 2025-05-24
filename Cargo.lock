@@ -168,7 +168,6 @@ dependencies = [
  "cab-syntax",
  "clap",
  "tokio",
- "ust",
 ]
 
 [[package]]

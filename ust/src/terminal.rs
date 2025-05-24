@@ -403,7 +403,7 @@ struct Writer<W: fmt::Write> {
 
    style: style::Style,
 
-   indents: SmallVec<IndentWith<Self>, 4>,
+   indents: SmallVec<(u8, IndentWith<Self>), 4>,
    place:   IndentPlace,
 
    width:     usize,
@@ -415,7 +415,7 @@ impl<W: fmt::Write> Writer<W> {
    pub fn write_indent(&mut self) -> fmt::Result {
       assert_eq!(self.place, IndentPlace::Start);
 
-      for indent in &mut self.indents {
+      for (count, indent) in &mut self.indents {
          indent(&mut self.inner);
       }
 
@@ -484,6 +484,11 @@ impl<W: fmt::Write> Write for Writer<W> {
 
    fn width(&self) -> usize {
       self.width
+         + if self.place == IndentPlace::Start {
+            self.indents.iter().map(|&(count, _)| count as usize).sum()
+         } else {
+            0
+         }
    }
 
    fn width_max(&self) -> usize {
@@ -498,9 +503,10 @@ impl<W: fmt::Write> Write for Writer<W> {
 
    fn indent_with<'a>(
       &'a mut self,
+      count: u8,
       with: IndentWith<Self>,
    ) -> ScopeGuard<&'a mut Self, impl FnOnce(&'a mut Self)> {
-      self.indents.push(with);
+      self.indents.push((count, with));
 
       guard(self, |this| {
          this.indents.pop();

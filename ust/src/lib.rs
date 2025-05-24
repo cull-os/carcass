@@ -76,7 +76,10 @@ pub trait Write: fmt::Write {
    fn dedent<'a>(&'a mut self) -> ScopeGuard<&'a mut Self, impl FnOnce(&'a mut Self)>;
 
    fn indent<'a>(&'a mut self, count: u8) -> ScopeGuard<&'a mut Self, impl FnOnce(&'a mut Self)> {
-      self.indent_with(Box::new(move |this| this.write_str(&SPACES[..count as _])))
+      self.indent_with(
+         count,
+         Box::new(move |this| this.write_str(&SPACES[..count as _])),
+      )
    }
 
    fn indent_by<'a>(
@@ -92,14 +95,17 @@ pub trait Write: fmt::Write {
 
       let mut wrote = false;
 
-      self.indent_with(Box::new(move |this| {
-         if wrote {
-            this.write_str(&continuation)
-         } else {
-            wrote = true;
-            this.write_styled(&header)
-         }
-      }))
+      self.indent_with(
+         terminal::width(&header.value) as u8,
+         Box::new(move |this| {
+            if wrote {
+               this.write_str(&continuation)
+            } else {
+               wrote = true;
+               this.write_styled(&header)
+            }
+         }),
+      )
    }
 
    fn indent_header<'a>(
@@ -116,6 +122,7 @@ pub trait Write: fmt::Write {
 
    fn indent_with<'a>(
       &'a mut self,
+      count: u8,
       with: IndentWith<Self>,
    ) -> ScopeGuard<&'a mut Self, impl FnOnce(&'a mut Self)>;
 

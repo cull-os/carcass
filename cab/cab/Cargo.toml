@@ -19,7 +19,5 @@ cab-runtime.path = "../cab-runtime"
 cab-span.path    = "../cab-span"
 cab-syntax.path  = "../cab-syntax"
 
-ust.path = "../../ust"
-
 clap.workspace  = true
 tokio.workspace = true
