@@ -7,6 +7,7 @@ use std::{
       Write as _,
    },
    iter,
+   num::NonZeroUsize,
    ops::Add as _,
    os,
 };
@@ -19,8 +20,10 @@ use cab_span::{
 use cab_util::{
    as_,
    borrow_mut,
+   into_iter,
    unwrap,
 };
+use itertools::Itertools as _;
 use num::traits::AsPrimitive;
 use scopeguard::{
    ScopeGuard,
@@ -86,6 +89,141 @@ pub fn width(s: &str) -> usize {
          }
       })
       .sum::<usize>()
+}
+
+/// [`wrap`], but with a newline before the text.
+pub fn lnwrap<'a, W: Write>(
+   writer: &mut W,
+   parts: impl IntoIterator<Item = style::Styled<&'a str>>,
+) -> fmt::Result {
+   writer.write_char('\n')?;
+   wrap(writer, parts)
+}
+
+/// Writes the given iterator of colored words into the writer, splicing and
+/// wrapping at the max width.
+pub fn wrap<'a, W: Write>(
+   writer: &mut W,
+   parts: impl IntoIterator<Item = style::Styled<&'a str>>,
+) -> fmt::Result {
+   use None as Newline;
+   use Some as Word;
+
+   let mut parts = parts
+      .into_iter()
+      .flat_map(|part| {
+         Iterator::intersperse(
+            part
+               .value
+               .split('\n')
+               .map(move |word| Word(word.style(part.style))),
+            Newline,
+         )
+      })
+      .peekable();
+
+   while parts.peek().is_some() {
+      wrap_line(
+         writer,
+         parts
+            .by_ref()
+            .take_while_inclusive(|part| matches!(*part, Word(_)))
+            .map(|part| {
+               match part {
+                  Word(word) => word,
+                  Newline => "\n".styled(),
+               }
+            }),
+      )?;
+   }
+
+   Ok(())
+}
+
+fn wrap_line<'a, W: Write>(
+   writer: &mut W,
+   parts: impl IntoIterator<Item = style::Styled<&'a str>>,
+) -> fmt::Result {
+   const WIDTH_NEEDED: NonZeroUsize = NonZeroUsize::new(8).unwrap();
+
+   use None as Space;
+   use Some as Word;
+
+   into_iter!(parts);
+
+   let width_start = writer.width();
+
+   let width_max = if width_start + WIDTH_NEEDED.get() <= writer.width_max() {
+      writer.width_max()
+   } else {
+      // If we can't even write WIDTH_NEEDED amount just assume the width is
+      // double the worst case width.
+      (writer.width_max() + WIDTH_NEEDED.get()) * 2
+   };
+
+   let mut parts = parts
+      .flat_map(|part| {
+         Iterator::intersperse(
+            part
+               .value
+               .split(' ')
+               .map(move |word| Word(word.style(part.style))),
+            Space,
+         )
+      })
+      .peekable();
+
+   while let Some(part) = parts.peek_mut() {
+      let Word(word) = part.as_mut() else {
+         if writer.width() != 0 && writer.width() < width_max {
+            writer.write_char(' ')?;
+         }
+
+         parts.next();
+         continue;
+      };
+
+      let word_width = width(word.value);
+
+      // Word fits in current line.
+      if writer.width() + word_width <= width_max {
+         writer.write_styled(word)?;
+
+         parts.next();
+         continue;
+      }
+
+      // Word fits in the next line.
+      if width_start + word_width <= width_max {
+         writer.write_char('\n')?;
+         writer.write_styled(word)?;
+
+         parts.next();
+         continue;
+      }
+
+      // Word doesn't fit in the next line.
+      let width_remainder = width_max - writer.width();
+
+      let split_index = word
+         .value
+         .grapheme_indices(true)
+         .scan(0, |width, state @ (_, grapheme)| {
+            *width += self::width(grapheme);
+            Some((*width, state))
+         })
+         .find_map(|(width, (split_index, _))| (width > width_remainder).then_some(split_index))
+         .unwrap();
+
+      let (word_this, word_rest) = word.value.split_at(split_index);
+
+      word.value = word_this;
+      writer.write_styled(word)?;
+
+      word.value = word_rest;
+   }
+
+   Ok(())
 }
 
 const STYLE_RESET: &str = "\x1B[0m";
@@ -435,7 +573,7 @@ impl<W: fmt::Write> fmt::Write for Writer<W> {
          self.style = style::Style::default();
       }
 
-      let mut lines = s.split('\n').map(Line).intersperse(Newline).peekable();
+      let mut lines = Iterator::intersperse(s.split('\n').map(Line), Newline).peekable();
       while let Some(segment) = lines.next() {
          match self.place {
             IndentPlace::Start
@@ -779,7 +917,7 @@ impl<W: fmt::Write> Write for Writer<W> {
 
       drop(labels);
 
-      let writer = &mut self;
+      let writer = self;
 
       {
          // INDENT: "<note|warn|error|bug>: "
@@ -793,7 +931,7 @@ impl<W: fmt::Write> Write for Writer<W> {
             .style(severity.style_in()),
          );
 
-         wrap(writer, [title.as_ref().bold()])?;
+         wrap(*writer, [title.as_ref().bold()])?;
       }
 
       let line_number_width = lines.last().map_or(0, |line| number_width(line.number));
@@ -801,56 +939,60 @@ impl<W: fmt::Write> Write for Writer<W> {
       // INDENT: "123 | "
       let line_number = RefCell::new(None::<u32>);
       let line_number_previous = RefCell::new(None::<u32>);
-      let writer = writer.indent_with(Box::new(move |writer| {
-         let line_number = *line_number.borrow();
-         borrow_mut!(line_number_previous);
+      let writer = writer.indent_with(
+         line_number_width as u8 + 3,
+         Box::new(move |writer| {
+            let line_number = *line_number.borrow();
+            borrow_mut!(line_number_previous);
 
-         writer.write_style(STYLE_GUTTER)?;
-         match line_number {
-            // Don't write the current line number, just print spaces instead.
-            None => {
-               write!(writer, "{:>line_number_width$}", "")?;
-            },
+            writer.write_style(STYLE_GUTTER)?;
+            match line_number {
+               // Don't write the current line number, just print spaces instead.
+               None => {
+                  write!(writer, "{:>line_number_width$}", "")?;
+               },
 
-            // Continuation line. Use dots instead of the number.
-            Some(line_number) if *line_number_previous == Some(line_number) => {
-               let dot_width = number_width(line_number);
-               let space_width = line_number_width - dot_width;
+               // Continuation line. Use dots instead of the number.
+               Some(line_number) if *line_number_previous == Some(line_number) => {
+                  let dot_width = number_width(line_number);
+                  let space_width = line_number_width - dot_width;
 
-               write!(writer, "{:>space_width$}", "")?;
+                  write!(writer, "{:>space_width$}", "")?;
 
-               for _ in 0..dot_width {
-                  writer.write_char(DOT)?;
-               }
-            },
+                  for _ in 0..dot_width {
+                     writer.write_char(DOT)?;
+                  }
+               },
 
-            // New line, but not right after the previous line.
-            Some(line_number)
-               if line_number_previous
-                  .is_some_and(|line_number_previous| line_number > line_number_previous + 1) =>
-            {
-               writeln!(
-                  writer,
-                  "{:>line_number_width$} {TOP_TO_BOTTOM_PARTIAL} ",
-                  "",
-               )?;
-               write!(writer, "{line_number:>line_number_width$}")?;
-            },
+               // New line, but not right after the previous line.
+               Some(line_number)
+                  if line_number_previous.is_some_and(|line_number_previous| {
+                     line_number > line_number_previous + 1
+                  }) =>
+               {
+                  writeln!(
+                     writer,
+                     "{:>line_number_width$} {TOP_TO_BOTTOM_PARTIAL} ",
+                     "",
+                  )?;
+                  write!(writer, "{line_number:>line_number_width$}")?;
+               },
 
-            // New line.
-            Some(line_number) => {
-               write!(writer, "{line_number:>line_number_width$}")?;
-            },
-         }
+               // New line.
+               Some(line_number) => {
+                  write!(writer, "{line_number:>line_number_width$}")?;
+               },
+            }
 
-         write!(writer, " {TOP_TO_BOTTOM} ")?;
+            write!(writer, " {TOP_TO_BOTTOM} ")?;
 
-         if let Some(line_number) = line_number {
-            line_number_previous.replace(line_number);
-         }
+            if let Some(line_number) = line_number {
+               line_number_previous.replace(line_number);
+            }
 
-         Ok(())
-      }));
+            Ok(())
+         }),
+      );
 
       if let Some(line) = lines.first() {
          {
@@ -876,7 +1018,7 @@ impl<W: fmt::Write> Write for Writer<W> {
             writeln!(writer)?;
 
             wrap(
-               writer,
+               *writer,
                [
                   location
                      .display_free_width()
@@ -915,41 +1057,46 @@ impl<W: fmt::Write> Write for Writer<W> {
          let strike_prefix = RefCell::new(
             iter::repeat_n(None::<LineStrike>, strike_prefix_width).collect::<SmallVec<_, 2>>(),
          );
-         let writer = writer.indent_with(Box::new(|writer| {
-            const STRIKE_OVERRIDE_DEFAULT: style::Styled<char> = style::Styled::new(' ');
+         let writer = writer.indent_with(
+            strike_prefix_width as u8 + 1,
+            Box::new(|writer| {
+               const STRIKE_OVERRIDE_DEFAULT: style::Styled<char> = style::Styled::new(' ');
 
-            let mut strike_override = None::<style::Styled<char>>;
+               let mut strike_override = None::<style::Styled<char>>;
 
-            for slot in &*strike_prefix.borrow() {
-               let Some(strike) = *slot else {
-                  writer.write_styled(&strike_override.unwrap_or(STRIKE_OVERRIDE_DEFAULT));
-                  continue;
-               };
+               for slot in &*strike_prefix.borrow() {
+                  let Some(strike) = *slot else {
+                     writer.write_styled(&strike_override.unwrap_or(STRIKE_OVERRIDE_DEFAULT));
+                     continue;
+                  };
 
-               match strike.status {
-                  LineStrikeStatus::Start => {
-                     writer
-                        .write_styled(&RIGHT_TO_BOTTOM.style(strike.severity.style_in(severity)))?;
+                  match strike.status {
+                     LineStrikeStatus::Start => {
+                        writer.write_styled(
+                           &RIGHT_TO_BOTTOM.style(strike.severity.style_in(severity)),
+                        )?;
 
-                     strike_override =
-                        Some(LEFT_TO_RIGHT.style(strike.severity.style_in(severity)));
-                  },
+                        strike_override =
+                           Some(LEFT_TO_RIGHT.style(strike.severity.style_in(severity)));
+                     },
 
-                  LineStrikeStatus::Continue | LineStrikeStatus::End
-                     if let Some(strike) = strike_override =>
-                  {
-                     writer.write_styled(&strike)?;
-                  },
+                     LineStrikeStatus::Continue | LineStrikeStatus::End
+                        if let Some(strike) = strike_override =>
+                     {
+                        writer.write_styled(&strike)?;
+                     },
 
-                  LineStrikeStatus::Continue | LineStrikeStatus::End => {
-                     writer
-                        .write_styled(&TOP_TO_BOTTOM.style(strike.severity.style_in(severity)))?;
-                  },
+                     LineStrikeStatus::Continue | LineStrikeStatus::End => {
+                        writer.write_styled(
+                           &TOP_TO_BOTTOM.style(strike.severity.style_in(severity)),
+                        )?;
+                     },
+                  }
                }
-            }
 
-            writer.write_styled(&strike_override.unwrap_or(STRIKE_OVERRIDE_DEFAULT))
-         }));
+               writer.write_styled(&strike_override.unwrap_or(STRIKE_OVERRIDE_DEFAULT))
+            }),
+         );
 
          for line in &lines {
             // Patch strike prefix and keep track of positions of strikes with their IDs.
@@ -982,7 +1129,10 @@ impl<W: fmt::Write> Write for Writer<W> {
                // Explicitly write the indent because the line may be empty.
                writeln!(writer)?;
                writer.write_indent()?;
-               wrap(writer, resolve_style(&line.content, &line.styles, severity))?;
+               wrap(
+                  *writer,
+                  resolve_style(&line.content, &line.styles, severity),
+               )?;
 
                *line_number.borrow_mut() = None;
             }
@@ -1021,88 +1171,93 @@ impl<W: fmt::Write> Write for Writer<W> {
 
                      // INDENT: "<strike-prefix>"
                      let mut wrote = false;
+                     let writer = writer.indent_with(
+                        strike_prefix_width as u8,
+                        Box::new(|writer| {
+                           // Write all strikes up to the index of the one we are going to
+                           // redirect to the right.
+                           for slot in strike_prefix.borrow().iter().take(top_to_right_index) {
+                              writer.write_styled(&match *slot {
+                                 Some(strike) => {
+                                    TOP_TO_BOTTOM.style(strike.severity.style_in(severity))
+                                 },
+                                 None => ' '.styled(),
+                              })?;
+                           }
 
-                     let writer = writer.indent_with(Box::new(|writer| {
-                        // Write all strikes up to the index of the one we are going to
-                        // redirect to the right.
-                        for slot in strike_prefix.borrow().iter().take(top_to_right_index) {
-                           writer.write_styled(&match *slot {
-                              Some(strike) => {
-                                 TOP_TO_BOTTOM.style(strike.severity.style_in(severity))
-                              },
-                              None => ' '.styled(),
-                           })?;
-                        }
+                           if wrote {
+                              return writer
+                                 .write_str(&SPACES[top_to_right_index..strike_prefix_width]);
+                           }
 
-                        if wrote {
-                           return writer
-                              .write_str(&SPACES[top_to_right_index..strike_prefix_width]);
-                        }
-
-                        writer.write_styled(
-                           &TOP_TO_RIGHT.style(top_to_right.severity.style_in(severity)),
-                        )?;
-
-                        for _ in 0..strike_prefix_width - top_to_right_index - 1 {
                            writer.write_styled(
-                              &LEFT_TO_RIGHT.style(top_to_right.severity.style_in(severity)),
+                              &TOP_TO_RIGHT.style(top_to_right.severity.style_in(severity)),
                            )?;
-                        }
 
-                        wrote = true;
-                        Ok(())
-                     }));
+                           for _ in 0..strike_prefix_width - top_to_right_index - 1 {
+                              writer.write_styled(
+                                 &LEFT_TO_RIGHT.style(top_to_right.severity.style_in(severity)),
+                              )?;
+                           }
+
+                           wrote = true;
+                           Ok(())
+                        }),
+                     );
 
                      // INDENT: "<left-to-right><left-to-bottom>"
                      // INDENT: "               <top--to-bottom>"
                      let mut wrote = false;
-                     let writer = writer.indent_with(Box::new(move |writer| {
-                        for index in 0..*span_end {
-                           writer.write_styled(&match () {
-                              // If there is a label on the current line after this label
-                              // that has a start or
-                              // end at the
-                              // current index, write it instead of out <left-to-right>
-                              () if let Some(label) =
-                                 line.labels[..label_index].iter().rev().find(|label| {
-                                    *label.span.end() == index && !label.span.is_empty()
-                                       || label
-                                          .span
-                                          .start()
-                                          .is_some_and(|start| *start + 1 == index)
-                                 }) =>
-                              {
-                                 if label.span.is_empty() {
-                                    TOP_TO_BOTTOM_LEFT.style(label.severity.style_in(severity))
-                                 } else {
-                                    TOP_TO_BOTTOM.style(label.severity.style_in(severity))
-                                 }
-                              },
+                     let writer = writer.indent_with(
+                        *span_end as u8 + 2,
+                        Box::new(move |writer| {
+                           for index in 0..*span_end {
+                              writer.write_styled(&match () {
+                                 // If there is a label on the current line after this label
+                                 // that has a start or
+                                 // end at the
+                                 // current index, write it instead of out <left-to-right>
+                                 () if let Some(label) =
+                                    line.labels[..label_index].iter().rev().find(|label| {
+                                       *label.span.end() == index && !label.span.is_empty()
+                                          || label
+                                             .span
+                                             .start()
+                                             .is_some_and(|start| *start + 1 == index)
+                                    }) =>
+                                 {
+                                    if label.span.is_empty() {
+                                       TOP_TO_BOTTOM_LEFT.style(label.severity.style_in(severity))
+                                    } else {
+                                       TOP_TO_BOTTOM.style(label.severity.style_in(severity))
+                                    }
+                                 },
 
-                              () if !wrote => {
-                                 LEFT_TO_RIGHT.style(top_to_right.severity.style_in(severity))
-                              },
+                                 () if !wrote => {
+                                    LEFT_TO_RIGHT.style(top_to_right.severity.style_in(severity))
+                                 },
 
-                              () => ' '.styled(),
-                           })?;
-                        }
-
-                        writer.write_styled(
-                           &match () {
-                              () if !wrote => LEFT_TO_TOP_BOTTOM,
-                              () => TOP_TO_BOTTOM,
+                                 () => ' '.styled(),
+                              })?;
                            }
-                           .style(top_to_right.severity.style_in(severity)),
-                        )?;
 
-                        writer.write_char(' ')?;
+                           writer.write_styled(
+                              &match () {
+                                 () if !wrote => LEFT_TO_TOP_BOTTOM,
+                                 () => TOP_TO_BOTTOM,
+                              }
+                              .style(top_to_right.severity.style_in(severity)),
+                           )?;
 
-                        wrote = true;
-                        strike_prefix.borrow_mut()[top_to_right_index] = None;
-                        Ok(())
-                     }));
+                           writer.write_char(' ')?;
 
-                     lnwrap(writer, [label
+                           wrote = true;
+                           strike_prefix.borrow_mut()[top_to_right_index] = None;
+                           Ok(())
+                        }),
+                     );
+
+                     lnwrap(*writer, [label
                         .text
                         .as_ref()
                         .style(top_to_right.severity.style_in(severity))])?;
@@ -1112,18 +1267,21 @@ impl<W: fmt::Write> Write for Writer<W> {
                      unwrap!(span_start);
 
                      // INDENT: "<strike-prefix> "
-                     let writer = writer.indent_with(Box::new(|writer| {
-                        for slot in &*strike_prefix.borrow() {
-                           writer.write_styled(&match *slot {
-                              Some(strike) => {
-                                 TOP_TO_BOTTOM.style(strike.severity.style_in(severity))
-                              },
-                              None => ' '.styled(),
-                           })?;
-                        }
+                     let writer = writer.indent_with(
+                        strike_prefix_width as u8 + 1,
+                        Box::new(|writer| {
+                           for slot in &*strike_prefix.borrow() {
+                              writer.write_styled(&match *slot {
+                                 Some(strike) => {
+                                    TOP_TO_BOTTOM.style(strike.severity.style_in(severity))
+                                 },
+                                 None => ' '.styled(),
+                              })?;
+                           }
 
-                        writer.write_char(' ')
-                     }));
+                           writer.write_char(' ')
+                        }),
+                     );
 
                      // INDENT: "               <top-to-right><left-to-right><left-to-bottom> "
                      // INDENT: "                                            <top--to-bottom> "
@@ -1177,7 +1335,7 @@ impl<W: fmt::Write> Write for Writer<W> {
                         Ok(*span_end as usize + usize::from(span_start == span_end) + 1)
                      }));
 
-                     lnwrap(writer, [label
+                     lnwrap(*writer, [label
                         .text
                         .as_ref()
                         .style(label.severity.style_in(severity))])?;
@@ -1213,7 +1371,7 @@ impl<W: fmt::Write> Write for Writer<W> {
                .style(point.severity.style_in()),
             );
 
-            lnwrap(writer, [point.text.as_ref().styled()])?;
+            lnwrap(*writer, [point.text.as_ref().styled()])?;
          }
       }
 

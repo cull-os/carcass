@@ -1230,6 +1230,7 @@ dependencies = [
  "const-str",
  "derive_more",
  "enumflags2",
+ "itertools",
  "itoa",
  "num",
  "scopeguard",
