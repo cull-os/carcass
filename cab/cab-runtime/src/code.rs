@@ -109,7 +109,7 @@ impl DisplayView for Code {
                   write!(writer, "{index:>#index_width$X}")?;
                }
 
-               write!(writer, " {TOP_TO_BOTTOM} ",)?;
+               write!(writer, " {TOP_TO_BOTTOM} ")?;
                style.fmt_suffix(writer)?;
 
                index_previous.replace(index);

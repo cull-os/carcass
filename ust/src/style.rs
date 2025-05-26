@@ -32,10 +32,12 @@ pub enum Color {
 }
 
 impl Color {
+   #[must_use]
    pub const fn fg(self) -> Style {
       Style::new().fg(self)
    }
 
+   #[must_use]
    pub const fn bg(self) -> Style {
       Style::new().bg(self)
    }
@@ -57,6 +59,7 @@ pub enum Attr {
 }
 
 impl Attr {
+   #[must_use]
    pub const fn style(self) -> Style {
       Style::new().attr(self)
    }

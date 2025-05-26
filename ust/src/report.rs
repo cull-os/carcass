@@ -94,12 +94,12 @@ impl LabelSeverity {
    /// Returns the applicable style of this label severity in the given report
    /// severity.
    #[must_use]
-   pub fn style_in(self, report_severity: ReportSeverity) -> Style {
+   pub fn style_in(self, report_severity: Severity) -> Style {
       use LabelSeverity::{
          Primary,
          Secondary,
       };
-      use ReportSeverity::{
+      use Severity::{
          Bug,
          Error,
          Note,
@@ -177,6 +177,7 @@ pub enum PointSeverity {
 }
 
 impl PointSeverity {
+   #[must_use]
    pub fn style_in(self) -> Style {
       match self {
          PointSeverity::Tip => Color::Cyan,
@@ -216,14 +217,15 @@ impl Point {
 
 /// The severity of a report.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum ReportSeverity {
+pub enum Severity {
    Note,
    Warn,
    Error,
    Bug,
 }
 
-impl ReportSeverity {
+impl Severity {
+   #[must_use]
    pub fn style_in(self) -> Style {
       LabelSeverity::Primary.style_in(self)
    }
@@ -231,14 +233,14 @@ impl ReportSeverity {
 
 #[derive(Debug, Clone)]
 pub struct Report {
-   pub severity: ReportSeverity,
+   pub severity: Severity,
    pub title:    Cow<'static, str>,
    pub labels:   SmallVec<Label, 2>,
    pub points:   SmallVec<Point, 2>,
 }
 
 impl Report {
-   pub fn new(severity: ReportSeverity, title: impl Into<Cow<'static, str>>) -> Self {
+   pub fn new(severity: Severity, title: impl Into<Cow<'static, str>>) -> Self {
       into!(title);
 
       Self {
@@ -250,19 +252,19 @@ impl Report {
    }
 
    pub fn note(title: impl Into<Cow<'static, str>>) -> Self {
-      Self::new(ReportSeverity::Note, title)
+      Self::new(Severity::Note, title)
    }
 
    pub fn warn(title: impl Into<Cow<'static, str>>) -> Self {
-      Self::new(ReportSeverity::Warn, title)
+      Self::new(Severity::Warn, title)
    }
 
    pub fn error(title: impl Into<Cow<'static, str>>) -> Self {
-      Self::new(ReportSeverity::Error, title)
+      Self::new(Severity::Error, title)
    }
 
    pub fn bug(title: impl Into<Cow<'static, str>>) -> Self {
-      Self::new(ReportSeverity::Bug, title)
+      Self::new(Severity::Bug, title)
    }
 
    #[must_use]
