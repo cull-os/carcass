@@ -65,13 +65,46 @@ allow = [
 ]
 confidence-threshold = 0.93
 
-[[licenses.clarify]]
-crate         = "webpki"
-expression    = "ISC"
-license-files = [ { path = "LICENSE", hash = 0x001c7e6c } ]
+clarify = [
+  { crate = "ust", expression = "MPL-2.0", license-files = [
+    { path = "../LICENSE.md", hash = 0x382977f7 },
+  ] },
+  { crate = "fuzz", expression = "MPL-2.0", license-files = [
+    { path = "../LICENSE.md", hash = 0x382977f7 },
+  ] },
+  { crate = "cab", expression = "MPL-2.0", license-files = [
+    { path = "../../LICENSE.md", hash = 0x382977f7 },
+  ] },
+  { crate = "cab-format", expression = "MPL-2.0", license-files = [
+    { path = "../../LICENSE.md", hash = 0x382977f7 },
+  ] },
+  { crate = "cab-island", expression = "MPL-2.0", license-files = [
+    { path = "../../LICENSE.md", hash = 0x382977f7 },
+  ] },
+  { crate = "cab-report", expression = "MPL-2.0", license-files = [
+    { path = "../../LICENSE.md", hash = 0x382977f7 },
+  ] },
+  { crate = "cab-runtime", expression = "MPL-2.0", license-files = [
+    { path = "../../LICENSE.md", hash = 0x382977f7 },
+  ] },
+  { crate = "cab-span", expression = "MPL-2.0", license-files = [
+    { path = "../../LICENSE.md", hash = 0x382977f7 },
+  ] },
+  { crate = "cab-syntax", expression = "MPL-2.0", license-files = [
+    { path = "../../LICENSE.md", hash = 0x382977f7 },
+  ] },
+  { crate = "cab-task", expression = "MPL-2.0", license-files = [
+    { path = "../../LICENSE.md", hash = 0x382977f7 },
+  ] },
+  { crate = "cab-util", expression = "MPL-2.0", license-files = [
+    { path = "../../LICENSE.md", hash = 0x382977f7 },
+  ] },
 
-# Actually "ISC-style"
-[[licenses.clarify]]
-crate         = "rustls-webpki"
-expression    = "ISC"
-license-files = [ { path = "LICENSE", hash = 0x001c7e6c } ]
+  { crate = "webpki", expression = "ISC", license-files = [
+    { path = "LICENSE", hash = 0x001c7e6c },
+  ] },
+
+  { crate = "rustls-webpki", expression = "ISC", license-files = [
+    { path = "LICENSE", hash = 0x001c7e6c },
+  ] },
+]
