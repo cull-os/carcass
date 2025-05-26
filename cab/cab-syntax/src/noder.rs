@@ -68,7 +68,7 @@ impl Parse {
       }
 
       if fail > 0 {
-         bail!("parsing failed due to {fail} previous error(s)",);
+         bail!("parsing failed due to {fail} previous error(s)");
       }
 
       Ok(self.expression)

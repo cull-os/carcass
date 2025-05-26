@@ -5,60 +5,26 @@
    anonymous_lifetime_in_impl_trait
 )]
 
-use std::{
-   borrow::Cow,
-   fmt,
-};
-
-use scopeguard::ScopeGuard;
-use style::StyledExt;
+use std::fmt;
 
 pub mod report;
 pub mod style;
 
 pub mod terminal;
 
-pub trait Display<W: Write> {
-   fn display_styled(&self, w: &mut W) -> fmt::Result;
+pub trait Display {
+   fn display_styled(&self, w: &mut dyn Write) -> fmt::Result;
 }
 
-trait IntoWidth {
-   fn width(&self) -> usize;
+pub fn write(writer: &mut dyn Write, styled: &style::Styled<impl fmt::Display>) -> fmt::Result {
+   let style_previous = writer.get_style();
+
+   writer.set_style(styled.style);
+   write!(writer, "{value}", value = **styled)?;
+
+   writer.set_style(style_previous);
+   Ok(())
 }
-
-impl IntoWidth for &'_ str {
-   fn width(&self) -> usize {
-      terminal::width(self)
-   }
-}
-
-impl IntoWidth for Cow<'_, str> {
-   fn width(&self) -> usize {
-      terminal::width(self.as_ref())
-   }
-}
-
-impl IntoWidth for style::Styled<&'_ str> {
-   fn width(&self) -> usize {
-      terminal::width(self.value)
-   }
-}
-
-impl IntoWidth for style::Styled<Cow<'_, str>> {
-   fn width(&self) -> usize {
-      terminal::width(self.value.as_ref())
-   }
-}
-
-const SPACES: &str = const {
-   if let Ok(indents) = str::from_utf8(&[b' '; u8::MAX as _]) {
-      indents
-   } else {
-      unreachable!()
-   }
-};
-
-pub type IndentWith<W: Write> = Box<dyn FnMut(&mut W) -> fmt::Result>;
 
 pub trait Write: fmt::Write {
    fn finish(&mut self) -> fmt::Result {
@@ -73,69 +39,16 @@ pub trait Write: fmt::Write {
       usize::MAX
    }
 
-   fn dedent<'a>(&'a mut self) -> ScopeGuard<&'a mut Self, impl FnOnce(&'a mut Self)>;
+   fn get_style(&self) -> style::Style;
 
-   fn indent<'a>(&'a mut self, count: u8) -> ScopeGuard<&'a mut Self, impl FnOnce(&'a mut Self)> {
-      self.indent_with(
-         count,
-         Box::new(move |this| this.write_str(&SPACES[..count as _])),
-      )
-   }
+   fn set_style(&mut self, style: style::Style);
 
-   fn indent_by<'a>(
-      &'a mut self,
-      header: style::Styled<&str>,
-      continuation: style::Styled<&str>,
-   ) -> ScopeGuard<&'a mut Self, impl FnOnce(&'a mut Self)>
-   where
-      Self: Sized,
-   {
-      let header = header.value.to_owned().style(header.style);
-      let continuation = continuation.value.to_owned().style(continuation.style);
-
-      let mut wrote = false;
-
-      self.indent_with(
-         terminal::width(&header.value) as u8,
-         Box::new(move |this| {
-            if wrote {
-               this.write_str(&continuation)
-            } else {
-               wrote = true;
-               this.write_styled(&header)
-            }
-         }),
-      )
-   }
-
-   fn indent_header<'a>(
-      &'a mut self,
-      header: style::Styled<&str>,
-   ) -> ScopeGuard<&'a mut Self, impl FnOnce(&'a mut Self)>
-   where
-      Self: Sized,
-   {
-      let continuation = SPACES[..header.width()].styled();
-
-      self.indent_by(header, continuation)
-   }
-
-   fn indent_with<'a>(
-      &'a mut self,
-      count: u8,
-      with: IndentWith<Self>,
-   ) -> ScopeGuard<&'a mut Self, impl FnOnce(&'a mut Self)>;
-
-   fn write_style(&mut self, style: style::Style) -> fmt::Result;
-
-   fn write_styled<T: fmt::Display>(&mut self, styled: &style::Styled<T>) -> fmt::Result;
+   fn apply_style(&mut self) -> fmt::Result;
 
    fn write_report(
       &mut self,
       report: &report::Report,
-      location: style::Styled<&str>,
+      location: &dyn Display,
       source: &report::PositionStr<'_>,
-   ) -> fmt::Result
-   where
-      Self: Sized;
+   ) -> fmt::Result;
 }
