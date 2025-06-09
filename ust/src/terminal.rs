@@ -66,14 +66,14 @@ pub fn number_hex_width(number: impl AsPrimitive<f64>) -> usize {
    }
 }
 
-/// Return whether if the given string is an emoji.
-fn is_emoji(s: &str) -> bool {
-   !s.is_ascii() && s.chars().any(unic_emoji_char::is_emoji)
-}
-
 /// Calculates the width of the string on a best-effort basis.
 #[must_use]
 pub fn width(s: &str) -> usize {
+   /// Return whether if the given string is an emoji.
+   fn is_emoji(s: &str) -> bool {
+      !s.is_ascii() && s.chars().any(unic_emoji_char::is_emoji)
+   }
+
    s.graphemes(true)
       .map(|grapheme| {
          match grapheme {
@@ -103,6 +103,92 @@ pub fn wrap<'a>(
 ) -> fmt::Result {
    use None as Newline;
    use Some as Word;
+
+   fn wrap_line<'a>(
+      writer: &mut dyn Write,
+      parts: impl IntoIterator<Item = style::Styled<&'a str>>,
+   ) -> fmt::Result {
+      const WIDTH_NEEDED: NonZeroUsize = NonZeroUsize::new(8).unwrap();
+
+      use None as Space;
+      use Some as Word;
+
+      into_iter!(parts);
+
+      let width_start = writer.width();
+
+      let width_max = if width_start + WIDTH_NEEDED.get() <= writer.width_max() {
+         writer.width_max()
+      } else {
+         // If we can't even write WIDTH_NEEDED amount just assume the width is
+         // double the worst case width.
+         (writer.width_max() + WIDTH_NEEDED.get()) * 2
+      };
+
+      let mut parts = parts
+         .flat_map(|part| {
+            Iterator::intersperse(
+               part
+                  .value
+                  .split(' ')
+                  .map(move |word| Word(word.style(part.style))),
+               Space,
+            )
+         })
+         .peekable();
+
+      while let Some(part) = parts.peek_mut() {
+         let Word(word) = part.as_mut() else {
+            if writer.width() != 0 && writer.width() < width_max {
+               writer.write_char(' ')?;
+            }
+
+            parts.next();
+            continue;
+         };
+
+         let word_width = width(word.value);
+
+         // Word fits in current line.
+         if writer.width() + word_width <= width_max {
+            write(writer, word)?;
+
+            parts.next();
+            continue;
+         }
+
+         // Word fits in the next line.
+         if width_start + word_width <= width_max {
+            writer.write_char('\n')?;
+            write(writer, word)?;
+
+            parts.next();
+            continue;
+         }
+
+         // Word doesn't fit in the next line.
+         let width_remainder = width_max - writer.width();
+
+         let split_index = word
+            .value
+            .grapheme_indices(true)
+            .scan(0, |width, state @ (_, grapheme)| {
+               *width += self::width(grapheme);
+               Some((*width, state))
+            })
+            .find_map(|(width, (split_index, _))| (width > width_remainder).then_some(split_index))
+            .unwrap();
+
+         let (word_this, word_rest) = word.value.split_at(split_index);
+
+         word.value = word_this;
+         write(writer, word)?;
+
+         word.value = word_rest;
+      }
+
+      Ok(())
+   }
 
    let mut parts = parts
       .into_iter()
@@ -135,92 +221,6 @@ pub fn wrap<'a>(
    Ok(())
 }
 
-fn wrap_line<'a>(
-   writer: &mut dyn Write,
-   parts: impl IntoIterator<Item = style::Styled<&'a str>>,
-) -> fmt::Result {
-   const WIDTH_NEEDED: NonZeroUsize = NonZeroUsize::new(8).unwrap();
-
-   use None as Space;
-   use Some as Word;
-
-   into_iter!(parts);
-
-   let width_start = writer.width();
-
-   let width_max = if width_start + WIDTH_NEEDED.get() <= writer.width_max() {
-      writer.width_max()
-   } else {
-      // If we can't even write WIDTH_NEEDED amount just assume the width is
-      // double the worst case width.
-      (writer.width_max() + WIDTH_NEEDED.get()) * 2
-   };
-
-   let mut parts = parts
-      .flat_map(|part| {
-         Iterator::intersperse(
-            part
-               .value
-               .split(' ')
-               .map(move |word| Word(word.style(part.style))),
-            Space,
-         )
-      })
-      .peekable();
-
-   while let Some(part) = parts.peek_mut() {
-      let Word(word) = part.as_mut() else {
-         if writer.width() != 0 && writer.width() < width_max {
-            writer.write_char(' ')?;
-         }
-
-         parts.next();
-         continue;
-      };
-
-      let word_width = width(word.value);
-
-      // Word fits in current line.
-      if writer.width() + word_width <= width_max {
-         write(writer, word)?;
-
-         parts.next();
-         continue;
-      }
-
-      // Word fits in the next line.
-      if width_start + word_width <= width_max {
-         writer.write_char('\n')?;
-         write(writer, word)?;
-
-         parts.next();
-         continue;
-      }
-
-      // Word doesn't fit in the next line.
-      let width_remainder = width_max - writer.width();
-
-      let split_index = word
-         .value
-         .grapheme_indices(true)
-         .scan(0, |width, state @ (_, grapheme)| {
-            *width += self::width(grapheme);
-            Some((*width, state))
-         })
-         .find_map(|(width, (split_index, _))| (width > width_remainder).then_some(split_index))
-         .unwrap();
-
-      let (word_this, word_rest) = word.value.split_at(split_index);
-
-      word.value = word_this;
-      write(writer, word)?;
-
-      word.value = word_rest;
-   }
-
-   Ok(())
-}
-
 const STYLE_GUTTER: style::Style = style::Style::new().blue();
 const STYLE_HEADER_POSITION: style::Style = style::Style::new().blue();
 
@@ -235,140 +235,6 @@ const LEFT_TO_TOP_BOTTOM: char = '┫';
 const TOP_TO_BOTTOM_LEFT: char = '▏';
 const TOP_LEFT_TO_RIGHT: char = '╲';
 const TOP_TO_BOTTOM_RIGHT: char = '▕';
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum StyleColorVariant {
-   Fg,
-   Bg,
-}
-
-fn style_color_fg(color: style::Color) -> &'static str {
-   match color {
-      style::Color::Primary => "39",
-      style::Color::Fixed(_) | style::Color::Rgb(..) => "38",
-      style::Color::Black => "30",
-      style::Color::Red => "31",
-      style::Color::Green => "32",
-      style::Color::Yellow => "33",
-      style::Color::Blue => "34",
-      style::Color::Magenta => "35",
-      style::Color::Cyan => "36",
-      style::Color::White => "37",
-      style::Color::BrightBlack => "90",
-      style::Color::BrightRed => "91",
-      style::Color::BrightGreen => "92",
-      style::Color::BrightYellow => "93",
-      style::Color::BrightBlue => "94",
-      style::Color::BrightMagenta => "95",
-      style::Color::BrightCyan => "96",
-      style::Color::BrightWhite => "97",
-   }
-}
-
-fn style_color_bg(color: style::Color) -> &'static str {
-   match color {
-      style::Color::Primary => "49",
-      style::Color::Fixed(_) | style::Color::Rgb(..) => "48",
-      style::Color::Black => "40",
-      style::Color::Red => "41",
-      style::Color::Green => "42",
-      style::Color::Yellow => "43",
-      style::Color::Blue => "44",
-      style::Color::Magenta => "45",
-      style::Color::Cyan => "46",
-      style::Color::White => "47",
-      style::Color::BrightBlack => "100",
-      style::Color::BrightRed => "101",
-      style::Color::BrightGreen => "102",
-      style::Color::BrightYellow => "103",
-      style::Color::BrightBlue => "104",
-      style::Color::BrightMagenta => "105",
-      style::Color::BrightCyan => "106",
-      style::Color::BrightWhite => "107",
-   }
-}
-
-fn style_attr(attr: style::Attr) -> &'static str {
-   match attr {
-      style::Attr::Bold => "1",
-      style::Attr::Dim => "2",
-      style::Attr::Italic => "3",
-      style::Attr::Underline => "4",
-      style::Attr::Blink => "5",
-      style::Attr::RapidBlink => "6",
-      style::Attr::Invert => "7",
-      style::Attr::Conceal => "8",
-      style::Attr::Strike => "9",
-   }
-}
-
-fn style_unattr(attr: style::Attr) -> &'static str {
-   match attr {
-      style::Attr::Bold => "22",
-      style::Attr::Dim => "22",
-      style::Attr::Italic => "23",
-      style::Attr::Underline => "24",
-      style::Attr::Blink => "25",
-      style::Attr::RapidBlink => "25",
-      style::Attr::Invert => "27",
-      style::Attr::Conceal => "28",
-      style::Attr::Strike => "29",
-   }
-}
-
-fn write_style_color(
-   writer: &mut impl fmt::Write,
-   color: style::Color,
-   variant: StyleColorVariant,
-) -> fmt::Result {
-   writer.write_str(match variant {
-      StyleColorVariant::Fg => style_color_fg(color),
-      StyleColorVariant::Bg => style_color_bg(color),
-   })?;
-
-   match color {
-      style::Color::Fixed(num) => {
-         let mut buffer = itoa::Buffer::new();
-
-         writer.write_str(";5;")?;
-         writer.write_str(buffer.format(num))
-      },
-
-      style::Color::Rgb(r, g, b) => {
-         let mut buffer = itoa::Buffer::new();
-
-         writer.write_str(";2;")?;
-         writer.write_str(buffer.format(r))?;
-         writer.write_str(";")?;
-         writer.write_str(buffer.format(g))?;
-         writer.write_str(";")?;
-         writer.write_str(buffer.format(b))
-      },
-
-      _ => Ok(()),
-   }
-}
-
-fn extend_to_line_boundaries(source: &str, mut span: Span) -> Span {
-   while *span.start > 0
-      && source
-         .as_bytes()
-         .get(*span.start as usize - 1)
-         .is_some_and(|&c| c != b'\n')
-   {
-      span.start -= 1_u32;
-   }
-
-   while source
-      .as_bytes()
-      .get(*span.end as usize)
-      .is_some_and(|&c| c != b'\n')
-   {
-      span.end += 1_u32;
-   }
-
-   span
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct LineStrikeId(u8);
@@ -439,88 +305,6 @@ struct Line {
    labels: SmallVec<LineLabel, 2>,
 }
 
-/// Given a list of spans which refer to the given content and their associated
-/// severities (primary and secondary), resolves the colors for every part,
-/// giving the primary color precedence over the secondary color in an overlap.
-fn resolve_style<'a>(
-   content: &'a str,
-   styles: &'a [LineStyle],
-   severity: report::Severity,
-) -> impl Iterator<Item = style::Styled<&'a str>> + 'a {
-   gen move {
-      let mut content_offset = Size::new(0_u32);
-      let mut style_offset: usize = 0;
-
-      while content_offset < content.len().into() {
-         let current_style =
-            styles[style_offset..]
-               .iter()
-               .copied()
-               .enumerate()
-               .find(|&(_, style)| {
-                  style.span.start <= content_offset && content_offset < style.span.end
-               });
-
-         match current_style {
-            Some((style_offset_diff, style)) => {
-               style_offset += style_offset_diff;
-
-               let contained_primary = (style.severity == report::LabelSeverity::Secondary)
-                  .then(|| {
-                     styles[style_offset..]
-                        .iter()
-                        .copied()
-                        .enumerate()
-                        .take_while(|&(_, other)| other.span.start <= style.span.end)
-                        .find(|&(_, other)| {
-                           other.severity == report::LabelSeverity::Primary
-                              && other.span.start > content_offset
-                        })
-                  })
-                  .flatten();
-
-               match contained_primary {
-                  Some((style_offset_diff, contained_style)) => {
-                     style_offset += style_offset_diff;
-
-                     yield content[Span::std(content_offset, contained_style.span.start)]
-                        .style(style.severity.style_in(severity));
-
-                     yield content[contained_style.span.into_std()]
-                        .style(contained_style.severity.style_in(severity));
-
-                     yield content[Span::std(contained_style.span.end, style.span.end)]
-                        .style(style.severity.style_in(severity));
-                  },
-
-                  None => {
-                     yield content[Span::std(content_offset, style.span.end)]
-                        .style(style.severity.style_in(severity));
-                  },
-               }
-
-               content_offset = style.span.end;
-            },
-
-            None => {
-               let (relative_offset, next_offset) = styles[style_offset..]
-                  .iter()
-                  .enumerate()
-                  .filter(|&(_, style)| style.span.start > content_offset)
-                  .map(|(relative_offset, style)| (relative_offset, style.span.start))
-                  .next()
-                  .unwrap_or((styles.len() - style_offset, content.len().into()));
-
-               style_offset += relative_offset;
-
-               yield content[Span::std(content_offset, next_offset)].styled();
-               content_offset = next_offset;
-            },
-         }
-      }
-   }
-}
-
 macro_rules! indent {
    ($writer:ident,header = $header:expr $(,)?) => {
       indent!($writer, header = $header, continuation = "".styled())
@@ -531,35 +315,35 @@ macro_rules! indent {
       let continuation = $continuation;
 
       let (header_width, continuation_width) = {
-         trait AsStr {
-            fn as_str2(&self) -> &str;
+         trait CastStr {
+            fn cast_str(&self) -> &str;
          }
 
-         impl AsStr for &'_ str {
-            fn as_str2(&self) -> &str {
+         impl CastStr for &'_ str {
+            fn cast_str(&self) -> &str {
                self
             }
          }
 
-         impl AsStr for std::borrow::Cow<'_, str> {
-            fn as_str2(&self) -> &str {
+         impl CastStr for std::borrow::Cow<'_, str> {
+            fn cast_str(&self) -> &str {
                self.as_ref()
             }
          }
 
-         impl AsStr for style::Styled<&'_ str> {
-            fn as_str2(&self) -> &str {
+         impl CastStr for style::Styled<&'_ str> {
+            fn cast_str(&self) -> &str {
                self.value
             }
          }
 
-         impl AsStr for style::Styled<std::borrow::Cow<'_, str>> {
-            fn as_str2(&self) -> &str {
+         impl CastStr for style::Styled<std::borrow::Cow<'_, str>> {
+            fn cast_str(&self) -> &str {
                self.value.as_ref()
             }
          }
 
-         (width(header.as_str2()), width(continuation.as_str2()))
+         (width(header.cast_str()), width(continuation.cast_str()))
       };
 
       let mut wrote = false;
@@ -619,6 +403,83 @@ macro_rules! dedent {
       };
    };
 }
+
+/// Given a list of spans which refer to the given content and their associated
+/// severities (primary and secondary), resolves the colors for every part,
+/// giving the primary color precedence over the secondary color in an overlap.
+fn resolve_style<'a>(
+   content: &'a str,
+   styles: &'a [LineStyle],
+   severity: report::Severity,
+) -> impl Iterator<Item = style::Styled<&'a str>> + 'a {
+   gen move {
+      let mut content_offset = Size::new(0_u32);
+      let mut style_offset: usize = 0;
+
+      while content_offset < content.len().into() {
+         let current_style =
+            styles[style_offset..]
+               .iter()
+               .copied()
+               .enumerate()
+               .find(|&(_, style)| {
+                  style.span.start <= content_offset && content_offset < style.span.end
+               });
+
+         let Some((style_offset_diff, style)) = current_style else {
+            let (relative_offset, next_offset) = styles[style_offset..]
+               .iter()
+               .enumerate()
+               .filter(|&(_, style)| style.span.start > content_offset)
+               .map(|(relative_offset, style)| (relative_offset, style.span.start))
+               .next()
+               .unwrap_or((styles.len() - style_offset, content.len().into()));
+
+            style_offset += relative_offset;
+
+            yield content[Span::std(content_offset, next_offset)].styled();
+            content_offset = next_offset;
+            continue;
+         };
+
+         style_offset += style_offset_diff;
+
+         let contained_primary = (style.severity == report::LabelSeverity::Secondary)
+            .then(|| {
+               styles[style_offset..]
+                  .iter()
+                  .copied()
+                  .enumerate()
+                  .take_while(|&(_, other)| other.span.start <= style.span.end)
+                  .find(|&(_, other)| {
+                     other.severity == report::LabelSeverity::Primary
+                        && other.span.start > content_offset
+                  })
+            })
+            .flatten();
+
+         let Some((style_offset_diff, contained_style)) = contained_primary else {
+            yield content[Span::std(content_offset, style.span.end)]
+               .style(style.severity.style_in(severity));
+            continue;
+         };
+
+         style_offset += style_offset_diff;
+
+         yield content[Span::std(content_offset, contained_style.span.start)]
+            .style(style.severity.style_in(severity));
+
+         yield content[contained_style.span.into_std()]
+            .style(contained_style.severity.style_in(severity));
+
+         yield content[Span::std(contained_style.span.end, style.span.end)]
+            .style(style.severity.style_in(severity));
+
+         content_offset = style.span.end;
+      }
+   }
+}
+
 fn write_report(
    writer: &mut dyn Write,
    report: &report::Report,
@@ -649,6 +510,27 @@ fn write_report(
    let mut lines = SmallVec::<Line, 8>::new();
 
    for (label_index, ((label_start, label_end), label)) in labels.into_iter().enumerate() {
+      fn extend_to_line_boundaries(source: &str, mut span: Span) -> Span {
+         while *span.start > 0
+            && source
+               .as_bytes()
+               .get(*span.start as usize - 1)
+               .is_some_and(|&c| c != b'\n')
+         {
+            span.start -= 1_u32;
+         }
+
+         while source
+            .as_bytes()
+            .get(*span.end as usize)
+            .is_some_and(|&c| c != b'\n')
+         {
+            span.end += 1_u32;
+         }
+
+         span
+      }
+
       let label_span_extended = extend_to_line_boundaries(**source, label.span);
 
       for (line_number, line_content) in
@@ -1399,6 +1281,119 @@ impl<W: fmt::Write> Write for Writer<W> {
    }
 
    fn apply_style(&mut self) -> fmt::Result {
+      #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+      enum StyleColorVariant {
+         Fg,
+         Bg,
+      }
+
+      fn style_color_fg(color: style::Color) -> &'static str {
+         match color {
+            style::Color::Primary => "39",
+            style::Color::Fixed(_) | style::Color::Rgb(..) => "38",
+            style::Color::Black => "30",
+            style::Color::Red => "31",
+            style::Color::Green => "32",
+            style::Color::Yellow => "33",
+            style::Color::Blue => "34",
+            style::Color::Magenta => "35",
+            style::Color::Cyan => "36",
+            style::Color::White => "37",
+            style::Color::BrightBlack => "90",
+            style::Color::BrightRed => "91",
+            style::Color::BrightGreen => "92",
+            style::Color::BrightYellow => "93",
+            style::Color::BrightBlue => "94",
+            style::Color::BrightMagenta => "95",
+            style::Color::BrightCyan => "96",
+            style::Color::BrightWhite => "97",
+         }
+      }
+
+      fn style_color_bg(color: style::Color) -> &'static str {
+         match color {
+            style::Color::Primary => "49",
+            style::Color::Fixed(_) | style::Color::Rgb(..) => "48",
+            style::Color::Black => "40",
+            style::Color::Red => "41",
+            style::Color::Green => "42",
+            style::Color::Yellow => "43",
+            style::Color::Blue => "44",
+            style::Color::Magenta => "45",
+            style::Color::Cyan => "46",
+            style::Color::White => "47",
+            style::Color::BrightBlack => "100",
+            style::Color::BrightRed => "101",
+            style::Color::BrightGreen => "102",
+            style::Color::BrightYellow => "103",
+            style::Color::BrightBlue => "104",
+            style::Color::BrightMagenta => "105",
+            style::Color::BrightCyan => "106",
+            style::Color::BrightWhite => "107",
+         }
+      }
+
+      fn style_attr(attr: style::Attr) -> &'static str {
+         match attr {
+            style::Attr::Bold => "1",
+            style::Attr::Dim => "2",
+            style::Attr::Italic => "3",
+            style::Attr::Underline => "4",
+            style::Attr::Blink => "5",
+            style::Attr::RapidBlink => "6",
+            style::Attr::Invert => "7",
+            style::Attr::Conceal => "8",
+            style::Attr::Strike => "9",
+         }
+      }
+
+      fn style_unattr(attr: style::Attr) -> &'static str {
+         match attr {
+            style::Attr::Bold => "22",
+            style::Attr::Dim => "22",
+            style::Attr::Italic => "23",
+            style::Attr::Underline => "24",
+            style::Attr::Blink => "25",
+            style::Attr::RapidBlink => "25",
+            style::Attr::Invert => "27",
+            style::Attr::Conceal => "28",
+            style::Attr::Strike => "29",
+         }
+      }
+
+      fn write_style_color(
+         writer: &mut impl fmt::Write,
+         color: style::Color,
+         variant: StyleColorVariant,
+      ) -> fmt::Result {
+         writer.write_str(match variant {
+            StyleColorVariant::Fg => style_color_fg(color),
+            StyleColorVariant::Bg => style_color_bg(color),
+         })?;
+
+         match color {
+            style::Color::Fixed(num) => {
+               let mut buffer = itoa::Buffer::new();
+
+               writer.write_str(";5;")?;
+               writer.write_str(buffer.format(num))
+            },
+
+            style::Color::Rgb(r, g, b) => {
+               let mut buffer = itoa::Buffer::new();
+
+               writer.write_str(";2;")?;
+               writer.write_str(buffer.format(r))?;
+               writer.write_str(";")?;
+               writer.write_str(buffer.format(g))?;
+               writer.write_str(";")?;
+               writer.write_str(buffer.format(b))
+            },
+
+            _ => Ok(()),
+         }
+      }
+
       struct Splicer {
          written: bool,
       }
