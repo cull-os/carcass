@@ -1,6 +1,5 @@
 use std::borrow::Cow;
 
-use cab_report::Report;
 use cab_span::{
    IntoSpan as _,
    Span,
@@ -16,6 +15,7 @@ use smallvec::{
    SmallVec,
    smallvec,
 };
+use ust::report::Report;
 
 use super::{
    Compiler,

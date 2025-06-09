@@ -13,6 +13,8 @@ workspace = true
 [dependencies]
 cab.path = "../cab"
 
+ust.path = "../../ust"
+
 clap.workspace  = true
 tokio.workspace = true
 which.workspace = true

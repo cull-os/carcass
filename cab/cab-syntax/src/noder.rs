@@ -1,14 +1,7 @@
 use std::fmt::Write as _;
 
-use cab_format::{
-   DisplayView,
-   WriteView,
-};
 use cab_report::{
    Contextful as _,
-   PositionStr,
-   Report,
-   ReportSeverity,
    Result,
    bail,
 };
@@ -21,6 +14,15 @@ use enumset::EnumSet;
 use peekmore::{
    PeekMore as _,
    PeekMoreIterator as PeekMore,
+};
+use ust::{
+   Display,
+   Write,
+   report::{
+      self,
+      PositionStr,
+      Report,
+   },
 };
 
 use crate::{
@@ -50,18 +52,17 @@ pub struct Parse {
 impl Parse {
    pub fn extractlnln(
       self,
-      writer: &mut impl WriteView,
-      location: &(impl DisplayView + Clone),
+      writer: &mut impl Write,
+      location: &impl Display,
       source: &PositionStr<'_>,
    ) -> Result<node::Expression> {
       let mut fail = 0;
 
       for report in self.reports {
-         fail += usize::from(report.severity >= ReportSeverity::Error);
+         fail += usize::from(report.severity >= report::Severity::Error);
 
-         report
-            .locate(location.clone(), source)
-            .display(writer)
+         writer
+            .write_report(&report, location, source)
             .context("failed to write report")?;
 
          write!(writer, "\n\n").context("failed to write report")?;

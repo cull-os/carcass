@@ -2,12 +2,12 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use bytes::Bytes;
-use cab_format::DisplayTags;
 use cab_report::{
    Error,
    Result,
    bail,
 };
+use ust::terminal::tag;
 
 use super::Value;
 
@@ -34,8 +34,8 @@ pub struct Path {
    content: Arc<str>,
 }
 
-impl DisplayTags for Path {
-   fn display_tags<'a>(&'a self, tags: &mut cab_format::Tags<'a>) {
+impl tag::DisplayTags for Path {
+   fn display_tags<'a>(&'a self, tags: &mut tag::Tags<'a>) {
       if let Some(ref root) = self.root {
          tags.write("<");
 

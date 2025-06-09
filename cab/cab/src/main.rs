@@ -8,11 +8,6 @@ use std::{
 };
 
 use cab::{
-   format::{
-      self,
-      DisplayView as _,
-      style::StyleExt as _,
-   },
    island,
    report::{
       self,
@@ -22,6 +17,15 @@ use cab::{
    syntax,
 };
 use clap::Parser as _;
+use ust::{
+   COLORS,
+   Display as _,
+   Write,
+   report::PositionStr,
+   style::StyledExt,
+   terminal,
+   write,
+};
 
 const FAIL_STDOUT: &str = "failed to write to stdout";
 
@@ -68,10 +72,8 @@ enum Dump {
 async fn main() -> report::Termination {
    let cli = Cli::parse();
 
-   cab::init();
-
-   let mut out = format::stdout();
-   let mut err = format::stderr();
+   let out = &mut terminal::stdout();
+   let err = &mut terminal::stderr();
 
    match cli.command {
       Command::Compile { expression: source } => {
@@ -90,23 +92,23 @@ async fn main() -> report::Termination {
             )
          })?;
 
-         let source = report::PositionStr::new(&source);
+         let source = PositionStr::new(&source);
 
          let parse_oracle = syntax::parse_oracle();
          let expression = parse_oracle.parse(syntax::tokenize(&source)).extractlnln(
-            &mut err,
+            err,
             &island::display!(leaf),
             &source,
          )?;
 
          let compile_oracle = runtime::compile_oracler();
          let code = compile_oracle.compile(expression.as_ref()).extractlnln(
-            &mut err,
+            err,
             &island::display!(leaf),
             &source,
          )?;
 
-         code.display(&mut out).context(FAIL_STDOUT)?;
+         code.display_styled(out).context(FAIL_STDOUT)?;
       },
 
       Command::Dump { path, command } => {
@@ -125,15 +127,15 @@ async fn main() -> report::Termination {
             )
          })?;
 
-         let source = report::PositionStr::new(&source);
+         let source = PositionStr::new(&source);
 
          match command {
             Dump::Token { color } => {
                for (kind, slice) in syntax::tokenize(&source) {
                   if color {
-                     let style = format::COLORS[kind as usize];
+                     let style = COLORS[kind as usize];
 
-                     write!(out, "{slice}", slice = slice.style(style))
+                     write(out, &slice.style(style))
                   } else {
                      writeln!(out, "{kind:?} {slice:?}")
                   }
@@ -144,7 +146,7 @@ async fn main() -> report::Termination {
             Dump::Syntax => {
                let parse_oracle = syntax::parse_oracle();
                let expression = parse_oracle.parse(syntax::tokenize(&source)).extractlnln(
-                  &mut err,
+                  err,
                   &island::display!(leaf),
                   &source,
                )?;
@@ -155,6 +157,9 @@ async fn main() -> report::Termination {
          }
       },
    }
+
+   out.finish()?;
+   err.finish()?;
 
    report::Termination::success()
 }

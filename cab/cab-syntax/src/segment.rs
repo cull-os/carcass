@@ -1,6 +1,5 @@
 use std::ops;
 
-use cab_report::Report;
 use cab_span::{
    IntoSpan as _,
    Span,
@@ -11,6 +10,7 @@ use cab_util::{
    reffed,
 };
 use smallvec::SmallVec;
+use ust::report::Report;
 
 use crate::{
    node,

@@ -12,28 +12,6 @@ pub use error::{
    Termination,
 };
 
-mod label;
-pub use label::{
-   Label,
-   LabelSeverity,
-};
-
-mod point;
-pub use point::Point;
-
-mod position;
-pub use position::{
-   Position,
-   PositionStr,
-};
-
-mod report;
-pub use report::{
-   Report,
-   ReportLocated,
-   ReportSeverity,
-};
-
 #[doc(hidden)]
 pub mod private {
    pub use anyhow;

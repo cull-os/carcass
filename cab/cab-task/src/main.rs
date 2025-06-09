@@ -5,7 +5,6 @@ use std::{
 };
 
 use cab::{
-   format::style::StyleExt as _,
    report::{
       self,
       Contextful as _,
@@ -13,6 +12,7 @@ use cab::{
    syntax,
 };
 use clap::Parser as _;
+use ust::style::StyledExt as _;
 use which::which;
 
 #[derive(clap::Parser)]
@@ -48,8 +48,6 @@ enum Check {
 #[tokio::main]
 async fn main() -> report::Termination {
    let cli = Cli::parse();
-
-   cab::init();
 
    match cli.command {
       Command::Check {

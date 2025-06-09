@@ -2,34 +2,35 @@
 
 use std::sync::Arc;
 
-use cab_format::{
-   DisplayTags,
-   INDENT_WIDTH,
-   Tag,
-   TagCondition,
-};
 use rpds::HashTrieMapSync as HashTrieMap;
 use rustc_hash::FxBuildHasher;
+use ust::{
+   INDENT_WIDTH,
+   terminal::tag,
+};
 
 use super::Value;
 
 #[derive(Clone)]
 pub struct Attributes(HashTrieMap<Arc<str>, Value, FxBuildHasher>);
 
-impl DisplayTags for Attributes {
-   fn display_tags<'a>(&'a self, tags: &mut cab_format::Tags<'a>) {
-      use Tag::{
-         Indent,
-         Newline,
-         Space,
-      };
-      use TagCondition::{
-         Always,
-         Broken,
-         Flat,
+impl tag::DisplayTags for Attributes {
+   fn display_tags<'a>(&'a self, tags: &mut tag::Tags<'a>) {
+      use tag::{
+         Condition::{
+            Always,
+            Broken,
+            Flat,
+         },
+         Tag::{
+            Group,
+            Indent,
+            Newline,
+            Space,
+         },
       };
 
-      tags.write_with(Tag::Group(40), |tags| {
+      tags.write_with(Group(40), |tags| {
          tags.write("{");
 
          if !self.0.is_empty() {

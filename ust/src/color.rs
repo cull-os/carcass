@@ -1,5 +1,8 @@
 use crate::style;
 
+pub const STYLE_GUTTER: style::Style = style::Style::new().blue();
+pub const STYLE_HEADER_POSITION: style::Style = style::Style::new().blue();
+
 const fn style(r: u8, g: u8, b: u8) -> style::Style {
    let color = if (0.2126 * r as f32 + 0.7152 * g as f32 + 0.0722 * b as f32) < 140.0 {
       style::Color::Rgb(0xFF, 0xFF, 0xFF)
@@ -7,7 +10,7 @@ const fn style(r: u8, g: u8, b: u8) -> style::Style {
       style::Color::Rgb(0, 0, 0)
    };
 
-   color.on_rgb(r, g, b)
+   color.fg().on_rgb(r, g, b)
 }
 
 /// A list of visually distinct colors. Useful for coloring
