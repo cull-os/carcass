@@ -7,7 +7,6 @@ use std::{
    ptr,
 };
 
-use cab_report::Report;
 use cab_span::{
    IntoSpan as _,
    Span,
@@ -21,6 +20,7 @@ use cab_util::{
 };
 use derive_more::Deref;
 use paste::paste;
+use ust::report::Report;
 
 use crate::{
    Kind::{

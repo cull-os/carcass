@@ -1,19 +1,45 @@
 #![feature(
+   anonymous_lifetime_in_impl_trait,
    gen_blocks,
    if_let_guard,
-   iter_intersperse,
-   anonymous_lifetime_in_impl_trait
+   mixed_integer_ops_unsigned_sub
 )]
+#![allow(unstable_name_collisions)] // Itertools::intersperse
 
 use std::fmt;
+
+mod color;
+pub use color::{
+   COLORS,
+   STYLE_GUTTER,
+   STYLE_HEADER_POSITION,
+};
 
 pub mod report;
 pub mod style;
 
 pub mod terminal;
 
+pub const INDENT_WIDTH: isize = 3;
+
+pub trait Debug {
+   fn debug_styled(&self, writer: &mut dyn Write) -> fmt::Result;
+}
+
+impl<T: fmt::Debug> Debug for T {
+   fn debug_styled(&self, writer: &mut dyn Write) -> fmt::Result {
+      write!(writer, "{self:?}")
+   }
+}
+
 pub trait Display {
-   fn display_styled(&self, w: &mut dyn Write) -> fmt::Result;
+   fn display_styled(&self, writer: &mut dyn Write) -> fmt::Result;
+}
+
+impl<T: fmt::Display> Display for T {
+   fn display_styled(&self, writer: &mut dyn Write) -> fmt::Result {
+      write!(writer, "{self}")
+   }
 }
 
 pub fn write(writer: &mut dyn Write, styled: &style::Styled<impl fmt::Display>) -> fmt::Result {

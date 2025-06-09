@@ -4,15 +4,12 @@ mod attributes;
 pub use attributes::Attributes;
 
 mod path;
-use cab_format::{
-   DisplayTags,
-   Tag,
-};
 use cab_syntax::is_valid_plain_identifier;
 pub use path::{
    Path,
    Root,
 };
+use ust::terminal::tag;
 
 mod thunk;
 pub use thunk::Thunk;
@@ -43,9 +40,9 @@ pub enum Value {
    Blueprint(Arc<Code>),
 }
 
-impl DisplayTags for Value {
-   fn display_tags<'a>(&'a self, tags: &mut cab_format::Tags<'a>) {
-      use Tag::Text;
+impl tag::DisplayTags for Value {
+   fn display_tags<'a>(&'a self, tags: &mut tag::Tags<'a>) {
+      use tag::Tag::Text;
 
       match *self {
          Value::Boolean(boolean) if boolean => tags.write("true"),

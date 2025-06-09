@@ -6,10 +6,14 @@ use std::{
       self,
       Write as _,
    },
+   io,
    iter,
    num::NonZeroUsize,
    ops::Add as _,
-   os,
+   os::{
+      self,
+      fd::AsFd as _,
+   },
 };
 
 use cab_span::{
@@ -30,6 +34,8 @@ use unicode_segmentation::UnicodeSegmentation as _;
 
 use crate::{
    Display,
+   STYLE_GUTTER,
+   STYLE_HEADER_POSITION,
    Write,
    report,
    style::{
@@ -38,6 +44,14 @@ use crate::{
    },
    write,
 };
+
+pub mod indent;
+pub use indent::{
+   dedent,
+   indent,
+};
+
+pub mod tag;
 
 /// Calculates the width of the number when formatted with the default
 /// formatter.
@@ -88,7 +102,7 @@ pub fn width(s: &str) -> usize {
 
 /// [`wrap`], but with a newline before the text.
 pub fn lnwrap<'a>(
-   writer: &mut dyn Write,
+   writer: &mut impl Write,
    parts: impl IntoIterator<Item = style::Styled<&'a str>>,
 ) -> fmt::Result {
    writer.write_char('\n')?;
@@ -98,14 +112,14 @@ pub fn lnwrap<'a>(
 /// Writes the given iterator of colored words into the writer, splicing and
 /// wrapping at the max width.
 pub fn wrap<'a>(
-   writer: &mut dyn Write,
+   writer: &mut impl Write,
    parts: impl IntoIterator<Item = style::Styled<&'a str>>,
 ) -> fmt::Result {
    use None as Newline;
    use Some as Word;
 
    fn wrap_line<'a>(
-      writer: &mut dyn Write,
+      writer: &mut impl Write,
       parts: impl IntoIterator<Item = style::Styled<&'a str>>,
    ) -> fmt::Result {
       const WIDTH_NEEDED: NonZeroUsize = NonZeroUsize::new(8).unwrap();
@@ -127,13 +141,11 @@ pub fn wrap<'a>(
 
       let mut parts = parts
          .flat_map(|part| {
-            Iterator::intersperse(
-               part
-                  .value
-                  .split(' ')
-                  .map(move |word| Word(word.style(part.style))),
-               Space,
-            )
+            part
+               .value
+               .split(' ')
+               .map(move |word| Word(word.style(part.style)))
+               .intersperse(Space)
          })
          .peekable();
 
@@ -193,13 +205,11 @@ pub fn wrap<'a>(
    let mut parts = parts
       .into_iter()
       .flat_map(|part| {
-         Iterator::intersperse(
-            part
-               .value
-               .split('\n')
-               .map(move |word| Word(word.style(part.style))),
-            Newline,
-         )
+         part
+            .value
+            .split('\n')
+            .map(move |word| Word(word.style(part.style)))
+            .intersperse(Newline)
       })
       .peekable();
 
@@ -221,20 +231,17 @@ pub fn wrap<'a>(
    Ok(())
 }
 
-const STYLE_GUTTER: style::Style = style::Style::new().blue();
-const STYLE_HEADER_POSITION: style::Style = style::Style::new().blue();
+pub const RIGHT_TO_BOTTOM: char = '┏';
+pub const TOP_TO_BOTTOM: char = '┃';
+pub const TOP_TO_BOTTOM_PARTIAL: char = '┇';
+pub const DOT: char = '·';
+pub const TOP_TO_RIGHT: char = '┗';
+pub const LEFT_TO_RIGHT: char = '━';
+pub const LEFT_TO_TOP_BOTTOM: char = '┫';
 
-const RIGHT_TO_BOTTOM: char = '┏';
-const TOP_TO_BOTTOM: char = '┃';
-const TOP_TO_BOTTOM_PARTIAL: char = '┇';
-const DOT: char = '·';
-const TOP_TO_RIGHT: char = '┗';
-const LEFT_TO_RIGHT: char = '━';
-const LEFT_TO_TOP_BOTTOM: char = '┫';
-
-const TOP_TO_BOTTOM_LEFT: char = '▏';
-const TOP_LEFT_TO_RIGHT: char = '╲';
-const TOP_TO_BOTTOM_RIGHT: char = '▕';
+pub const TOP_TO_BOTTOM_LEFT: char = '▏';
+pub const TOP_LEFT_TO_RIGHT: char = '╲';
+pub const TOP_TO_BOTTOM_RIGHT: char = '▕';
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct LineStrikeId(u8);
@@ -303,105 +310,6 @@ struct Line {
    styles:  SmallVec<LineStyle, 4>,
 
    labels: SmallVec<LineLabel, 2>,
-}
-
-macro_rules! indent {
-   ($writer:ident,header = $header:expr $(,)?) => {
-      indent!($writer, header = $header, continuation = "".styled())
-   };
-
-   ($writer:ident,header = $header:expr,continuation = $continuation:expr $(,)?) => {
-      let header = $header;
-      let continuation = $continuation;
-
-      let (header_width, continuation_width) = {
-         trait CastStr {
-            fn cast_str(&self) -> &str;
-         }
-
-         impl CastStr for &'_ str {
-            fn cast_str(&self) -> &str {
-               self
-            }
-         }
-
-         impl CastStr for std::borrow::Cow<'_, str> {
-            fn cast_str(&self) -> &str {
-               self.as_ref()
-            }
-         }
-
-         impl CastStr for style::Styled<&'_ str> {
-            fn cast_str(&self) -> &str {
-               self.value
-            }
-         }
-
-         impl CastStr for style::Styled<std::borrow::Cow<'_, str>> {
-            fn cast_str(&self) -> &str {
-               self.value.as_ref()
-            }
-         }
-
-         (width(header.cast_str()), width(continuation.cast_str()))
-      };
-
-      let mut wrote = false;
-      indent!($writer, header_width + 1, |writer| {
-         if !wrote {
-            write(writer, &header)?;
-
-            wrote = true;
-            Ok(header_width)
-         } else {
-            write(writer, &continuation)?;
-
-            Ok(continuation_width)
-         }
-      });
-   };
-
-   ($writer:ident, $count:expr $(,)?) => {
-      indent!($writer, $count, |_| Ok(0_usize));
-   };
-
-   ($writer:ident, $count:expr, $with:expr $(,)?) => {
-      let $writer = &mut IndentWriter {
-         inner: $writer,
-         with:  &mut $with,
-         count: $count,
-         place: IndentPlace::Start,
-      };
-   };
-}
-
-macro_rules! dedent {
-   ($writer:ident $(,)?) => {
-      dedent!($writer, $writer.count, discard = true);
-   };
-
-   ($writer:ident, $dedent:expr $(,)?) => {
-      dedent!($writer, $dedent, discard = true);
-   };
-
-   ($writer:ident, $dedent:expr,discard = $discard:literal $(,)?) => {
-      let $writer = &mut IndentWriter {
-         inner: $writer.inner,
-
-         count: $writer
-            .count
-            .checked_sub($dedent)
-            .expect("dedent must be smaller than indent"),
-
-         with: if $discard {
-            &mut move |_| Ok(0)
-         } else {
-            $writer.with
-         },
-
-         place: $writer.place,
-      };
-   };
 }
 
 /// Given a list of spans which refer to the given content and their associated
@@ -481,7 +389,7 @@ fn resolve_style<'a>(
 }
 
 fn write_report(
-   writer: &mut dyn Write,
+   writer: &mut impl Write,
    report: &report::Report,
    location: &dyn Display,
    source: &report::PositionStr<'_>,
@@ -690,10 +598,10 @@ fn write_report(
       indent!(
          writer,
          header = match severity {
-            report::Severity::Note => "note: ",
-            report::Severity::Warn => "warn: ",
-            report::Severity::Error => "error: ",
-            report::Severity::Bug => "bug: ",
+            report::Severity::Note => "note:",
+            report::Severity::Warn => "warn:",
+            report::Severity::Error => "error:",
+            report::Severity::Bug => "bug:",
          }
          .style(severity.style_in()),
       );
@@ -703,10 +611,10 @@ fn write_report(
 
    let line_number_width = lines.last().map_or(0, |line| number_width(line.number));
 
-   // INDENT: "123 | "
+   // INDENT: "123 |"
    let line_number = RefCell::new(None::<u32>);
    let line_number_previous = RefCell::new(None::<u32>);
-   indent!(writer, line_number_width + 3, |writer| {
+   indent!(writer, line_number_width + 2, |writer| {
       let line_number = *line_number.borrow();
       borrow_mut!(line_number_previous);
 
@@ -748,18 +656,18 @@ fn write_report(
          },
       }
 
-      write!(writer, " {TOP_TO_BOTTOM} ")?;
+      write!(writer, " {TOP_TO_BOTTOM}")?;
 
       if let Some(line_number) = line_number {
          line_number_previous.replace(line_number);
       }
 
-      Ok(line_number_width)
+      Ok(line_number_width + 2)
    });
 
    if let Some(line) = lines.first() {
       {
-         // DEDENT: "123 | "
+         // DEDENT: "123 |"
          dedent!(writer);
 
          // INDENT: "123 ", but spaces.
@@ -768,15 +676,10 @@ fn write_report(
          // INDENT: "┏━━━ ".
          indent!(
             writer,
-            header = const_str::concat!(
-               RIGHT_TO_BOTTOM,
-               LEFT_TO_RIGHT,
-               LEFT_TO_RIGHT,
-               LEFT_TO_RIGHT,
-               ' '
-            )
-            .style(STYLE_GUTTER),
-            continuation = const_str::concat!(TOP_TO_BOTTOM, "     ").style(STYLE_GUTTER),
+            header =
+               const_str::concat!(RIGHT_TO_BOTTOM, LEFT_TO_RIGHT, LEFT_TO_RIGHT, LEFT_TO_RIGHT)
+                  .style(STYLE_GUTTER),
+            continuation = const_str::concat!(TOP_TO_BOTTOM).style(STYLE_GUTTER),
          );
 
          writer.write_char('\n')?;
@@ -818,7 +721,6 @@ fn write_report(
       let strike_prefix = RefCell::new(
          iter::repeat_n(None::<LineStrike>, strike_prefix_width).collect::<SmallVec<_, 2>>(),
       );
-
       indent!(writer, strike_prefix_width + 1, |writer| {
          const STRIKE_OVERRIDE_DEFAULT: style::Styled<char> = style::Styled::new(' ');
 
@@ -861,7 +763,7 @@ fn write_report(
          write(writer, &strike_override.unwrap_or(STRIKE_OVERRIDE_DEFAULT))?;
 
          Ok(strike_prefix_width + 1)
-      },);
+      });
 
       for line in &lines {
          // Patch strike prefix and keep track of positions of strikes with their IDs.
@@ -931,9 +833,9 @@ fn write_report(
 
                   assert_eq!(top_to_right.severity, label.severity);
 
-                  // INDENT: "<strike-prefix>"
+                  // INDENT: "<strike-prefix> "
                   let mut wrote = false;
-                  indent!(writer, strike_prefix_width, |writer| {
+                  indent!(writer, strike_prefix_width + 1, |writer| {
                      // Write all strikes up to the index of the one we are going to
                      // redirect to the right.
                      for slot in strike_prefix.borrow().iter().take(top_to_right_index) {
@@ -952,7 +854,7 @@ fn write_report(
                         &TOP_TO_RIGHT.style(top_to_right.severity.style_in(severity)),
                      )?;
 
-                     for _ in 0..strike_prefix_width - top_to_right_index - 1 {
+                     for _ in 0..strike_prefix_width - top_to_right_index {
                         write(
                            writer,
                            &LEFT_TO_RIGHT.style(top_to_right.severity.style_in(severity)),
@@ -960,19 +862,19 @@ fn write_report(
                      }
 
                      wrote = true;
-                     Ok(strike_prefix_width)
-                  },);
+                     Ok(strike_prefix_width + 1)
+                  });
 
-                  // INDENT: "<left-to-right><left-to-bottom>"
-                  // INDENT: "               <top--to-bottom>"
+                  // INDENT: "<left-to-right><left-to-bottom> "
+                  // INDENT: "               <top--to-bottom> "
                   let mut wrote = false;
                   indent!(writer, *span_end as usize + 2, |writer| {
                      for index in 0..*span_end {
                         write(writer, &match () {
-                           // If there is a label on the current line after this label
-                           // that has a start or
-                           // end at the
-                           // current index, write it instead of out <left-to-right>
+                           // If there is a label on the current line
+                           // after this label that has a start or end
+                           // at the current index, write it instead
+                           // of our <left-to-right>.
                            () if let Some(label) =
                               line.labels[..label_index].iter().rev().find(|label| {
                                  *label.span.end() == index && !label.span.is_empty()
@@ -1029,7 +931,7 @@ fn write_report(
                      }
 
                      Ok(strike_prefix_width)
-                  },);
+                  });
 
                   // INDENT: "               <top-to-right><left-to-right><left-to-bottom> "
                   // INDENT: "                                            <top--to-bottom> "
@@ -1082,7 +984,7 @@ fn write_report(
 
                      wrote = true;
                      Ok(line_width)
-                  },);
+                  });
 
                   lnwrap(writer, [label
                      .text
@@ -1101,7 +1003,7 @@ fn write_report(
          writer.write_indent()?;
       }
 
-      // DEDENT: "123 | "
+      // DEDENT: "123 |"
       dedent!(writer);
 
       // INDENT: "123 ", but spaces.
@@ -1109,14 +1011,14 @@ fn write_report(
 
       for point in points {
          // INDENT: "= "
-         indent!(writer, header = "= ".style(STYLE_GUTTER));
+         indent!(writer, header = "=".style(STYLE_GUTTER));
 
          // INDENT: "<tip|help|...>: "
          indent!(
             writer,
             header = match point.severity {
-               report::PointSeverity::Tip => "tip: ",
-               report::PointSeverity::Help => "help: ",
+               report::PointSeverity::Tip => "tip:",
+               report::PointSeverity::Help => "help:",
             }
             .style(point.severity.style_in()),
          );
@@ -1126,126 +1028,6 @@ fn write_report(
    }
 
    Ok(())
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum IndentPlace {
-   Start,
-   Middle,
-   End,
-}
-
-struct IndentWriter<'a, W: Write + ?Sized> {
-   inner: &'a mut W,
-   with:  &'a mut dyn FnMut(&mut W) -> Result<usize, fmt::Error>,
-   count: usize,
-   place: IndentPlace,
-}
-
-impl<W: Write + ?Sized> Write for IndentWriter<'_, W> {
-   fn finish(&mut self) -> fmt::Result {
-      self.inner.finish()
-   }
-
-   fn width(&self) -> usize {
-      self.inner.width()
-         + if self.place == IndentPlace::Start {
-            self.count
-         } else {
-            0
-         }
-   }
-
-   fn width_max(&self) -> usize {
-      self.inner.width_max()
-   }
-
-   fn get_style(&self) -> style::Style {
-      self.inner.get_style()
-   }
-
-   fn set_style(&mut self, style: style::Style) {
-      self.inner.set_style(style);
-   }
-
-   fn apply_style(&mut self) -> fmt::Result {
-      self.inner.apply_style()
-   }
-
-   fn write_report(
-      &mut self,
-      report: &report::Report,
-      location: &dyn Display,
-      source: &report::PositionStr<'_>,
-   ) -> fmt::Result
-   where
-      Self: Sized,
-   {
-      write_report(self, report, location, source)
-   }
-}
-
-impl<W: Write + ?Sized> IndentWriter<'_, W> {
-   /// Asserts that it is at the start of the line and writes the indent.
-   ///
-   /// # Panics
-   ///
-   /// Panics if the writer isn't at the start of the line or if the indent
-   /// writer wrote more than the indent.
-   #[track_caller]
-   pub fn write_indent(&mut self) -> fmt::Result {
-      assert_eq!(self.place, IndentPlace::Start);
-
-      let wrote = (self.with)(self.inner)?;
-
-      assert!(
-         wrote <= self.count,
-         "indent writer wrote ({wrote}) more than the indent ({count})",
-         count = self.count
-      );
-
-      for _ in wrote..self.count {
-         self.inner.write_char('\n')?;
-      }
-      self.place = IndentPlace::Middle;
-
-      Ok(())
-   }
-}
-
-impl<W: Write + ?Sized> fmt::Write for IndentWriter<'_, W> {
-   fn write_str(&mut self, s: &str) -> fmt::Result {
-      use None as Newline;
-      use Some as Line;
-
-      for segment in Iterator::intersperse(s.split('\n').map(Line), Newline) {
-         match self.place {
-            IndentPlace::Start
-               if let Line(line) = segment
-                  && !line.is_empty() =>
-            {
-               self.write_indent()?;
-            },
-
-            IndentPlace::End => {
-               self.inner.write_char('\n')?;
-               self.place = IndentPlace::Start;
-            },
-
-            IndentPlace::Start | IndentPlace::Middle => {},
-         }
-
-         match segment {
-            Newline => self.place = IndentPlace::End,
-
-            Line(line) => {
-               self.inner.write_str(line)?;
-            },
-         }
-      }
-
-      Ok(())
-   }
 }
 
 struct Writer<W: fmt::Write> {
@@ -1476,7 +1258,7 @@ impl<W: fmt::Write> fmt::Write for Writer<W> {
       use None as Newline;
       use Some as Line;
 
-      let mut lines = Iterator::intersperse(s.split('\n').map(Line), Newline).peekable();
+      let mut lines = s.split('\n').map(Line).intersperse(Newline).peekable();
       while let Some(segment) = lines.next() {
          match segment {
             Newline => {
@@ -1506,7 +1288,7 @@ impl<W: fmt::Write> fmt::Write for Writer<W> {
    }
 }
 
-pub fn writer(inner: impl os::fd::AsFd + fmt::Write) -> impl Write {
+pub fn writer_from(inner: impl os::fd::AsFd + fmt::Write) -> impl Write {
    Writer {
       style_current: style::Style::default(),
       style_next: style::Style::default(),
@@ -1517,4 +1299,58 @@ pub fn writer(inner: impl os::fd::AsFd + fmt::Write) -> impl Write {
 
       inner,
    }
+}
+
+pub fn writer_from_stdout(inner: impl fmt::Write) -> impl Write {
+   Writer {
+      style_current: style::Style::default(),
+      style_next: style::Style::default(),
+
+      width: 0,
+      width_max: terminal_size::terminal_size_of(io::stdout().as_fd())
+         .map_or(usize::MAX, |(width, _)| width.0 as usize),
+
+      inner,
+   }
+}
+
+pub fn writer_from_stderr(inner: impl fmt::Write) -> impl Write {
+   Writer {
+      style_current: style::Style::default(),
+      style_next: style::Style::default(),
+
+      width: 0,
+      width_max: terminal_size::terminal_size_of(io::stderr().as_fd())
+         .map_or(usize::MAX, |(width, _)| width.0 as usize),
+
+      inner,
+   }
+}
+
+struct WriteFmt<T>(T);
+
+impl<W: io::Write> fmt::Write for WriteFmt<W> {
+   fn write_str(&mut self, s: &str) -> fmt::Result {
+      self.0.write_all(s.as_bytes()).map_err(|_| fmt::Error)
+   }
+}
+
+impl<F: os::fd::AsFd> os::fd::AsFd for WriteFmt<F> {
+   fn as_fd(&self) -> os::unix::prelude::BorrowedFd<'_> {
+      self.0.as_fd()
+   }
+}
+
+/// Constructs a new [`crate::Write`] to the standard output of the current
+/// process.
+#[must_use]
+pub fn stdout() -> impl Write {
+   writer_from(WriteFmt(io::stdout()))
+}
+
+/// Constructs a new [`crate::Write`] to the standard error of the current
+/// process.
+#[must_use]
+pub fn stderr() -> impl Write {
+   writer_from(WriteFmt(io::stderr()))
 }

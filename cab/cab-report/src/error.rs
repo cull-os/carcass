@@ -16,7 +16,11 @@ use std::{
    sync::Arc,
 };
 
-use cab_format::style::StyleExt as _;
+use ust::{
+   style::StyledExt as _,
+   terminal,
+   write,
+};
 
 /// A type alias for concice use of [`Error`].
 pub type Result<T> = result::Result<T, Error>;
@@ -29,17 +33,18 @@ pub struct Error(#[doc(hidden)] pub Arc<anyhow::Error>);
 
 impl fmt::Debug for Error {
    fn fmt(&self, writer: &mut fmt::Formatter<'_>) -> fmt::Result {
+      let writer = &mut terminal::writer_from_stderr(writer);
+
       let mut message = String::new();
       let mut chain = self.0.chain().rev().peekable();
 
       while let Some(error) = chain.next() {
-         write!(
+         write(
             writer,
-            "{header} ",
-            header = if chain.peek().is_none() {
-               "error:"
+            &if chain.peek().is_none() {
+               "error: "
             } else {
-               "cause:"
+               "cause: "
             }
             .red()
             .bold(),

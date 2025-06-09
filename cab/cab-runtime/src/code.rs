@@ -11,27 +11,28 @@ use std::{
    },
 };
 
-use cab_format::{
+use cab_span::Span;
+use derive_more::Deref;
+use ust::{
    COLORS,
-   DisplayTags as _,
-   DisplayView,
+   Display,
    INDENT_WIDTH,
-   WriteView,
-   dedent,
-   indent,
-   number_hex_width,
+   STYLE_GUTTER,
+   Write,
    style::{
+      self,
+      StyledExt as _,
+   },
+   terminal::{
       self,
       DOT,
       LEFT_TO_RIGHT,
       RIGHT_TO_BOTTOM,
-      Style,
-      StyleExt as _,
       TOP_TO_BOTTOM,
+      tag::DisplayTags as _,
    },
+   write,
 };
-use cab_span::Span;
-use derive_more::Deref;
 
 use crate::{
    Argument,
@@ -70,70 +71,61 @@ pub struct Code {
    values: Vec<Value>,
 }
 
-impl DisplayView for Code {
-   fn display(&self, writer: &mut dyn WriteView) -> fmt::Result {
+impl Display for Code {
+   fn display_styled(&self, writer: &mut dyn Write) -> fmt::Result {
       let mut codes = VecDeque::from([(0_u64, self)]);
 
       while let Some((code_index, code)) = codes.pop_back() {
          let highlighted = RefCell::new(Vec::<ByteIndex>::new());
-         let index_width = 2 + number_hex_width(code.bytes.len() - 1);
+         let index_width = 2 + terminal::number_hex_width(code.bytes.len() - 1);
 
          let index = RefCell::new(ByteIndex(0));
          let mut index_previous = None::<usize>;
-         indent!(
-            writer,
-            index_width + 3,
-            with = |writer: &mut dyn WriteView| {
-               let index = *index.borrow();
+         terminal::indent!(writer, index_width + 3, |writer| {
+            let index = *index.borrow();
 
-               let style = if highlighted.borrow().contains(&index) {
-                  Style::new().cyan().bold()
-               } else {
-                  style::GUTTER
-               };
+            let style = if highlighted.borrow().contains(&index) {
+               style::Style::new().cyan().bold()
+            } else {
+               STYLE_GUTTER
+            };
 
-               let index = *index;
+            let index = *index;
 
-               style.fmt_prefix(writer)?;
+            writer.set_style(style);
+            if index_previous == Some(index) {
+               let dot_width = 2 + terminal::number_hex_width(index);
+               let space_width = index_width - dot_width;
 
-               if index_previous == Some(index) {
-                  let dot_width = 2 + number_hex_width(index);
-                  let space_width = index_width - dot_width;
+               write!(writer, "{:>space_width$}", "")?;
 
-                  write!(writer, "{:>space_width$}", "")?;
-
-                  for _ in 0..dot_width {
-                     write!(writer, "{DOT}")?;
-                  }
-               } else {
-                  write!(writer, "{index:>#index_width$X}")?;
+               for _ in 0..dot_width {
+                  write!(writer, "{DOT}")?;
                }
-
-               write!(writer, " {TOP_TO_BOTTOM} ")?;
-               style.fmt_suffix(writer)?;
-
-               index_previous.replace(index);
-               Ok(index_width + 3)
+            } else {
+               write!(writer, "{index:>#index_width$X}")?;
             }
-         );
+
+            write!(writer, " {TOP_TO_BOTTOM} ")?;
+
+            index_previous.replace(index);
+            Ok(index_width + 3)
+         });
 
          if **index.borrow() < code.bytes.len() {
             // DEDENT: "| "
-            dedent!(writer, 2);
+            terminal::dedent!(writer, 2);
 
             // INDENT: "┏━━━ ".
-            indent!(
+            terminal::indent!(
                writer,
                header =
                   const_str::concat!(RIGHT_TO_BOTTOM, LEFT_TO_RIGHT, LEFT_TO_RIGHT, LEFT_TO_RIGHT)
-                     .style(style::GUTTER)
+                     .style(STYLE_GUTTER)
             );
 
-            write!(
-               writer,
-               "{code_index:#X}",
-               code_index = code_index.red().bold(),
-            )?;
+            writer.set_style(style::Color::Red.fg().bold());
+            write!(writer, "{code_index:#X}")?;
          }
 
          let mut indent: usize = 0;
@@ -141,7 +133,7 @@ impl DisplayView for Code {
          while **index.borrow() < code.bytes.len() {
             let (_, operation, size) = code.read_operation(*index.borrow());
 
-            indent!(
+            terminal::indent!(
                writer,
                (indent - usize::from(operation == Operation::ScopeEnd)) * INDENT_WIDTH as usize,
             );
@@ -150,21 +142,15 @@ impl DisplayView for Code {
 
             if operation == Operation::ScopeEnd {
                indent -= 1;
-               write!(
-                  writer,
-                  "{right} ",
-                  right = "}".style(COLORS[indent % COLORS.len()])
-               )?;
+               write(writer, &"}".style(COLORS[indent % COLORS.len()]))?;
+               write!(writer, " ")?;
             }
 
             write!(writer, "{operation:?}", operation = operation.yellow())?;
 
             if operation == Operation::ScopeStart {
-               write!(
-                  writer,
-                  " {left}",
-                  left = "{".style(COLORS[indent % COLORS.len()])
-               )?;
+               write!(writer, " ")?;
+               write(writer, &"{".style(COLORS[indent % COLORS.len()]))?;
                indent += 1;
             }
 
@@ -173,14 +159,14 @@ impl DisplayView for Code {
             let mut arguments = operation.arguments().iter().enumerate().peekable();
             while let Some((argument_index, &argument)) = arguments.next() {
                if argument_index == 0 {
-                  write!(writer, "{symbol}", symbol = '('.bright_black().bold())?;
+                  write(writer, &'('.bright_black().bold())?;
                }
 
                match argument {
                   Argument::U64 => {
                      let (u64, size) = code.read_u64(*index.borrow());
 
-                     write!(writer, "{argument}", argument = u64.blue())?;
+                     write(writer, &u64.blue())?;
                      index.borrow_mut().0 += size;
                   },
 
@@ -189,11 +175,8 @@ impl DisplayView for Code {
 
                      let value_index_unique = code_index.add(2) * value_index.add(2);
 
-                     write!(
-                        writer,
-                        "{value_index:#X} ",
-                        value_index = value_index.blue().bold(),
-                     )?;
+                     writer.set_style(style::Color::Blue.fg().bold());
+                     write!(writer, "{value_index:#X} ")?;
                      index.borrow_mut().0 += size;
 
                      match code[ValueIndex(
@@ -203,17 +186,15 @@ impl DisplayView for Code {
                      )] {
                         Value::Blueprint(ref code) => {
                            codes.push_front((value_index_unique, code));
-                           write!(
-                              writer,
-                              "{arrow} {unique:#X}",
-                              arrow = "->".bright_black().bold(),
-                              unique = value_index_unique.red().bold(),
-                           )?;
+                           write(writer, &"->".bright_black().bold())?;
+                           write!(writer, " ")?;
+                           writer.set_style(style::Color::Red.fg().bold());
+                           write!(writer, "{value_index_unique:#X}")?;
                         },
 
                         ref value => {
-                           write!(writer, "{colon} ", colon = "::".bright_black().bold())?;
-                           value.display(writer)?;
+                           write(writer, &"::".bright_black().bold())?;
+                           value.display_styled(writer)?;
                         },
                      }
                   },
@@ -221,7 +202,7 @@ impl DisplayView for Code {
                   Argument::U16 => {
                      let (u16, size) = code.read_u16(*index.borrow());
 
-                     write!(writer, "{argument}", argument = u16.magenta())?;
+                     write(writer, &u16.magenta())?;
                      index.borrow_mut().0 += size;
                   },
 
@@ -230,15 +211,15 @@ impl DisplayView for Code {
 
                      highlighted.borrow_mut().push(ByteIndex(u16 as _));
 
-                     write!(writer, "{argument:#X}", argument = u16.cyan().bold())?;
+                     writer.set_style(style::Color::Cyan.fg().bold());
+                     write!(writer, "{u16:#X}")?;
                      index.borrow_mut().0 += size;
                   },
                }
 
-               write!(
+               write(
                   writer,
-                  "{symbol}",
-                  symbol = if arguments.peek().is_none() { ')' } else { ',' }
+                  &if arguments.peek().is_none() { ')' } else { ',' }
                      .bright_black()
                      .bold(),
                )?;

@@ -1,6 +1,6 @@
 [package]
 name                 = "cab-syntax"
-authors.workspace = true
+authors.workspace    = true
 edition.workspace    = true
 license.workspace    = true
 publish.workspace    = true
@@ -11,10 +11,11 @@ version.workspace    = true
 workspace = true
 
 [dependencies]
-cab-format.path = "../cab-format"
 cab-report.path = "../cab-report"
 cab-span.path   = "../cab-span"
 cab-util.path   = "../cab-util"
+
+ust.path = "../../ust"
 
 cstree.workspace      = true
 derive_more.workspace = true

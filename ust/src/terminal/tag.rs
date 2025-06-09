@@ -13,11 +13,8 @@ use cab_util::into;
 use derive_more::Deref;
 
 use crate::{
-   DebugView,
-   DisplayView,
-   WriteView,
-   indent,
-   width,
+   Debug,
+   Write,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -44,7 +41,7 @@ impl Tag<'_> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TagCondition {
+pub enum Condition {
    Flat,
    Broken,
    Always,
@@ -57,21 +54,21 @@ struct Measure {
 }
 
 #[derive(Debug, Clone)]
-struct TagData<'a> {
+struct Data<'a> {
    tag:       Tag<'a>,
    len:       usize,
-   condition: TagCondition,
+   condition: Condition,
    measure:   Cell<Measure>,
 }
 
-impl TagData<'_> {
+impl Data<'_> {
    fn measure(&self, children: TagsIter<'_>) {
       let tag_width = match self.tag {
-         Tag::Indent(..) if self.condition == TagCondition::Broken => 0,
-         _ if self.condition == TagCondition::Broken => 0,
+         Tag::Indent(..) if self.condition == Condition::Broken => 0,
+         _ if self.condition == Condition::Broken => 0,
 
          Tag::Text(ref s) if s.contains('\n') => usize::MAX,
-         Tag::Text(ref s) => width(s),
+         Tag::Text(ref s) => super::width(s),
 
          Tag::Space => 1,
          Tag::Newline(_) => usize::MAX,
@@ -91,20 +88,20 @@ impl TagData<'_> {
 }
 
 #[derive(Clone)]
-pub struct Tags<'a>(Vec<TagData<'a>>);
+pub struct Tags<'a>(Vec<Data<'a>>);
 
-impl DebugView for Tags<'_> {
-   fn debug(&self, writer: &mut dyn WriteView) -> fmt::Result {
-      fn debug(writer: &mut dyn WriteView, children: TagsIter<'_>) -> fmt::Result {
+impl Debug for Tags<'_> {
+   fn debug_styled(&self, writer: &mut dyn Write) -> fmt::Result {
+      fn debug(writer: &mut dyn Write, children: TagsIter<'_>) -> fmt::Result {
          for (index, (data, children)) in children.enumerate() {
             if index != 0 {
                writeln!(writer)?;
             }
 
             let condition = match data.condition {
-               TagCondition::Flat => " if=flat",
-               TagCondition::Broken => " if=broken",
-               TagCondition::Always => "",
+               Condition::Flat => " if=flat",
+               Condition::Broken => " if=broken",
+               Condition::Always => "",
             };
 
             match data.tag {
@@ -126,7 +123,7 @@ impl DebugView for Tags<'_> {
 
                   writeln!(writer, "<{text}{condition}>")?;
                   {
-                     indent!(writer, 3);
+                     super::indent!(writer, 3);
                      debug(writer, children)?;
                      writeln!(writer)?;
                   }
@@ -143,10 +140,10 @@ impl DebugView for Tags<'_> {
 }
 
 #[derive(Deref)]
-struct TagsIter<'a>(slice::Iter<'a, TagData<'a>>);
+struct TagsIter<'a>(slice::Iter<'a, Data<'a>>);
 
 impl<'a> Iterator for TagsIter<'a> {
-   type Item = (&'a TagData<'a>, TagsIter<'a>);
+   type Item = (&'a Data<'a>, TagsIter<'a>);
 
    fn next(&mut self) -> Option<Self::Item> {
       let this = self.0.next()?;
@@ -179,11 +176,11 @@ impl<'a> Tags<'a> {
                let mut measure = data.measure.get();
                measure.column = self.column;
 
-               let condition = data.condition != TagCondition::Flat;
+               let condition = data.condition != Condition::Flat;
 
                match data.tag {
                   Tag::Text(ref s) if let Some(nl) = s.rfind('\n') => {
-                     self.column = self.indent + width(&s[nl..]);
+                     self.column = self.indent + super::width(&s[nl..]);
                   },
 
                   Tag::Text(_) => self.column += measure.width,
@@ -239,21 +236,21 @@ impl<'a> Tags<'a> {
    }
 
    pub fn write(&mut self, tag: impl Into<Tag<'a>>) {
-      self.write_if(tag, TagCondition::Always);
+      self.write_if(tag, Condition::Always);
    }
 
-   pub fn write_if(&mut self, tag: impl Into<Tag<'a>>, condition: TagCondition) {
+   pub fn write_if(&mut self, tag: impl Into<Tag<'a>>, condition: Condition) {
       self.write_if_with(tag, condition, |_| {});
    }
 
    pub fn write_with(&mut self, tag: impl Into<Tag<'a>>, closure: impl FnOnce(&mut Self)) {
-      self.write_if_with(tag, TagCondition::Always, closure);
+      self.write_if_with(tag, Condition::Always, closure);
    }
 
    pub fn write_if_with(
       &mut self,
       tag: impl Into<Tag<'a>>,
-      condition: TagCondition,
+      condition: Condition,
       closure: impl FnOnce(&mut Self),
    ) {
       into!(tag);
@@ -262,7 +259,7 @@ impl<'a> Tags<'a> {
          tag == Tag::Space && self.0.last().is_some_and(|data| data.tag == Tag::Space);
 
       let index = self.0.len();
-      self.0.push(TagData {
+      self.0.push(Data {
          tag,
          len: 0,
          condition,
@@ -297,9 +294,9 @@ impl<'a> Tags<'a> {
 pub trait DisplayTags {
    fn display_tags<'a>(&'a self, tags: &mut Tags<'a>);
 
-   fn display(&self, writer: &mut dyn WriteView) -> fmt::Result {
+   fn display_styled(&self, writer: &mut dyn Write) -> fmt::Result {
       struct Renderer<'a> {
-         writer:   &'a mut dyn WriteView,
+         writer:   &'a mut dyn Write,
          indent:   usize,
          space:    bool,
          newlines: usize,
@@ -343,9 +340,9 @@ pub trait DisplayTags {
          fn render(&mut self, children: TagsIter<'_>, parent_is_broken: bool) -> fmt::Result {
             for (data, children) in children {
                let condition = match data.condition {
-                  TagCondition::Flat => !parent_is_broken,
-                  TagCondition::Broken => parent_is_broken,
-                  TagCondition::Always => true,
+                  Condition::Flat => !parent_is_broken,
+                  Condition::Broken => parent_is_broken,
+                  Condition::Always => true,
                };
 
                match data.tag {
@@ -402,11 +399,5 @@ pub trait DisplayTags {
          newlines: 0,
       }
       .render(tags.children(), false)
-   }
-}
-
-impl DisplayView for dyn DisplayTags {
-   fn display(&self, writer: &mut dyn WriteView) -> fmt::Result {
-      DisplayTags::display(self, writer)
    }
 }

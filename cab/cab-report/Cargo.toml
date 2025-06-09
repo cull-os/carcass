@@ -17,9 +17,10 @@ cstree = [ "cab-span/cstree" ]
 error  = [ "dep:anyhow", "dep:thiserror" ]
 
 [dependencies]
-cab-format.path = "../cab-format"
 cab-span.path   = "../cab-span"
 cab-util.path   = "../cab-util"
+
+ust.path = "../../ust"
 
 anyhow.optional     = true
 anyhow.workspace    = true

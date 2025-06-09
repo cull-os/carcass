@@ -1,14 +1,7 @@
 use std::borrow::Cow;
 
-use cab_format::{
-   DisplayView,
-   WriteView,
-};
 use cab_report::{
    Contextful as _,
-   PositionStr,
-   Report,
-   ReportSeverity,
    Result,
    bail,
 };
@@ -24,6 +17,15 @@ use cab_syntax::{
    },
 };
 use smallvec::SmallVec;
+use ust::{
+   Display,
+   Write,
+   report::{
+      self,
+      PositionStr,
+      Report,
+   },
+};
 
 use crate::{
    ByteIndex,
@@ -56,18 +58,17 @@ pub struct Compile {
 impl Compile {
    pub fn extractlnln(
       self,
-      writer: &mut impl WriteView,
-      location: &(impl DisplayView + Clone),
+      writer: &mut impl Write,
+      location: &impl Display,
       source: &PositionStr<'_>,
    ) -> Result<Code> {
       let mut fail = 0;
 
       for report in self.reports {
-         fail += usize::from(report.severity >= ReportSeverity::Error);
+         fail += usize::from(report.severity >= report::Severity::Error);
 
-         report
-            .locate(location.clone(), source)
-            .display(writer)
+         writer
+            .write_report(&report, location, source)
             .context("failed to write report")?;
 
          write!(writer, "\n\n").context("failed to write report")?;
