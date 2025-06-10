@@ -145,7 +145,8 @@ impl Display for Code {
 
             if operation == Operation::ScopeEnd {
                indent -= 1;
-               write(writer, &"} ".style(COLORS[indent % COLORS.len()]))?;
+               write(writer, &"}".style(COLORS[indent % COLORS.len()]))?;
+               write!(writer, " ")?;
             }
 
             with(writer, style::Color::Yellow.fg(), |writer| {
@@ -153,7 +154,8 @@ impl Display for Code {
             })?;
 
             if operation == Operation::ScopeStart {
-               write(writer, &" {".style(COLORS[indent % COLORS.len()]))?;
+               write!(writer, " ")?;
+               write(writer, &"{".style(COLORS[indent % COLORS.len()]))?;
                indent += 1;
             }
 

@@ -9,7 +9,10 @@ pub use path::{
    Path,
    Root,
 };
-use ust::terminal::tag;
+use ust::{
+   style::StyledExt as _,
+   terminal::tag,
+};
 
 mod thunk;
 pub use thunk::Thunk;
@@ -42,13 +45,11 @@ pub enum Value {
 
 impl tag::DisplayTags for Value {
    fn display_tags<'a>(&'a self, tags: &mut tag::Tags<'a>) {
-      use tag::Tag::Text;
-
       match *self {
-         Value::Boolean(boolean) if boolean => tags.write("true"),
-         Value::Boolean(_) => tags.write("false"),
+         Value::Boolean(true) => tags.write("true".magenta().bold()),
+         Value::Boolean(false) => tags.write("false".magenta().bold()),
 
-         Value::Nil => tags.write("[]"),
+         Value::Nil => tags.write("[]".yellow()),
 
          Value::Cons(ref left, ref right) => {
             left.display_tags(tags);
@@ -64,12 +65,12 @@ impl tag::DisplayTags for Value {
 
             if is_valid_plain_identifier(identifier) {
                // TODO: Escape.
-               tags.write(&**identifier);
+               tags.write((**identifier).blue());
             } else {
-               tags.write("`");
+               tags.write("`".blue());
                // TODO: Escape.
-               tags.write(&**identifier);
-               tags.write("`");
+               tags.write((**identifier).blue());
+               tags.write("`".blue());
             }
          },
 
@@ -86,24 +87,24 @@ impl tag::DisplayTags for Value {
          },
 
          Value::String(ref string) => {
-            tags.write("\"");
+            tags.write("\"".green());
             // TODO: Escape.
-            tags.write(&**string);
-            tags.write("\"");
+            tags.write((**string).green());
+            tags.write("\"".green());
          },
 
          Value::Rune(rune) => {
-            tags.write("'");
+            tags.write("'".green());
             // TODO: Escape.
-            tags.write(Text(rune.to_string().into()));
-            tags.write("'");
+            tags.write(rune.to_string().green());
+            tags.write("'".green());
          },
 
-         Value::Integer(ref integer) => tags.write(Text(integer.to_string().into())),
+         Value::Integer(ref integer) => tags.write(integer.to_string().cyan().bold()),
 
-         Value::Float(float) => tags.write(Text(float.to_string().into())),
+         Value::Float(float) => tags.write(float.to_string().cyan().bold()),
 
-         Value::Thunk(_) | Value::Blueprint(_) => tags.write("_"),
+         Value::Thunk(_) | Value::Blueprint(_) => tags.write("_".bright_black().bold()),
       }
    }
 }
