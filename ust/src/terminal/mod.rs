@@ -367,22 +367,21 @@ fn resolve_style<'a>(
             })
             .flatten();
 
-         let Some((style_offset_diff, contained_style)) = contained_primary else {
+         if let Some((style_offset_diff, contained_style)) = contained_primary {
+            style_offset += style_offset_diff;
+
+            yield content[Span::std(content_offset, contained_style.span.start)]
+               .style(style.severity.style_in(severity));
+
+            yield content[contained_style.span.into_std()]
+               .style(contained_style.severity.style_in(severity));
+
+            yield content[Span::std(contained_style.span.end, style.span.end)]
+               .style(style.severity.style_in(severity));
+         } else {
             yield content[Span::std(content_offset, style.span.end)]
                .style(style.severity.style_in(severity));
-            continue;
-         };
-
-         style_offset += style_offset_diff;
-
-         yield content[Span::std(content_offset, contained_style.span.start)]
-            .style(style.severity.style_in(severity));
-
-         yield content[contained_style.span.into_std()]
-            .style(contained_style.severity.style_in(severity));
-
-         yield content[Span::std(contained_style.span.end, style.span.end)]
-            .style(style.severity.style_in(severity));
+         }
 
          content_offset = style.span.end;
       }
