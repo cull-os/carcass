@@ -1,5 +1,5 @@
 [workspace]
-members  = [ "ust", "fuzz", "cab/cab*" ]
+members  = [ "ust", "fuzz", "cab", "cab/cab*" ]
 resolver = "3"
 
 metadata.crane.name = "cab"
