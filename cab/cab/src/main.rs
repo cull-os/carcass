@@ -20,9 +20,9 @@ use clap::Parser as _;
 use ust::{
    COLORS,
    Display as _,
-   Write,
+   Write as _,
    report::PositionStr,
-   style::StyledExt,
+   style::StyledExt as _,
    terminal,
    write,
 };

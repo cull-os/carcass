@@ -1201,43 +1201,51 @@ impl<W: fmt::Write> Write for Writer<W> {
       }
 
       let style::Style {
-         fg: fg_current,
-         bg: bg_current,
-         attrs: attrs_current,
+         fg: current_foreg,
+         bg: current_backg,
+         attrs: current_attrs,
       } = self.style_current;
 
-      let style::Style {
-         fg: fg_next,
-         bg: bg_next,
-         attrs: attrs_next,
+      let next @ style::Style {
+         fg: next_fg,
+         bg: next_bg,
+         attrs: next_attrs,
       } = self.style_next;
 
       let mut splicer = Splicer { written: false };
 
-      if fg_current != fg_next {
-         splicer.splice(&mut self.inner)?;
-         write_style_color(&mut self.inner, fg_next, StyleColorVariant::Fg)?;
+      if current_foreg != next_fg && next == style::Style::default() {
+         const STYLE_RESET: &str = "\x1B[0m";
+         self.inner.write_str(STYLE_RESET)?;
+
+         self.style_current = next;
+         return Ok(());
       }
 
-      if bg_current != bg_next {
+      if current_foreg != next_fg {
          splicer.splice(&mut self.inner)?;
-         write_style_color(&mut self.inner, bg_next, StyleColorVariant::Bg)?;
+         write_style_color(&mut self.inner, next_fg, StyleColorVariant::Fg)?;
       }
 
-      let attrs_both = attrs_next & attrs_current;
+      if current_backg != next_bg {
+         splicer.splice(&mut self.inner)?;
+         write_style_color(&mut self.inner, next_bg, StyleColorVariant::Bg)?;
+      }
 
-      for attr_deleted in attrs_current & !attrs_both {
+      let attrs_both = next_attrs & current_attrs;
+
+      for attr_deleted in current_attrs & !attrs_both {
          splicer.splice(&mut self.inner)?;
          self.inner.write_str(style_unattr(attr_deleted))?;
       }
 
-      for attr_added in attrs_next & !attrs_both {
+      for attr_added in next_attrs & !attrs_both {
          splicer.splice(&mut self.inner)?;
          self.inner.write_str(style_attr(attr_added))?;
       }
 
       splicer.finish(&mut self.inner)?;
-      self.style_current = self.style_next;
+      self.style_current = next;
       Ok(())
    }
 
