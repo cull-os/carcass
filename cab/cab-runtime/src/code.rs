@@ -145,15 +145,15 @@ impl Display for Code {
 
             if operation == Operation::ScopeEnd {
                indent -= 1;
-               write(writer, &"}".style(COLORS[indent % COLORS.len()]))?;
-               write!(writer, " ")?;
+               write(writer, &"} ".style(COLORS[indent % COLORS.len()]))?;
             }
 
-            write!(writer, "{operation:?}", operation = operation.yellow())?;
+            with(writer, style::Color::Yellow.fg(), |writer| {
+               write!(writer, "{operation:?}")
+            })?;
 
             if operation == Operation::ScopeStart {
-               write!(writer, " ")?;
-               write(writer, &"{".style(COLORS[indent % COLORS.len()]))?;
+               write(writer, &" {".style(COLORS[indent % COLORS.len()]))?;
                indent += 1;
             }
 
@@ -190,15 +190,14 @@ impl Display for Code {
                      )] {
                         Value::Blueprint(ref code) => {
                            codes.push_front((value_index_unique, code));
-                           write(writer, &"->".bright_black().bold())?;
-                           write!(writer, " ")?;
+                           write(writer, &"-> ".bright_black().bold())?;
                            with(writer, style::Color::Red.fg().bold(), |writer| {
                               write!(writer, "{value_index_unique:#X}")
                            })?;
                         },
 
                         ref value => {
-                           write(writer, &"::".bright_black().bold())?;
+                           write(writer, &":: ".bright_black().bold())?;
                            value.display_styled(writer)?;
                         },
                      }
