@@ -20,7 +20,9 @@ pub mod style;
 
 pub mod terminal;
 
-pub const INDENT_WIDTH: isize = 3;
+pub const INDENT: &str = "   ";
+#[expect(clippy::cast_possible_wrap)]
+pub const INDENT_WIDTH: isize = INDENT.len() as isize;
 
 pub trait Debug {
    fn debug_styled(&self, writer: &mut dyn Write) -> fmt::Result;

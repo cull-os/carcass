@@ -34,6 +34,8 @@ use unicode_segmentation::UnicodeSegmentation as _;
 
 use crate::{
    Display,
+   INDENT,
+   INDENT_WIDTH,
    STYLE_GUTTER,
    STYLE_HEADER_POSITION,
    Write,
@@ -92,7 +94,7 @@ pub fn width(s: &str) -> usize {
    s.graphemes(true)
       .map(|grapheme| {
          match grapheme {
-            "\t" => 4,
+            "\t" => INDENT_WIDTH as usize,
             s if is_emoji(s) => 2,
             #[expect(clippy::disallowed_methods)]
             s => unicode_width::UnicodeWidthStr::width(s),
@@ -1278,7 +1280,9 @@ impl<W: fmt::Write> fmt::Write for Writer<W> {
 
             Line(line) => {
                self.apply_style()?;
-               self.inner.write_str(line)?;
+               for part in line.split('\t').intersperse(INDENT) {
+                  self.inner.write_str(part)?;
+               }
 
                if lines.peek().is_none() {
                   self.width = self.width.saturating_add(width(line));
