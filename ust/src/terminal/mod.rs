@@ -42,6 +42,7 @@ use crate::{
       self,
       StyledExt as _,
    },
+   with,
    write,
 };
 
@@ -618,45 +619,46 @@ fn write_report(
       let line_number = *line_number.borrow();
       borrow_mut!(line_number_previous);
 
-      writer.set_style(STYLE_GUTTER);
-      match line_number {
-         // Don't write the current line number, just print spaces instead.
-         None => {
-            write!(writer, "{:>line_number_width$}", "")?;
-         },
+      with(writer, STYLE_GUTTER, |writer| {
+         match line_number {
+            // Don't write the current line number, just print spaces instead.
+            None => {
+               write!(writer, "{:>line_number_width$}", "")?;
+            },
 
-         // Continuation line. Use dots instead of the number.
-         Some(line_number) if *line_number_previous == Some(line_number) => {
-            let dot_width = number_width(line_number);
-            let space_width = line_number_width - dot_width;
+            // Continuation line. Use dots instead of the number.
+            Some(line_number) if *line_number_previous == Some(line_number) => {
+               let dot_width = number_width(line_number);
+               let space_width = line_number_width - dot_width;
 
-            write!(writer, "{:>space_width$}", "")?;
+               write!(writer, "{:>space_width$}", "")?;
 
-            for _ in 0..dot_width {
-               writer.write_char(DOT)?;
-            }
-         },
+               for _ in 0..dot_width {
+                  writer.write_char(DOT)?;
+               }
+            },
 
-         // New line, but not right after the previous line.
-         Some(line_number)
-            if line_number_previous
-               .is_some_and(|line_number_previous| line_number > line_number_previous + 1) =>
-         {
-            writeln!(
-               writer,
-               "{:>line_number_width$} {TOP_TO_BOTTOM_PARTIAL} ",
-               "",
-            )?;
-            write!(writer, "{line_number:>line_number_width$}")?;
-         },
+            // New line, but not right after the previous line.
+            Some(line_number)
+               if line_number_previous
+                  .is_some_and(|line_number_previous| line_number > line_number_previous + 1) =>
+            {
+               writeln!(
+                  writer,
+                  "{:>line_number_width$} {TOP_TO_BOTTOM_PARTIAL} ",
+                  "",
+               )?;
+               write!(writer, "{line_number:>line_number_width$}")?;
+            },
 
-         // New line.
-         Some(line_number) => {
-            write!(writer, "{line_number:>line_number_width$}")?;
-         },
-      }
+            // New line.
+            Some(line_number) => {
+               write!(writer, "{line_number:>line_number_width$}")?;
+            },
+         }
 
-      write!(writer, " {TOP_TO_BOTTOM}")?;
+         write!(writer, " {TOP_TO_BOTTOM}")
+      })?;
 
       if let Some(line_number) = line_number {
          line_number_previous.replace(line_number);
