@@ -1,4 +1,5 @@
 use std::{
+   fmt::Write as _,
    fs,
    io::Write as _,
    process,
@@ -12,7 +13,11 @@ use cab::{
    syntax,
 };
 use clap::Parser as _;
-use ust::style::StyledExt as _;
+use ust::{
+   style::StyledExt as _,
+   terminal,
+   write,
+};
 use which::which;
 
 #[derive(clap::Parser)]
@@ -48,6 +53,8 @@ enum Check {
 #[tokio::main]
 async fn main() -> report::Termination {
    let cli = Cli::parse();
+
+   let err = &mut terminal::stderr();
 
    match cli.command {
       Command::Check {
@@ -100,17 +107,16 @@ async fn main() -> report::Termination {
                let name = source_file.file_stem().unwrap().to_str().unwrap().bold();
 
                if expected_display == actual_display {
-                  eprintln!(
-                     "expected and actual display matched for {name}",
-                     name = name.green()
-                  );
+                  write!(err, "expected and actual display matched for ")
+                     .context("failed to write to stderr")?;
+                  write(err, &name.green()).context("failed to write to stderr")?;
                   return Ok(());
                }
 
-               eprintln!(
-                  "behaviour has changed for {name}! diffing expected vs actual display",
-                  name = name.yellow()
-               );
+               write!(err, "behaviour has changed for ").context("failed to write to stderr")?;
+               write(err, &name.yellow()).context("failed to write to stderr")?;
+               write!(err, "! diffing expected vs actual display")
+                  .context("failed to write to stderr")?;
 
                let mut child = process::Command::new(&diff_tool)
                   .arg(&expected_display_file)
