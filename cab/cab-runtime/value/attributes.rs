@@ -6,6 +6,7 @@ use rpds::HashTrieMapSync as HashTrieMap;
 use rustc_hash::FxBuildHasher;
 use ust::{
    INDENT_WIDTH,
+   style::StyledExt as _,
    terminal::tag,
 };
 
@@ -31,7 +32,7 @@ impl tag::DisplayTags for Attributes {
       };
 
       tags.write_with(Group(40), |tags| {
-         tags.write("{");
+         tags.write("{".yellow());
 
          if !self.0.is_empty() {
             tags.write_if(Space, Flat);
@@ -48,8 +49,8 @@ impl tag::DisplayTags for Attributes {
 
             let mut entries = entries.into_iter().peekable();
             while let Some((name, value)) = entries.next() {
-               tags.write("@");
-               tags.write(&**name);
+               tags.write("@".yellow());
+               tags.write((**name).blue());
                tags.write(Space);
                tags.write("=");
                tags.write(Space);
@@ -71,7 +72,7 @@ impl tag::DisplayTags for Attributes {
             tags.write_if(Space, Flat);
          }
 
-         tags.write("}");
+         tags.write("}".yellow());
       });
    }
 }

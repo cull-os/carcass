@@ -30,7 +30,7 @@ macro_rules! token {
 
       impl fmt::Display for $name {
          fn fmt(&self, writer: &mut fmt::Formatter<'_>) -> fmt::Result {
-            (&**self).fmt(writer)
+            (**self).fmt(writer)
          }
       }
 

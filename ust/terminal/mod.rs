@@ -668,11 +668,8 @@ fn write_report(
 
    if let Some(line) = lines.first() {
       {
-         // DEDENT: "123 |"
-         dedent!(writer);
-
-         // INDENT: "123 ", but spaces.
-         indent!(writer, line_number_width + 1);
+         // DEDENT: "|"
+         dedent!(writer, 1);
 
          // INDENT: "┏━━━ ".
          indent!(
@@ -1004,11 +1001,8 @@ fn write_report(
          writer.write_indent()?;
       }
 
-      // DEDENT: "123 |"
-      dedent!(writer);
-
-      // INDENT: "123 ", but spaces.
-      indent!(writer, line_number_width + 1);
+      // DEDENT: "|"
+      dedent!(writer, 1);
 
       for point in points {
          // INDENT: "= "

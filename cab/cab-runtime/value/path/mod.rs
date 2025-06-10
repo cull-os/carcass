@@ -7,7 +7,10 @@ use cab_report::{
    Result,
    bail,
 };
-use ust::terminal::tag;
+use ust::{
+   style::StyledExt as _,
+   terminal::tag,
+};
 
 use super::Value;
 
@@ -37,10 +40,12 @@ pub struct Path {
 impl tag::DisplayTags for Path {
    fn display_tags<'a>(&'a self, tags: &mut tag::Tags<'a>) {
       if let Some(ref root) = self.root {
-         tags.write("<");
-
+         let type_ = root.type_();
          let config = root.config();
          let path = root.path();
+
+         tags.write("<".yellow());
+         tags.write((**type_).yellow());
 
          match *config {
             Value::Attributes(ref attributes) if attributes.is_empty() => {
@@ -48,20 +53,21 @@ impl tag::DisplayTags for Path {
                   Value::Path(ref path) if path.content.is_empty() => {},
 
                   ref path => {
-                     tags.write("::");
+                     tags.write("::".yellow());
                      path.display_tags(tags);
                   },
                }
             },
 
             ref config => {
+               tags.write(":".yellow());
                config.display_tags(tags);
 
                match *path {
                   Value::Path(ref path) if path.content.is_empty() => {},
 
                   ref path => {
-                     tags.write(":");
+                     tags.write(":".yellow());
                      path.display_tags(tags);
                   },
                }
@@ -72,9 +78,9 @@ impl tag::DisplayTags for Path {
       }
 
       if self.content.is_empty() {
-         tags.write("<empty path>");
+         tags.write("<empty-path>".red());
       } else {
-         tags.write(&*self.content);
+         tags.write((*self.content).yellow());
       }
    }
 }

@@ -15,11 +15,17 @@ use derive_more::Deref;
 use crate::{
    Debug,
    Write,
+   report,
+   style::{
+      self,
+      StyledExt as _,
+   },
+   write,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Tag<'a> {
-   Text(Cow<'a, str>),
+   Text(style::Styled<Cow<'a, str>>),
    Space,
    Newline(usize),
    Group(usize),
@@ -29,7 +35,13 @@ pub enum Tag<'a> {
 impl<'a, I: Into<Cow<'a, str>>> From<I> for Tag<'a> {
    fn from(value: I) -> Self {
       into!(value);
-      Self::Text(value)
+      Self::Text(value.styled())
+   }
+}
+
+impl<'a, I: Into<Cow<'a, str>>> From<style::Styled<I>> for Tag<'a> {
+   fn from(value: style::Styled<I>) -> Self {
+      Self::Text(value.value.into().style(value.style))
    }
 }
 
@@ -105,7 +117,11 @@ impl Debug for Tags<'_> {
             };
 
             match data.tag {
-               Tag::Text(ref s) => write!(writer, "<text{condition}>{s:?}</text>")?,
+               Tag::Text(ref s) => {
+                  write!(writer, "<text{condition}>")?;
+                  write(writer, s)?;
+                  write!(writer, "</text>")?;
+               },
                Tag::Space => write!(writer, "<space{condition}/>")?,
                Tag::Newline(count) => write!(writer, "<newline count={count}{condition}>")?,
 
@@ -296,10 +312,45 @@ pub trait DisplayTags {
 
    fn display_styled(&self, writer: &mut dyn Write) -> fmt::Result {
       struct Renderer<'a> {
-         writer:   &'a mut dyn Write,
+         inner:    &'a mut dyn Write,
          indent:   usize,
          space:    bool,
          newlines: usize,
+      }
+
+      impl Write for Renderer<'_> {
+         fn finish(&mut self) -> fmt::Result {
+            self.inner.finish()
+         }
+
+         fn width(&self) -> usize {
+            self.inner.width()
+         }
+
+         fn width_max(&self) -> usize {
+            self.inner.width_max()
+         }
+
+         fn get_style(&self) -> style::Style {
+            self.inner.get_style()
+         }
+
+         fn set_style(&mut self, style: style::Style) {
+            self.inner.set_style(style);
+         }
+
+         fn apply_style(&mut self) -> fmt::Result {
+            self.inner.apply_style()
+         }
+
+         fn write_report(
+            &mut self,
+            report: &report::Report,
+            location: &dyn crate::Display,
+            source: &report::PositionStr<'_>,
+         ) -> fmt::Result {
+            self.inner.write_report(report, location, source)
+         }
       }
 
       impl fmt::Write for Renderer<'_> {
@@ -315,17 +366,17 @@ pub trait DisplayTags {
             for line in s.split_inclusive('\n') {
                if line == "\n" {
                   self.newlines += 1;
-                  self.writer.write_char('\n')?;
+                  self.inner.write_char('\n')?;
                   continue;
                }
 
                if mem::take(&mut self.newlines) > 0 {
                   for _ in 0..self.indent {
-                     self.writer.write_char(' ')?;
+                     self.inner.write_char(' ')?;
                   }
                }
 
-               self.writer.write_str(line)?;
+               self.inner.write_str(line)?;
 
                if line.ends_with('\n') {
                   self.newlines = 1;
@@ -348,7 +399,7 @@ pub trait DisplayTags {
                match data.tag {
                   Tag::Text(ref s) => {
                      if condition {
-                        self.write_str(s)?;
+                        write(self, s)?;
                      }
                   },
 
@@ -393,9 +444,9 @@ pub trait DisplayTags {
       tags.layout(writer.width_max().saturating_sub(writer.width()));
 
       Renderer {
-         writer,
-         indent: 0,
-         space: false,
+         inner:    writer,
+         indent:   0,
+         space:    false,
          newlines: 0,
       }
       .render(tags.children(), false)
