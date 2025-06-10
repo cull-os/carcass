@@ -1196,7 +1196,7 @@ impl<W: fmt::Write> Write for Writer<W> {
          }
       }
 
-      let style::Style {
+      let current @ style::Style {
          fg: current_foreg,
          bg: current_backg,
          attrs: current_attrs,
@@ -1208,15 +1208,15 @@ impl<W: fmt::Write> Write for Writer<W> {
          attrs: next_attrs,
       } = self.style_next;
 
-      let mut splicer = Splicer { written: false };
-
-      if current_foreg != next_fg && next == style::Style::default() {
+      if current != next && next == style::Style::default() {
          const STYLE_RESET: &str = "\x1B[0m";
          self.inner.write_str(STYLE_RESET)?;
 
          self.style_current = next;
          return Ok(());
       }
+
+      let mut splicer = Splicer { written: false };
 
       if current_foreg != next_fg {
          splicer.splice(&mut self.inner)?;
