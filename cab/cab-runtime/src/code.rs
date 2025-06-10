@@ -21,7 +21,7 @@ use ust::{
    Write,
    style::{
       self,
-      StyledExt,
+      StyledExt as _,
    },
    terminal::{
       self,
