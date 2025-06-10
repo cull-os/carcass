@@ -164,13 +164,13 @@ impl Style {
    }
 
    #[must_use]
-   pub const fn rgb(mut self, r: u8, b: u8, g: u8) -> Self {
+   pub const fn rgb(mut self, r: u8, g: u8, b: u8) -> Self {
       self.fg = Color::Rgb(r, g, b);
       self
    }
 
    #[must_use]
-   pub const fn on_rgb(mut self, r: u8, b: u8, g: u8) -> Self {
+   pub const fn on_rgb(mut self, r: u8, g: u8, b: u8) -> Self {
       self.bg = Color::Rgb(r, g, b);
       self
    }
@@ -285,13 +285,13 @@ impl<T> Styled<T> {
    }
 
    #[must_use]
-   pub const fn rgb(mut self, r: u8, b: u8, g: u8) -> Self {
+   pub const fn rgb(mut self, r: u8, g: u8, b: u8) -> Self {
       self.style = self.style.rgb(r, g, b);
       self
    }
 
    #[must_use]
-   pub const fn on_rgb(mut self, r: u8, b: u8, g: u8) -> Self {
+   pub const fn on_rgb(mut self, r: u8, g: u8, b: u8) -> Self {
       self.style = self.style.on_rgb(r, g, b);
       self
    }
@@ -408,14 +408,14 @@ where
    }
 
    #[must_use]
-   fn rgb(self, r: u8, b: u8, g: u8) -> Styled<Self> {
+   fn rgb(self, r: u8, g: u8, b: u8) -> Styled<Self> {
       let mut styled = self.styled();
       styled.style = styled.style.rgb(r, g, b);
       styled
    }
 
    #[must_use]
-   fn on_rgb(self, r: u8, b: u8, g: u8) -> Styled<Self> {
+   fn on_rgb(self, r: u8, g: u8, b: u8) -> Styled<Self> {
       let mut styled = self.styled();
       styled.style = styled.style.on_rgb(r, g, b);
       styled
