@@ -7,11 +7,15 @@ publish.workspace    = true
 repository.workspace = true
 version.workspace    = true
 
+[[bin]]
+name = "cab-task"
+path = "main.rs"
+
 [lints]
 workspace = true
 
 [dependencies]
-cab.path = "../cab"
+cab.path = "../"
 
 ust.path = "../../ust"
 

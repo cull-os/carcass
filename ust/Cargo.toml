@@ -10,6 +10,9 @@ keywords          = [ "styling", "color", "terminal", "ansi", "universal" ]
 repository        = "https://github.com/cull-os/carcass/tree/master/ust"
 version           = "0.0.2"
 
+[lib]
+path = "lib.rs"
+
 [lints]
 workspace = true
 
