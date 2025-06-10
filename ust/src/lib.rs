@@ -42,14 +42,24 @@ impl<T: fmt::Display> Display for T {
    }
 }
 
-pub fn write(writer: &mut dyn Write, styled: &style::Styled<impl fmt::Display>) -> fmt::Result {
+pub fn with<T>(
+   writer: &mut dyn Write,
+   style: style::Style,
+   closure: impl FnOnce(&mut dyn Write) -> T,
+) -> T {
    let style_previous = writer.get_style();
 
-   writer.set_style(styled.style);
-   write!(writer, "{value}", value = **styled)?;
+   writer.set_style(style);
+   let result = closure(writer);
 
    writer.set_style(style_previous);
-   Ok(())
+   result
+}
+
+pub fn write(writer: &mut dyn Write, styled: &style::Styled<impl fmt::Display>) -> fmt::Result {
+   with(writer, styled.style, |writer| {
+      write!(writer, "{value}", value = **styled)
+   })
 }
 
 pub trait Write: fmt::Write {

@@ -21,7 +21,7 @@ use ust::{
    Write,
    style::{
       self,
-      StyledExt as _,
+      StyledExt,
    },
    terminal::{
       self,
@@ -31,6 +31,7 @@ use ust::{
       TOP_TO_BOTTOM,
       tag::DisplayTags as _,
    },
+   with,
    write,
 };
 
@@ -92,21 +93,22 @@ impl Display for Code {
 
             let index = *index;
 
-            writer.set_style(style);
-            if index_previous == Some(index) {
-               let dot_width = 2 + terminal::number_hex_width(index);
-               let space_width = index_width - dot_width;
+            with(writer, style, |writer| {
+               if index_previous == Some(index) {
+                  let dot_width = 2 + terminal::number_hex_width(index);
+                  let space_width = index_width - dot_width;
 
-               write!(writer, "{:>space_width$}", "")?;
+                  write!(writer, "{:>space_width$}", "")?;
 
-               for _ in 0..dot_width {
-                  write!(writer, "{DOT}")?;
+                  for _ in 0..dot_width {
+                     write!(writer, "{DOT}")?;
+                  }
+               } else {
+                  write!(writer, "{index:>#index_width$X}")?;
                }
-            } else {
-               write!(writer, "{index:>#index_width$X}")?;
-            }
 
-            write!(writer, " {TOP_TO_BOTTOM} ")?;
+               write!(writer, " {TOP_TO_BOTTOM} ")
+            })?;
 
             index_previous.replace(index);
             Ok(index_width + 3)
@@ -124,8 +126,9 @@ impl Display for Code {
                      .style(STYLE_GUTTER)
             );
 
-            writer.set_style(style::Color::Red.fg().bold());
-            write!(writer, "{code_index:#X}")?;
+            with(writer, style::Color::Red.fg().bold(), |writer| {
+               write!(writer, "{code_index:#X}")
+            })?;
          }
 
          let mut indent: usize = 0;
@@ -175,8 +178,9 @@ impl Display for Code {
 
                      let value_index_unique = code_index.add(2) * value_index.add(2);
 
-                     writer.set_style(style::Color::Blue.fg().bold());
-                     write!(writer, "{value_index:#X} ")?;
+                     with(writer, style::Color::Blue.fg().bold(), |writer| {
+                        write!(writer, "{value_index:#X} ")
+                     })?;
                      index.borrow_mut().0 += size;
 
                      match code[ValueIndex(
@@ -188,8 +192,9 @@ impl Display for Code {
                            codes.push_front((value_index_unique, code));
                            write(writer, &"->".bright_black().bold())?;
                            write!(writer, " ")?;
-                           writer.set_style(style::Color::Red.fg().bold());
-                           write!(writer, "{value_index_unique:#X}")?;
+                           with(writer, style::Color::Red.fg().bold(), |writer| {
+                              write!(writer, "{value_index_unique:#X}")
+                           })?;
                         },
 
                         ref value => {
@@ -211,8 +216,9 @@ impl Display for Code {
 
                      highlighted.borrow_mut().push(ByteIndex(u16 as _));
 
-                     writer.set_style(style::Color::Cyan.fg().bold());
-                     write!(writer, "{u16:#X}")?;
+                     with(writer, style::Color::Cyan.fg().bold(), |writer| {
+                        write!(writer, "{u16:#X}")
+                     })?;
                      index.borrow_mut().0 += size;
                   },
                }
