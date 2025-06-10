@@ -8,7 +8,6 @@
 !Cargo.toml
 
 # SOURCES
-!src/
-!src/**/
+!**/
 
 !*.rs

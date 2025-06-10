@@ -1,24 +1,31 @@
 [package]
 name                 = "cab"
 description          = "A reproducible contextful-expression language"
-authors.workspace = true
+authors.workspace    = true
 edition.workspace    = true
 license.workspace    = true
 publish.workspace    = true
 repository.workspace = true
 version.workspace    = true
 
+[lib]
+path = "lib.rs"
+
+[[bin]]
+name = "cab"
+path = "main.rs"
+
 [lints]
 workspace = true
 
 [dependencies]
-cab-island.path  = "../cab-island"
-cab-report.path = "../cab-report"
-cab-runtime.path = "../cab-runtime"
-cab-span.path    = "../cab-span"
-cab-syntax.path  = "../cab-syntax"
+cab-island.path  = "./cab-island"
+cab-report.path  = "./cab-report"
+cab-runtime.path = "./cab-runtime"
+cab-span.path    = "./cab-span"
+cab-syntax.path  = "./cab-syntax"
 
-ust.path = "../../ust"
+ust.path = "../ust"
 
 clap.workspace  = true
 tokio.workspace = true

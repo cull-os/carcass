@@ -12,8 +12,7 @@
 
 # SOURCES
 !cab*/
-!cab*/src/
-!cab*/src/**/
+!cab*/**/
 
 !fuzz/
 !fuzz/**/

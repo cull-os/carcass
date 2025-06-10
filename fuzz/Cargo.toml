@@ -14,7 +14,7 @@ workspace = true
 cargo-fuzz = true
 
 [dependencies]
-cab.path = "../cab/cab"
+cab.path = "../cab"
 
 ust.path = "../ust"
 
