@@ -2,6 +2,7 @@
 
 use std::{
    env,
+   fmt::Write as _,
    fs,
    hash::{
       self,
@@ -13,22 +14,21 @@ use std::{
 };
 
 use cab::{
-   format::{
-      self,
-      style::StyleExt as _,
-   },
    island,
-   report,
    syntax,
 };
 use libfuzzer_sys::{
    Corpus,
    fuzz_target,
 };
+use ust::{
+   report,
+   style::StyledExt as _,
+   terminal,
+   write,
+};
 
 fuzz_target!(|source: &str| -> Corpus {
-   cab::init();
-
    let parse_oracle = syntax::parse_oracle();
    let parse = parse_oracle.parse(syntax::tokenize(source));
 
@@ -40,9 +40,9 @@ fuzz_target!(|source: &str| -> Corpus {
       Ok("true" | "1"),
    );
 
-   let Ok(expression) =
-      parse.extractlnln(&mut format::stdout(), &island::display!(island), &source)
-   else {
+   let out = &mut terminal::stdout();
+
+   let Ok(expression) = parse.extractlnln(out, &island::display!(island), &source) else {
       return if save_valid {
          Corpus::Reject
       } else {
@@ -54,7 +54,7 @@ fuzz_target!(|source: &str| -> Corpus {
       return Corpus::Keep;
    }
 
-   print!("found a valid parse!");
+   write!(out, "found a valid parse!").unwrap();
 
    let display = format!("{node:#?}", node = *expression);
 
@@ -77,16 +77,20 @@ fuzz_target!(|source: &str| -> Corpus {
    };
 
    if source_file.exists() {
-      println!(
-         " seems like it was already known before, skipping writing {name}",
-         name = base_file.yellow().bold()
-      );
+      write!(
+         out,
+         " seems like it was already known before, skipping writing "
+      )
+      .unwrap();
+      write(out, &base_file.yellow().bold()).unwrap();
 
       Corpus::Reject
    } else {
-      println!(" wrote it to {name}", name = base_file.green().bold());
       fs::write(source_file, *source).unwrap();
       fs::write(display_file, display).unwrap();
+
+      write!(out, " wrote it to ").unwrap();
+      write(out, &base_file.green().bold()).unwrap();
 
       Corpus::Keep
    }

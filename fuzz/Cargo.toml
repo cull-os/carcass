@@ -16,6 +16,8 @@ cargo-fuzz = true
 [dependencies]
 cab.path = "../cab/cab"
 
+ust.path = "../ust"
+
 libfuzzer-sys.workspace = true
 
 [[bin]]
