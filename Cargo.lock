@@ -1201,7 +1201,6 @@ dependencies = [
  "itertools",
  "itoa",
  "num",
- "scopeguard",
  "smallvec 2.0.0-alpha.11",
  "terminal_size",
  "unic-emoji-char",
