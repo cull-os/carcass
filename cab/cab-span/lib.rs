@@ -1,3 +1,5 @@
+//! Span and related type definitions.
+
 mod size;
 pub use size::{
    IntoSize,

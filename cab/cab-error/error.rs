@@ -1,5 +1,3 @@
-// ERROR
-
 use std::{
    error,
    fmt::{

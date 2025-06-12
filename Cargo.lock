@@ -160,8 +160,8 @@ checksum = "d71b6127be86fdcfddb610f7182ac57211d4b18a3e9c82eb2d17662f2227ad6a"
 name = "cab"
 version = "0.0.1"
 dependencies = [
+ "cab-error",
  "cab-island",
- "cab-report",
  "cab-runtime",
  "cab-span",
  "cab-syntax",
@@ -171,19 +171,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "cab-island"
-version = "0.0.1"
-dependencies = [
- "async-once-cell",
- "async-trait",
- "bytes",
- "cab-report",
- "cab-util",
- "tokio",
-]
-
-[[package]]
-name = "cab-report"
+name = "cab-error"
 version = "0.0.1"
 dependencies = [
  "anyhow",
@@ -196,12 +184,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "cab-island"
+version = "0.0.1"
+dependencies = [
+ "async-once-cell",
+ "async-trait",
+ "bytes",
+ "cab-error",
+ "cab-util",
+ "tokio",
+]
+
+[[package]]
 name = "cab-runtime"
 version = "0.0.1"
 dependencies = [
  "async-trait",
  "bytes",
- "cab-report",
+ "cab-error",
  "cab-span",
  "cab-syntax",
  "const-str",
@@ -229,7 +229,7 @@ dependencies = [
 name = "cab-syntax"
 version = "0.0.1"
 dependencies = [
- "cab-report",
+ "cab-error",
  "cab-span",
  "cab-util",
  "cstree",

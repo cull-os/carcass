@@ -1,3 +1,5 @@
+//! Miscellaneous utilities.
+
 mod lazy;
 mod reffed;
 

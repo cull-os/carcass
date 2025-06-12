@@ -14,9 +14,9 @@ path = "lib.rs"
 workspace = true
 
 [dependencies]
-cab-report.path = "../cab-report"
-cab-span.path   = "../cab-span"
-cab-util.path   = "../cab-util"
+cab-error.path = "../cab-error"
+cab-span.path  = "../cab-span"
+cab-util.path  = "../cab-util"
 
 ust.path = "../../ust"
 
