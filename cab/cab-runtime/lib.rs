@@ -1,3 +1,5 @@
+//! Runtime implementation.
+
 #![feature(let_chains)]
 
 mod code;

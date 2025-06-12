@@ -19,8 +19,8 @@ path = "main.rs"
 workspace = true
 
 [dependencies]
+cab-error.path   = "./cab-error"
 cab-island.path  = "./cab-island"
-cab-report.path  = "./cab-report"
 cab-runtime.path = "./cab-runtime"
 cab-span.path    = "./cab-span"
 cab-syntax.path  = "./cab-syntax"

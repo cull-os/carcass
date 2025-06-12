@@ -1,6 +1,6 @@
 use std::fmt::Write as _;
 
-use cab_report::{
+use cab_error::{
    Contextful as _,
    Result,
    bail,

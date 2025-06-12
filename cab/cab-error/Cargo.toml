@@ -1,5 +1,5 @@
 [package]
-name                 = "cab-report"
+name                 = "cab-error"
 authors.workspace    = true
 edition.workspace    = true
 license.workspace    = true

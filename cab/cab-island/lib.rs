@@ -10,7 +10,7 @@ use std::{
 
 use async_trait::async_trait;
 use bytes::Bytes;
-use cab_report::Result;
+use cab_error::Result;
 
 mod blob;
 pub use blob::blob;
