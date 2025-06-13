@@ -21,12 +21,6 @@ use cab_span::{
    Size,
    Span,
 };
-use cab_util::{
-   as_,
-   borrow_mut,
-   into_iter,
-   unwrap,
-};
 use itertools::Itertools as _;
 use num::traits::AsPrimitive;
 use smallvec::SmallVec;
@@ -60,7 +54,7 @@ pub mod tag;
 /// formatter.
 #[expect(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 pub fn number_width(number: impl AsPrimitive<f64>) -> usize {
-   as_!(number);
+   let number = number.as_();
 
    if number == 0.0 {
       1
@@ -74,7 +68,7 @@ pub fn number_width(number: impl AsPrimitive<f64>) -> usize {
 /// Width does not include `0x` prefix, so beware.
 #[expect(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 pub fn number_hex_width(number: impl AsPrimitive<f64>) -> usize {
-   as_!(number);
+   let number = number.as_();
 
    if number == 0.0 {
       1
@@ -130,8 +124,6 @@ pub fn wrap<'a>(
       use None as Space;
       use Some as Word;
 
-      into_iter!(parts);
-
       let width_start = writer.width();
 
       let width_max = if width_start + WIDTH_NEEDED.get() <= writer.width_max() {
@@ -143,6 +135,7 @@ pub fn wrap<'a>(
       };
 
       let mut parts = parts
+         .into_iter()
          .flat_map(|part| {
             part
                .value
@@ -618,7 +611,7 @@ fn write_report(
    let line_number_previous = RefCell::new(None::<u32>);
    indent!(writer, line_number_width + 2, |writer| {
       let line_number = *line_number.borrow();
-      borrow_mut!(line_number_previous);
+      let mut line_number_previous = line_number_previous.borrow_mut();
 
       with(writer, STYLE_GUTTER, |writer| {
          match line_number {
@@ -768,7 +761,7 @@ fn write_report(
       for line in &lines {
          // Patch strike prefix and keep track of positions of strikes with their IDs.
          {
-            borrow_mut!(strike_prefix);
+            let mut strike_prefix = strike_prefix.borrow_mut();
 
             for strike_new @ LineStrike { id, .. } in line.strikes.iter().copied() {
                match strike_prefix
@@ -919,7 +912,7 @@ fn write_report(
                },
 
                LineLabelSpan::Inline(_) => {
-                  unwrap!(span_start);
+                  let span_start = span_start.unwrap();
 
                   // INDENT: "<strike-prefix> "
                   indent!(writer, strike_prefix_width + 1, |writer| {
