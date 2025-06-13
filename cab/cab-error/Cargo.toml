@@ -16,7 +16,8 @@ workspace = true
 [dependencies]
 ust.path = "../../ust"
 
-anyhow.workspace    = true
-thiserror.workspace = true
-const-str.workspace = true
-smallvec.workspace  = true
+anyhow.workspace      = true
+const-str.workspace   = true
+derive_more.workspace = true
+smallvec.workspace    = true
+thiserror.workspace   = true

@@ -1,12 +1,12 @@
 use std::{
    borrow::Cow,
-   cell::Cell,
    fmt::{
       self,
       Write as _,
    },
    mem,
    slice,
+   sync::RwLock,
 };
 
 use derive_more::Deref;
@@ -64,12 +64,12 @@ struct Measure {
    column: usize,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 struct Data<'a> {
    tag:       Tag<'a>,
    len:       usize,
    condition: Condition,
-   measure:   Cell<Measure>,
+   measure:   RwLock<Measure>,
 }
 
 impl Data<'_> {
@@ -87,18 +87,22 @@ impl Data<'_> {
          Tag::Group(..) | Tag::Indent(..) => 0,
       };
 
-      let width = children
-         .map(|(child, children)| {
-            child.measure(children);
-            child.measure.get().width
-         })
-         .fold(tag_width, usize::saturating_add);
+      let mut measure = self.measure.write().unwrap();
 
-      self.measure.set(Measure { width, column: 0 });
+      *measure = Measure {
+         width: children
+            .map(|(child, children)| {
+               child.measure(children);
+               measure.width
+            })
+            .fold(tag_width, usize::saturating_add),
+
+         column: 0,
+      };
    }
 }
 
-#[derive(Clone)]
+#[derive(Debug)]
 pub struct Tags<'a>(Vec<Data<'a>>);
 
 pub trait DisplayTags {
@@ -275,7 +279,7 @@ impl Display for Tags<'_> {
                   },
 
                   Tag::Group(..) => {
-                     let measure = data.measure.get();
+                     let measure = data.measure.read().unwrap();
                      self.render(children, measure.width == usize::MAX)?;
                   },
 
@@ -320,7 +324,7 @@ impl<'a> Tags<'a> {
       impl Layer {
          fn layout(&mut self, children: TagsIter<'_>) {
             for (data, children) in children {
-               let mut measure = data.measure.get();
+               let mut measure = data.measure.write().unwrap();
                measure.column = self.column;
 
                let condition = data.condition != Condition::Flat;
@@ -364,8 +368,6 @@ impl<'a> Tags<'a> {
                      }
                   },
                }
-
-               data.measure.set(measure);
             }
          }
       }
@@ -411,7 +413,7 @@ impl<'a> Tags<'a> {
          tag,
          len: 0,
          condition,
-         measure: Cell::new(Measure {
+         measure: RwLock::new(Measure {
             width:  0,
             column: 0,
          }),

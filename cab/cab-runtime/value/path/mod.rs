@@ -3,7 +3,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use bytes::Bytes;
 use cab_error::{
-   Error,
+   Contextful as _,
    Result,
    bail,
 };
@@ -14,6 +14,10 @@ use ust::{
 
 use super::Value;
 
+mod blob;
+// mod fs;
+// mod stdin;
+
 #[async_trait]
 pub trait Root: Send + Sync + 'static {
    fn type_(&self) -> &Arc<str>;
@@ -22,19 +26,33 @@ pub trait Root: Send + Sync + 'static {
 
    fn path(&self) -> &Value;
 
-   async fn list(self: Arc<Self>, content: &str) -> Result<Arc<[Path]>> {
-      bail!("TODO list '{content:?}' error")
+   async fn list(self: Arc<Self>, subpath: &str) -> Result<Arc<[Path]>> {
+      let _ = subpath;
+
+      bail!("root does not support listing");
    }
 
-   async fn read(self: Arc<Self>, content: &str) -> Result<Bytes> {
-      bail!("TODO read '{content:?}' error")
+   async fn read(self: Arc<Self>, subpath: &str) -> Result<Bytes> {
+      let _ = subpath;
+
+      bail!("root does not support reading");
+   }
+
+   async fn is_mutable(&self) -> bool {
+      false
+   }
+
+   async fn write(self: Arc<Self>, subpath: &str, content: Bytes) -> Result<()> {
+      let _ = (subpath, content);
+
+      bail!("root does not support writing");
    }
 }
 
 #[derive(Clone)]
 pub struct Path {
    root:    Option<Arc<dyn Root>>,
-   content: Arc<str>,
+   subpath: Arc<str>,
 }
 
 impl tag::DisplayTags for Path {
@@ -50,7 +68,7 @@ impl tag::DisplayTags for Path {
          match *config {
             Value::Attributes(ref attributes) if attributes.is_empty() => {
                match *path {
-                  Value::Path(ref path) if path.content.is_empty() => {},
+                  Value::Path(ref path) if path.subpath.is_empty() => {},
 
                   ref path => {
                      tags.write("::".yellow());
@@ -64,7 +82,7 @@ impl tag::DisplayTags for Path {
                config.display_tags(tags);
 
                match *path {
-                  Value::Path(ref path) if path.content.is_empty() => {},
+                  Value::Path(ref path) if path.subpath.is_empty() => {},
 
                   ref path => {
                      tags.write(":".yellow());
@@ -77,10 +95,10 @@ impl tag::DisplayTags for Path {
          tags.write(">");
       }
 
-      if self.content.is_empty() {
+      if self.subpath.is_empty() {
          tags.write("<empty-path>".red());
       } else {
-         tags.write((*self.content).yellow());
+         tags.write((*self.subpath).yellow());
       }
    }
 }
@@ -91,56 +109,36 @@ impl From<Path> for Value {
    }
 }
 
-impl TryInto<Arc<str>> for Path {
-   type Error = Error;
-
-   fn try_into(self) -> Result<Arc<str>> {
-      if self.root.is_some() {
-         bail!("TODO");
-      }
-
-      Ok(self.content)
-   }
-}
-
 impl Path {
    #[must_use]
-   pub fn new(root: Arc<dyn Root>, content: Arc<str>) -> Self {
+   pub fn new(root: Arc<dyn Root>, subpath: Arc<str>) -> Self {
       Self {
          root: Some(root),
-         content,
+         subpath,
       }
    }
 
    #[must_use]
-   pub fn rootless(content: Arc<str>) -> Self {
+   pub fn rootless(subpath: Arc<str>) -> Self {
       Self {
          root: None,
-         content,
+         subpath,
       }
    }
 }
 
 impl Path {
    #[must_use]
-   pub fn get(&self, content: &str) -> Self {
-      let mut content_ = String::with_capacity(self.content.len() + content.len());
+   pub fn get(&self, subpath: &str) -> Self {
+      let mut subpath_ = String::with_capacity(self.subpath.len() + subpath.len());
 
-      content_.push_str(&self.content);
-      content_.push_str(content);
+      subpath_.push_str(&self.subpath);
+      subpath_.push_str(subpath);
 
       Self {
          root:    self.root.clone(),
-         content: content_.into(),
+         subpath: subpath_.into(),
       }
-   }
-
-   pub async fn read(&self) -> Result<Bytes> {
-      let Some(root) = self.root.clone() else {
-         bail!("tried to read rootless path");
-      };
-
-      root.read(&self.content).await
    }
 
    pub async fn list(&self) -> Result<Arc<[Path]>> {
@@ -148,6 +146,17 @@ impl Path {
          bail!("tried to list rootless path");
       };
 
-      root.list(&self.content).await
+      root
+         .list(&self.subpath)
+         .await
+         .context("failed to read 'TODO: add a Tags serializer and display_tags in Termination'")
+   }
+
+   pub async fn read(&self) -> Result<Bytes> {
+      let Some(root) = self.root.clone() else {
+         bail!("tried to read rootless path");
+      };
+
+      root.read(&self.subpath).await
    }
 }
