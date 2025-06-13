@@ -6,7 +6,7 @@ use std::{
 };
 
 use cab::{
-   report::{
+   error::{
       self,
       Contextful as _,
    },
@@ -51,7 +51,7 @@ enum Check {
 }
 
 #[tokio::main]
-async fn main() -> report::Termination {
+async fn main() -> error::Termination {
    let cli = Cli::parse();
 
    let err = &mut terminal::stderr();
@@ -148,10 +148,10 @@ async fn main() -> report::Termination {
                fail_count += 1;
 
                if fail_fast {
-                  report::bail!("failed fast");
+                  error::bail!("failed fast");
                }
 
-               Ok::<(), report::Error>(())
+               Ok::<(), error::Error>(())
             })?;
 
          if fail_count > 0 {
@@ -159,10 +159,10 @@ async fn main() -> report::Termination {
                eprintln!("behaviour has changed for {fail_count} test cases");
             }
 
-            report::bail!("exiting due to {fail_count} previous errors");
+            error::bail!("exiting due to {fail_count} previous errors");
          }
       },
    }
 
-   report::Termination::success()
+   error::Termination::success()
 }
