@@ -179,14 +179,12 @@ impl From<ops::Range<usize>> for Span {
    }
 }
 
-#[cfg(feature = "cstree")]
 impl From<Span> for cstree::text::TextRange {
    fn from(this: Span) -> Self {
       cstree::text::TextRange::new(this.start.into(), this.end.into())
    }
 }
 
-#[cfg(feature = "cstree")]
 impl From<cstree::text::TextRange> for Span {
    fn from(that: cstree::text::TextRange) -> Self {
       Self {
@@ -202,27 +200,23 @@ pub trait IntoSpan {
    fn span(&self) -> Span;
 }
 
-#[cfg(feature = "cstree")]
 impl<S: cstree::Syntax> IntoSpan for cstree::syntax::SyntaxToken<S> {
    fn span(&self) -> Span {
       self.text_range().into()
    }
 }
-#[cfg(feature = "cstree")]
 impl<S: cstree::Syntax> IntoSpan for cstree::syntax::ResolvedToken<S> {
    fn span(&self) -> Span {
       self.text_range().into()
    }
 }
 
-#[cfg(feature = "cstree")]
 impl<S: cstree::Syntax> IntoSpan for cstree::syntax::SyntaxNode<S> {
    fn span(&self) -> Span {
       self.text_range().into()
    }
 }
 
-#[cfg(feature = "cstree")]
 impl<S: cstree::Syntax> IntoSpan for cstree::syntax::ResolvedNode<S> {
    fn span(&self) -> Span {
       self.text_range().into()

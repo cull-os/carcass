@@ -13,15 +13,8 @@ path = "lib.rs"
 [lints]
 workspace = true
 
-[features]
-default = [ "cstree" ]
-
-cstree = [ "dep:cstree" ]
-
 [dependencies]
 cab-util.path = "../cab-util"
 
-cstree.optional  = true
-cstree.workspace = true
-
+cstree.workspace      = true
 derive_more.workspace = true

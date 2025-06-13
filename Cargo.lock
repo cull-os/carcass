@@ -175,8 +175,6 @@ name = "cab-error"
 version = "0.0.1"
 dependencies = [
  "anyhow",
- "cab-span",
- "cab-util",
  "const-str",
  "smallvec 2.0.0-alpha.11",
  "thiserror",
@@ -1194,7 +1192,6 @@ name = "ust"
 version = "0.0.2"
 dependencies = [
  "cab-span",
- "cab-util",
  "const-str",
  "derive_more",
  "enumflags2",

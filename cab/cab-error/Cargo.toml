@@ -13,22 +13,10 @@ path = "lib.rs"
 [lints]
 workspace = true
 
-[features]
-default = [ "cstree", "error" ]
-
-cstree = [ "cab-span/cstree" ]
-error  = [ "dep:anyhow", "dep:thiserror" ]
-
 [dependencies]
-cab-span.path = "../cab-span"
-cab-util.path = "../cab-util"
-
 ust.path = "../../ust"
 
-anyhow.optional     = true
 anyhow.workspace    = true
-thiserror.optional  = true
 thiserror.workspace = true
-
 const-str.workspace = true
 smallvec.workspace  = true

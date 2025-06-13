@@ -7,7 +7,6 @@ use cab_span::{
    Size,
    Span,
 };
-use cab_util::into;
 use derive_more::Deref;
 use smallvec::SmallVec;
 
@@ -147,12 +146,10 @@ impl Label {
       severity: LabelSeverity,
       text: impl Into<Cow<'static, str>>,
    ) -> Self {
-      into!(span, text);
-
       Self {
-         span,
+         span: span.into(),
          severity,
-         text,
+         text: text.into(),
       }
    }
 
@@ -199,9 +196,10 @@ pub struct Point {
 impl Point {
    /// Creates a new [`Point`].
    pub fn new(severity: PointSeverity, text: impl Into<Cow<'static, str>>) -> Self {
-      into!(text);
-
-      Self { severity, text }
+      Self {
+         severity,
+         text: text.into(),
+      }
    }
 
    /// Creates a tip [`Point`].
@@ -241,10 +239,8 @@ pub struct Report {
 
 impl Report {
    pub fn new(severity: Severity, title: impl Into<Cow<'static, str>>) -> Self {
-      into!(title);
-
       Self {
-         title,
+         title: title.into(),
          severity,
          labels: SmallVec::new(),
          points: SmallVec::new(),

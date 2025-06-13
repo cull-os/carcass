@@ -9,7 +9,6 @@ use std::{
    slice,
 };
 
-use cab_util::into;
 use derive_more::Deref;
 
 use crate::{
@@ -34,8 +33,7 @@ pub enum Tag<'a> {
 
 impl<'a, I: Into<Cow<'a, str>>> From<I> for Tag<'a> {
    fn from(value: I) -> Self {
-      into!(value);
-      Self::Text(value.styled())
+      Self::Text(value.into().styled())
    }
 }
 
@@ -269,7 +267,8 @@ impl<'a> Tags<'a> {
       condition: Condition,
       closure: impl FnOnce(&mut Self),
    ) {
-      into!(tag);
+      let tag = tag.into();
+
       let tag_is_node = tag.is_node();
       let tag_should_pop =
          tag == Tag::Space && self.0.last().is_some_and(|data| data.tag == Tag::Space);
