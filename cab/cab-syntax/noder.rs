@@ -20,7 +20,6 @@ use ust::{
    Write,
    report::{
       self,
-      PositionStr,
       Report,
    },
 };
@@ -54,7 +53,7 @@ impl Parse {
       self,
       writer: &mut impl Write,
       location: &impl Display,
-      source: &PositionStr<'_>,
+      source: &report::PositionStr<'_>,
    ) -> Result<node::Expression> {
       let mut fail = 0;
 

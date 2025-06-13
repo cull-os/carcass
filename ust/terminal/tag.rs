@@ -13,6 +13,7 @@ use derive_more::Deref;
 
 use crate::{
    Debug,
+   Display,
    Write,
    report,
    style::{
@@ -100,6 +101,18 @@ impl Data<'_> {
 #[derive(Clone)]
 pub struct Tags<'a>(Vec<Data<'a>>);
 
+pub trait DisplayTags {
+   fn display_tags<'a>(&'a self, tags: &mut Tags<'a>);
+}
+
+impl<'a, D: DisplayTags> From<&'a D> for Tags<'a> {
+   fn from(value: &'a D) -> Self {
+      let mut this = Self(Vec::new());
+      value.display_tags(&mut this);
+      this
+   }
+}
+
 impl Debug for Tags<'_> {
    fn debug_styled(&self, writer: &mut dyn Write) -> fmt::Result {
       fn debug(writer: &mut dyn Write, children: TagsIter<'_>) -> fmt::Result {
@@ -153,24 +166,144 @@ impl Debug for Tags<'_> {
    }
 }
 
-#[derive(Deref)]
-struct TagsIter<'a>(slice::Iter<'a, Data<'a>>);
-
-impl<'a> Iterator for TagsIter<'a> {
-   type Item = (&'a Data<'a>, TagsIter<'a>);
-
-   fn next(&mut self) -> Option<Self::Item> {
-      let this = self.0.next()?;
-
-      if this.len == 0 {
-         return Some((this, TagsIter([].iter())));
+impl Display for Tags<'_> {
+   fn display_styled(&self, writer: &mut dyn Write) -> fmt::Result {
+      struct Renderer<'a> {
+         inner:    &'a mut dyn Write,
+         indent:   usize,
+         space:    bool,
+         newlines: usize,
       }
 
-      let (children, rest) = self.0.as_slice().split_at(this.len);
+      impl Write for Renderer<'_> {
+         fn finish(&mut self) -> fmt::Result {
+            self.inner.finish()
+         }
 
-      self.0 = rest.iter();
+         fn width(&self) -> usize {
+            self.inner.width()
+         }
 
-      Some((this, TagsIter(children.iter())))
+         fn width_max(&self) -> usize {
+            self.inner.width_max()
+         }
+
+         fn get_style(&self) -> style::Style {
+            self.inner.get_style()
+         }
+
+         fn set_style(&mut self, style: style::Style) {
+            self.inner.set_style(style);
+         }
+
+         fn apply_style(&mut self) -> fmt::Result {
+            self.inner.apply_style()
+         }
+
+         fn write_report(
+            &mut self,
+            report: &report::Report,
+            location: &dyn crate::Display,
+            source: &report::PositionStr<'_>,
+         ) -> fmt::Result {
+            self.inner.write_report(report, location, source)
+         }
+      }
+
+      impl fmt::Write for Renderer<'_> {
+         fn write_str(&mut self, s: &str) -> fmt::Result {
+            if s.is_empty() {
+               return Ok(());
+            }
+
+            if mem::take(&mut self.space) && !s.starts_with('\n') {
+               self.write_char(' ')?;
+            }
+
+            for line in s.split_inclusive('\n') {
+               if line == "\n" {
+                  self.newlines += 1;
+                  self.inner.write_char('\n')?;
+                  continue;
+               }
+
+               if mem::take(&mut self.newlines) > 0 {
+                  for _ in 0..self.indent {
+                     self.inner.write_char(' ')?;
+                  }
+               }
+
+               self.inner.write_str(line)?;
+
+               if line.ends_with('\n') {
+                  self.newlines = 1;
+               }
+            }
+
+            Ok(())
+         }
+      }
+
+      impl Renderer<'_> {
+         fn render(&mut self, children: TagsIter<'_>, parent_is_broken: bool) -> fmt::Result {
+            for (data, children) in children {
+               let condition = match data.condition {
+                  Condition::Flat => !parent_is_broken,
+                  Condition::Broken => parent_is_broken,
+                  Condition::Always => true,
+               };
+
+               match data.tag {
+                  Tag::Text(ref s) => {
+                     if condition {
+                        write(self, s)?;
+                     }
+                  },
+
+                  Tag::Space => {
+                     if condition {
+                        self.space = true;
+                     }
+                  },
+
+                  Tag::Newline(count) => {
+                     if condition {
+                        for _ in self.newlines..count {
+                           self.write_char('\n')?;
+                        }
+                     }
+                  },
+
+                  Tag::Group(..) => {
+                     let measure = data.measure.get();
+                     self.render(children, measure.width == usize::MAX)?;
+                  },
+
+                  Tag::Indent(count) => {
+                     if condition {
+                        self.indent = self.indent.checked_add_signed(count).unwrap();
+                        self.render(children, parent_is_broken)?;
+                        self.indent = self.indent.checked_sub_signed(count).unwrap();
+                     } else {
+                        self.render(children, parent_is_broken)?;
+                     }
+                  },
+               }
+            }
+
+            Ok(())
+         }
+      }
+
+      self.layout(writer.width_max().saturating_sub(writer.width()));
+
+      Renderer {
+         inner:    writer,
+         indent:   0,
+         space:    false,
+         newlines: 0,
+      }
+      .render(self.children(), false)
    }
 }
 
@@ -306,148 +439,23 @@ impl<'a> Tags<'a> {
    }
 }
 
-pub trait DisplayTags {
-   fn display_tags<'a>(&'a self, tags: &mut Tags<'a>);
+#[derive(Deref)]
+struct TagsIter<'a>(slice::Iter<'a, Data<'a>>);
 
-   fn display_styled(&self, writer: &mut dyn Write) -> fmt::Result {
-      struct Renderer<'a> {
-         inner:    &'a mut dyn Write,
-         indent:   usize,
-         space:    bool,
-         newlines: usize,
+impl<'a> Iterator for TagsIter<'a> {
+   type Item = (&'a Data<'a>, TagsIter<'a>);
+
+   fn next(&mut self) -> Option<Self::Item> {
+      let this = self.0.next()?;
+
+      if this.len == 0 {
+         return Some((this, TagsIter([].iter())));
       }
 
-      impl Write for Renderer<'_> {
-         fn finish(&mut self) -> fmt::Result {
-            self.inner.finish()
-         }
+      let (children, rest) = self.0.as_slice().split_at(this.len);
 
-         fn width(&self) -> usize {
-            self.inner.width()
-         }
+      self.0 = rest.iter();
 
-         fn width_max(&self) -> usize {
-            self.inner.width_max()
-         }
-
-         fn get_style(&self) -> style::Style {
-            self.inner.get_style()
-         }
-
-         fn set_style(&mut self, style: style::Style) {
-            self.inner.set_style(style);
-         }
-
-         fn apply_style(&mut self) -> fmt::Result {
-            self.inner.apply_style()
-         }
-
-         fn write_report(
-            &mut self,
-            report: &report::Report,
-            location: &dyn crate::Display,
-            source: &report::PositionStr<'_>,
-         ) -> fmt::Result {
-            self.inner.write_report(report, location, source)
-         }
-      }
-
-      impl fmt::Write for Renderer<'_> {
-         fn write_str(&mut self, s: &str) -> fmt::Result {
-            if s.is_empty() {
-               return Ok(());
-            }
-
-            if mem::take(&mut self.space) && !s.starts_with('\n') {
-               self.write_char(' ')?;
-            }
-
-            for line in s.split_inclusive('\n') {
-               if line == "\n" {
-                  self.newlines += 1;
-                  self.inner.write_char('\n')?;
-                  continue;
-               }
-
-               if mem::take(&mut self.newlines) > 0 {
-                  for _ in 0..self.indent {
-                     self.inner.write_char(' ')?;
-                  }
-               }
-
-               self.inner.write_str(line)?;
-
-               if line.ends_with('\n') {
-                  self.newlines = 1;
-               }
-            }
-
-            Ok(())
-         }
-      }
-
-      impl Renderer<'_> {
-         fn render(&mut self, children: TagsIter<'_>, parent_is_broken: bool) -> fmt::Result {
-            for (data, children) in children {
-               let condition = match data.condition {
-                  Condition::Flat => !parent_is_broken,
-                  Condition::Broken => parent_is_broken,
-                  Condition::Always => true,
-               };
-
-               match data.tag {
-                  Tag::Text(ref s) => {
-                     if condition {
-                        write(self, s)?;
-                     }
-                  },
-
-                  Tag::Space => {
-                     if condition {
-                        self.space = true;
-                     }
-                  },
-
-                  Tag::Newline(count) => {
-                     if condition {
-                        for _ in self.newlines..count {
-                           self.write_char('\n')?;
-                        }
-                     }
-                  },
-
-                  Tag::Group(..) => {
-                     let measure = data.measure.get();
-                     self.render(children, measure.width == usize::MAX)?;
-                  },
-
-                  Tag::Indent(count) => {
-                     if condition {
-                        self.indent = self.indent.checked_add_signed(count).unwrap();
-                        self.render(children, parent_is_broken)?;
-                        self.indent = self.indent.checked_sub_signed(count).unwrap();
-                     } else {
-                        self.render(children, parent_is_broken)?;
-                     }
-                  },
-               }
-            }
-
-            Ok(())
-         }
-      }
-
-      let mut tags = Tags(Vec::new());
-      self.display_tags(&mut tags);
-
-      tags.layout(writer.width_max().saturating_sub(writer.width()));
-
-      Renderer {
-         inner:    writer,
-         indent:   0,
-         space:    false,
-         newlines: 0,
-      }
-      .render(tags.children(), false)
+      Some((this, TagsIter(children.iter())))
    }
 }

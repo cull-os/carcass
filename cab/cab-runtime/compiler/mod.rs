@@ -22,7 +22,6 @@ use ust::{
    Write,
    report::{
       self,
-      PositionStr,
       Report,
    },
 };
@@ -60,7 +59,7 @@ impl Compile {
       self,
       writer: &mut impl Write,
       location: &impl Display,
-      source: &PositionStr<'_>,
+      source: &report::PositionStr<'_>,
    ) -> Result<Code> {
       let mut fail = 0;
 
