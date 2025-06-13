@@ -8,11 +8,11 @@ use std::{
 };
 
 use cab::{
-   island,
-   report::{
+   error::{
       self,
       Contextful as _,
    },
+   island,
    runtime,
    syntax,
 };
@@ -69,7 +69,7 @@ enum Dump {
 }
 
 #[tokio::main]
-async fn main() -> report::Termination {
+async fn main() -> error::Termination {
    let cli = Cli::parse();
 
    let out = &mut terminal::stdout();
@@ -161,5 +161,5 @@ async fn main() -> report::Termination {
    out.finish()?;
    err.finish()?;
 
-   report::Termination::success()
+   error::Termination::success()
 }
