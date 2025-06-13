@@ -14,6 +14,7 @@ use cab::{
 };
 use clap::Parser as _;
 use ust::{
+   Write as _,
    style::StyledExt as _,
    terminal,
    write,
@@ -163,6 +164,8 @@ async fn main() -> error::Termination {
          }
       },
    }
+
+   err.finish()?;
 
    error::Termination::success()
 }

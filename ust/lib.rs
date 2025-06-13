@@ -28,20 +28,8 @@ pub trait Debug {
    fn debug_styled(&self, writer: &mut dyn Write) -> fmt::Result;
 }
 
-impl<T: fmt::Debug> Debug for T {
-   fn debug_styled(&self, writer: &mut dyn Write) -> fmt::Result {
-      write!(writer, "{self:?}")
-   }
-}
-
 pub trait Display {
    fn display_styled(&self, writer: &mut dyn Write) -> fmt::Result;
-}
-
-impl<T: fmt::Display> Display for T {
-   fn display_styled(&self, writer: &mut dyn Write) -> fmt::Result {
-      write!(writer, "{self}")
-   }
 }
 
 pub fn with<T>(

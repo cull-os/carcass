@@ -2,11 +2,15 @@ use std::{
    borrow::Cow,
    cell::RefCell,
    cmp,
+   env,
    fmt::{
       self,
       Write as _,
    },
-   io,
+   io::{
+      self,
+      IsTerminal as _,
+   },
    iter,
    num::NonZeroUsize,
    ops::Add as _,
@@ -1023,6 +1027,7 @@ fn write_report(
 struct Writer<W: fmt::Write> {
    inner: W,
 
+   style:         bool,
    style_current: style::Style,
    style_next:    style::Style,
 
@@ -1045,6 +1050,10 @@ impl<W: fmt::Write> Write for Writer<W> {
    }
 
    fn set_style(&mut self, style: style::Style) {
+      if !self.style {
+         return;
+      }
+
       self.style_next = style;
    }
 
@@ -1189,6 +1198,10 @@ impl<W: fmt::Write> Write for Writer<W> {
          }
       }
 
+      if !self.style {
+         return Ok(());
+      }
+
       let current @ style::Style {
          fg: current_foreg,
          bg: current_backg,
@@ -1288,43 +1301,107 @@ impl<W: fmt::Write> fmt::Write for Writer<W> {
    }
 }
 
-pub fn writer_from(inner: impl os::fd::AsFd + fmt::Write) -> impl Write {
+#[derive(Debug, Clone, Copy)]
+pub enum StyleChoice<'a> {
+   From(os::fd::BorrowedFd<'a>),
+   Always,
+   Never,
+}
+
+pub fn writer<Wr: fmt::Write>(choice: StyleChoice<'_>, writer: Wr) -> impl Write + use<Wr> {
    Writer {
+      style: match choice {
+         StyleChoice::From(fd) => 'style: {
+            // If NO_COLOR is set and is not empty, don't color.
+            if let Some(value) = env::var_os("NO_COLOR")
+               && !value.is_empty()
+            {
+               break 'style false;
+            }
+
+            // If CLICOLOR is set and is 0, don't output color.
+            if let Some(value) = env::var_os("CLICOLOR")
+               && value == "0"
+            {
+               break 'style false;
+            }
+
+            // If CLICOLOR_FORCE is set and not 0, always output color.
+            if let Some(value) = env::var_os("CLICOLOR_FORCE")
+               && value != "0"
+            {
+               break 'style true;
+            }
+
+            // Output color if it is a terminal.
+            fd.is_terminal()
+         },
+         StyleChoice::Always => true,
+         StyleChoice::Never => false,
+      },
+
       style_current: style::Style::default(),
-      style_next: style::Style::default(),
+      style_next:    style::Style::default(),
 
-      width: 0,
-      width_max: terminal_size::terminal_size_of(inner.as_fd())
-         .map_or(usize::MAX, |(width, _)| width.0 as usize),
+      width:     0,
+      width_max: match choice {
+         StyleChoice::From(fd) if let Some((width, _)) = terminal_size::terminal_size_of(fd) => {
+            width.0 as usize
+         },
+         _ => usize::MAX,
+      },
 
-      inner,
+      inner: writer,
    }
 }
 
-pub fn writer_from_stdout(inner: impl fmt::Write) -> impl Write {
-   Writer {
-      style_current: style::Style::default(),
-      style_next: style::Style::default(),
+pub fn writer_from(writer: impl os::fd::AsFd + fmt::Write) -> impl Write {
+   let fd = writer.as_fd();
 
-      width: 0,
-      width_max: terminal_size::terminal_size_of(io::stdout().as_fd())
+   Writer {
+      style: 'style: {
+         // If NO_COLOR is set and is not empty, don't style.
+         if let Some(value) = env::var_os("NO_COLOR")
+            && !value.is_empty()
+         {
+            break 'style false;
+         }
+
+         // If CLICOLOR is set and is 0, don't style.
+         if let Some(value) = env::var_os("CLICOLOR")
+            && value == "0"
+         {
+            break 'style false;
+         }
+
+         // If CLICOLOR_FORCE is set and not 0, always style.
+         if let Some(value) = env::var_os("CLICOLOR_FORCE")
+            && value != "0"
+         {
+            break 'style true;
+         }
+
+         // Style if it is a terminal.
+         fd.is_terminal()
+      },
+
+      style_current: style::Style::default(),
+      style_next:    style::Style::default(),
+
+      width:     0,
+      width_max: terminal_size::terminal_size_of(fd)
          .map_or(usize::MAX, |(width, _)| width.0 as usize),
 
-      inner,
+      inner: writer,
    }
 }
 
-pub fn writer_from_stderr(inner: impl fmt::Write) -> impl Write {
-   Writer {
-      style_current: style::Style::default(),
-      style_next: style::Style::default(),
+pub fn writer_from_stdout(writer: impl fmt::Write) -> impl Write {
+   self::writer(StyleChoice::From(io::stdout().as_fd()), writer)
+}
 
-      width: 0,
-      width_max: terminal_size::terminal_size_of(io::stderr().as_fd())
-         .map_or(usize::MAX, |(width, _)| width.0 as usize),
-
-      inner,
-   }
+pub fn writer_from_stderr(writer: impl fmt::Write) -> impl Write {
+   self::writer(StyleChoice::From(io::stderr().as_fd()), writer)
 }
 
 struct WriteFmt<T>(T);

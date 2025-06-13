@@ -176,6 +176,7 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "const-str",
+ "derive_more",
  "smallvec 2.0.0-alpha.11",
  "thiserror",
  "ust",

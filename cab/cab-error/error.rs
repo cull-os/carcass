@@ -14,10 +14,12 @@ use std::{
    sync::Arc,
 };
 
+use derive_more::Deref;
 use ust::{
+   Display,
+   Write as _,
    style::StyledExt as _,
    terminal,
-   write,
 };
 
 /// A type alias for concice use of [`Error`].
@@ -34,22 +36,32 @@ impl fmt::Debug for Error {
       let writer = &mut terminal::writer_from_stderr(writer);
 
       let mut message = String::new();
+
       let mut chain = self.0.chain().rev().peekable();
-
       while let Some(error) = chain.next() {
-         write(
-            writer,
-            &if chain.peek().is_none() {
-               "error: "
-            } else {
-               "cause: "
-            }
-            .red()
-            .bold(),
-         )?;
-
          message.clear();
-         write!(message, "{error}")?;
+
+         {
+            let message = &mut terminal::writer_from_stderr(&mut message);
+
+            terminal::indent!(
+               message,
+               header = if chain.peek().is_none() {
+                  "error:"
+               } else {
+                  "cause:"
+               }
+               .red()
+               .bold(),
+            );
+
+            match error.downcast_ref::<Displayable>() {
+               Some(displayable) => displayable.display_styled(message)?,
+               None => write!(message, "{error}")?,
+            }
+
+            message.finish()?;
+         }
 
          let mut chars = message.char_indices();
 
@@ -68,9 +80,32 @@ impl fmt::Debug for Error {
          }
       }
 
+      writer.finish()?;
       Ok(())
    }
 }
+
+#[derive(Deref)]
+struct Displayable(Box<dyn Display + Send + Sync + 'static>);
+
+impl fmt::Debug for Displayable {
+   fn fmt(&self, writer: &mut fmt::Formatter<'_>) -> fmt::Result {
+      let mut writer = terminal::writer(terminal::StyleChoice::Never, writer);
+
+      self.display_styled(&mut writer)?;
+
+      writer.finish()?;
+      Ok(())
+   }
+}
+
+impl fmt::Display for Displayable {
+   fn fmt(&self, writer: &mut fmt::Formatter<'_>) -> fmt::Result {
+      <Self as fmt::Debug>::fmt(self, writer)
+   }
+}
+
+impl error::Error for Displayable {}
 
 /// The termination type. Meant to be used as the return type of the main
 /// function.
@@ -179,6 +214,8 @@ pub trait Contextful<T> {
    /// Appends the context to the error chain.
    fn context(self, context: impl Context) -> Result<T>;
 
+   fn context_tags<D: Display + Send + Sync + 'static>(self, context: impl Into<D>) -> Result<T>;
+
    /// Appends the context to the error chain, lazily.
    fn with_context<C: Context>(self, context: impl FnOnce() -> C) -> Result<T>;
 }
@@ -186,6 +223,11 @@ pub trait Contextful<T> {
 impl<T> Contextful<T> for Option<T> {
    fn context(self, context: impl Context) -> Result<T> {
       anyhow::Context::context(self, context).map_err(|error| Error(Arc::new(error)))
+   }
+
+   fn context_tags<D: Display + Send + Sync + 'static>(self, context: impl Into<D>) -> Result<T> {
+      anyhow::Context::context(self, Displayable(Box::new(context.into())))
+         .map_err(move |error| Error(Arc::new(error)))
    }
 
    fn with_context<C: Context>(self, context: impl FnOnce() -> C) -> Result<T> {
@@ -196,6 +238,11 @@ impl<T> Contextful<T> for Option<T> {
 impl<T, E: error::Error + Send + Sync + 'static> Contextful<T> for result::Result<T, E> {
    fn context(self, context: impl Context) -> Result<T> {
       anyhow::Context::context(self, context).map_err(|error| Error(Arc::new(error)))
+   }
+
+   fn context_tags<D: Display + Send + Sync + 'static>(self, context: impl Into<D>) -> Result<T> {
+      anyhow::Context::context(self, Displayable(Box::new(context.into())))
+         .map_err(move |error| Error(Arc::new(error)))
    }
 
    fn with_context<C: Context>(self, context: impl FnOnce() -> C) -> Result<T> {
