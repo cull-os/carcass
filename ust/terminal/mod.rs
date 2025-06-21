@@ -1308,34 +1308,36 @@ pub enum StyleChoice<'a> {
    Never,
 }
 
+fn should_style(fd: os::fd::BorrowedFd<'_>) -> bool {
+   // If NO_COLOR is set and is not empty, don't style.
+   if let Some(value) = env::var_os("NO_COLOR")
+      && !value.is_empty()
+   {
+      return false;
+   }
+
+   // If CLICOLOR is set and is 0, don't style.
+   if let Some(value) = env::var_os("CLICOLOR")
+      && value == "0"
+   {
+      return false;
+   }
+
+   // If CLICOLOR_FORCE is set and not 0, always style.
+   if let Some(value) = env::var_os("CLICOLOR_FORCE")
+      && value != "0"
+   {
+      return true;
+   }
+
+   // Style if it is a terminal.
+   fd.is_terminal()
+}
+
 pub fn writer<Wr: fmt::Write>(choice: StyleChoice<'_>, writer: Wr) -> impl Write + use<Wr> {
    Writer {
       style: match choice {
-         StyleChoice::From(fd) => 'style: {
-            // If NO_COLOR is set and is not empty, don't color.
-            if let Some(value) = env::var_os("NO_COLOR")
-               && !value.is_empty()
-            {
-               break 'style false;
-            }
-
-            // If CLICOLOR is set and is 0, don't output color.
-            if let Some(value) = env::var_os("CLICOLOR")
-               && value == "0"
-            {
-               break 'style false;
-            }
-
-            // If CLICOLOR_FORCE is set and not 0, always output color.
-            if let Some(value) = env::var_os("CLICOLOR_FORCE")
-               && value != "0"
-            {
-               break 'style true;
-            }
-
-            // Output color if it is a terminal.
-            fd.is_terminal()
-         },
+         StyleChoice::From(fd) => should_style(fd),
          StyleChoice::Always => true,
          StyleChoice::Never => false,
       },
@@ -1359,31 +1361,7 @@ pub fn writer_from(writer: impl os::fd::AsFd + fmt::Write) -> impl Write {
    let fd = writer.as_fd();
 
    Writer {
-      style: 'style: {
-         // If NO_COLOR is set and is not empty, don't style.
-         if let Some(value) = env::var_os("NO_COLOR")
-            && !value.is_empty()
-         {
-            break 'style false;
-         }
-
-         // If CLICOLOR is set and is 0, don't style.
-         if let Some(value) = env::var_os("CLICOLOR")
-            && value == "0"
-         {
-            break 'style false;
-         }
-
-         // If CLICOLOR_FORCE is set and not 0, always style.
-         if let Some(value) = env::var_os("CLICOLOR_FORCE")
-            && value != "0"
-         {
-            break 'style true;
-         }
-
-         // Style if it is a terminal.
-         fd.is_terminal()
-      },
+      style: should_style(writer.as_fd()),
 
       style_current: style::Style::default(),
       style_next:    style::Style::default(),
