@@ -1005,11 +1005,14 @@ impl Identifier {
    /// [`token::Identifier`] or a [`IdentifierQuoted`].
    #[must_use]
    pub fn value(&self) -> IdentifierValueRef<'_> {
-      let Some(first_token) = self.first_token() else {
-         unreachable!()
-      };
+      let first_token = self
+         .first_token()
+         .expect("identifier node must have children");
 
-      assert!(!first_token.kind().is_trivia());
+      assert!(
+         !first_token.kind().is_trivia(),
+         "identifier node's first child must not be trivia"
+      );
 
       if let Ok(token) = <&token::Identifier>::try_from(first_token) {
          return IdentifierValueRef::Plain(token);
@@ -1019,7 +1022,7 @@ impl Identifier {
          return IdentifierValueRef::Quoted(quoted);
       }
 
-      panic!("identifier node did not have an identifier or identifier starter token")
+      unreachable!("identifier node must contain an identifier token or quoted identifier")
    }
 
    pub fn validate(&self, to: &mut Vec<Report>) {

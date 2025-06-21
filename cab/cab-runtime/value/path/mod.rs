@@ -142,9 +142,10 @@ impl Path {
    }
 
    pub async fn list(&self) -> Result<Arc<[Path]>> {
-      let Some(root) = self.root.clone() else {
-         bail!("tried to list rootless path");
-      };
+      let root = self
+         .root
+         .clone()
+         .context("tried to list rootless path TODO")?;
 
       root
          .list(&self.subpath)
@@ -153,10 +154,11 @@ impl Path {
    }
 
    pub async fn read(&self) -> Result<Bytes> {
-      let Some(root) = self.root.clone() else {
-         bail!("tried to read rootless path");
-      };
+      let root = self.root.clone().context("tried to read rootless path")?;
 
-      root.read(&self.subpath).await
+      root
+         .read(&self.subpath)
+         .await
+         .context("failed to read TODO")
    }
 }
