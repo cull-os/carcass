@@ -2,6 +2,8 @@
 
 #![feature(let_chains)]
 
+use cab_span::Span;
+
 mod code;
 pub use code::{
    ByteIndex,
@@ -10,7 +12,10 @@ pub use code::{
 };
 
 mod compiler;
-pub use compiler::oracle as compile_oracler;
+pub use compiler::{
+   Compile,
+   CompileOracle,
+};
 
 mod operation;
 pub use operation::{
@@ -20,3 +25,5 @@ pub use operation::{
 
 pub mod value;
 pub use value::Value;
+
+pub type Location = (value::Path, Span);

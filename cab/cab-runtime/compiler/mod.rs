@@ -10,6 +10,7 @@ use cab_span::{
    Span,
 };
 use cab_syntax::{
+   ParseOracle,
    node,
    segment::{
       Segment,
@@ -81,17 +82,22 @@ impl Compile {
    }
 }
 
-pub struct Oracle;
-
-#[must_use]
-pub fn oracle() -> Oracle {
-   Oracle
+pub struct CompileOracle {
+   parse_oracle: ParseOracle,
 }
 
-impl Oracle {
+impl CompileOracle {
+   #[must_use]
+   pub fn new() -> Self {
+      Self {
+         parse_oracle: ParseOracle::new(),
+      }
+   }
+
    #[expect(clippy::unused_self)]
-   pub fn compile(&self, expression: node::ExpressionRef<'_>) -> Compile {
-      let mut compiler = Compiler::new();
+   #[must_use]
+   pub fn compile(&self, path: value::Path, expression: node::ExpressionRef<'_>) -> Compile {
+      let mut compiler = Compiler::new(path);
 
       compiler.emit_scope(expression.span(), |this| {
          this.emit_force(expression);
@@ -119,9 +125,9 @@ struct Compiler<'a> {
 }
 
 impl<'a> Compiler<'a> {
-   fn new() -> Self {
+   fn new(path: value::Path) -> Self {
       Compiler {
-         codes:   vec![Code::new()],
+         codes:   vec![Code::new(path)],
          scopes:  vec![Scope::global()],
          reports: Vec::new(),
 
@@ -207,7 +213,8 @@ impl<'a> Compiler<'a> {
    }
 
    fn emit_thunk(&mut self, span: Span, closure: impl FnOnce(&mut Self)) {
-      self.codes.push(Code::new());
+      let path = self.code().path().clone();
+      self.codes.push(Code::new(path));
 
       closure(self);
       self.push_operation(span, Operation::Return);
@@ -219,7 +226,7 @@ impl<'a> Compiler<'a> {
          // if code.references_parent {
          Value::Blueprint(code.into()),
          // } else {
-         //     Value::Thunk(Arc::new(Mutex::new(Thunk::suspended(span, context.code))))
+         //     Value::Thunk(Arc::new(Mutex::new(Thunk::suspended(location, context.code))))
          // }
       );
    }

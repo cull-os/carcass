@@ -94,7 +94,7 @@ async fn main() -> error::Termination {
 
          let source = PositionStr::new(&source);
 
-         let parse_oracle = syntax::parse_oracle();
+         let parse_oracle = syntax::ParseOracle::new();
          let expression = parse_oracle.parse(syntax::tokenize(&source)).extractlnln(
             err,
             &island::display!(leaf),

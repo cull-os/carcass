@@ -37,8 +37,10 @@ use ust::{
 
 use crate::{
    Argument,
+   Location,
    Operation,
    Value,
+   value,
 };
 
 const ENCODED_U64_LEN: usize = 9;
@@ -67,6 +69,8 @@ impl ValueIndex {
 
 pub struct Code {
    bytes: Vec<u8>,
+
+   path:  value::Path,
    spans: Vec<(ByteIndex, Span)>,
 
    values: Vec<Value>,
@@ -261,12 +265,20 @@ impl ops::Index<ValueIndex> for Code {
 
 impl Code {
    #[must_use]
-   pub fn new() -> Self {
+   pub fn new(path: value::Path) -> Self {
       Self {
-         bytes:  Vec::new(),
-         spans:  Vec::new(),
+         bytes: Vec::new(),
+
+         path,
+         spans: Vec::new(),
+
          values: Vec::new(),
       }
+   }
+
+   #[must_use]
+   pub fn path(&self) -> &value::Path {
+      &self.path
    }
 
    pub fn push_u64(&mut self, data: u64) -> ByteIndex {
@@ -330,13 +342,13 @@ impl Code {
    }
 
    #[must_use]
-   pub fn read_operation(&self, index: ByteIndex) -> (Span, Operation, usize) {
+   pub fn read_operation(&self, index: ByteIndex) -> (Location, Operation, usize) {
       let position = self.spans.partition_point(|&(index2, _)| index >= index2);
 
       let (_, span) = self.spans[position.saturating_sub(1)];
 
       (
-         span,
+         (self.path.clone(), span),
          self.bytes[*index]
             .try_into()
             .expect("byte index must be valid"),

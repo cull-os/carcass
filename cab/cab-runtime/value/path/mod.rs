@@ -20,6 +20,10 @@ mod blob;
 
 #[async_trait]
 pub trait Root: Send + Sync + 'static {
+   fn new(config: Value, path: Value) -> Result<Self>
+   where
+      Self: Sized;
+
    fn type_(&self) -> &Arc<str>;
 
    fn config(&self) -> &Value;
@@ -96,7 +100,7 @@ impl tag::DisplayTags for Path {
       }
 
       if self.subpath.is_empty() {
-         tags.write("<empty-path>".red());
+         tags.write("<empty-path>".bright_black());
       } else {
          tags.write((*self.subpath).yellow());
       }
@@ -145,12 +149,12 @@ impl Path {
       let root = self
          .root
          .clone()
-         .context("tried to list rootless path TODO")?;
+         .context("tried to list rootless path 'TODO'")?;
 
       root
          .list(&self.subpath)
          .await
-         .context("failed to read 'TODO: add a Tags serializer and display_tags in Termination'")
+         .context("failed to read TODO")
    }
 
    pub async fn read(&self) -> Result<Bytes> {
@@ -160,5 +164,17 @@ impl Path {
          .read(&self.subpath)
          .await
          .context("failed to read TODO")
+   }
+
+   pub async fn write(&self, content: Bytes) -> Result<()> {
+      let root = self
+         .root
+         .clone()
+         .context("tried to write to rootless path 'TODO'")?;
+
+      root
+         .write(&self.subpath, content)
+         .await
+         .context("failed to write to TODO")
    }
 }

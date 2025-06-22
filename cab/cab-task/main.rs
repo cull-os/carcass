@@ -68,7 +68,7 @@ async fn main() -> error::Termination {
             .or_else(|_| which("diff"))
             .context("failed to find diff tool")?;
 
-         let parse_oracle = syntax::parse_oracle();
+         let parse_oracle = syntax::ParseOracle::new();
 
          fs::read_dir("cab-syntax/test/data")
             .context("failed to list cab-syntax/test/data")?

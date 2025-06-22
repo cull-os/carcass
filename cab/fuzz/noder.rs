@@ -29,7 +29,7 @@ use ust::{
 };
 
 fuzz_target!(|source: &str| -> Corpus {
-   let parse_oracle = syntax::parse_oracle();
+   let parse_oracle = syntax::ParseOracle::new();
    let parse = parse_oracle.parse(syntax::tokenize(source));
 
    let island: Arc<dyn island::Leaf> = Arc::new(island::blob(source.to_owned()));

@@ -80,15 +80,15 @@ pub struct ParseOracle {
    cache: green::NodeCache,
 }
 
-/// Returns a fresh parse oracle with an empty cache.
-#[must_use]
-pub fn parse_oracle() -> ParseOracle {
-   ParseOracle {
-      cache: green::NodeCache::from_interner(green::interner()),
-   }
-}
-
 impl ParseOracle {
+   /// Returns a fresh parse oracle with an empty cache.
+   #[must_use]
+   pub fn new() -> Self {
+      Self {
+         cache: green::NodeCache::from_interner(green::interner()),
+      }
+   }
+
    pub fn parse<'a>(&self, tokens: impl Iterator<Item = (Kind, &'a str)>) -> Parse {
       let mut noder = Noder::with_interner_and_tokens(self.cache.interner().clone(), tokens);
 

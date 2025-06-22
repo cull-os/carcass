@@ -22,7 +22,6 @@ pub use self::{
    noder::{
       Parse,
       ParseOracle,
-      parse_oracle,
    },
    tokenizer::{
       is_valid_plain_identifier,
