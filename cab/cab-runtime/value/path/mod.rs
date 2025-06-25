@@ -20,15 +20,11 @@ mod blob;
 
 #[async_trait]
 pub trait Root: Send + Sync + 'static {
-   fn new(config: Value, path: Value) -> Result<Self>
-   where
-      Self: Sized;
-
    fn type_(&self) -> &Arc<str>;
 
-   fn config(&self) -> &Value;
+   fn config(&self) -> Option<&Value>;
 
-   fn path(&self) -> &Value;
+   fn path(&self) -> Option<&Value>;
 
    async fn list(self: Arc<Self>, subpath: &str) -> Result<Arc<[Path]>> {
       let _ = subpath;
@@ -69,29 +65,21 @@ impl tag::DisplayTags for Path {
          tags.write("<".yellow());
          tags.write((**type_).yellow());
 
-         match *config {
-            Value::Attributes(ref attributes) if attributes.is_empty() => {
-               match *path {
-                  Value::Path(ref path) if path.subpath.is_empty() => {},
-
-                  ref path => {
-                     tags.write("::".yellow());
-                     path.display_tags(tags);
-                  },
+         match config {
+            None => {
+               if let Some(path) = path {
+                  tags.write("::".yellow());
+                  path.display_tags(tags);
                }
             },
 
-            ref config => {
+            Some(config) => {
                tags.write(":".yellow());
                config.display_tags(tags);
 
-               match *path {
-                  Value::Path(ref path) if path.subpath.is_empty() => {},
-
-                  ref path => {
-                     tags.write(":".yellow());
-                     path.display_tags(tags);
-                  },
+               if let Some(path) = path {
+                  tags.write(":".yellow());
+                  path.display_tags(tags);
                }
             },
          }
