@@ -1,4 +1,7 @@
-use std::sync::Arc;
+use std::sync::{
+   Arc,
+   OnceLock,
+};
 
 use async_trait::async_trait;
 use bytes::Bytes;
@@ -15,21 +18,17 @@ use crate::Value;
 
 #[must_use]
 pub fn blob(config: Value) -> impl Root {
-   let Value::String(ref string) = config else {
-      unreachable!()
-   };
-
    Blob {
-      content: Bytes::copy_from_slice(string.as_bytes()),
-
       config,
+
+      content: OnceLock::new(),
    }
 }
 
 struct Blob {
-   content: Bytes,
-
    config: Value,
+
+   content: OnceLock<Bytes>,
 }
 
 #[async_trait]
@@ -51,6 +50,15 @@ impl Root for Blob {
          bail!("blob only contains a single leaf");
       }
 
-      Ok(self.content.clone())
+      Ok(self
+         .content
+         .get_or_init(|| {
+            let Value::String(ref string) = self.config else {
+               unreachable!()
+            };
+
+            Bytes::copy_from_slice(string.as_bytes())
+         })
+         .clone())
    }
 }
