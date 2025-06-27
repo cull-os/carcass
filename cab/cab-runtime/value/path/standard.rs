@@ -66,7 +66,7 @@ impl Root for Standard {
          .clone()
    }
 
-   async fn is_mutable(&self) -> bool {
+   async fn is_writeable(&self) -> bool {
       true
    }
 

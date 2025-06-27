@@ -42,7 +42,7 @@ pub trait Root: Send + Sync + 'static {
 
    async fn read(self: Arc<Self>, subpath: &Subpath) -> Result<Bytes>;
 
-   async fn is_mutable(&self) -> bool {
+   async fn is_writeable(&self) -> bool {
       false
    }
 
