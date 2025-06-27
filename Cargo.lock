@@ -198,6 +198,7 @@ dependencies = [
 name = "cab-runtime"
 version = "0.0.1"
 dependencies = [
+ "async-once-cell",
  "async-trait",
  "bytes",
  "cab-error",

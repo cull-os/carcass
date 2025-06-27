@@ -16,6 +16,9 @@ use super::Value;
 
 mod blob;
 pub use blob::blob;
+
+mod standard;
+pub use standard::standard;
 // mod fs;
 // mod stdin;
 
