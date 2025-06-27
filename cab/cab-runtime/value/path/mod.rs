@@ -15,34 +15,35 @@ use ust::{
 use super::Value;
 
 mod blob;
+pub use blob::blob;
 // mod fs;
 // mod stdin;
 
+pub const SEPARATOR: char = '/';
+
+pub type Subpath = Arc<[Arc<str>]>;
+
 #[async_trait]
 pub trait Root: Send + Sync + 'static {
-   fn type_(&self) -> &Arc<str>;
+   fn type_(&self) -> &'static str;
 
    fn config(&self) -> Option<&Value>;
 
    fn path(&self) -> Option<&Value>;
 
-   async fn list(self: Arc<Self>, subpath: &str) -> Result<Arc<[Path]>> {
+   async fn list(self: Arc<Self>, subpath: &Subpath) -> Result<Arc<[Path]>> {
       let _ = subpath;
 
       bail!("root does not support listing");
    }
 
-   async fn read(self: Arc<Self>, subpath: &str) -> Result<Bytes> {
-      let _ = subpath;
-
-      bail!("root does not support reading");
-   }
+   async fn read(self: Arc<Self>, subpath: &Subpath) -> Result<Bytes>;
 
    async fn is_mutable(&self) -> bool {
       false
    }
 
-   async fn write(self: Arc<Self>, subpath: &str, content: Bytes) -> Result<()> {
+   async fn write(self: Arc<Self>, subpath: &Subpath, content: Bytes) -> Result<()> {
       let _ = (subpath, content);
 
       bail!("root does not support writing");
@@ -52,7 +53,7 @@ pub trait Root: Send + Sync + 'static {
 #[derive(Clone)]
 pub struct Path {
    root:    Option<Arc<dyn Root>>,
-   subpath: Arc<str>,
+   subpath: Subpath,
 }
 
 impl tag::DisplayTags for Path {
@@ -63,7 +64,7 @@ impl tag::DisplayTags for Path {
          let path = root.path();
 
          tags.write("<".yellow());
-         tags.write((**type_).yellow());
+         tags.write(type_.yellow());
 
          match config {
             None => {
@@ -90,7 +91,10 @@ impl tag::DisplayTags for Path {
       if self.subpath.is_empty() {
          tags.write("<empty-path>".bright_black());
       } else {
-         tags.write((*self.subpath).yellow());
+         for part in &*self.subpath {
+            tags.write(const_str::concat!(SEPARATOR).yellow());
+            tags.write((**part).yellow());
+         }
       }
    }
 }
@@ -103,7 +107,7 @@ impl From<Path> for Value {
 
 impl Path {
    #[must_use]
-   pub fn new(root: Arc<dyn Root>, subpath: Arc<str>) -> Self {
+   pub fn new(root: Arc<dyn Root>, subpath: Subpath) -> Self {
       Self {
          root: Some(root),
          subpath,
@@ -111,7 +115,7 @@ impl Path {
    }
 
    #[must_use]
-   pub fn rootless(subpath: Arc<str>) -> Self {
+   pub fn rootless(subpath: Subpath) -> Self {
       Self {
          root: None,
          subpath,
@@ -121,15 +125,10 @@ impl Path {
 
 impl Path {
    #[must_use]
-   pub fn get(&self, subpath: &str) -> Self {
-      let mut subpath_ = String::with_capacity(self.subpath.len() + subpath.len());
-
-      subpath_.push_str(&self.subpath);
-      subpath_.push_str(subpath);
-
+   pub fn get(&self, subpath: Arc<str>) -> Self {
       Self {
          root:    self.root.clone(),
-         subpath: subpath_.into(),
+         subpath: self.subpath.iter().cloned().chain([subpath]).collect(),
       }
    }
 

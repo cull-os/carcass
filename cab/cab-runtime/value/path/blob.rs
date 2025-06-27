@@ -1,1 +1,56 @@
+use std::sync::Arc;
 
+use async_trait::async_trait;
+use bytes::Bytes;
+use cab_error::{
+   Result,
+   bail,
+};
+
+use super::{
+   Root,
+   Subpath,
+};
+use crate::Value;
+
+#[must_use]
+pub fn blob(config: Value) -> impl Root {
+   let Value::String(ref string) = config else {
+      unreachable!()
+   };
+
+   Blob {
+      content: Bytes::copy_from_slice(string.as_bytes()),
+
+      config,
+   }
+}
+
+struct Blob {
+   content: Bytes,
+
+   config: Value,
+}
+
+#[async_trait]
+impl Root for Blob {
+   fn type_(&self) -> &'static str {
+      "blob"
+   }
+
+   fn config(&self) -> Option<&Value> {
+      Some(&self.config)
+   }
+
+   fn path(&self) -> Option<&Value> {
+      None
+   }
+
+   async fn read(self: Arc<Self>, subpath: &Subpath) -> Result<Bytes> {
+      if !subpath.is_empty() {
+         bail!("blob only contains a single leaf");
+      }
+
+      Ok(self.content.clone())
+   }
+}

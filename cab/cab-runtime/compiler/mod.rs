@@ -464,7 +464,7 @@ impl<'a> Compiler<'a> {
             if let Some(path) = root.path() {
                this.emit(path);
             } else {
-               this.emit_push(root.span(), value::Path::rootless("".into()).into());
+               this.emit_push(root.span(), value::Path::rootless([].into()).into());
             }
          }
 
@@ -478,7 +478,16 @@ impl<'a> Compiler<'a> {
          for segment in &segments {
             match *segment {
                Segment::Content { span, ref content } => {
-                  this.emit_push(span, value::Path::rootless(content.as_str().into()).into());
+                  this.emit_push(
+                     span,
+                     value::Path::rootless(
+                        content
+                           .split(value::path::SEPARATOR)
+                           .map(Into::into)
+                           .collect(),
+                     )
+                     .into(),
+                  );
                },
 
                Segment::Interpolation(interpolation) => {

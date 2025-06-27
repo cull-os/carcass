@@ -1,23 +1,21 @@
 use std::sync::Arc;
 
-mod attributes;
-pub use attributes::Attributes;
-
-mod path;
 use cab_syntax::is_valid_plain_identifier;
-pub use path::{
-   Path,
-   Root,
-};
 use ust::{
    style::StyledExt as _,
    terminal::tag,
 };
 
+use crate::Code;
+
+mod attributes;
+pub use attributes::Attributes;
+
+pub mod path;
+pub use path::Path;
+
 mod thunk;
 pub use thunk::Thunk;
-
-use crate::Code;
 
 #[warn(variant_size_differences)]
 #[derive(Clone)]
