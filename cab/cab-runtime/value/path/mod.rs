@@ -88,10 +88,10 @@ impl tag::DisplayTags for Path {
             },
          }
 
-         tags.write(">");
+         tags.write(">".yellow());
       }
 
-      if self.subpath.is_empty() {
+      if self.root.is_none() && self.subpath.is_empty() {
          tags.write("<empty-path>".bright_black());
       } else {
          for part in &*self.subpath {

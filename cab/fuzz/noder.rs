@@ -14,7 +14,7 @@ use std::{
 };
 
 use cab::{
-   island,
+   runtime::value,
    syntax,
 };
 use libfuzzer_sys::{
@@ -32,17 +32,13 @@ fuzz_target!(|source: &str| -> Corpus {
    let parse_oracle = syntax::ParseOracle::new();
    let parse = parse_oracle.parse(syntax::tokenize(source));
 
-   let island: Arc<dyn island::Leaf> = Arc::new(island::blob(source.to_owned()));
+   let path = value::Path::new(Arc::new(value::path::standard()), [].into());
    let source = report::PositionStr::new(source);
-
-   let save_valid = matches!(
-      env::var("FUZZ_NODER_SAVE_VALID").as_deref(),
-      Ok("true" | "1"),
-   );
 
    let out = &mut terminal::stdout();
 
-   let Ok(expression) = parse.extractlnln(out, &island::display!(island), &source) else {
+   let save_valid = env::var_os("FUZZ_NODER_SAVE_VALID").is_some_and(|value| value != "0");
+   let Ok(expression) = parse.extractlnln(out, &path, &source) else {
       return if save_valid {
          Corpus::Reject
       } else {

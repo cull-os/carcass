@@ -1,9 +1,5 @@
 use std::{
    fmt::Write as _,
-   path::{
-      Path,
-      PathBuf,
-   },
    sync::Arc,
 };
 
@@ -12,16 +8,16 @@ use cab::{
       self,
       Contextful as _,
    },
-   island,
    runtime,
    syntax,
 };
 use clap::Parser as _;
+use runtime::value;
 use ust::{
    COLORS,
    Display as _,
    Write as _,
-   report::PositionStr,
+   report,
    style::StyledExt as _,
    terminal,
    write,
@@ -41,7 +37,7 @@ enum Command {
    // Compile an expression.
    Compile {
       #[clap(default_value = "-")]
-      expression: String,
+      source: String,
    },
 
    /// Various commands related to debugging.
@@ -49,9 +45,9 @@ enum Command {
       #[command(subcommand)]
       command: Dump,
 
-      /// The file to dump. If set to '-', stdin is read.
+      /// The expression to dump. If set to '-', stdin is read.
       #[clap(default_value = "-", global = true)]
-      path: PathBuf,
+      source: String,
    },
 }
 
@@ -75,60 +71,37 @@ async fn main() -> error::Termination {
    let out = &mut terminal::stdout();
    let err = &mut terminal::stderr();
 
+   let (Command::Compile { ref source } | Command::Dump { ref source, .. }) = cli.command;
+
+   let path: Arc<dyn value::path::Root> = if source == "-" {
+      Arc::new(value::path::standard())
+   } else {
+      Arc::new(value::path::blob(runtime::Value::String(
+         source.as_str().into(),
+      )))
+   };
+   let path = value::Path::new(path, [].into());
+
+   let source = path.read().await?.to_vec();
+   let source = String::from_utf8(source).expect("source was created from UTF-8 string");
+   let source = report::PositionStr::new(&source);
+
    match cli.command {
-      Command::Compile { expression: source } => {
-         let leaf: Arc<dyn island::Leaf> = if source == "-" {
-            Arc::new(island::stdin())
-         } else {
-            Arc::new(island::blob(source))
-         };
-
-         let source = leaf.clone().read().await?.to_vec();
-
-         let source = String::from_utf8(source).with_context(|| {
-            format!(
-               "failed to convert {leaf} to an UTF-8 string",
-               leaf = island::display!(leaf)
-            )
-         })?;
-
-         let source = PositionStr::new(&source);
-
+      Command::Compile { .. } => {
          let parse_oracle = syntax::ParseOracle::new();
-         let expression = parse_oracle.parse(syntax::tokenize(&source)).extractlnln(
-            err,
-            &island::display!(leaf),
-            &source,
-         )?;
+         let expression = parse_oracle
+            .parse(syntax::tokenize(&source))
+            .extractlnln(err, &path, &source)?;
 
-         let compile_oracle = runtime::compile_oracler();
-         let code = compile_oracle.compile(expression.as_ref()).extractlnln(
-            err,
-            &island::display!(leaf),
-            &source,
-         )?;
+         let compile_oracle = runtime::CompileOracle::new();
+         let code = compile_oracle
+            .compile(path.clone(), expression.as_ref())
+            .extractlnln(err, &path, &source)?;
 
          code.display_styled(out).context(FAIL_STDOUT)?;
       },
 
-      Command::Dump { path, command } => {
-         let leaf: Arc<dyn island::Leaf> = if path == Path::new("-") {
-            Arc::new(island::stdin())
-         } else {
-            Arc::new(island::fs(path))
-         };
-
-         let source = leaf.clone().read().await?.to_vec();
-
-         let source = String::from_utf8(source).with_context(|| {
-            format!(
-               "failed to convert {leaf} to an UTF-8 string",
-               leaf = island::display!(leaf)
-            )
-         })?;
-
-         let source = PositionStr::new(&source);
-
+      Command::Dump { command, .. } => {
          match command {
             Dump::Token { color } => {
                for (kind, slice) in syntax::tokenize(&source) {
@@ -144,12 +117,10 @@ async fn main() -> error::Termination {
             },
 
             Dump::Syntax => {
-               let parse_oracle = syntax::parse_oracle();
-               let expression = parse_oracle.parse(syntax::tokenize(&source)).extractlnln(
-                  err,
-                  &island::display!(leaf),
-                  &source,
-               )?;
+               let parse_oracle = syntax::ParseOracle::new();
+               let expression = parse_oracle
+                  .parse(syntax::tokenize(&source))
+                  .extractlnln(err, &path, &source)?;
 
                write!(out, "{node:#?}", node = expression.parent().unwrap())
                   .context(FAIL_STDOUT)?;

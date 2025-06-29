@@ -161,7 +161,6 @@ name = "cab"
 version = "0.0.1"
 dependencies = [
  "cab-error",
- "cab-island",
  "cab-runtime",
  "cab-span",
  "cab-syntax",
@@ -180,18 +179,6 @@ dependencies = [
  "smallvec 2.0.0-alpha.11",
  "thiserror",
  "ust",
-]
-
-[[package]]
-name = "cab-island"
-version = "0.0.1"
-dependencies = [
- "async-once-cell",
- "async-trait",
- "bytes",
- "cab-error",
- "cab-util",
- "tokio",
 ]
 
 [[package]]

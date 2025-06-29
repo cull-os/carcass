@@ -109,6 +109,13 @@ pub trait DisplayTags {
    fn display_tags<'a>(&'a self, tags: &mut Tags<'a>);
 }
 
+impl<D: DisplayTags> Display for D {
+   fn display_styled(&self, writer: &mut dyn Write) -> fmt::Result {
+      let tags: Tags<'_> = self.into();
+      tags.display_styled(writer)
+   }
+}
+
 impl<'a, D: DisplayTags> From<&'a D> for Tags<'a> {
    fn from(value: &'a D) -> Self {
       let mut this = Self(Vec::new());
