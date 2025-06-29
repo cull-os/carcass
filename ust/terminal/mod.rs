@@ -191,12 +191,19 @@ pub fn wrap<'a>(
             .find_map(|(width, (split_index, _))| (width > width_remainder).then_some(split_index))
             .unwrap();
 
-         let (word_this, word_rest) = word.value.split_at(split_index);
+         // Some space left in the current line. Write some of the word.
+         if split_index != 0 {
+            let (word_this, word_rest) = word.value.split_at(split_index);
 
-         word.value = word_this;
-         write(writer, word)?;
+            word.value = word_this;
+            write(writer, word)?;
 
-         word.value = word_rest;
+            word.value = word_rest;
+            continue;
+         }
+
+         // No space left in the current line.
+         writer.write_char('\n')?;
       }
 
       Ok(())
