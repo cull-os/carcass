@@ -5,11 +5,9 @@ use cab_span::{
    Span,
 };
 use cab_syntax::{
+   Segment,
+   Segmented as _,
    node,
-   segment::{
-      Segment,
-      Segmented as _,
-   },
 };
 use smallvec::{
    SmallVec,

@@ -32,7 +32,14 @@ pub use self::{
 pub mod node;
 mod noder;
 
-pub mod segment;
+mod segment;
+pub use segment::{
+   Segment,
+   Segmented,
+   Segments,
+   escape_string,
+   unescape,
+};
 
 pub mod token;
 mod tokenizer;

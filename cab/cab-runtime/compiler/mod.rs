@@ -11,11 +11,9 @@ use cab_span::{
 };
 use cab_syntax::{
    ParseOracle,
+   Segment,
+   Segmented as _,
    node,
-   segment::{
-      Segment,
-      Segmented as _,
-   },
 };
 use rpds::ListSync as List;
 use smallvec::SmallVec;

@@ -1,10 +1,21 @@
-use std::sync::Arc;
+use core::str;
+use std::{
+   mem,
+   ptr,
+   sync::Arc,
+};
 
-use cab_syntax::is_valid_plain_identifier;
+use cab_syntax::{
+   escape_string,
+   is_valid_plain_identifier,
+};
 use rpds::ListSync as List;
 use ust::{
    INDENT_WIDTH,
-   style::StyledExt as _,
+   style::{
+      self,
+      StyledExt as _,
+   },
    terminal::tag,
 };
 
@@ -60,6 +71,12 @@ impl tag::DisplayTags for Value {
          },
       };
 
+      fn display_tags_escaped<'a>(tags: &mut tag::Tags<'a>, s: &'a str, normal: style::Style) {
+         for part in escape_string(s, normal) {
+            tags.write(part);
+         }
+      }
+
       match *self {
          Value::Boolean(true) => tags.write("true".magenta().bold()),
          Value::Boolean(false) => tags.write("false".magenta().bold()),
@@ -99,42 +116,40 @@ impl tag::DisplayTags for Value {
          Value::Path(ref path) => path.display_tags(tags),
 
          Value::Bind(ref identifier) => {
-            tags.write("@");
+            tags.write("@".blue().bold());
 
             if is_valid_plain_identifier(identifier) {
-               // TODO: Escape.
-               tags.write((**identifier).blue());
+               display_tags_escaped(tags, identifier, style::Color::Blue.fg());
             } else {
                tags.write("`".blue());
-               // TODO: Escape.
-               tags.write((**identifier).blue());
+               display_tags_escaped(tags, identifier, style::Color::Blue.fg());
                tags.write("`".blue());
             }
          },
 
          Value::Reference(ref identifier) => {
             if is_valid_plain_identifier(identifier) {
-               // TODO: Escape.
-               tags.write(&**identifier);
+               display_tags_escaped(tags, identifier, style::Style::default());
             } else {
                tags.write("`");
-               // TODO: Escape.
-               tags.write(&**identifier);
+               display_tags_escaped(tags, identifier, style::Style::default());
                tags.write("`");
             }
          },
 
          Value::String(ref string) => {
             tags.write("\"".green());
-            // TODO: Escape.
-            tags.write((**string).green());
+            display_tags_escaped(tags, string, style::Color::Green.fg());
             tags.write("\"".green());
          },
 
-         Value::Rune(rune) => {
+         Value::Rune(ref rune) => {
             tags.write("'".green());
-            // TODO: Escape.
-            tags.write(rune.to_string().green());
+            // SAFETY: It's valid to cast a reference to a char into a &str, as a char is
+            // just 4 bytes and &str is a pointer to the first byte + char's used length.
+            let as_str =
+               unsafe { str::from_raw_parts(ptr::from_ref(rune).cast::<u8>(), rune.len_utf8()) };
+            display_tags_escaped(tags, as_str, style::Color::Green.fg());
             tags.write("'".green());
          },
 

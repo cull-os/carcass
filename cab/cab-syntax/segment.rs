@@ -10,7 +10,13 @@ use cab_util::{
    reffed,
 };
 use smallvec::SmallVec;
-use ust::report::Report;
+use ust::{
+   report::Report,
+   style::{
+      self,
+      StyledExt as _,
+   },
+};
 
 use crate::{
    node,
@@ -19,7 +25,7 @@ use crate::{
 };
 
 #[must_use]
-fn escape_character(c: char) -> Option<char> {
+pub fn unescape(c: char) -> Option<char> {
    Some(match c {
       ' ' => ' ',
       '0' => '\0',
@@ -37,12 +43,12 @@ fn escape_character(c: char) -> Option<char> {
 }
 
 #[must_use]
-fn escape_string(s: &str) -> Option<String> {
+pub fn unescape_string(s: &str) -> Option<String> {
    let mut string = String::with_capacity(s.len());
 
    let mut literal_start_offset = 0;
 
-   let mut chars = s.char_indices().peekable();
+   let mut chars = s.char_indices();
    while let Some((offset, c)) = chars.next() {
       if c != '\\' {
          continue;
@@ -51,13 +57,44 @@ fn escape_string(s: &str) -> Option<String> {
       string.push_str(&s[literal_start_offset..offset]);
       literal_start_offset = offset;
 
-      let c = chars.next()?.1;
-      string.push(escape_character(c)?);
+      let (_, c) = chars.next()?;
+      string.push(unescape(c)?);
       literal_start_offset += '\\'.len_utf8() + c.len_utf8();
    }
 
    string.push_str(&s[literal_start_offset..s.len()]);
    Some(string)
+}
+
+pub fn escape(c: char) -> Option<&'static str> {
+   Some(match c {
+      '\0' => "\\0",
+      '\t' => "\\t",
+      '\n' => "\\n",
+      '\r' => "\\r",
+
+      _ => return None,
+   })
+}
+
+pub fn escape_string(s: &str, normal: style::Style) -> impl Iterator<Item = style::Styled<&str>> {
+   gen move {
+      let mut literal_start_offset = 0;
+
+      for (offset, c) in s.char_indices() {
+         let Some(escaped) = escape(c) else {
+            continue;
+         };
+
+         yield s[literal_start_offset..offset].style(normal);
+         literal_start_offset = offset;
+
+         yield escaped.magenta().bold();
+         literal_start_offset += c.len_utf8();
+      }
+
+      yield s[literal_start_offset..s.len()].style(normal);
+   }
 }
 
 type Indent = (Option<char>, usize);
@@ -100,11 +137,13 @@ impl SegmentRawRef<'_> {
 
 #[derive(Debug)]
 enum Straight<'a> {
-   Content {
-      span:          Span,
-      text:          &'a str,
-      is_from_start: bool,
-      is_last:       bool,
+   Line {
+      span:               Span,
+      text:               &'a str,
+      is_from_line_start: bool,
+
+      is_first: bool,
+      is_last:  bool,
    },
 
    Interpolation(&'a node::Interpolation),
@@ -136,22 +175,28 @@ impl<'a> IntoIterator for Segments<'a> {
 
          for straight in self.straights {
             match straight {
-               Straight::Content {
+               Straight::Line {
                   span,
                   text,
-                  is_from_start,
+                  is_from_line_start,
+                  is_first,
                   is_last,
                } => {
-                  let unindented = if is_last && is_from_start {
+                  let unindented = if is_last && is_from_line_start {
                      text.trim_start()
-                  } else if is_from_start {
+                  } else if is_from_line_start {
                      assert!(text[..indent_width].chars().all(|c| c == indent.unwrap()));
                      &text[indent_width..]
                   } else {
                      text
                   };
 
-                  buffer.push_str(&escape_string(unindented).unwrap());
+                  buffer.push_str(&unescape_string(unindented).unwrap());
+
+                  if !is_first && !is_last {
+                     buffer.push('\n');
+                  }
+
                   buffer_span.replace(buffer_span.map_or(span, |span_| span_.cover(span)));
                },
 
@@ -182,9 +227,9 @@ impl Segments<'_> {
       let mut indent_width = None::<usize>;
 
       for straight in &self.straights {
-         let &Straight::Content {
+         let &Straight::Line {
             text,
-            is_from_start: true,
+            is_from_line_start: true,
             is_last: false,
             ..
          } = straight
@@ -220,15 +265,15 @@ impl Segments<'_> {
    pub fn validate(&self, report: &mut Lazy!(Report), to: &mut Vec<Report>) {
       for straight in &self.straights {
          match *straight {
-            Straight::Content { span, text, .. } => {
-               let mut chars = text.char_indices().peekable();
+            Straight::Line { span, text, .. } => {
+               let mut chars = text.char_indices();
                while let Some((offset, c)) = chars.next() {
                   if c != '\\' {
                      continue;
                   }
 
                   match chars.next() {
-                     Some((_, c)) if escape_character(c).is_some() => {},
+                     Some((_, c)) if unescape(c).is_some() => {},
 
                      next @ (Some(_) | None) => {
                         force_ref!(report).push_primary(
@@ -246,9 +291,9 @@ impl Segments<'_> {
             Straight::Interpolation(interpolation) => interpolation.expression().validate(to),
          }
 
-         let Straight::Content {
+         let Straight::Line {
             text,
-            is_from_start: true,
+            is_from_line_start: true,
             ..
          } = *straight
          else {
@@ -350,15 +395,16 @@ pub trait Segmented: ops::Deref<Target = red::Node> {
                   }
 
                   #[expect(clippy::nonminimal_bool)]
-                  straights.push(Straight::Content {
+                  straights.push(Straight::Line {
                      span: Span::at(content.span().start + offset, line.len()),
 
                      text: &content.text()[offset..offset + line.len()],
 
-                     is_from_start: !(segment_is_first && line_is_first)
+                     is_from_line_start: !(segment_is_first && line_is_first)
                         && !(previous_segment_span.is_some() && line_is_first),
 
-                     is_last: segment_is_last && line_is_last,
+                     is_first: segment_is_first && line_is_first,
+                     is_last:  segment_is_last && line_is_last,
                   });
 
                   offset += line.len() + '\n'.len_utf8();
