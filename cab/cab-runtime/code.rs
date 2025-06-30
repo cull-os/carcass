@@ -186,7 +186,6 @@ impl Display for Code {
                      with(writer, style::Color::Blue.fg().bold(), |writer| {
                         write!(writer, "{value_index:#X} ")
                      })?;
-                     index.borrow_mut().0 += size;
 
                      match code[ValueIndex(
                         value_index
@@ -206,6 +205,7 @@ impl Display for Code {
                            value.display_styled(writer)?;
                         },
                      }
+                     index.borrow_mut().0 += size;
                   },
 
                   Argument::U16 => {
