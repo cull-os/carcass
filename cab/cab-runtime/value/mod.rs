@@ -144,6 +144,9 @@ impl tag::DisplayTags for Value {
 
          Value::Rune(ref rune) => {
             tags.write("'".green());
+            // FIXME: Not all characters are valid UTF-8 byte encoded. Such as é.
+            //
+            // Others will silently corrupt. This only works for ASCII.
             let as_str = str::try_ref_from_bytes(rune.as_bytes()).unwrap();
             display_tags_escaped(tags, as_str, style::Color::Green.fg());
             tags.write("'".green());
