@@ -26,6 +26,7 @@ fn escape_character(c: char) -> Option<char> {
       't' => '\t',
       'n' => '\n',
       'r' => '\r',
+      '=' => '=',
       '`' => '`',
       '"' => '\"',
       '\'' => '\'',
