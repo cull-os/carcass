@@ -12,6 +12,7 @@ use cab::{
    syntax,
 };
 use clap::Parser as _;
+use rpds::ListSync as List;
 use runtime::value;
 use ust::{
    COLORS,
@@ -80,7 +81,7 @@ async fn main() -> error::Termination {
          source.as_str().into(),
       )))
    };
-   let path = value::Path::new(path, [].into());
+   let path = value::Path::new(path, List::new_sync());
 
    let source = path.read().await?.to_vec();
    let source = String::from_utf8(source).expect("source was created from UTF-8 string");

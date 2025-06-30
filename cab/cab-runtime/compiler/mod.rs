@@ -464,7 +464,10 @@ impl<'a> Compiler<'a> {
             if let Some(path) = root.path() {
                this.emit(path);
             } else {
-               this.emit_push(root.span(), value::Path::rootless([].into()).into());
+               this.emit_push(
+                  root.span(),
+                  value::Path::rootless(rpds::List::new_sync()).into(),
+               );
             }
          }
 

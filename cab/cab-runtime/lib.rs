@@ -1,6 +1,6 @@
 //! Runtime implementation.
 
-#![feature(let_chains)]
+#![feature(iter_intersperse, let_chains)]
 
 use cab_span::Span;
 

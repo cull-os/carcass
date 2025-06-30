@@ -27,4 +27,5 @@ cab-syntax.path  = "./cab-syntax"
 ust.path = "../ust"
 
 clap.workspace  = true
+rpds.workspace  = true
 tokio.workspace = true

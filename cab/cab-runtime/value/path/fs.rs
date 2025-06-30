@@ -1,9 +1,5 @@
 use std::{
-   fmt,
-   path::{
-      Path,
-      PathBuf,
-   },
+   path::PathBuf,
    sync::Arc,
 };
 
@@ -12,234 +8,127 @@ use async_trait::async_trait;
 use bytes::Bytes;
 use cab_error::{
    Contextful as _,
-   bail,
+   Result,
 };
+use dashmap::DashMap;
+use rpds::ListSync as List;
+use rustc_hash::FxBuildHasher;
 use tokio::fs;
 
-use crate::{
-   Collection,
-   CollectionList,
-   Entry,
-   Leaf,
-   Result,
-   display,
+use super::{
+   Root,
+   Subpath,
 };
+use crate::Value;
 
 /// Creates an entry from a given fs path.
 #[must_use]
-pub fn fs(path: PathBuf) -> impl Leaf + CollectionList {
-   FsEntry {
-      location: FsEntryLocation::Root { path },
+pub fn fs(config: Value, path: Value) -> impl Root {
+   Fs {
+      config,
+      path,
 
-      content: OnceCell::new(),
+      entries: DashMap::with_hasher(FxBuildHasher),
+      contents: DashMap::with_hasher(FxBuildHasher),
    }
 }
 
-#[derive(Clone)]
-enum FsEntryContent {
-   Leaf(Bytes),
-   CollectionList(Arc<[Arc<dyn Entry>]>),
-}
+struct Fs {
+   config: Value,
+   path:   Value,
 
-enum FsEntryLocation {
-   Root {
-      path: PathBuf,
-   },
-   Child {
-      parent: Arc<FsEntry>,
-      name:   String,
-   },
-}
-
-struct FsEntry {
-   location: FsEntryLocation,
-
-   content: OnceCell<Result<FsEntryContent>>,
-}
-
-impl fmt::Display for FsEntry {
-   fn fmt(&self, writer: &mut fmt::Formatter<'_>) -> fmt::Result {
-      match self.location {
-         FsEntryLocation::Root { ref path } => {
-            write!(
-               writer,
-               "fs::{path}",
-               path = path.to_str().ok_or(fmt::Error)?,
-            )
-         },
-         FsEntryLocation::Child { ref name, .. } => write!(writer, "{name}"),
-      }
-   }
+   entries:  DashMap<Subpath, OnceCell<Result<List<Subpath>>>, FxBuildHasher>,
+   contents: DashMap<Subpath, OnceCell<Result<Bytes>>, FxBuildHasher>,
 }
 
 #[async_trait]
-impl Entry for FsEntry {
-   fn name(&self) -> Option<&str> {
-      match self.location {
-         FsEntryLocation::Root { .. } => None,
-         FsEntryLocation::Child { ref name, .. } => Some(name),
-      }
+impl Root for Fs {
+   fn type_(&self) -> &'static str {
+      "fs"
    }
 
-   fn parent(&self) -> Option<Arc<dyn Collection>> {
-      match self.location {
-         FsEntryLocation::Root { .. } => None,
-         FsEntryLocation::Child { ref parent, .. } => Some(parent.clone()),
-      }
+   fn config(&self) -> Option<&Value> {
+      Some(&self.config)
    }
 
-   // TODO: Maybe not do this and check the content?
-   async fn as_leaf(self: Arc<Self>) -> Option<Arc<dyn Leaf>> {
-      Some(self)
+   fn path(&self) -> Option<&Value> {
+      Some(&self.path)
    }
 
-   async fn as_collection(self: Arc<Self>) -> Option<Arc<dyn Collection>> {
-      Some(self)
+   async fn list(self: Arc<Self>, subpath: &Subpath) -> Result<List<Subpath>> {
+      self
+         .entries
+         .entry(subpath.clone())
+         .or_default()
+         .get_or_init(async {
+            let mut contents = Vec::new();
+
+            let path = self.to_pathbuf(subpath);
+
+            let mut read = fs::read_dir(&path)
+               .await
+               .with_context(|| format!("failed to read dir '{path}'", path = path.display()))?;
+
+            while let Some(entry) = read.next_entry().await.with_context(|| {
+               format!("failed to read entry of '{path}'", path = path.display())
+            })? {
+               let name = entry.file_name();
+               let name = name.to_str().with_context(|| {
+                  format!(
+                     "entry with name similar to '{name}' contains invalid UTF-8",
+                     name = name.display()
+                  )
+               })?;
+
+               contents.push(subpath.push_front(name.into()));
+            }
+
+            todo!()
+         })
+         .await
+         .clone()
    }
 
-   async fn as_collection_list(self: Arc<Self>) -> Option<Arc<dyn CollectionList>> {
-      Some(self)
+   async fn read(self: Arc<Self>, subpath: &Subpath) -> Result<Bytes> {
+      self
+         .contents
+         .entry(subpath.clone())
+         .or_default()
+         .get_or_init(async {
+            let path = self.to_pathbuf(subpath);
+
+            let content = fs::read(&path)
+               .await
+               .with_context(|| format!("failed to read '{path}'", path = path.display()))?;
+
+            Ok(Bytes::from(content))
+         })
+         .await
+         .clone()
+   }
+
+   async fn is_writeable(&self) -> bool {
+      true
+   }
+
+   async fn write(self: Arc<Self>, _subpath: &Subpath, _content: Bytes) -> Result<()> {
+      todo!()
    }
 }
 
-#[async_trait]
-impl Leaf for FsEntry {
-   async fn read(self: Arc<Self>) -> Result<Bytes> {
-      match self.content().await? {
-         FsEntryContent::Leaf(bytes) => Ok(bytes),
+impl Fs {
+   fn to_pathbuf(&self, subpath: &Subpath) -> PathBuf {
+      let Value::Path(ref path) = self.path else {
+         unreachable!()
+      };
 
-         FsEntryContent::CollectionList(_) => {
-            bail!(
-               "failed to read {this} as it is a directory",
-               this = display!(self)
-            )
-         },
-      }
-   }
-}
+      assert!(path.root.is_none());
 
-#[async_trait]
-impl Collection for FsEntry {
-   async fn entry(self: Arc<Self>, name: &str) -> Result<Option<Arc<dyn Entry>>> {
-      Ok(self
-         .list()
-         .await?
+      path
+         .subpath
          .iter()
-         .find(|entry| entry.name() == Some(name))
-         .map(Arc::clone))
-   }
-}
-
-#[async_trait]
-impl CollectionList for FsEntry {
-   async fn list(self: Arc<Self>) -> Result<Arc<[Arc<dyn Entry>]>> {
-      match self.content().await? {
-         FsEntryContent::CollectionList(entries) => Ok(entries),
-
-         FsEntryContent::Leaf(_) => {
-            bail!(
-               "failed to list {this} as it is a file",
-               this = display!(self)
-            )
-         },
-      }
-   }
-}
-
-impl FsEntry {
-   fn path(&self) -> PathBuf {
-      let mut this = self;
-      let mut parts = Vec::new();
-
-      loop {
-         match this.location {
-            FsEntryLocation::Root { ref path } => break parts.push(path.as_path()),
-
-            FsEntryLocation::Child {
-               ref parent,
-               ref name,
-               ..
-            } => {
-               this = parent;
-
-               parts.push(Path::new(name.as_str()));
-            },
-         }
-      }
-
-      parts.into_iter().rev().collect::<PathBuf>()
-   }
-
-   async fn content(self: &Arc<Self>) -> Result<FsEntryContent> {
-      self.content.get_or_init(self.content_eager()).await.clone()
-   }
-
-   async fn content_eager(self: &Arc<Self>) -> Result<FsEntryContent> {
-      let path = self.path();
-
-      let metadata = fs::metadata(&path).await.with_context(|| {
-         format!(
-            "failed to get metadata of '{path}'",
-            path = path.to_string_lossy()
-         )
-      })?;
-
-      if metadata.is_file() || metadata.is_symlink() {
-         return self.content_file_eager(&path).await;
-      }
-
-      if metadata.is_dir() {
-         return self.content_dir_eager(&path).await;
-      }
-
-      bail!(
-         "unsupported type of entry at '{path}'",
-         path = path.to_string_lossy()
-      );
-   }
-
-   async fn content_file_eager(self: &Arc<Self>, path: &Path) -> Result<FsEntryContent> {
-      let bytes = fs::read(path)
-         .await
-         .with_context(|| format!("failed to read '{path}'", path = path.to_string_lossy()))?;
-
-      Ok(FsEntryContent::Leaf(Bytes::from(bytes)))
-   }
-
-   async fn content_dir_eager(self: &Arc<Self>, path: &Path) -> Result<FsEntryContent> {
-      let mut read_dir = fs::read_dir(path)
-         .await
-         .with_context(|| format!("failed to list '{path}'", path = path.to_string_lossy()))?;
-
-      let mut entries = Vec::<Arc<dyn Entry>>::new();
-
-      while let Some(entry) = read_dir.next_entry().await.with_context(|| {
-         format!(
-            "failed to read entry under '{path}'",
-            path = path.to_string_lossy()
-         )
-      })? {
-         let name = entry.file_name();
-
-         entries.push(Arc::new(FsEntry {
-            location: FsEntryLocation::Child {
-               parent: self.clone(),
-               name:   name
-                  .to_str()
-                  .with_context(|| {
-                     format!(
-                        "failed to convert name of '{name}' under '{path}' to valid UTF-8",
-                        name = name.to_string_lossy(),
-                        path = path.to_string_lossy(),
-                     )
-                  })?
-                  .to_owned(),
-            },
-
-            content: OnceCell::new(),
-         }));
-      }
-
-      Ok(FsEntryContent::CollectionList(entries.into()))
+         .map(|arc| &**arc)
+         .chain(subpath.iter().map(|arc| &**arc))
+         .collect::<PathBuf>()
    }
 }

@@ -19,6 +19,7 @@ cab.path = "../cab"
 ust.path = "../ust"
 
 libfuzzer-sys.workspace = true
+rpds.workspace          = true
 
 [[bin]]
 bench = false

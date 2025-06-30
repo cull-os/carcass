@@ -20,10 +20,11 @@ cab-syntax.path = "../cab-syntax"
 
 ust.path = "../../ust"
 
-async-trait.workspace     = true
 async-once-cell.workspace = true
+async-trait.workspace     = true
 bytes.workspace           = true
 const-str.workspace       = true
+dashmap.workspace         = true
 derive_more.workspace     = true
 num.workspace             = true
 num_enum.workspace        = true

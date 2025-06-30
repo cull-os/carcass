@@ -7,6 +7,7 @@ use cab_error::{
    Result,
    bail,
 };
+use rpds::ListSync as List;
 use ust::{
    style::StyledExt as _,
    terminal::tag,
@@ -17,14 +18,15 @@ use super::Value;
 mod blob;
 pub use blob::blob;
 
+mod fs;
+pub use fs::fs;
+
 mod standard;
 pub use standard::standard;
-// mod fs;
-// mod stdin;
 
 pub const SEPARATOR: char = '/';
 
-pub type Subpath = Arc<[Arc<str>]>;
+pub type Subpath = List<Arc<str>>;
 
 #[async_trait]
 pub trait Root: Send + Sync + 'static {
@@ -34,7 +36,7 @@ pub trait Root: Send + Sync + 'static {
 
    fn path(&self) -> Option<&Value>;
 
-   async fn list(self: Arc<Self>, subpath: &Subpath) -> Result<Arc<[Path]>> {
+   async fn list(self: Arc<Self>, subpath: &Subpath) -> Result<List<Subpath>> {
       let _ = subpath;
 
       bail!("root does not support listing");
@@ -94,7 +96,7 @@ impl tag::DisplayTags for Path {
       if self.root.is_none() && self.subpath.is_empty() {
          tags.write("<empty-path>".bright_black());
       } else {
-         for part in &*self.subpath {
+         for part in &self.subpath {
             tags.write(const_str::concat!(SEPARATOR).yellow());
             tags.write((**part).yellow());
          }
@@ -135,7 +137,7 @@ impl Path {
       }
    }
 
-   pub async fn list(&self) -> Result<Arc<[Path]>> {
+   pub async fn list(&self) -> Result<List<Subpath>> {
       let root = self
          .root
          .clone()

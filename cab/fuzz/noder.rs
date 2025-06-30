@@ -21,6 +21,7 @@ use libfuzzer_sys::{
    Corpus,
    fuzz_target,
 };
+use rpds::ListSync as List;
 use ust::{
    report,
    style::StyledExt as _,
@@ -32,7 +33,7 @@ fuzz_target!(|source: &str| -> Corpus {
    let parse_oracle = syntax::ParseOracle::new();
    let parse = parse_oracle.parse(syntax::tokenize(source));
 
-   let path = value::Path::new(Arc::new(value::path::standard()), [].into());
+   let path = value::Path::new(Arc::new(value::path::standard()), List::new_sync());
    let source = report::PositionStr::new(source);
 
    let out = &mut terminal::stdout();
