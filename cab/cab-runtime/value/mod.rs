@@ -1,9 +1,4 @@
-use core::str;
-use std::{
-   mem,
-   ptr,
-   sync::Arc,
-};
+use std::sync::Arc;
 
 use cab_syntax::{
    escape_string,
@@ -17,6 +12,10 @@ use ust::{
       StyledExt as _,
    },
    terminal::tag,
+};
+use zerocopy::{
+   IntoBytes as _,
+   TryFromBytes as _,
 };
 
 use crate::Code;
@@ -145,10 +144,7 @@ impl tag::DisplayTags for Value {
 
          Value::Rune(ref rune) => {
             tags.write("'".green());
-            // SAFETY: It's valid to cast a reference to a char into a &str, as a char is
-            // just 4 bytes and &str is a pointer to the first byte + char's used length.
-            let as_str =
-               unsafe { str::from_raw_parts(ptr::from_ref(rune).cast::<u8>(), rune.len_utf8()) };
+            let as_str = str::try_ref_from_bytes(rune.as_bytes()).unwrap();
             display_tags_escaped(tags, as_str, style::Color::Green.fg());
             tags.write("'".green());
          },
