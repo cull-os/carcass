@@ -32,10 +32,10 @@ pub trait Display {
    fn display_styled(&self, writer: &mut dyn Write) -> fmt::Result;
 }
 
-pub fn with<T>(
-   writer: &mut dyn Write,
+pub fn with<W: Write + ?Sized, T>(
+   writer: &mut W,
    style: style::Style,
-   closure: impl FnOnce(&mut dyn Write) -> T,
+   closure: impl FnOnce(&mut W) -> T,
 ) -> T {
    let style_previous = writer.get_style();
 
@@ -46,7 +46,10 @@ pub fn with<T>(
    result
 }
 
-pub fn write(writer: &mut dyn Write, styled: &style::Styled<impl fmt::Display>) -> fmt::Result {
+pub fn write(
+   writer: &mut (impl Write + ?Sized),
+   styled: &style::Styled<impl fmt::Display>,
+) -> fmt::Result {
    with(writer, styled.style, |writer| {
       write!(writer, "{value}", value = **styled)
    })

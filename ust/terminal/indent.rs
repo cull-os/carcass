@@ -7,6 +7,8 @@ use crate::{
    Write,
    report,
    style,
+   style::StyledExt as _,
+   write,
 };
 
 #[doc(hidden)]
@@ -91,8 +93,9 @@ impl Writer<'_> {
       );
 
       for _ in wrote..self.count {
-         self.inner.write_char(' ')?;
+         write(self.inner, &' '.style(style::Style::default()))?;
       }
+
       self.place = Place::Middle;
 
       Ok(())
