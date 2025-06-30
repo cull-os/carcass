@@ -764,7 +764,7 @@ impl SuffixOperation {
 
 node! {
    #[from(NODE_INTERPOLATION)]
-   /// Interpolation. Is a content segment that has a single expression within.
+   /// Interpolation. Is a segment that has a single expression within.
    struct Interpolation;
 }
 
@@ -862,12 +862,12 @@ impl PathRoot {
 }
 
 node! {
-   #[from(NODE_PATH_CONTENT)]
-   /// A path content.
-   struct PathContent;
+   #[from(NODE_PATH_SUBPATH)]
+   /// A path subpath.
+   struct PathSubpath;
 }
 
-impl Segmented for PathContent {}
+impl Segmented for PathSubpath {}
 
 node! {
    #[from(NODE_PATH)]
@@ -878,7 +878,7 @@ node! {
 impl Path {
    get_node! { root -> Option<&PathRoot> }
 
-   get_node! { content -> Option<&PathContent> }
+   get_node! { subpath -> Option<&PathSubpath> }
 
    pub fn validate(&self, to: &mut Vec<Report>) {
       let mut report = lazy!(Report::error("invalid path"));
@@ -907,8 +907,8 @@ impl Path {
          }
       }
 
-      if let Some(content) = self.content() {
-         let mut segments = content.segments();
+      if let Some(subpath) = self.subpath() {
+         let mut segments = subpath.segments();
 
          // FIXME: ../foo/bar\<newline-here> gets detected as a multiline
          // segment, even though it is actually escaped (and errors) later.

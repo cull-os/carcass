@@ -63,6 +63,11 @@ pub struct Path {
 
 impl tag::DisplayTags for Path {
    fn display_tags<'a>(&'a self, tags: &mut tag::Tags<'a>) {
+      if self.root.is_none() && self.subpath.is_empty() {
+         tags.write("<empty-path>".bright_black());
+         return;
+      }
+
       if let Some(ref root) = self.root {
          let type_ = root.type_();
          let config = root.config();
@@ -93,13 +98,9 @@ impl tag::DisplayTags for Path {
          tags.write(">".yellow());
       }
 
-      if self.root.is_none() && self.subpath.is_empty() {
-         tags.write("<empty-path>".bright_black());
-      } else {
-         for part in &self.subpath {
-            tags.write(const_str::concat!(SEPARATOR).yellow());
-            tags.write((**part).yellow());
-         }
+      for part in &self.subpath {
+         tags.write(const_str::concat!(SEPARATOR).yellow());
+         tags.write((**part).yellow());
       }
    }
 }

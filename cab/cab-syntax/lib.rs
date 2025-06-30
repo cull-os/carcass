@@ -271,14 +271,14 @@ pub enum Kind {
    #[display("the closing delimiter of a root")]
    TOKEN_PATH_ROOT_TYPE_END,
 
-   /// A zero width token for the start of a path. Has no content.
+   /// A zero width token for the start of a path subpath. Has no content.
    #[display("a path")]
    #[static_text("")]
-   TOKEN_PATH_CONTENT_START,
-   /// A zero width token for the end of a path. Has no content.
+   TOKEN_PATH_SUBPATH_START,
+   /// A zero width token for the end of a path subpath. Has no content.
    #[display("the closing delimiter of a path")]
    #[static_text("")]
-   TOKEN_PATH_END,
+   TOKEN_PATH_SUBPATH_END,
 
    #[display("'@'")]
    #[static_text("@")]
@@ -339,7 +339,7 @@ pub enum Kind {
    #[display("{}", unreachable!())]
    NODE_PATH_ROOT_TYPE,
    #[display("{}", unreachable!())]
-   NODE_PATH_CONTENT,
+   NODE_PATH_SUBPATH,
 
    /// A node that starts with a [`TOKEN_AT`] and has a [`NODE_IDENTIFIER`] as
    /// a child, used for binding expressions to identifiers.
@@ -388,7 +388,7 @@ impl Kind {
          | TOKEN_INTEGER
          | TOKEN_FLOAT
          | TOKEN_KEYWORD_IF
-         | TOKEN_PATH_CONTENT_START
+         | TOKEN_PATH_SUBPATH_START
          | TOKEN_AT
          | TOKEN_IDENTIFIER
          | TOKEN_QUOTED_IDENTIFIER_START
@@ -433,7 +433,7 @@ impl Kind {
    #[must_use]
    pub fn into_node_and_closing(self) -> Option<(Kind, Kind)> {
       Some(match self {
-         TOKEN_PATH_CONTENT_START => (NODE_PATH_CONTENT, TOKEN_PATH_END),
+         TOKEN_PATH_SUBPATH_START => (NODE_PATH_SUBPATH, TOKEN_PATH_SUBPATH_END),
          TOKEN_PATH_ROOT_TYPE_START => (NODE_PATH_ROOT_TYPE, TOKEN_PATH_ROOT_TYPE_END),
          TOKEN_QUOTED_IDENTIFIER_START => (NODE_IDENTIFIER, TOKEN_QUOTED_IDENTIFIER_END),
          TOKEN_STRING_START => (NODE_STRING, TOKEN_STRING_END),

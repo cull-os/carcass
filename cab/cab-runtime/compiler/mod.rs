@@ -459,52 +459,49 @@ impl<'a> Compiler<'a> {
             if let Some(config) = root.config() {
                this.emit(config);
             } else {
-               this.emit_push(root.span(), value::Attributes::new().into());
+               this.emit_push(root.span(), Value::Nope);
             }
 
             if let Some(path) = root.path() {
                this.emit(path);
             } else {
-               this.emit_push(
-                  root.span(),
-                  value::Path::rootless(rpds::List::new_sync()).into(),
-               );
+               this.emit_push(root.span(), Value::Nope);
             }
          }
 
-         let segments = path
-            .content()
-            .expect(EXPECT_VALID)
-            .segments()
-            .into_iter()
-            .collect::<SmallVec<_, 4>>();
+         if let Some(subpath) = path.subpath() {
+            let segments = subpath.segments().into_iter().collect::<SmallVec<_, 4>>();
 
-         for segment in &segments {
-            match *segment {
-               Segment::Content { span, ref content } => {
-                  this.emit_push(
-                     span,
-                     value::Path::rootless(
-                        content
-                           .split(value::path::SEPARATOR)
-                           .map(Into::into)
-                           .collect(),
-                     )
-                     .into(),
-                  );
-               },
+            for segment in &segments {
+               match *segment {
+                  Segment::Content { span, ref content } => {
+                     this.emit_push(
+                        span,
+                        value::Path::rootless(
+                           content
+                              .split(value::path::SEPARATOR)
+                              .filter(|part| !part.is_empty())
+                              .map(Into::into)
+                              .collect(),
+                        )
+                        .into(),
+                     );
+                  },
 
-               Segment::Interpolation(interpolation) => {
-                  this.emit_scope(interpolation.span(), |this| {
-                     this.emit_force(interpolation.expression());
-                  });
-               },
+                  Segment::Interpolation(interpolation) => {
+                     this.emit_scope(interpolation.span(), |this| {
+                        this.emit_force(interpolation.expression());
+                     });
+                  },
+               }
             }
-         }
 
-         if segments.len() != 1 || !segments[0].is_content() {
-            this.push_operation(path.span(), Operation::Interpolate);
-            this.push_u64(segments.len() as _);
+            if segments.len() != 1 || !segments[0].is_content() {
+               this.push_operation(path.span(), Operation::Interpolate);
+               this.push_u64(segments.len() as _);
+            }
+         } else {
+            this.emit_push(path.span(), Value::Nope);
          }
 
          if path.root().is_some() {

@@ -40,6 +40,8 @@ pub enum Value {
 
    Thunk(Thunk),
    Blueprint(Arc<Code>),
+
+   Nope,
 }
 
 impl tag::DisplayTags for Value {
@@ -141,6 +143,8 @@ impl tag::DisplayTags for Value {
          Value::Float(float) => tags.write(float.to_string().cyan().bold()),
 
          Value::Thunk(_) | Value::Blueprint(_) => tags.write("_".bright_black().bold()),
+
+         Value::Nope => tags.write("<nope>".bright_black()),
       }
    }
 }

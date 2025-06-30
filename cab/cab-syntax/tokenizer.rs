@@ -39,9 +39,10 @@ fn is_valid_path_content_character(c: char) -> bool {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Context<'a> {
-   PathContentStart,
+   PathContentTryStart,
    PathContent,
    PathContentEnd,
+
    PathRootType,
    PathRootTypeEnd,
 
@@ -210,7 +211,7 @@ impl<'a> Tokenizer<'a> {
       loop {
          if let Some('>' | ':') = self.peek_character() {
             self.context_pop(Context::PathRootType);
-            self.context_push(Context::PathContentStart);
+            self.context_push(Context::PathContentTryStart);
             self.context_push(Context::PathRootTypeEnd);
 
             return TOKEN_CONTENT;
@@ -277,11 +278,14 @@ impl<'a> Tokenizer<'a> {
             return Some(TOKEN_PATH_ROOT_TYPE_END);
          },
 
-         Some(Context::PathContentStart) => {
-            self.context_pop(Context::PathContentStart);
-            self.context_push(Context::PathContent);
+         Some(Context::PathContentTryStart) => {
+            self.context_pop(Context::PathContentTryStart);
 
-            return Some(TOKEN_PATH_CONTENT_START);
+            if self.peek_character() == Some('/') {
+               self.context_push(Context::PathContent);
+
+               return Some(TOKEN_PATH_SUBPATH_START);
+            }
          },
          Some(Context::PathContent) => {
             return Some(self.consume_path_content());
@@ -289,7 +293,7 @@ impl<'a> Tokenizer<'a> {
          Some(Context::PathContentEnd) => {
             self.context_pop(Context::PathContentEnd);
 
-            return Some(TOKEN_PATH_END);
+            return Some(TOKEN_PATH_SUBPATH_END);
          },
 
          Some(Context::Delimited { before, end }) => {
@@ -496,14 +500,14 @@ impl<'a> Tokenizer<'a> {
             self.offset -= start.len_utf8();
             self.context_push(Context::PathContent);
 
-            TOKEN_PATH_CONTENT_START
+            TOKEN_PATH_SUBPATH_START
          },
          // ./bar/baz.txt
          start @ '.' if let Some('.' | '/') = self.peek_character() => {
             self.offset -= start.len_utf8();
             self.context_push(Context::PathContent);
 
-            TOKEN_PATH_CONTENT_START
+            TOKEN_PATH_SUBPATH_START
          },
          // /bar/baz.txt
          start @ '/'
@@ -514,7 +518,7 @@ impl<'a> Tokenizer<'a> {
             self.offset -= start.len_utf8();
             self.context_push(Context::PathContent);
 
-            TOKEN_PATH_CONTENT_START
+            TOKEN_PATH_SUBPATH_START
          },
          // <self>/bar/baz.txt
          '<' if self
@@ -604,13 +608,13 @@ mod tests {
    fn path() {
       assert_token_matches!(
          r"../foo\(𓃰)///baz",
-         (TOKEN_PATH_CONTENT_START, ""),
+         (TOKEN_PATH_SUBPATH_START, ""),
          (TOKEN_CONTENT, "../foo"),
          (TOKEN_INTERPOLATION_START, r"\("),
          (TOKEN_IDENTIFIER, "𓃰"),
          (TOKEN_INTERPOLATION_END, ")"),
          (TOKEN_CONTENT, "///baz"),
-         (TOKEN_PATH_END, ""),
+         (TOKEN_PATH_SUBPATH_END, ""),
       );
    }
 
