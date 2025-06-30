@@ -182,11 +182,13 @@ impl<'a> IntoIterator for Segments<'a> {
                   is_first,
                   is_last,
                } => {
-                  let unindented = if is_last && is_from_line_start {
-                     text.trim_start()
-                  } else if is_from_line_start {
-                     assert!(text[..indent_width].chars().all(|c| c == indent.unwrap()));
-                     &text[indent_width..]
+                  let unindented = if is_from_line_start {
+                     if text.trim_start().is_empty() {
+                        ""
+                     } else {
+                        assert!(text[..indent_width].chars().all(|c| c == indent.unwrap()));
+                        &text[indent_width..]
+                     }
                   } else {
                      text
                   };
@@ -236,6 +238,10 @@ impl Segments<'_> {
          else {
             continue;
          };
+
+         if text.trim().is_empty() {
+            continue;
+         }
 
          let mut line_indent_width: usize = 0;
 
