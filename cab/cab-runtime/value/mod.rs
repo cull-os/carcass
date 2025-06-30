@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
 use cab_syntax::is_valid_plain_identifier;
+use rpds::ListSync as List;
 use ust::{
+   INDENT_WIDTH,
    style::StyledExt as _,
    terminal::tag,
 };
@@ -22,8 +24,7 @@ pub use thunk::Thunk;
 pub enum Value {
    Boolean(bool),
 
-   Nil,
-   Cons(Arc<Value>, Arc<Value>),
+   List(List<Value>),
 
    Attributes(Attributes),
 
@@ -43,16 +44,53 @@ pub enum Value {
 
 impl tag::DisplayTags for Value {
    fn display_tags<'a>(&'a self, tags: &mut tag::Tags<'a>) {
+      use tag::{
+         Condition::{
+            Always,
+            Broken,
+            Flat,
+         },
+         Tag::{
+            Group,
+            Indent,
+            Newline,
+            Space,
+         },
+      };
+
       match *self {
          Value::Boolean(true) => tags.write("true".magenta().bold()),
          Value::Boolean(false) => tags.write("false".magenta().bold()),
 
-         Value::Nil => tags.write("[]".yellow()),
+         Value::List(ref list) => {
+            tags.write_with(Group(40), |tags| {
+               tags.write("[".yellow());
 
-         Value::Cons(ref left, ref right) => {
-            left.display_tags(tags);
-            tags.write(" : ");
-            right.display_tags(tags);
+               if !list.is_empty() {
+                  tags.write_if(Space, Flat);
+                  tags.write_if(Newline(1), Broken);
+               }
+
+               tags.write_if_with(Indent(INDENT_WIDTH), Broken, |tags| {
+                  let mut items = list.iter().peekable();
+                  while let Some(item) = items.next() {
+                     item.display_tags(tags);
+
+                     tags.write_if(
+                        ",".yellow(),
+                        if items.peek().is_some() {
+                           Always
+                        } else {
+                           Broken
+                        },
+                     );
+                     tags.write_if(Space, Flat);
+                     tags.write_if(Newline(1), Broken);
+                  }
+               });
+
+               tags.write("]".yellow());
+            });
          },
 
          Value::Attributes(ref attributes) => attributes.display_tags(tags),

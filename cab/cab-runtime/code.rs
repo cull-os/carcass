@@ -29,7 +29,6 @@ use ust::{
       LEFT_TO_RIGHT,
       RIGHT_TO_BOTTOM,
       TOP_TO_BOTTOM,
-      tag,
    },
    with,
    write,
@@ -204,7 +203,7 @@ impl Display for Code {
 
                         ref value => {
                            write(writer, &":: ".bright_black().bold())?;
-                           Into::<tag::Tags<'_>>::into(value).display_styled(writer)?;
+                           value.display_styled(writer)?;
                         },
                      }
                   },

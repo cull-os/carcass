@@ -75,7 +75,6 @@ struct Data<'a> {
 impl Data<'_> {
    fn measure(&self, children: TagsIter<'_>) {
       let tag_width = match self.tag {
-         Tag::Indent(..) if self.condition == Condition::Broken => 0,
          _ if self.condition == Condition::Broken => 0,
 
          Tag::Text(ref s) if s.contains('\n') => usize::MAX,
@@ -87,13 +86,11 @@ impl Data<'_> {
          Tag::Group(..) | Tag::Indent(..) => 0,
       };
 
-      let mut measure = self.measure.write().unwrap();
-
-      *measure = Measure {
+      *self.measure.write().unwrap() = Measure {
          width: children
             .map(|(child, children)| {
                child.measure(children);
-               measure.width
+               child.measure.read().unwrap().width
             })
             .fold(tag_width, usize::saturating_add),
 
@@ -111,16 +108,9 @@ pub trait DisplayTags {
 
 impl<D: DisplayTags> Display for D {
    fn display_styled(&self, writer: &mut dyn Write) -> fmt::Result {
-      let tags: Tags<'_> = self.into();
+      let mut tags = Tags(Vec::new());
+      self.display_tags(&mut tags);
       tags.display_styled(writer)
-   }
-}
-
-impl<'a, D: DisplayTags> From<&'a D> for Tags<'a> {
-   fn from(value: &'a D) -> Self {
-      let mut this = Self(Vec::new());
-      value.display_tags(&mut this);
-      this
    }
 }
 

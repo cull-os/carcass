@@ -17,6 +17,7 @@ use cab_syntax::{
       Segmented as _,
    },
 };
+use rpds::ListSync as List;
 use smallvec::SmallVec;
 use ust::{
    Display,
@@ -238,7 +239,7 @@ impl<'a> Compiler<'a> {
    }
 
    fn emit_list(&mut self, list: &'a node::List) {
-      self.emit_push(list.span(), Value::Nil);
+      self.emit_push(list.span(), Value::List(List::new_sync()));
 
       for item in list.items() {
          self.emit_scope(item.span(), |this| this.emit(item));
