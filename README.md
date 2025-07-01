@@ -5,6 +5,8 @@ The Cull monorepository.
 ## Projects
 
 - [`cab`](./cab/README.md): A reproducible contextful-expression language.
+- [`dup`](./dup/README.md): Cheap clone trait for distinguishing expensive
+  clones from things that should have been Copy.
 
 ## Contributing
 
