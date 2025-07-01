@@ -66,6 +66,9 @@ allow = [
 confidence-threshold = 0.93
 
 clarify = [
+  { crate = "dup", expression = "MPL-2.0", license-files = [
+    { path = "../LICENSE.md", hash = 0x382977f7 },
+  ] },
   { crate = "ust", expression = "MPL-2.0", license-files = [
     { path = "../LICENSE.md", hash = 0x382977f7 },
   ] },
@@ -75,13 +78,7 @@ clarify = [
   { crate = "cab", expression = "MPL-2.0", license-files = [
     { path = "../../LICENSE.md", hash = 0x382977f7 },
   ] },
-  { crate = "cab-format", expression = "MPL-2.0", license-files = [
-    { path = "../../LICENSE.md", hash = 0x382977f7 },
-  ] },
-  { crate = "cab-island", expression = "MPL-2.0", license-files = [
-    { path = "../../LICENSE.md", hash = 0x382977f7 },
-  ] },
-  { crate = "cab-report", expression = "MPL-2.0", license-files = [
+  { crate = "cab-error", expression = "MPL-2.0", license-files = [
     { path = "../../LICENSE.md", hash = 0x382977f7 },
   ] },
   { crate = "cab-runtime", expression = "MPL-2.0", license-files = [
