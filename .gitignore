@@ -15,9 +15,6 @@
 !Cargo.toml
 !Cargo.lock
 
-# FUZZING
-!fuzz/
-
 # FORMATTERS
 !.rustfmt.toml
 !.taplo.toml

@@ -14,9 +14,9 @@ workspace = true
 cargo-fuzz = true
 
 [dependencies]
-cab.path = "../cab"
+cab.path = "../"
 
-ust.path = "../ust"
+ust.path = "../../ust"
 
 libfuzzer-sys.workspace = true
 rpds.workspace          = true
@@ -24,13 +24,14 @@ rpds.workspace          = true
 [[bin]]
 bench = false
 doc   = false
-name  = "cab-tokenizer"
-path  = "../cab/fuzz/tokenizer.rs"
+name  = "tokenizer"
+path  = "./tokenizer.rs"
 test  = false
 
 [[bin]]
 bench = false
 doc   = false
-name  = "cab-noder"
-path  = "../cab/fuzz/noder.rs"
+name  = "noder"
+path  = "./noder.rs"
 test  = false
+

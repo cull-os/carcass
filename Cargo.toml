@@ -1,19 +1,12 @@
 [workspace]
 members = [
   "dup",
-  "dup/macros",
+  "dup/*",
 
   "ust",
 
-  "fuzz",
-
   "cab",
-  "cab/error",
-  "cab/runtime",
-  "cab/span",
-  "cab/syntax",
-  "cab/task",
-  "cab/util",
+  "cab/*",
 ]
 resolver = "3"
 
