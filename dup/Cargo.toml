@@ -15,11 +15,11 @@ path = "mod.rs"
 workspace = true
 
 [features]
-bytes = ["dep:bytes"]
-rpds = ["dep:rpds"]
+bytes = [ "dep:bytes" ]
+rpds  = [ "dep:rpds" ]
 
 [dependencies]
 dup-macros.path = "./dup-macros"
 
 bytes = { workspace = true, optional = true }
-rpds = { workspace = true, optional = true }
+rpds  = { workspace = true, optional = true }

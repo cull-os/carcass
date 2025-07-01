@@ -14,8 +14,8 @@ path = "lib.rs"
 workspace = true
 
 [dependencies]
-ust.path = "../../ust"
 dup.path = "../../dup"
+ust.path = "../../ust"
 
 anyhow.workspace      = true
 const-str.workspace   = true

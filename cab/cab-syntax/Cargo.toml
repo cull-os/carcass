@@ -18,8 +18,8 @@ cab-error.path = "../cab-error"
 cab-span.path  = "../cab-span"
 cab-util.path  = "../cab-util"
 
-ust.path = "../../ust"
 dup.path = "../../dup"
+ust.path = "../../ust"
 
 cstree.workspace      = true
 derive_more.workspace = true
