@@ -112,24 +112,6 @@ pub fn escape_string(
    }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Segment<'a> {
-   Content { span: Span, content: String },
-   Interpolation(&'a node::Interpolation),
-}
-
-impl Segment<'_> {
-   #[must_use]
-   pub fn is_content(&self) -> bool {
-      matches!(self, &Self::Content { .. })
-   }
-
-   #[must_use]
-   pub fn is_interpolation(&self) -> bool {
-      matches!(self, &Self::Interpolation(_))
-   }
-}
-
 reffed! {
    #[derive(Debug, Clone, PartialEq, Eq, Hash)]
    enum SegmentRaw {
@@ -145,6 +127,24 @@ impl SegmentRawRef<'_> {
          Self::Content(content) => content.span(),
          Self::Interpolation(interpolation) => interpolation.span(),
       }
+   }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Segment<'a> {
+   Content { span: Span, content: String },
+   Interpolation(&'a node::Interpolation),
+}
+
+impl Segment<'_> {
+   #[must_use]
+   pub fn is_content(&self) -> bool {
+      matches!(self, &Self::Content { .. })
+   }
+
+   #[must_use]
+   pub fn is_interpolation(&self) -> bool {
+      matches!(self, &Self::Interpolation(_))
    }
 }
 
@@ -304,8 +304,19 @@ impl Segments<'_> {
       if let Err(indents) = self.indent() {
          force_ref!(report).push_primary(
             self.span,
-            // TODO: Don't fmt::Debug.
-            format!("cannot mix different kinds of space in indents: {indents:?}"),
+            format!(
+               "cannot mix different kinds of space in indents: {indents}",
+               indents = indents
+                  .into_iter()
+                  .map(|c| {
+                     match escape(c) {
+                        Some(escaped) => escaped.to_owned(),
+                        None => format!("'{c}'"),
+                     }
+                  })
+                  .intersperse(", ".to_owned())
+                  .collect::<String>(),
+            ),
          );
       }
 

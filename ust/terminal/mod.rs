@@ -909,8 +909,6 @@ fn write_report(
                         .style(top_to_right.severity.style_in(severity)),
                      )?;
 
-                     writer.write_char(' ')?;
-
                      wrote = true;
                      strike_prefix.borrow_mut()[top_to_right_index] = None;
                      Ok(*span_end as usize + 1)

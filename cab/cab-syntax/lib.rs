@@ -4,9 +4,10 @@
    assert_matches,
    gen_blocks,
    if_let_guard,
-   lazy_get,
-   lazy_cell_into_inner,
    impl_trait_in_assoc_type,
+   iter_intersperse,
+   lazy_cell_into_inner,
+   lazy_get,
    let_chains,
    trait_alias
 )]
