@@ -1,4 +1,7 @@
-use std::ops;
+use std::{
+   mem,
+   ops,
+};
 
 use cab_span::{
    IntoSpan as _,
@@ -211,10 +214,10 @@ impl<'a> IntoIterator for Segments<'a> {
 
                Straight::Interpolation(interpolation) => {
                   yield Segment::Content {
-                     content: buffer.clone(),
                      span:    buffer_span
                         .take()
                         .expect("interpolation must never be the first or last segment"),
+                     content: mem::take(&mut buffer),
                   };
 
                   yield Segment::Interpolation(interpolation);
