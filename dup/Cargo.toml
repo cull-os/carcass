@@ -1,0 +1,25 @@
+[package]
+name                 = "dup"
+description          = "Cheap clone trait for distinguishing expensive clones from things that should have been Copy"
+authors.workspace    = true
+edition.workspace    = true
+license.workspace    = true
+publish.workspace    = true
+repository.workspace = true
+version.workspace    = true
+
+[lib]
+path = "mod.rs"
+
+[lints]
+workspace = true
+
+[features]
+bytes = ["dep:bytes"]
+rpds = ["dep:rpds"]
+
+[dependencies]
+dup-macros.path = "./dup-macros"
+
+bytes = { workspace = true, optional = true }
+rpds = { workspace = true, optional = true }

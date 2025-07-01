@@ -19,6 +19,7 @@ cab-span.path   = "../cab-span"
 cab-syntax.path = "../cab-syntax"
 
 ust.path = "../../ust"
+dup = { path = "../../dup", features = [ "bytes", "rpds" ] }
 
 async-once-cell.workspace = true
 async-trait.workspace     = true
@@ -33,4 +34,3 @@ rustc-hash.workspace      = true
 smallvec.workspace        = true
 tokio.workspace           = true
 vu128.workspace           = true
-zerocopy.workspace        = true

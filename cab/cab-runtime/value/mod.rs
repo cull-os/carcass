@@ -5,6 +5,7 @@ use cab_syntax::{
    escape_string,
    is_valid_plain_identifier,
 };
+use dup::Dupe;
 use rpds::ListSync as List;
 use ust::{
    INDENT_WIDTH,
@@ -27,7 +28,7 @@ mod thunk;
 pub use thunk::Thunk;
 
 #[warn(variant_size_differences)]
-#[derive(Clone)]
+#[derive(Clone, Dupe)]
 pub enum Value {
    Boolean(bool),
 
@@ -42,7 +43,7 @@ pub enum Value {
    String(Arc<str>),
 
    Rune(char),
-   Integer(num::BigInt),
+   Integer(Arc<num::BigInt>),
    Float(f64),
 
    Thunk(Thunk),

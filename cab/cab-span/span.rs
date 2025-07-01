@@ -36,6 +36,7 @@ impl Span {
    }
 
    /// Creates a new dummy [`Span`].
+   #[inline]
    #[must_use]
    pub fn dummy() -> Self {
       Self::new(0_u32, 0_u32)

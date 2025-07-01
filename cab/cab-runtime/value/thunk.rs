@@ -5,6 +5,7 @@ use std::{
    sync::Arc,
 };
 
+use dup::Dupe;
 use rustc_hash::{
    FxBuildHasher,
    FxHashMap,
@@ -35,7 +36,7 @@ enum ThunkInner {
    Evaluated(Arc<Value>),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Dupe)]
 pub struct Thunk(Arc<RwLock<ThunkInner>>);
 
 impl From<Thunk> for Value {

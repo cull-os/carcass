@@ -7,6 +7,10 @@ use cab_error::{
    Result,
    bail,
 };
+use dup::{
+   Dupe,
+   IteratorDupedExt as _,
+};
 use rpds::ListSync as List;
 use ust::{
    style::StyledExt as _,
@@ -55,7 +59,7 @@ pub trait Root: Send + Sync + 'static {
    }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Dupe)]
 pub struct Path {
    root:    Option<Arc<dyn Root>>,
    subpath: Subpath,
@@ -133,15 +137,15 @@ impl Path {
    #[must_use]
    pub fn get(&self, subpath: Arc<str>) -> Self {
       Self {
-         root:    self.root.clone(),
-         subpath: self.subpath.iter().cloned().chain([subpath]).collect(),
+         root:    self.root.dupe(),
+         subpath: self.subpath.iter().duped().chain([subpath]).collect(),
       }
    }
 
    pub async fn list(&self) -> Result<List<Subpath>> {
       let root = self
          .root
-         .clone()
+         .dupe()
          .context("tried to list rootless path 'TODO'")?;
 
       root
@@ -151,7 +155,7 @@ impl Path {
    }
 
    pub async fn read(&self) -> Result<Bytes> {
-      let root = self.root.clone().context("tried to read rootless path")?;
+      let root = self.root.dupe().context("tried to read rootless path")?;
 
       root
          .read(&self.subpath)
@@ -162,7 +166,7 @@ impl Path {
    pub async fn write(&self, content: Bytes) -> Result<()> {
       let root = self
          .root
-         .clone()
+         .dupe()
          .context("tried to write to rootless path 'TODO'")?;
 
       root

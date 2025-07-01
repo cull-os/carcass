@@ -15,6 +15,7 @@ workspace = true
 
 [dependencies]
 ust.path = "../../ust"
+dup.path = "../../dup"
 
 anyhow.workspace      = true
 const-str.workspace   = true

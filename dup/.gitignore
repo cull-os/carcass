@@ -1,0 +1,13 @@
+*
+!.gitignore
+
+# DOCUMENTATION
+!*.md
+
+# BUILD SYSTEMS
+!Cargo.toml
+
+# SOURCES
+!**/
+
+!*.rs

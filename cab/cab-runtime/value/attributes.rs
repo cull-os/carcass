@@ -3,6 +3,7 @@
 use std::sync::Arc;
 
 use derive_more::Deref;
+use dup::Dupe;
 use rpds::HashTrieMapSync as HashTrieMap;
 use rustc_hash::FxBuildHasher;
 use ust::{
@@ -13,7 +14,7 @@ use ust::{
 
 use super::Value;
 
-#[derive(Deref, Clone)]
+#[derive(Deref, Clone, Dupe)]
 pub struct Attributes(HashTrieMap<Arc<str>, Value, FxBuildHasher>);
 
 impl tag::DisplayTags for Attributes {

@@ -9,6 +9,7 @@ use cab_error::{
    Result,
    bail,
 };
+use dup::Dupe as _;
 
 use super::{
    Root,
@@ -59,6 +60,6 @@ impl Root for Blob {
 
             Bytes::copy_from_slice(string.as_bytes())
          })
-         .clone())
+         .dupe())
    }
 }

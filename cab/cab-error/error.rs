@@ -15,6 +15,7 @@ use std::{
 };
 
 use derive_more::Deref;
+use dup::Dupe;
 use ust::{
    Display,
    Write as _,
@@ -27,7 +28,7 @@ pub type Result<T> = result::Result<T, Error>;
 
 /// The error type. Stores an error chain that can be appended to with
 /// [`Contextful`]. Can be formatted to show the chain with [`fmt::Debug`].
-#[derive(thiserror::Error, Clone)]
+#[derive(thiserror::Error, Clone, Dupe)]
 #[error(transparent)]
 pub struct Error(#[doc(hidden)] pub Arc<anyhow::Error>);
 

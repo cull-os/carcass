@@ -14,6 +14,7 @@ use cab_syntax::{
    Segmented as _,
    node,
 };
+use dup::Dupe as _;
 use rpds::ListSync as List;
 use smallvec::SmallVec;
 use ust::{
@@ -207,7 +208,7 @@ impl<'a> Compiler<'a> {
    }
 
    fn emit_thunk(&mut self, span: Span, closure: impl FnOnce(&mut Self)) {
-      let path = self.code().path().clone();
+      let path = self.code().path().dupe();
       self.codes.push(Code::new(path));
 
       closure(self);
@@ -678,7 +679,7 @@ impl<'a> Compiler<'a> {
             self.emit_push(rune.span(), Value::Rune(rune.value()));
          },
          node::ExpressionRef::Integer(integer) => {
-            self.emit_push(integer.span(), Value::Integer(integer.value()));
+            self.emit_push(integer.span(), Value::Integer(integer.value().into()));
          },
          node::ExpressionRef::Float(float) => {
             self.emit_push(float.span(), Value::Float(float.value()));

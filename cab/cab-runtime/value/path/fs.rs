@@ -11,6 +11,7 @@ use cab_error::{
    Result,
 };
 use dashmap::DashMap;
+use dup::Dupe as _;
 use rpds::ListSync as List;
 use rustc_hash::FxBuildHasher;
 use tokio::fs;
@@ -58,7 +59,7 @@ impl Root for Fs {
    async fn list(self: Arc<Self>, subpath: &Subpath) -> Result<List<Subpath>> {
       self
          .entries
-         .entry(subpath.clone())
+         .entry(subpath.dupe())
          .or_default()
          .get_or_init(async {
             let mut contents = Vec::new();
@@ -86,13 +87,13 @@ impl Root for Fs {
             todo!()
          })
          .await
-         .clone()
+         .dupe()
    }
 
    async fn read(self: Arc<Self>, subpath: &Subpath) -> Result<Bytes> {
       self
          .contents
-         .entry(subpath.clone())
+         .entry(subpath.dupe())
          .or_default()
          .get_or_init(async {
             let path = self.to_pathbuf(subpath);
@@ -104,7 +105,7 @@ impl Root for Fs {
             Ok(Bytes::from(content))
          })
          .await
-         .clone()
+         .dupe()
    }
 
    async fn is_writeable(&self) -> bool {

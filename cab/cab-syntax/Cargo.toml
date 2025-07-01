@@ -19,6 +19,7 @@ cab-span.path  = "../cab-span"
 cab-util.path  = "../cab-util"
 
 ust.path = "../../ust"
+dup.path = "../../dup"
 
 cstree.workspace      = true
 derive_more.workspace = true

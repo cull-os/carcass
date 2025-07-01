@@ -10,6 +10,7 @@ use cab_span::{
    Size,
    Span,
 };
+use dup::Dupe as _;
 use enumset::EnumSet;
 use peekmore::{
    PeekMore as _,
@@ -90,7 +91,7 @@ impl ParseOracle {
    }
 
    pub fn parse<'a>(&self, tokens: impl Iterator<Item = (Kind, &'a str)>) -> Parse {
-      let mut noder = Noder::with_interner_and_tokens(self.cache.interner().clone(), tokens);
+      let mut noder = Noder::with_interner_and_tokens(self.cache.interner().dupe(), tokens);
 
       noder.node(NODE_PARSE_ROOT, |this| {
          this.node_expression(EnumSet::empty());
@@ -99,7 +100,7 @@ impl ParseOracle {
 
       let (green_node, _) = noder.builder.finish();
 
-      let node = red::Node::new_root_with_resolver(green_node, self.cache.interner().clone());
+      let node = red::Node::new_root_with_resolver(green_node, self.cache.interner().dupe());
 
       let expression: node::ExpressionRef<'_> = node
          .first_child()

@@ -13,6 +13,7 @@ use std::{
 
 use cab_span::Span;
 use derive_more::Deref;
+use dup::Dupe as _;
 use ust::{
    COLORS,
    Display,
@@ -347,7 +348,7 @@ impl Code {
       let (_, span) = self.spans[position.saturating_sub(1)];
 
       (
-         (self.path.clone(), span),
+         (self.path.dupe(), span),
          self.bytes[*index]
             .try_into()
             .expect("byte index must be valid"),

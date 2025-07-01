@@ -8,6 +8,7 @@ use cab_error::{
    Result,
    bail,
 };
+use dup::Dupe as _;
 use tokio::io::{
    self,
    AsyncReadExt as _,
@@ -63,7 +64,7 @@ impl Root for Standard {
             Ok(Bytes::from(buffer))
          })
          .await
-         .clone()
+         .dupe()
    }
 
    async fn is_writeable(&self) -> bool {

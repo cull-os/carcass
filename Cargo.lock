@@ -26,7 +26,7 @@ dependencies = [
  "cfg-if",
  "once_cell",
  "version_check",
- "zerocopy 0.7.35",
+ "zerocopy",
 ]
 
 [[package]]
@@ -165,6 +165,7 @@ dependencies = [
  "cab-span",
  "cab-syntax",
  "clap",
+ "dup",
  "rpds",
  "tokio",
  "ust",
@@ -177,6 +178,7 @@ dependencies = [
  "anyhow",
  "const-str",
  "derive_more",
+ "dup",
  "smallvec 2.0.0-alpha.11",
  "thiserror",
  "ust",
@@ -195,6 +197,7 @@ dependencies = [
  "const-str",
  "dashmap 7.0.0-rc2",
  "derive_more",
+ "dup",
  "num",
  "num_enum",
  "rpds",
@@ -203,7 +206,6 @@ dependencies = [
  "tokio",
  "ust",
  "vu128",
- "zerocopy 0.8.26",
 ]
 
 [[package]]
@@ -224,6 +226,7 @@ dependencies = [
  "cab-util",
  "cstree",
  "derive_more",
+ "dup",
  "enumset",
  "num",
  "paste",
@@ -441,6 +444,23 @@ dependencies = [
  "quote",
  "syn",
  "unicode-xid",
+]
+
+[[package]]
+name = "dup"
+version = "0.0.1"
+dependencies = [
+ "bytes",
+ "dup-macros",
+ "rpds",
+]
+
+[[package]]
+name = "dup-macros"
+version = "0.0.1"
+dependencies = [
+ "quote",
+ "syn",
 ]
 
 [[package]]
@@ -1029,9 +1049,9 @@ checksum = "7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f"
 
 [[package]]
 name = "syn"
-version = "2.0.100"
+version = "2.0.104"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b09a44accad81e1ba1cd74a32461ba89dee89095ba17b32f5d03683b1b1fc2a0"
+checksum = "17b6f705963418cdb9927482fa304bc562ece2fdd4f616084c50b7023b435a40"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1369,16 +1389,7 @@ version = "0.7.35"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1b9b4fd18abc82b8136838da5d50bae7bdea537c574d8dc1a34ed098d6c166f0"
 dependencies = [
- "zerocopy-derive 0.7.35",
-]
-
-[[package]]
-name = "zerocopy"
-version = "0.8.26"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1039dd0d3c310cf05de012d8a39ff557cb0d23087fd44cad61df08fc31907a2f"
-dependencies = [
- "zerocopy-derive 0.8.26",
+ "zerocopy-derive",
 ]
 
 [[package]]
@@ -1386,17 +1397,6 @@ name = "zerocopy-derive"
 version = "0.7.35"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fa4f8080344d4671fb4e831a13ad1e68092748387dfc4f55e356242fae12ce3e"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
-name = "zerocopy-derive"
-version = "0.8.26"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9ecf5b4cc5364572d7f4c329661bcc82724222973f2cab6f050a4e5c22f75181"
 dependencies = [
  "proc-macro2",
  "quote",

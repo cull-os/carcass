@@ -12,6 +12,7 @@ use cab::{
    syntax,
 };
 use clap::Parser as _;
+use dup::Dupe as _;
 use rpds::ListSync as List;
 use runtime::value;
 use ust::{
@@ -96,7 +97,7 @@ async fn main() -> error::Termination {
 
          let compile_oracle = runtime::CompileOracle::new();
          let code = compile_oracle
-            .compile(path.clone(), expression.as_ref())
+            .compile(path.dupe(), expression.as_ref())
             .extractlnln(err, &path, &source)?;
 
          code.display_styled(out).context(FAIL_STDOUT)?;
