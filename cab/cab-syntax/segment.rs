@@ -1,3 +1,7 @@
+// TODO: Parse, don't validate.
+//
+// Make unescape_string() return Result with SmallVec<Span>, and use that in
+// Segments::validate. Also find a way to reuse logic in IntoIterator too.
 use std::ops;
 
 use cab_span::{
@@ -135,7 +139,7 @@ impl SegmentRawRef<'_> {
    }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum Straight<'a> {
    Line {
       span:               Span,
@@ -149,7 +153,7 @@ enum Straight<'a> {
    Interpolation(&'a node::Interpolation),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Segments<'a> {
    span: Span,
 
@@ -171,7 +175,7 @@ impl<'a> IntoIterator for Segments<'a> {
          let mut buffer = String::new();
          let mut buffer_span = None::<Span>;
 
-         let (indent, indent_width) = self.calculate_indent();
+         let (indent, indent_width) = self.indent().expect("node must be valid");
 
          for straight in self.straights {
             match straight {
@@ -224,8 +228,8 @@ impl<'a> IntoIterator for Segments<'a> {
 }
 
 impl Segments<'_> {
-   fn calculate_indent(&self) -> Indent {
-      let mut indent = None::<char>;
+   fn indent(&self) -> Result<Indent, SmallVec<char, 4>> {
+      let mut indents = SmallVec::<char, 4>::new();
       let mut indent_width = None::<usize>;
 
       for straight in &self.straights {
@@ -239,7 +243,7 @@ impl Segments<'_> {
             continue;
          };
 
-         if text.trim().is_empty() {
+         if text.trim_start().is_empty() {
             continue;
          }
 
@@ -252,9 +256,8 @@ impl Segments<'_> {
 
             line_indent_width += 1;
 
-            match indent {
-               None => indent = Some(c),
-               Some(indent) => assert_eq!(indent, c),
+            if !indents.contains(&c) {
+               indents.push(c);
             }
          }
 
@@ -265,7 +268,11 @@ impl Segments<'_> {
          }
       }
 
-      (indent, indent_width.unwrap_or(0))
+      if indents.len() > 1 {
+         return Err(indents);
+      }
+
+      Ok((indents.first().copied(), indent_width.unwrap_or(0)))
    }
 
    pub fn validate(&self, report: &mut Lazy!(Report), to: &mut Vec<Report>) {
@@ -296,33 +303,14 @@ impl Segments<'_> {
 
             Straight::Interpolation(interpolation) => interpolation.expression().validate(to),
          }
+      }
 
-         let Straight::Line {
-            text,
-            is_from_line_start: true,
-            ..
-         } = *straight
-         else {
-            continue;
-         };
-
-         let mut indent = None::<char>;
-         for c in text.chars() {
-            if !c.is_whitespace() {
-               break;
-            }
-
-            let Some(indent) = indent else {
-               indent.replace(c);
-               continue;
-            };
-
-            if indent != c {
-               force_ref!(report)
-                  .push_primary(self.span, "cannot mix different kinds of space in indents");
-               break;
-            }
-         }
+      if let Err(indents) = self.indent() {
+         force_ref!(report).push_primary(
+            self.span,
+            // TODO: Don't fmt::Debug.
+            format!("cannot mix different kinds of space in indents: {indents:?}"),
+         );
       }
 
       if self.is_multiline {
