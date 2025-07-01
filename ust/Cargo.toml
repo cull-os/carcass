@@ -17,7 +17,7 @@ path = "mod.rs"
 workspace = true
 
 [dependencies]
-cab-span.path = "../cab/cab-span"
+cab-span.path = "../cab/span"
 
 const-str.workspace            = true
 derive_more.workspace          = true

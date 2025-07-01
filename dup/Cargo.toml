@@ -19,7 +19,7 @@ bytes = [ "dep:bytes" ]
 rpds  = [ "dep:rpds" ]
 
 [dependencies]
-dup-macros.path = "./dup-macros"
+dup-macros.path = "./macros"
 
 bytes = { workspace = true, optional = true }
 rpds  = { workspace = true, optional = true }

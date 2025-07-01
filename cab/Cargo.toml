@@ -19,10 +19,10 @@ path = "main.rs"
 workspace = true
 
 [dependencies]
-cab-error.path   = "./cab-error"
-cab-runtime.path = "./cab-runtime"
-cab-span.path    = "./cab-span"
-cab-syntax.path  = "./cab-syntax"
+cab-error.path   = "./error"
+cab-runtime.path = "./runtime"
+cab-span.path    = "./span"
+cab-syntax.path  = "./syntax"
 
 dup.path = "../dup"
 ust.path = "../ust"

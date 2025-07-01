@@ -11,10 +11,6 @@
 !Cargo.toml
 
 # SOURCES
-!cab*/
-!cab*/**/
-
-!fuzz/
-!fuzz/**/
+!**/
 
 !*.rs

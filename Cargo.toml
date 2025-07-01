@@ -1,5 +1,20 @@
 [workspace]
-members  = [ "dup", "dup/dup-*", "ust", "fuzz", "cab", "cab/cab-*" ]
+members = [
+  "dup",
+  "dup/macros",
+
+  "ust",
+
+  "fuzz",
+
+  "cab",
+  "cab/error",
+  "cab/runtime",
+  "cab/span",
+  "cab/syntax",
+  "cab/task",
+  "cab/util",
+]
 resolver = "3"
 
 metadata.crane.name = "cab"

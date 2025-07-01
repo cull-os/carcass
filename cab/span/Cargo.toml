@@ -14,7 +14,7 @@ path = "mod.rs"
 workspace = true
 
 [dependencies]
-cab-util.path = "../cab-util"
+cab-util.path = "../util"
 
 cstree.workspace      = true
 derive_more.workspace = true

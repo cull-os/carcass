@@ -14,9 +14,9 @@ path = "mod.rs"
 workspace = true
 
 [dependencies]
-cab-error.path = "../cab-error"
-cab-span.path  = "../cab-span"
-cab-util.path  = "../cab-util"
+cab-error.path = "../error"
+cab-span.path  = "../span"
+cab-util.path  = "../util"
 
 dup.path = "../../dup"
 ust.path = "../../ust"
