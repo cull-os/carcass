@@ -107,8 +107,6 @@ pub fn escape_string(s: &str, normal: style::Style) -> impl Iterator<Item = styl
    }
 }
 
-type Indent = (Option<char>, usize);
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Segment<'a> {
    Content { span: Span, content: String },
@@ -236,7 +234,7 @@ impl<'a> IntoIterator for Segments<'a> {
 }
 
 impl Segments<'_> {
-   fn indent(&self) -> Result<Indent, SmallVec<char, 4>> {
+   fn indent(&self) -> Result<(Option<char>, usize), SmallVec<char, 4>> {
       let mut indents = SmallVec::<char, 4>::new();
       let mut indent_width = None::<usize>;
 
