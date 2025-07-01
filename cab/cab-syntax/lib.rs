@@ -37,8 +37,10 @@ pub use segment::{
    Segment,
    Segmented,
    Segments,
+   escape,
    escape_string,
    unescape,
+   unescape_string,
 };
 
 pub mod token;

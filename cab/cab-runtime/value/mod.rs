@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use cab_syntax::{
+   escape,
    escape_string,
    is_valid_plain_identifier,
 };
@@ -12,10 +13,6 @@ use ust::{
       StyledExt as _,
    },
    terminal::tag,
-};
-use zerocopy::{
-   IntoBytes as _,
-   TryFromBytes as _,
 };
 
 use crate::Code;
@@ -70,8 +67,10 @@ impl tag::DisplayTags for Value {
          },
       };
 
+      const ESCAPED_STYLE: style::Style = style::Color::Magenta.fg().bold();
+
       fn display_tags_escaped<'a>(tags: &mut tag::Tags<'a>, s: &'a str, normal: style::Style) {
-         for part in escape_string(s, normal) {
+         for part in escape_string(s, normal, ESCAPED_STYLE) {
             tags.write(part);
          }
       }
@@ -142,13 +141,12 @@ impl tag::DisplayTags for Value {
             tags.write("\"".green());
          },
 
-         Value::Rune(ref rune) => {
+         Value::Rune(rune) => {
             tags.write("'".green());
-            // FIXME: Not all characters are valid UTF-8 byte encoded. Such as é.
-            //
-            // Others will silently corrupt. This only works for ASCII.
-            let as_str = str::try_ref_from_bytes(rune.as_bytes()).unwrap();
-            display_tags_escaped(tags, as_str, style::Color::Green.fg());
+            match escape(rune) {
+               Some(escaped) => tags.write(escaped.style(ESCAPED_STYLE)),
+               None => tags.write(rune.to_string().green()),
+            }
             tags.write("'".green());
          },
 

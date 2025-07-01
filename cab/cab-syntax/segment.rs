@@ -76,6 +76,7 @@ pub fn unescape_string(s: &str) -> Result<String, SmallVec<Span, 4>> {
    }
 }
 
+#[must_use]
 pub fn escape(c: char) -> Option<&'static str> {
    Some(match c {
       '\0' => "\\0",
@@ -87,19 +88,23 @@ pub fn escape(c: char) -> Option<&'static str> {
    })
 }
 
-pub fn escape_string(s: &str, normal: style::Style) -> impl Iterator<Item = style::Styled<&str>> {
+pub fn escape_string(
+   s: &str,
+   normal: style::Style,
+   escaped: style::Style,
+) -> impl Iterator<Item = style::Styled<&str>> {
    gen move {
       let mut literal_start_offset = 0;
 
       for (offset, c) in s.char_indices() {
-         let Some(escaped) = escape(c) else {
+         let Some(escaped_) = escape(c) else {
             continue;
          };
 
          yield s[literal_start_offset..offset].style(normal);
          literal_start_offset = offset;
 
-         yield escaped.magenta().bold();
+         yield escaped_.style(escaped);
          literal_start_offset += c.len_utf8();
       }
 
