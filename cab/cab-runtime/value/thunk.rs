@@ -5,7 +5,6 @@ use std::{
    sync::Arc,
 };
 
-use cab_span::Span;
 use rustc_hash::{
    FxBuildHasher,
    FxHashMap,
@@ -14,22 +13,23 @@ use tokio::sync::RwLock;
 
 use crate::{
    Code,
+   Location,
    Value,
 };
 
 enum ThunkInner {
    Suspended {
-      span:   Span,
-      code:   Code,
-      locals: FxHashMap<String, Value>,
+      location: Location,
+      code:     Code,
+      locals:   FxHashMap<String, Value>,
    },
 
    SuspendedNative(Box<dyn FnOnce() -> Value + Send + Sync>),
 
    BlackHole {
-      span:         Span,
-      forced_at:    Span,
-      suspended_at: Span,
+      location:     Location,
+      forced_at:    Location,
+      suspended_at: Location,
    },
 
    Evaluated(Arc<Value>),
@@ -46,10 +46,10 @@ impl From<Thunk> for Value {
 
 impl Thunk {
    #[must_use]
-   pub fn suspended(span: Span, code: Code) -> Self {
+   pub fn suspended(location: Location, code: Code) -> Self {
       Self(
          RwLock::new(ThunkInner::Suspended {
-            span,
+            location,
             code,
             locals: HashMap::with_hasher(FxBuildHasher),
          })
