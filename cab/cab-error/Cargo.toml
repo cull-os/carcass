@@ -8,7 +8,7 @@ repository.workspace = true
 version.workspace    = true
 
 [lib]
-path = "lib.rs"
+path = "mod.rs"
 
 [lints]
 workspace = true

@@ -11,7 +11,7 @@ repository        = "https://github.com/cull-os/carcass/tree/master/ust"
 version           = "0.0.2"
 
 [lib]
-path = "lib.rs"
+path = "mod.rs"
 
 [lints]
 workspace = true
