@@ -1,4 +1,5 @@
 use std::{
+   env,
    fmt::Write as _,
    fs,
    io::Write as _,
@@ -70,7 +71,10 @@ async fn main() -> error::Termination {
 
          let parse_oracle = syntax::ParseOracle::new();
 
-         fs::read_dir("cab-syntax/test/data")
+         let root = env::current_dir().unwrap();
+         let root = root.parent().unwrap().join("target").join("cab-noder-fuzz");
+
+         fs::read_dir(&root)
             .context("failed to list cab-syntax/test/data")?
             .filter_map(|entry| {
                let mut path = entry.ok()?.path();

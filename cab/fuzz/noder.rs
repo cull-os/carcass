@@ -9,7 +9,6 @@ use std::{
       Hash as _,
       Hasher as _,
    },
-   path::Path,
    sync::Arc,
 };
 
@@ -64,8 +63,10 @@ fuzz_target!(|source: &str| -> Corpus {
    let base_file = format!("{display_hash:016x}");
 
    let (source_file, display_file) = {
-      let root = Path::new("cab-syntax/test/data");
-      fs::create_dir_all(root).unwrap();
+      let root = env::current_dir().unwrap();
+      let root = root.parent().unwrap().join("target").join("cab-noder-fuzz");
+
+      fs::create_dir_all(&root).unwrap();
 
       (
          root.join(base_file.clone() + ".cab"),
