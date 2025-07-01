@@ -148,6 +148,16 @@ impl Span {
 
       Self::new(start, end)
    }
+
+   /// Offsets the span to the right by the given size. Basically sets its
+   /// "base".
+   #[inline]
+   #[must_use]
+   pub fn offset(self, by: impl Into<Size>) -> Self {
+      into!(by);
+
+      Self::new(by + self.start, by + self.end)
+   }
 }
 
 impl From<Span> for ops::Range<u32> {
