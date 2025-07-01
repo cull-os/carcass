@@ -1,7 +1,3 @@
-// TODO: Parse, don't validate.
-//
-// Make unescape_string() return Result with SmallVec<Span>, and use that in
-// Segments::validate. Also find a way to reuse logic in IntoIterator too.
 use std::ops;
 
 use cab_span::{
@@ -46,28 +42,35 @@ pub fn unescape(c: char) -> Option<char> {
    })
 }
 
-#[must_use]
-pub fn unescape_string(s: &str) -> Option<String> {
+pub fn unescape_string(s: &str) -> Result<String, SmallVec<Span, 4>> {
    let mut string = String::with_capacity(s.len());
+   let mut invalids = SmallVec::<Span, 4>::new();
 
-   let mut literal_start_offset = 0;
-
-   let mut chars = s.char_indices();
-   while let Some((offset, c)) = chars.next() {
+   let mut chars = s.char_indices().peekable();
+   while let Some((index, c)) = chars.next() {
       if c != '\\' {
+         string.push(c);
          continue;
       }
 
-      string.push_str(&s[literal_start_offset..offset]);
-      literal_start_offset = offset;
+      let Some((_, next)) = chars.next() else {
+         invalids.push(Span::at(index, '\\'.len_utf8()));
+         continue;
+      };
 
-      let (_, c) = chars.next()?;
-      string.push(unescape(c)?);
-      literal_start_offset += '\\'.len_utf8() + c.len_utf8();
+      let Some(unescaped) = unescape(next) else {
+         invalids.push(Span::at(index, '\\'.len_utf8() + next.len_utf8()));
+         continue;
+      };
+
+      string.push(unescaped);
    }
 
-   string.push_str(&s[literal_start_offset..s.len()]);
-   Some(string)
+   if invalids.is_empty() {
+      Ok(string)
+   } else {
+      Err(invalids)
+   }
 }
 
 pub fn escape(c: char) -> Option<&'static str> {
@@ -197,7 +200,7 @@ impl<'a> IntoIterator for Segments<'a> {
                      text
                   };
 
-                  buffer.push_str(&unescape_string(unindented).unwrap());
+                  buffer.push_str(&unescape_string(unindented).expect("node must be valid"));
 
                   if !is_first && !is_last {
                      buffer.push('\n');
@@ -208,8 +211,10 @@ impl<'a> IntoIterator for Segments<'a> {
 
                Straight::Interpolation(interpolation) => {
                   yield Segment::Content {
-                     span:    buffer_span.take().unwrap(),
                      content: buffer.clone(),
+                     span:    buffer_span
+                        .take()
+                        .expect("interpolation must never be the first or last segment"),
                   };
 
                   yield Segment::Interpolation(interpolation);
@@ -279,24 +284,9 @@ impl Segments<'_> {
       for straight in &self.straights {
          match *straight {
             Straight::Line { span, text, .. } => {
-               let mut chars = text.char_indices();
-               while let Some((offset, c)) = chars.next() {
-                  if c != '\\' {
-                     continue;
-                  }
-
-                  match chars.next() {
-                     Some((_, c)) if unescape(c).is_some() => {},
-
-                     next @ (Some(_) | None) => {
-                        force_ref!(report).push_primary(
-                           Span::at(
-                              span.start + offset,
-                              1 + next.map_or(0, |(_, c)| c.len_utf8()),
-                           ),
-                           "invalid escape",
-                        );
-                     },
+               if let Err(invalids) = unescape_string(text) {
+                  for invalid in invalids {
+                     force_ref!(report).push_primary(invalid.offset(span.start), "invalid escape");
                   }
                }
             },
