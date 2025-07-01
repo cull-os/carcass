@@ -10,7 +10,6 @@ use cab_span::{
    Span,
 };
 use cab_syntax::{
-   ParseOracle,
    Segment,
    Segmented as _,
    node,
@@ -81,16 +80,12 @@ impl Compile {
    }
 }
 
-pub struct CompileOracle {
-   parse_oracle: ParseOracle,
-}
+pub struct CompileOracle;
 
 impl CompileOracle {
    #[must_use]
    pub fn new() -> Self {
-      Self {
-         parse_oracle: ParseOracle::new(),
-      }
+      Self
    }
 
    #[expect(clippy::unused_self)]
