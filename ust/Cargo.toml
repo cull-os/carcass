@@ -1,6 +1,7 @@
 [package]
 name        = "ust"
 description = "Universal styling"
+license     = "MPL-2.0"
 categories  = [ "command-line-interface", "game-development", "graphics", "web-programming" ]
 keywords    = [ "styling", "color", "terminal", "ansi", "universal" ]
 repository  = "https://github.com/cull-os/carcass/tree/master/ust"
@@ -9,7 +10,6 @@ publish     = true
 
 authors.workspace = true
 edition.workspace = true
-license.workspace = true
 
 [lib]
 path = "mod.rs"
