@@ -6,7 +6,7 @@ in {
     default     = [];
     description = ''
       List of supported project types
-    ''; 
+    '';
   };
 
   options.projects = lib.mkOption {

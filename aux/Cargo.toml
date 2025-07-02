@@ -1,0 +1,22 @@
+[package]
+name        = "aux"
+description = "Auxiliary vector (auxv) reader and modifier."
+license     = "MPL-2.0"
+categories  = [ "os::unix-apis" ]
+keywords    = [ "elf", "auxiliary", "vector", "auxv", "auxval" ]
+repository  = "https://github.com/cull-os/carcass/tree/master/ust"
+version     = "0.0.1"
+publish     = true
+
+authors.workspace = true
+edition.workspace = true
+
+[lib]
+path = "mod.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+derive_more.workspace = true
+num_enum.workspace    = true

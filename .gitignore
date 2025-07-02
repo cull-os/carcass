@@ -24,6 +24,7 @@
 !.deny.toml
 
 # PROJECTS
+!aux/
 !dup/
 !cab/
 !ust/
