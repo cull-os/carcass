@@ -1,4 +1,4 @@
-# aux
+# auxvec
 
 Auxiliary vector (auxv) reader and modifier.
 
@@ -42,9 +42,9 @@ kernel in
 [this document](https://refspecs.linuxfoundation.org/ELF/zSeries/lzsabi0_zSeries/x895.html).
 
 These keys are widely defined using macros in C and are prefixed using `AT_`.
-However, this crate uses `aux::VectorKey::<type-here>` instead and doesn't
+However, this crate uses `auxvec::VectorKey::<type-here>` instead and doesn't
 define the enumerations using the C naming style. `AT_PAGESZ` vs
-`aux::VectorKey::PageSize`, for example.
+`auxvec::VectorKey::PageSize`, for example.
 
 TODO: write rest of the README and finish documenting `mod.rs`.
 
