@@ -10,7 +10,7 @@ instantiated by the kernel before the program is handed off to the interpreter
 (or directly executed, if it does not specify one)**.
 
 These key/value pairs give the interpreter (and dynamic linker, they are
-different conceps but usually implemented by the same program) information on
+different concepts but usually implemented by the same program) information on
 what to do with the ELF file & how to transform its dynamic, relocatable code
 into something that the CPU can execute.
 

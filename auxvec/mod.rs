@@ -160,7 +160,7 @@ pub enum VectorKey {
    /// Referred to as `AT_HWCAP` in [`libc`].
    #[display("AT_HWCAP")]
    #[doc(alias = "AT_HWCAP")]
-   HardwareCapablility                      = 16,
+   HardwareCapability                      = 16,
    /// Frequency of [`times()`](https://man7.org/linux/man-pages/man2/times.2.html).
    ///
    /// Referred to as `AT_CLKTCK` in [`libc`].
@@ -224,7 +224,7 @@ pub enum VectorKey {
    /// Referred to as `AT_HWCAP2` in [`libc`].
    #[display("AT_HWCAP2")]
    #[doc(alias = "AT_HWCAP2")]
-   HardwareCapablility2                     = 26,
+   HardwareCapability2                     = 26,
    /// Restartable Sequences (rseq) supported feature size.
    ///
    /// Referred to as `AT_RSEQ_FEATURE_SIZE` in [`libc`].
@@ -236,18 +236,18 @@ pub enum VectorKey {
    /// Referred to as `AT_RSEQ_ALIGN` in [`libc`].
    #[display("AT_RSEQ_ALIGN")]
    #[doc(alias = "AT_RSEQ_ALIGN")]
-   RestartableSeqeuencesAllocationAlignment = 28,
+   RestartableSequencesAllocationAlignment = 28,
    /// Extension of [`HardwareCabability`].
    ///
    /// Referred to as `AT_HWCAP3` in [`libc`].
    #[display("AT_HWCAP3")]
    #[doc(alias = "AT_HWCAP3")]
-   HardwareCapablility3                     = 29,
+   HardwareCapability3                     = 29,
    /// ///
    /// Referred to as `AT_HWCAP4` in [`libc`].
    /// Extension of [`HardwareCabability`].
    #[doc(alias = "AT_HWCAP4")]
-   HardwareCapablility4                     = 30,
+   HardwareCapability4                     = 30,
    /// Pointer to the null-terminated filename of the executable.
    ///
    /// Referred to as `AT_EXECFN` in [`libc`].
