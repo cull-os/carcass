@@ -5,7 +5,7 @@ license     = "MPL-2.0"
 categories  = [ "os::unix-apis" ]
 keywords    = [ "elf", "auxiliary", "vector", "auxv", "auxval" ]
 repository  = "https://github.com/cull-os/carcass/tree/master/auxvec"
-version     = "0.0.2"
+version     = "0.0.3"
 publish     = true
 
 authors.workspace = true
