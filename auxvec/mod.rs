@@ -413,15 +413,19 @@ impl Vector<'_> {
    ///
    /// # Example
    ///
-   /// ```rs,notest
-   /// // SAFETY: This program is an ELF file.
+   /// ```no_run
+   /// # use auxvec::{Vector, VectorKey};
+   /// # #[cfg(all(unix, not(target_os = "macos"), not(target_os = "ios")))] {
+   /// /// // SAFETY: This program is an ELF file.
    /// let mut aux = unsafe { Vector::chase_environ() };
+   /// # }
+   /// # let mut aux = unsafe { Vector::from(unimplemented!()) };
    ///
    /// // SAFETY: No other thread is accessig this program's environ.
    /// for (key, value) in unsafe { aux.iter_raw_mut() } {
-   ///   if VectorKey::try_from(*key) == Ok(VectorKey::NotElf) {
-   ///     *value = 0; // Haha! You are ELF now.
-   ///   }
+   ///    if VectorKey::try_from(*key) == Ok(VectorKey::NotElf) {
+   ///       *value = 0; // Haha! You are ELF now.
+   ///    }
    /// }
    /// ```
    ///
