@@ -416,7 +416,7 @@ impl Vector<'_> {
    /// ```no_run
    /// # use auxvec::{Vector, VectorKey};
    /// # #[cfg(all(unix, not(target_os = "macos"), not(target_os = "ios")))] {
-   /// /// // SAFETY: This program is an ELF file.
+   /// // SAFETY: This program is an ELF file.
    /// let mut aux = unsafe { Vector::chase_environ() };
    /// # }
    /// # let mut aux = unsafe { Vector::from(unimplemented!()) };
