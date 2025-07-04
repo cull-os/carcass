@@ -93,10 +93,13 @@ impl ParseOracle {
    pub fn parse<'a>(&self, tokens: impl Iterator<Item = (Kind, &'a str)>) -> Parse {
       let mut noder = Noder::with_interner_and_tokens(self.cache.interner().dupe(), tokens);
 
-      noder.node(NODE_PARSE_ROOT, |this| {
-         this.node_expression(EnumSet::empty());
-         this.next_expect(EnumSet::empty(), EnumSet::empty());
-      });
+      noder
+         .node(NODE_PARSE_ROOT)
+         .with(|this| {
+            this.node_expression(EnumSet::empty());
+            this.next_expect(EnumSet::empty(), EnumSet::empty());
+         })
+         .call();
 
       let (green_node, _) = noder.builder.finish();
 
@@ -135,6 +138,7 @@ impl ParseOracle {
    }
 }
 
+#[bon::builder]
 fn unexpected(got: Option<Kind>, mut expected: EnumSet<Kind>, span: Span) -> Report {
    let report = match got {
       Some(kind) => Report::error(format!("didn't expect {kind}")),
@@ -193,6 +197,7 @@ struct Noder<'a, I: Iterator<Item = (Kind, &'a str)>> {
    offset: Size,
 }
 
+#[bon::bon]
 impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
    fn with_interner_and_tokens(interner: green::Interner, tokens: I) -> Self {
       Self {
@@ -210,24 +215,20 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
       self.builder.checkpoint()
    }
 
-   fn node<T>(&mut self, kind: Kind, closure: impl FnOnce(&mut Self) -> T) -> T {
-      self.builder.start_node(kind);
-
-      let result = closure(self);
-
-      self.builder.finish_node();
-      result
-   }
-
-   fn node_from<T>(
+   #[builder]
+   #[inline]
+   fn node<T>(
       &mut self,
-      checkpoint: green::Checkpoint,
-      kind: Kind,
-      closure: impl FnOnce(&mut Self) -> T,
+      #[builder(start_fn)] kind: Kind,
+      with: impl FnOnce(&mut Self) -> T,
+      from: Option<green::Checkpoint>,
    ) -> T {
-      self.builder.start_node_at(checkpoint, kind);
+      match from {
+         Some(checkpoint) => self.builder.start_node_at(checkpoint, kind),
+         None => self.builder.start_node(kind),
+      }
 
-      let result = closure(self);
+      let result = with(self);
 
       self.builder.finish_node();
       result
@@ -271,9 +272,12 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
          },
 
          None => {
-            self
-               .reports
-               .push(unexpected(None, EnumSet::empty(), Span::empty(self.offset)));
+            self.reports.push(
+               unexpected()
+                  .expected(EnumSet::empty())
+                  .span(Span::empty(self.offset))
+                  .call(),
+            );
 
             unreachable!()
          },
@@ -322,14 +326,18 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
          None if expected.is_empty() => None,
          Some(next) if expected.contains(next) => Some(self.next()),
 
-         unexpected => {
-            let unexpected_span = self.next_while(|next| !(until | expected).contains(next));
+         got => {
+            let got_span = self.next_while(|next| !(until | expected).contains(next));
 
-            self.node_from(expected_at, NODE_ERROR, |_| {});
+            self.node(NODE_ERROR).from(expected_at).with(|_| {}).call();
 
-            self
-               .reports
-               .push(self::unexpected(unexpected, expected, unexpected_span));
+            self.reports.push(
+               unexpected()
+                  .maybe_got(got)
+                  .expected(expected)
+                  .span(got_span)
+                  .call(),
+            );
 
             let next = self.peek()?;
 
@@ -339,119 +347,138 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
    }
 
    fn node_parenthesis(&mut self, until: EnumSet<Kind>) {
-      self.node(NODE_PARENTHESIS, |this| {
-         this.next_expect(
-            TOKEN_PARENTHESIS_LEFT.into(),
-            until | Kind::EXPRESSIONS | TOKEN_PARENTHESIS_RIGHT,
-         );
+      self
+         .node(NODE_PARENTHESIS)
+         .with(|this| {
+            this.next_expect(
+               TOKEN_PARENTHESIS_LEFT.into(),
+               until | Kind::EXPRESSIONS | TOKEN_PARENTHESIS_RIGHT,
+            );
 
-         if this
-            .peek()
-            .is_some_and(|kind| kind != TOKEN_PARENTHESIS_RIGHT)
-         {
-            this.node_expression(until | TOKEN_PARENTHESIS_RIGHT);
-         }
+            if this
+               .peek()
+               .is_some_and(|kind| kind != TOKEN_PARENTHESIS_RIGHT)
+            {
+               this.node_expression(until | TOKEN_PARENTHESIS_RIGHT);
+            }
 
-         this.next_if(TOKEN_PARENTHESIS_RIGHT);
-      });
+            this.next_if(TOKEN_PARENTHESIS_RIGHT);
+         })
+         .call();
    }
 
    fn node_list(&mut self, until: EnumSet<Kind>) {
-      self.node(NODE_LIST, |this| {
-         this.next_expect(
-            TOKEN_BRACKET_LEFT.into(),
-            until | Kind::EXPRESSIONS | TOKEN_BRACKET_RIGHT,
-         );
+      self
+         .node(NODE_LIST)
+         .with(|this| {
+            this.next_expect(
+               TOKEN_BRACKET_LEFT.into(),
+               until | Kind::EXPRESSIONS | TOKEN_BRACKET_RIGHT,
+            );
 
-         if this.peek().is_some_and(|kind| kind != TOKEN_BRACKET_RIGHT) {
-            this.node_expression(until | TOKEN_BRACKET_RIGHT);
-         }
+            if this.peek().is_some_and(|kind| kind != TOKEN_BRACKET_RIGHT) {
+               this.node_expression(until | TOKEN_BRACKET_RIGHT);
+            }
 
-         this.next_if(TOKEN_BRACKET_RIGHT);
-      });
+            this.next_if(TOKEN_BRACKET_RIGHT);
+         })
+         .call();
    }
 
    fn node_attributes(&mut self, until: EnumSet<Kind>) {
-      self.node(NODE_ATTRIBUTES, |this| {
-         this.next_expect(
-            TOKEN_CURLYBRACE_LEFT.into(),
-            until | Kind::EXPRESSIONS | TOKEN_CURLYBRACE_RIGHT,
-         );
+      self
+         .node(NODE_ATTRIBUTES)
+         .with(|this| {
+            this.next_expect(
+               TOKEN_CURLYBRACE_LEFT.into(),
+               until | Kind::EXPRESSIONS | TOKEN_CURLYBRACE_RIGHT,
+            );
 
-         if this
-            .peek()
-            .is_some_and(|kind| kind != TOKEN_CURLYBRACE_RIGHT)
-         {
-            this.node_expression(until | TOKEN_CURLYBRACE_RIGHT);
-         }
+            if this
+               .peek()
+               .is_some_and(|kind| kind != TOKEN_CURLYBRACE_RIGHT)
+            {
+               this.node_expression(until | TOKEN_CURLYBRACE_RIGHT);
+            }
 
-         this.next_if(TOKEN_CURLYBRACE_RIGHT);
-      });
+            this.next_if(TOKEN_CURLYBRACE_RIGHT);
+         })
+         .call();
    }
 
    fn node_path_root(&mut self, until: EnumSet<Kind>) {
-      self.node(NODE_PATH_ROOT, |this| {
-         let end = this.node_delimited();
+      self
+         .node(NODE_PATH_ROOT)
+         .with(|this| {
+            let end = this.node_delimited();
 
-         if end == Some(">") {
-            // DONE: <root>
-            return;
-         }
-
-         // DONE: <root:
-
-         if this.next_if(TOKEN_COLON) {
-            // DONE: :path
-            this.node_expression_single(until | TOKEN_MORE);
-         } else {
-            // DONE: config
-            this.node_expression_single(until | TOKEN_COLON | Kind::EXPRESSIONS | TOKEN_MORE);
-
-            // DONE: :path
-            if this.next_if(TOKEN_COLON) {
-               this.node_expression_single(until | TOKEN_MORE);
+            if end == Some(">") {
+               // DONE: <root>
+               return;
             }
-         }
 
-         // DONE: >
-         this.next_expect(TOKEN_MORE.into(), until);
+            // DONE: <root:
 
-         // EITHER:
-         // <root>
-         // <root::path>
-         // <root:config>
-         // <root:config:path>
-      });
+            if this.next_if(TOKEN_COLON) {
+               // DONE: :path
+               this.node_expression_single(until | TOKEN_MORE);
+            } else {
+               // DONE: config
+               this.node_expression_single(until | TOKEN_COLON | Kind::EXPRESSIONS | TOKEN_MORE);
+
+               // DONE: :path
+               if this.next_if(TOKEN_COLON) {
+                  this.node_expression_single(until | TOKEN_MORE);
+               }
+            }
+
+            // DONE: >
+            this.next_expect(TOKEN_MORE.into(), until);
+
+            // EITHER:
+            // <root>
+            // <root::path>
+            // <root:config>
+            // <root:config:path>
+         })
+         .call();
    }
 
    fn node_path(&mut self, until: EnumSet<Kind>) {
-      self.node(NODE_PATH, |this| {
-         if this.peek() == Some(TOKEN_PATH_ROOT_TYPE_START) {
-            this.node_path_root(until | TOKEN_PATH_SUBPATH_START);
-         }
+      self
+         .node(NODE_PATH)
+         .with(|this| {
+            if this.peek() == Some(TOKEN_PATH_ROOT_TYPE_START) {
+               this.node_path_root(until | TOKEN_PATH_SUBPATH_START);
+            }
 
-         if this.peek() == Some(TOKEN_PATH_SUBPATH_START) {
-            this.node_delimited();
-         }
-      });
+            if this.peek() == Some(TOKEN_PATH_SUBPATH_START) {
+               this.node_delimited();
+            }
+         })
+         .call();
    }
 
    fn node_bind(&mut self, until: EnumSet<Kind>) {
-      self.node(NODE_BIND, |this| {
-         this.next_expect(TOKEN_AT.into(), Kind::IDENTIFIERS);
+      self
+         .node(NODE_BIND)
+         .with(|this| {
+            this.next_expect(TOKEN_AT.into(), Kind::IDENTIFIERS);
 
-         this.next_while_trivia();
-         this.node_expression_single(until);
-      });
+            this.next_while_trivia();
+            this.node_expression_single(until);
+         })
+         .call();
    }
 
    fn node_identifier(&mut self, until: EnumSet<Kind>) {
       if self.peek() == Some(TOKEN_QUOTED_IDENTIFIER_START) {
          self.node_delimited();
       } else {
-         self.node(NODE_IDENTIFIER, |this| {
-            this.next_expect(Kind::IDENTIFIERS, until);
-         });
+         self
+            .node(NODE_IDENTIFIER)
+            .with(|this| this.next_expect(Kind::IDENTIFIERS, until))
+            .call();
       }
    }
 
@@ -465,95 +492,108 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
 
       let mut end_delimiter = None;
 
-      self.node_from(start_of_delimited, node, |this| {
-         loop {
-            match this.peek() {
-               Some(TOKEN_CONTENT) => {
-                  this.next_direct();
-               },
+      self
+         .node(node)
+         .from(start_of_delimited)
+         .with(|this| {
+            loop {
+               match this.peek() {
+                  Some(TOKEN_CONTENT) => {
+                     this.next_direct();
+                  },
 
-               Some(TOKEN_INTERPOLATION_START) => {
-                  this.node_interpolation();
-               },
+                  Some(TOKEN_INTERPOLATION_START) => {
+                     this.node_interpolation();
+                  },
 
-               Some(other) if other == end => {
-                  end_delimiter = this.tokens.peek().map(|&(_, slice)| slice);
-                  this.next_direct();
-                  break;
-               },
+                  Some(other) if other == end => {
+                     end_delimiter = this.tokens.peek().map(|&(_, slice)| slice);
+                     this.next_direct();
+                     break;
+                  },
 
-               Some(_) => {
-                  // Sometimes recoverably parsing interpolation leaves us unwanted tokens. It
-                  // is not worth it trying to node it correctly without a big rewrite, so
-                  // just consume them.
-                  this.next_direct();
-               },
+                  Some(_) => {
+                     // Sometimes recoverably parsing interpolation leaves us unwanted tokens. It
+                     // is not worth it trying to node it correctly without a big rewrite, so
+                     // just consume them.
+                     this.next_direct();
+                  },
 
-               None => {
-                  this.reports.push(unexpected(
-                     None,
-                     TOKEN_CONTENT | end,
-                     Span::empty(this.offset),
-                  ));
-                  break;
-               },
+                  None => {
+                     this.reports.push(
+                        unexpected()
+                           .expected(TOKEN_CONTENT | end)
+                           .span(Span::empty(this.offset))
+                           .call(),
+                     );
+                     break;
+                  },
+               }
             }
-         }
-      });
+         })
+         .call();
 
       end_delimiter
    }
 
    fn node_interpolation(&mut self) {
-      self.node(NODE_INTERPOLATION, |this| {
-         this.next_expect(TOKEN_INTERPOLATION_START.into(), EnumSet::empty());
+      self
+         .node(NODE_INTERPOLATION)
+         .with(|this| {
+            this.next_expect(TOKEN_INTERPOLATION_START.into(), EnumSet::empty());
 
-         this.node_expression(TOKEN_INTERPOLATION_END.into());
+            this.node_expression(TOKEN_INTERPOLATION_END.into());
 
-         this.next_expect(TOKEN_INTERPOLATION_END.into(), EnumSet::empty());
-      });
+            this.next_expect(TOKEN_INTERPOLATION_END.into(), EnumSet::empty());
+         })
+         .call();
    }
 
    fn node_integer(&mut self, until: EnumSet<Kind>) {
-      self.node(NODE_INTEGER, |this| {
-         this.next_expect(TOKEN_INTEGER.into(), until);
-      });
+      self
+         .node(NODE_INTEGER)
+         .with(|this| this.next_expect(TOKEN_INTEGER.into(), until))
+         .call();
    }
 
    fn node_float(&mut self, until: EnumSet<Kind>) {
-      self.node(NODE_FLOAT, |this| {
-         this.next_expect(TOKEN_FLOAT.into(), until);
-      });
+      self
+         .node(NODE_FLOAT)
+         .with(|this| this.next_expect(TOKEN_FLOAT.into(), until))
+         .call();
    }
 
    fn node_if(&mut self, until: EnumSet<Kind>) {
       let if_then_else_binding_power = node::InfixOperator::Same.binding_power().0 + 1;
 
-      self.node(NODE_IF, |this| {
-         this.next_expect(
-            TOKEN_KEYWORD_IF.into(),
-            until | Kind::EXPRESSIONS | TOKEN_KEYWORD_THEN | TOKEN_KEYWORD_ELSE,
-         );
+      self
+         .node(NODE_IF)
+         .with(|this| {
+            this.next_expect(
+               TOKEN_KEYWORD_IF.into(),
+               until | Kind::EXPRESSIONS | TOKEN_KEYWORD_THEN | TOKEN_KEYWORD_ELSE,
+            );
 
-         this.node_expression_binding_power(
-            if_then_else_binding_power,
-            until | Kind::EXPRESSIONS | TOKEN_KEYWORD_THEN | TOKEN_KEYWORD_ELSE,
-         );
+            this.node_expression_binding_power(
+               if_then_else_binding_power,
+               until | Kind::EXPRESSIONS | TOKEN_KEYWORD_THEN | TOKEN_KEYWORD_ELSE,
+            );
 
-         this.next_expect(
-            TOKEN_KEYWORD_THEN.into(),
-            until | Kind::EXPRESSIONS | TOKEN_KEYWORD_ELSE,
-         );
+            this.next_expect(
+               TOKEN_KEYWORD_THEN.into(),
+               until | Kind::EXPRESSIONS | TOKEN_KEYWORD_ELSE,
+            );
 
-         this.node_expression_binding_power(
-            if_then_else_binding_power,
-            until | Kind::EXPRESSIONS | TOKEN_KEYWORD_ELSE,
-         );
+            this.node_expression_binding_power(
+               if_then_else_binding_power,
+               until | Kind::EXPRESSIONS | TOKEN_KEYWORD_ELSE,
+            );
 
-         this.next_expect(TOKEN_KEYWORD_ELSE.into(), until | Kind::EXPRESSIONS);
+            this.next_expect(TOKEN_KEYWORD_ELSE.into(), until | Kind::EXPRESSIONS);
 
-         this.node_expression_binding_power(if_then_else_binding_power, until);
-      });
+            this.node_expression_binding_power(if_then_else_binding_power, until);
+         })
+         .call();
    }
 
    fn node_expression_single(&mut self, until: EnumSet<Kind>) {
@@ -581,10 +621,10 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
 
          Some(TOKEN_KEYWORD_IF) => self.node_if(until),
 
-         unexpected => {
+         got => {
             // Consume until the next token is either the limit, an
             // expression token or an operator.
-            let unexpected_span = self.next_while(|kind| {
+            let got_span = self.next_while(|kind| {
                !((until | Kind::EXPRESSIONS).contains(kind)
                   || node::PrefixOperator::try_from(kind).is_ok()
                   || node::InfixOperator::try_from(kind)
@@ -592,13 +632,15 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
                   || node::SuffixOperator::try_from(kind).is_ok())
             });
 
-            self.node_from(expected_at, NODE_ERROR, |_| {});
+            self.node(NODE_ERROR).from(expected_at).with(|_| {}).call();
 
-            self.reports.push(self::unexpected(
-               unexpected,
-               Kind::EXPRESSIONS,
-               unexpected_span,
-            ));
+            self.reports.push(
+               unexpected()
+                  .maybe_got(got)
+                  .expected(Kind::EXPRESSIONS)
+                  .span(got_span)
+                  .call(),
+            );
          },
       }
    }
@@ -612,10 +654,13 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
       {
          let ((), right_power) = operator.binding_power();
 
-         self.node(NODE_PREFIX_OPERATION, |this| {
-            this.next();
-            this.node_expression_binding_power(right_power, until);
-         });
+         self
+            .node(NODE_PREFIX_OPERATION)
+            .with(|this| {
+               this.next();
+               this.node_expression_binding_power(right_power, until);
+            })
+            .call();
       } else {
          self.node_expression_single(until);
       }
@@ -638,11 +683,17 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
                .peek()
                .is_none_or(|kind| !Kind::EXPRESSIONS.contains(kind))
          {
-            self.node_from(start_of_expression, NODE_SUFFIX_OPERATION, |_| {});
+            self
+               .node(NODE_SUFFIX_OPERATION)
+               .from(start_of_expression)
+               .with(|_| {})
+               .call();
          } else {
-            self.node_from(start_of_expression, NODE_INFIX_OPERATION, |this| {
-               this.node_expression_binding_power(right_power, until);
-            });
+            self
+               .node(NODE_INFIX_OPERATION)
+               .from(start_of_expression)
+               .with(|this| this.node_expression_binding_power(right_power, until))
+               .call();
          }
       }
    }

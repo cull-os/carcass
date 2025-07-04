@@ -71,7 +71,11 @@ impl tag::DisplayTags for Value {
       const ESCAPED_STYLE: style::Style = style::Color::Magenta.fg().bold();
 
       fn display_tags_escaped<'a>(tags: &mut tag::Tags<'a>, s: &'a str, normal: style::Style) {
-         for part in escape_string(s, normal, ESCAPED_STYLE) {
+         for part in escape_string(s)
+            .normal_style(normal)
+            .escaped_style(ESCAPED_STYLE)
+            .call()
+         {
             tags.write(part);
          }
       }

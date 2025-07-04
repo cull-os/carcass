@@ -90,9 +90,4 @@ impl Attributes {
    pub fn new() -> Self {
       Self(HashTrieMap::new_with_hasher_and_ptr_kind(FxBuildHasher))
    }
-
-   #[must_use]
-   pub fn is_empty(&self) -> bool {
-      self.0.is_empty()
-   }
 }

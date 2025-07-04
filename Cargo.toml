@@ -108,6 +108,7 @@ cstree = { git = "https://github.com/domenicquirl/cstree", features = [
 anyhow               = "1.0.95"
 async-once-cell      = "0.5.4"
 async-trait          = "0.1.86"
+bon                  = "3.6.4"
 bytes                = "1.10.0"
 clap                 = { version = "4.5.4", features = [ "derive" ] }
 const-str            = "0.6.2"

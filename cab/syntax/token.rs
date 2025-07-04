@@ -74,7 +74,7 @@ token! {
 impl Space {
    /// Returns the amount of lines this space.
    #[must_use]
-   pub fn newline_count(&self) -> usize {
+   pub fn line_count(&self) -> usize {
       self.text().bytes().filter(|&c| c == b'\n').count() + 1
    }
 }

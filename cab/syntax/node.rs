@@ -887,7 +887,7 @@ impl Path {
          let mut report = lazy!(Report::error("invalid path root"));
 
          let segments = root.type_().segments();
-         segments.validate(&mut report, to);
+         segments.validate(to, &mut report);
 
          if segments.is_multiline {
             force!(report).push_primary(root.type_().span(), "here");
@@ -914,7 +914,7 @@ impl Path {
          // segment, even though it is actually escaped (and errors) later.
          segments.is_multiline = false;
 
-         segments.validate(&mut report, to);
+         segments.validate(to, &mut report);
 
          assert!(!segments.is_multiline);
       }
@@ -970,7 +970,7 @@ impl IdentifierQuoted {
       let mut report = lazy!(Report::error("invalid identifier"));
 
       let segments = self.segments();
-      segments.validate(&mut report, to);
+      segments.validate(to, &mut report);
 
       if segments.is_multiline {
          force!(report).push_primary(self.span(), "here");
@@ -1047,7 +1047,7 @@ impl SString {
       let mut report = lazy!(Report::error("invalid string"));
 
       let segments = self.segments();
-      segments.validate(&mut report, to);
+      segments.validate(to, &mut report);
 
       if let Some(report) = read!(report) {
          to.push(report);
@@ -1079,7 +1079,7 @@ impl Rune {
       let mut report = lazy!(Report::error("invalid rune"));
 
       let segments = self.segments();
-      segments.validate(&mut report, to);
+      segments.validate(to, &mut report);
 
       if segments.is_multiline {
          force!(report).push_primary(self.span(), "runes cannot cannot contain newlines");

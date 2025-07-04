@@ -23,6 +23,7 @@ ust.path = "../../ust"
 
 async-once-cell.workspace = true
 async-trait.workspace     = true
+bon.workspace             = true
 bytes.workspace           = true
 const-str.workspace       = true
 dashmap.workspace         = true

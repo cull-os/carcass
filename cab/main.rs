@@ -97,7 +97,8 @@ async fn main() -> error::Termination {
 
          let compile_oracle = runtime::CompileOracle::new();
          let code = compile_oracle
-            .compile(path.dupe(), expression.as_ref())
+            .compile(expression.as_ref())
+            .path(path.dupe())
             .extractlnln(err, &path, &source)?;
 
          code.display_styled(out).context(FAIL_STDOUT)?;

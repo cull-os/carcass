@@ -83,6 +83,7 @@ impl Compile {
 
 pub struct CompileOracle;
 
+#[bon::bon]
 impl CompileOracle {
    #[must_use]
    pub fn new() -> Self {
@@ -90,8 +91,13 @@ impl CompileOracle {
    }
 
    #[expect(clippy::unused_self)]
+   #[builder(finish_fn(name = "path"))]
    #[must_use]
-   pub fn compile(&self, path: value::Path, expression: node::ExpressionRef<'_>) -> Compile {
+   pub fn compile(
+      &self,
+      #[builder(start_fn)] expression: node::ExpressionRef<'_>,
+      #[builder(finish_fn)] path: value::Path,
+   ) -> Compile {
       let mut compiler = Compiler::new(path);
 
       compiler.emit_scope(expression.span(), |this| {
@@ -179,6 +185,7 @@ impl<'a> Compiler<'a> {
    }
 }
 
+#[bon::bon]
 impl<'a> Compiler<'a> {
    fn emit_push(&mut self, span: Span, value: Value) {
       let index = self.value(value);
@@ -504,7 +511,13 @@ impl<'a> Compiler<'a> {
       });
    }
 
-   fn emit_identifier(&mut self, is_bind: bool, span: Span, identifier: &'a node::Identifier) {
+   #[builder]
+   fn emit_identifier(
+      &mut self,
+      #[builder(start_fn)] identifier: &'a node::Identifier,
+      span: Span,
+      #[builder(default)] is_bind: bool,
+   ) {
       self.emit_thunk(span, |this| {
          let name = match identifier.value() {
             node::IdentifierValueRef::Plain(plain) => {
@@ -667,10 +680,17 @@ impl<'a> Compiler<'a> {
             let node::ExpressionRef::Identifier(identifier) = bind.identifier() else {
                unreachable!("{EXPECT_VALID}")
             };
-            self.emit_identifier(true, bind.span(), identifier);
+            self
+               .emit_identifier(identifier)
+               .span(bind.span())
+               .is_bind(true)
+               .call();
          },
          node::ExpressionRef::Identifier(identifier) => {
-            self.emit_identifier(false, identifier.span(), identifier);
+            self
+               .emit_identifier(identifier)
+               .span(identifier.span())
+               .call();
          },
 
          node::ExpressionRef::SString(string) => self.emit_string(string),

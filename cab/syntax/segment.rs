@@ -88,7 +88,17 @@ pub fn escape(c: char) -> Option<&'static str> {
    })
 }
 
+#[bon::builder]
 pub fn escape_string(
+   #[builder(start_fn)] s: &str,
+   #[builder(default)] normal_style: style::Style,
+   #[builder(default)] escaped_style: style::Style,
+) -> impl Iterator<Item = style::Styled<&str>> {
+   // Bon doesn't like generator syntax.
+   escape_string_impl(s, normal_style, escaped_style)
+}
+
+fn escape_string_impl(
    s: &str,
    normal: style::Style,
    escaped: style::Style,
@@ -286,7 +296,7 @@ impl Segments<'_> {
       Ok((indents.first().copied(), indent_width.unwrap_or(0)))
    }
 
-   pub fn validate(&self, report: &mut Lazy!(Report), to: &mut Vec<Report>) {
+   pub fn validate(&self, to: &mut Vec<Report>, report: &mut Lazy!(Report)) {
       for straight in &self.straights {
          match *straight {
             Straight::Line { span, text, .. } => {
