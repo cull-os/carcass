@@ -181,6 +181,7 @@ impl PointSeverity {
          PointSeverity::Help => Color::Magenta,
       }
       .fg()
+      .bold()
    }
 }
 
