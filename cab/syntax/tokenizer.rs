@@ -19,7 +19,7 @@ pub fn is_valid_plain_identifier(s: &str) -> bool {
    chars
       .by_ref()
       .next()
-      .is_some_and(is_valid_identifier_character)
+      .is_some_and(is_valid_initial_identifier_character)
       && chars.all(is_valid_identifier_character)
 }
 
