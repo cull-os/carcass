@@ -16,10 +16,12 @@ workspace = true
 
 [features]
 bytes = [ "dep:bytes" ]
-rpds  = [ "dep:rpds" ]
+rpds  = [ "dep:rpds", "dep:archery" ]
 
 [dependencies]
 dup-macros.path = "./macros"
 
 bytes = { workspace = true, optional = true }
-rpds  = { workspace = true, optional = true }
+
+archery = { workspace = true, optional = true }
+rpds    = { workspace = true, optional = true }

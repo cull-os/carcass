@@ -3,7 +3,7 @@
 
 use std::iter;
 
-pub use dup_macros::Dupe;
+#[doc(inline)] pub use dup_macros::Dupe;
 
 pub trait Dupe: Clone {
    #[inline]
@@ -39,6 +39,98 @@ impl<'a, I: Iterator<Item = &'a (impl Dupe + 'a)>> IteratorDupedExt for I {
    }
 }
 
+mod copy {
+   use std::{
+      any,
+      marker,
+      net,
+      num,
+      thread,
+      time,
+   };
+
+   use super::Dupe;
+
+   impl Dupe for bool {}
+
+   impl Dupe for char {}
+
+   impl Dupe for u8 {}
+
+   impl Dupe for u16 {}
+
+   impl Dupe for u32 {}
+
+   impl Dupe for u64 {}
+
+   impl Dupe for u128 {}
+
+   impl Dupe for usize {}
+
+   impl Dupe for i8 {}
+
+   impl Dupe for i16 {}
+
+   impl Dupe for i32 {}
+
+   impl Dupe for i64 {}
+
+   impl Dupe for i128 {}
+
+   impl Dupe for isize {}
+
+   impl Dupe for f32 {}
+
+   impl Dupe for f64 {}
+
+   impl Dupe for num::NonZeroU8 {}
+
+   impl Dupe for num::NonZeroU16 {}
+
+   impl Dupe for num::NonZeroU32 {}
+
+   impl Dupe for num::NonZeroU64 {}
+
+   impl Dupe for num::NonZeroU128 {}
+
+   impl Dupe for num::NonZeroUsize {}
+
+   impl Dupe for num::NonZeroI8 {}
+
+   impl Dupe for num::NonZeroI16 {}
+
+   impl Dupe for num::NonZeroI32 {}
+
+   impl Dupe for num::NonZeroI64 {}
+
+   impl Dupe for num::NonZeroI128 {}
+
+   impl Dupe for num::NonZeroIsize {}
+
+   impl Dupe for any::TypeId {}
+
+   impl Dupe for marker::PhantomPinned {}
+
+   impl Dupe for net::Ipv4Addr {}
+
+   impl Dupe for net::Ipv6Addr {}
+
+   impl Dupe for net::SocketAddrV4 {}
+
+   impl Dupe for net::SocketAddrV6 {}
+
+   impl Dupe for thread::ThreadId {}
+
+   impl Dupe for time::Instant {}
+
+   impl Dupe for time::SystemTime {}
+
+   impl Dupe for time::Duration {}
+
+   impl<T: ?Sized> Dupe for marker::PhantomData<T> {}
+}
+
+#[rustfmt::skip]
 mod pointers {
    use std::{
       cell,
@@ -48,6 +140,12 @@ mod pointers {
    };
 
    use super::Dupe;
+
+   impl<A: ?Sized> Dupe for &A {}
+
+   impl<A: ?Sized> Dupe for *const A {}
+
+   impl<A: ?Sized> Dupe for *mut A {}
 
    impl<A: ?Sized> Dupe for sync::Arc<A> {}
 
@@ -60,6 +158,20 @@ mod pointers {
    impl<A: Copy> Dupe for cell::Cell<A> {}
 
    impl<A: Dupe> Dupe for mem::ManuallyDrop<A> {}
+
+   impl<R> Dupe for fn() -> R {}
+   impl<R, A> Dupe for fn(A) -> R {}
+   impl<R, A, B> Dupe for fn(A, B) -> R {}
+   impl<R, A, B, C> Dupe for fn(A, B, C) -> R {}
+   impl<R, A, B, C, D> Dupe for fn(A, B, C, D) -> R {}
+   impl<R, A, B, C, D, E> Dupe for fn(A, B, C, D, E) -> R {}
+   impl<R, A, B, C, D, E, F> Dupe for fn(A, B, C, D, E, F) -> R {}
+   impl<R, A, B, C, D, E, F, G> Dupe for fn(A, B, C, D, E, F, G) -> R {}
+   impl<R, A, B, C, D, E, F, G, H> Dupe for fn(A, B, C, D, E, F, G, H) -> R {}
+   impl<R, A, B, C, D, E, F, G, H, I> Dupe for fn(A, B, C, D, E, F, G, H, I) -> R {}
+   impl<R, A, B, C, D, E, F, G, H, I, J> Dupe for fn(A, B, C, D, E, F, G, H, I, J) -> R {}
+   impl<R, A, B, C, D, E, F, G, H, I, J, K> Dupe for fn(A, B, C, D, E, F, G, H, I, J, K) -> R {}
+   impl<R, A, B, C, D, E, F, G, H, I, J, K, L> Dupe for fn(A, B, C, D, E, F, G, H, I, J, K, L) -> R {}
 }
 
 #[rustfmt::skip]
@@ -96,6 +208,8 @@ mod containers {
    impl<A: Dupe, B: Dupe, C: Dupe, D: Dupe, E: Dupe, F: Dupe, G: Dupe, H: Dupe> Dupe for (A, B, C, D, E, F, G, H) {}
    impl<A: Dupe, B: Dupe, C: Dupe, D: Dupe, E: Dupe, F: Dupe, G: Dupe, H: Dupe, I: Dupe> Dupe for (A, B, C, D, E, F, G, H, I) {}
    impl<A: Dupe, B: Dupe, C: Dupe, D: Dupe, E: Dupe, F: Dupe, G: Dupe, H: Dupe, I: Dupe, J: Dupe> Dupe for (A, B, C, D, E, F, G, H, I, J) {}
+   impl<A: Dupe, B: Dupe, C: Dupe, D: Dupe, E: Dupe, F: Dupe, G: Dupe, H: Dupe, I: Dupe, J: Dupe, K: Dupe> Dupe for (A, B, C, D, E, F, G, H, I, J, K) {}
+   impl<A: Dupe, B: Dupe, C: Dupe, D: Dupe, E: Dupe, F: Dupe, G: Dupe, H: Dupe, I: Dupe, J: Dupe, K: Dupe, L: Dupe> Dupe for (A, B, C, D, E, F, G, H, I, J, K, L) {}
 
    impl<A: Dupe, const N: usize> Dupe for [A; N] {}
 }
@@ -118,27 +232,31 @@ mod rpds {
 
    use super::Dupe;
 
-   impl<K: cmp::Eq + hash::Hash, V> Dupe for rpds::HashTrieMap<K, V> {}
-   impl<K: cmp::Eq + hash::Hash, V> Dupe for rpds::HashTrieMapSync<K, V> {}
+   impl<K: cmp::Eq + hash::Hash, V, P: archery::SharedPointerKind, H: hash::BuildHasher + Clone>
+      Dupe for rpds::HashTrieMap<K, V, P, H>
+   {
+   }
 
-   impl<T: cmp::Eq + hash::Hash> Dupe for rpds::HashTrieSet<T> {}
-   impl<T: cmp::Eq + hash::Hash> Dupe for rpds::HashTrieSetSync<T> {}
+   impl<K: cmp::Eq + hash::Hash, P: archery::SharedPointerKind, H: hash::BuildHasher + Clone> Dupe
+      for rpds::HashTrieSet<K, P, H>
+   {
+   }
 
-   impl<T> Dupe for rpds::List<T> {}
-   impl<T> Dupe for rpds::ListSync<T> {}
+   impl<T, P: archery::SharedPointerKind> Dupe for rpds::List<T, P> {}
 
-   impl<T> Dupe for rpds::Queue<T> {}
-   impl<T> Dupe for rpds::QueueSync<T> {}
+   impl<T, P: archery::SharedPointerKind> Dupe for rpds::Queue<T, P> {}
 
-   impl<K: cmp::Ord + cmp::Eq + hash::Hash, V> Dupe for rpds::RedBlackTreeMap<K, V> {}
-   impl<K: cmp::Ord + cmp::Eq + hash::Hash, V> Dupe for rpds::RedBlackTreeMapSync<K, V> {}
+   impl<K: cmp::Ord + cmp::Eq + hash::Hash, V, P: archery::SharedPointerKind> Dupe
+      for rpds::RedBlackTreeMap<K, V, P>
+   {
+   }
 
-   impl<T: cmp::Ord + cmp::Eq + hash::Hash> Dupe for rpds::RedBlackTreeSet<T> {}
-   impl<T: cmp::Ord + cmp::Eq + hash::Hash> Dupe for rpds::RedBlackTreeSetSync<T> {}
+   impl<T: cmp::Ord + cmp::Eq + hash::Hash, P: archery::SharedPointerKind> Dupe
+      for rpds::RedBlackTreeSet<T, P>
+   {
+   }
 
-   impl<T> Dupe for rpds::Stack<T> {}
-   impl<T> Dupe for rpds::StackSync<T> {}
+   impl<T, P: archery::SharedPointerKind> Dupe for rpds::Stack<T, P> {}
 
-   impl<T> Dupe for rpds::Vector<T> {}
-   impl<T> Dupe for rpds::VectorSync<T> {}
+   impl<T, P: archery::SharedPointerKind> Dupe for rpds::Vector<T, P> {}
 }

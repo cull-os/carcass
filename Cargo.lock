@@ -496,6 +496,7 @@ dependencies = [
 name = "dup"
 version = "0.0.1"
 dependencies = [
+ "archery",
  "bytes",
  "dup-macros",
  "rpds",
