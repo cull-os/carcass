@@ -29,14 +29,13 @@ use ust::{
 ///
 /// ```rs
 /// fn get_result() -> Result<()> {
-///   Err(chain!("can't get the result", "because of foo"))
+///   Err(chain!("can't get the result"))
 /// }
 /// ```
 #[macro_export]
 macro_rules! chain {
-   ($($link:expr),* $(,)?) => {
-      $crate::Chain::new()
-         $(.push_front_display($link))*
+   ($($t:tt)*) => {
+      $crate::Chain::new().push_front_display(format!($($t)*))
    };
 }
 
@@ -47,8 +46,8 @@ macro_rules! chain {
 /// ```
 #[macro_export]
 macro_rules! bail {
-   ($($link:expr),* $(,)?) => {{
-      Err($crate::chain!($($link),*))?;
+   ($($t:tt)*) => {{
+      Err($crate::chain!($($t)*))?;
       unreachable!()
    }};
 }
