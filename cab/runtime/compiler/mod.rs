@@ -74,7 +74,10 @@ impl Compile {
       }
 
       if fail > 0 {
-         bail!("compilation failed due to {fail} previous error(s)");
+         bail!(
+            "compilation failed due to {fail} previous error{s}",
+            s = if fail == 1 { "" } else { "s" },
+         );
       }
 
       Ok(self.code)
