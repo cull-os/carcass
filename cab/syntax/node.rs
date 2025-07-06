@@ -908,15 +908,15 @@ impl Path {
       }
 
       if let Some(subpath) = self.subpath() {
-         let mut segments = subpath.segments();
-
-         // FIXME: ../foo/bar\<newline-here> gets detected as a multiline
-         // segment, even though it is actually escaped (and errors) later.
-         segments.is_multiline = false;
-
+         let segments = subpath.segments();
          segments.validate(to, &mut report);
 
-         assert!(!segments.is_multiline);
+         // Only assert if the report wasn't initialized, because
+         // ./foo/bar\<newline-here> actually gets parsed as a
+         // multiline segment. And when that happens report is ready.
+         if !ready!(report) {
+            assert!(!segments.is_multiline);
+         }
       }
 
       if let Some(report) = read!(report) {
