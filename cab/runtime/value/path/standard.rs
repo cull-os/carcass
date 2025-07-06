@@ -4,8 +4,8 @@ use async_once_cell::OnceCell;
 use async_trait::async_trait;
 use bytes::Bytes;
 use cab_error::{
-   Contextful as _,
    Result,
+   ResultExt as _,
    bail,
 };
 use dup::Dupe as _;
@@ -59,7 +59,7 @@ impl Root for Standard {
             io::stdin()
                .read_to_end(&mut buffer)
                .await
-               .context("failed to read from standard in")?;
+               .chain_err("failed to read from standard in")?;
 
             Ok(Bytes::from(buffer))
          })
@@ -79,6 +79,6 @@ impl Root for Standard {
       io::stdout()
          .write_all(&content)
          .await
-         .context("failed to write to standard out")
+         .chain_err("failed to write to standard out")
    }
 }

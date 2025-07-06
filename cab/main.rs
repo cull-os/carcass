@@ -6,7 +6,7 @@ use std::{
 use cab::{
    error::{
       self,
-      Contextful as _,
+      ResultExt as _,
    },
    runtime,
    syntax,
@@ -101,7 +101,7 @@ async fn main() -> error::Termination {
             .path(path.dupe())
             .extractlnln(err, &path, &source)?;
 
-         code.display_styled(out).context(FAIL_STDOUT)?;
+         code.display_styled(out).chain_err(FAIL_STDOUT)?;
       },
 
       Command::Dump { command, .. } => {
@@ -115,7 +115,7 @@ async fn main() -> error::Termination {
                   } else {
                      writeln!(out, "{kind:?} {slice:?}")
                   }
-                  .context(FAIL_STDOUT)?;
+                  .chain_err(FAIL_STDOUT)?;
                }
             },
 
@@ -126,7 +126,7 @@ async fn main() -> error::Termination {
                   .extractlnln(err, &path, &source)?;
 
                write!(out, "{node:#?}", node = expression.parent().unwrap())
-                  .context(FAIL_STDOUT)?;
+                  .chain_err(FAIL_STDOUT)?;
             },
          }
       },

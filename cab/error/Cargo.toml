@@ -17,8 +17,4 @@ workspace = true
 dup.path = "../../dup"
 ust.path = "../../ust"
 
-anyhow.workspace      = true
-const-str.workspace   = true
-derive_more.workspace = true
-smallvec.workspace    = true
-thiserror.workspace   = true
+rpds.workspace        = true

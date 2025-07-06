@@ -1,8 +1,8 @@
 use std::borrow::Cow;
 
 use cab_error::{
-   Contextful as _,
    Result,
+   ResultExt as _,
    bail,
 };
 use cab_span::{
@@ -68,9 +68,9 @@ impl Compile {
 
          writer
             .write_report(&report, location, source)
-            .context("failed to write report")?;
+            .chain_err("failed to write report")?;
 
-         write!(writer, "\n\n").context("failed to write report")?;
+         write!(writer, "\n\n").chain_err("failed to write report")?;
       }
 
       if fail > 0 {

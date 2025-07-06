@@ -7,8 +7,9 @@ use async_once_cell::OnceCell;
 use async_trait::async_trait;
 use bytes::Bytes;
 use cab_error::{
-   Contextful as _,
+   OptionExt as _,
    Result,
+   ResultExt as _,
 };
 use dashmap::DashMap;
 use dup::Dupe as _;
@@ -68,13 +69,13 @@ impl Root for Fs {
 
             let mut read = fs::read_dir(&path)
                .await
-               .with_context(|| format!("failed to read dir '{path}'", path = path.display()))?;
+               .chain_err_with(|| format!("failed to read dir '{path}'", path = path.display()))?;
 
-            while let Some(entry) = read.next_entry().await.with_context(|| {
+            while let Some(entry) = read.next_entry().await.chain_err_with(|| {
                format!("failed to read entry of '{path}'", path = path.display())
             })? {
                let name = entry.file_name();
-               let name = name.to_str().with_context(|| {
+               let name = name.to_str().ok_or_chain_with(|| {
                   format!(
                      "entry with name similar to '{name}' contains invalid UTF-8",
                      name = name.display()
@@ -100,7 +101,7 @@ impl Root for Fs {
 
             let content = fs::read(&path)
                .await
-               .with_context(|| format!("failed to read '{path}'", path = path.display()))?;
+               .chain_err_with(|| format!("failed to read '{path}'", path = path.display()))?;
 
             Ok(Bytes::from(content))
          })

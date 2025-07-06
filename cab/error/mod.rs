@@ -3,25 +3,18 @@
 #![feature(gen_blocks, if_let_guard, let_chains, trait_alias, try_trait_v2)]
 
 use std::{
-   error,
    fmt::{
-      self,
-      Write as _,
-   },
-   io::{
       self,
       Write as _,
    },
    ops,
    process,
    result,
-   sync::Arc,
 };
 
-use derive_more::Deref;
 use dup::Dupe;
 use ust::{
-   Display as _,
+   Display,
    Write as _,
    style::StyledExt as _,
    terminal::{
@@ -30,195 +23,195 @@ use ust::{
    },
 };
 
-#[doc(hidden)]
-pub mod private {
-   pub use anyhow;
-}
-
-/// A type alias for concice use of [`Error`].
-pub type Result<T> = result::Result<T, Error>;
-
-/// The error type. Stores an error chain that can be appended to with
-/// [`Contextful`]. Can be formatted to show the chain with [`fmt::Debug`].
-#[derive(thiserror::Error, Clone, Dupe)]
-#[error(transparent)]
-pub struct Error(#[doc(hidden)] pub Arc<anyhow::Error>);
-
-impl fmt::Debug for Error {
-   fn fmt(&self, writer: &mut fmt::Formatter<'_>) -> fmt::Result {
-      let writer = &mut terminal::writer_from_stderr(writer);
-
-      let mut message = String::new();
-
-      let mut chain = self.0.chain().rev().peekable();
-      while let Some(error) = chain.next() {
-         message.clear();
-
-         {
-            let message = &mut terminal::writer_from_stderr(&mut message);
-
-            terminal::indent!(
-               message,
-               header = if chain.peek().is_none() {
-                  "error:"
-               } else {
-                  "cause:"
-               }
-               .red()
-               .bold(),
-            );
-
-            match error.downcast_ref::<ErrorTags>() {
-               // FIXME: This branch never happens because anyhow doesn't expose the type directly.
-               Some(displayable) => displayable.display_styled(message)?,
-               None => write!(message, "{error}")?,
-            }
-
-            message.finish()?;
-         }
-
-         let mut chars = message.char_indices();
-
-         if let Some((_, first)) = chars.next()
-            && let Some((second_start, second)) = chars.next()
-            && second.is_lowercase()
-         {
-            writeln!(
-               writer,
-               "{first_lowercase}{rest}",
-               first_lowercase = first.to_lowercase(),
-               rest = &message[second_start..],
-            )?;
-         } else {
-            writeln!(writer, "{message}")?;
-         }
-      }
-
-      writer.finish()?;
-      Ok(())
-   }
-}
-
-#[derive(Deref)]
-struct ErrorTags(tag::Tags<'static>);
-
-impl fmt::Debug for ErrorTags {
-   fn fmt(&self, writer: &mut fmt::Formatter<'_>) -> fmt::Result {
-      // TODO: Remove this hack, this only exists because anyhow
-      // wraps the errors in the chain and prevents us from getting
-      // ErrorTags in the Debug of Error (which shouldn't do this either).
-      //
-      // Move off of anyhow & make Termination handle this all.
-      let mut writer = terminal::writer_from_stderr(writer);
-      // let mut writer = terminal::writer(terminal::StyleChoice::Never, writer);
-
-      self.display_styled(&mut writer)?;
-
-      writer.finish()?;
-      Ok(())
-   }
-}
-
-/// Creates an [`Error`] from the provided string literal.
+/// Creates a [`Chain`] from the provided string literals.
 ///
 /// # Example
 ///
 /// ```rs
 /// fn get_result() -> Result<()> {
-///     unimplemented!()
+///   Err(chain!("can't get the result", "because of foo"))
 /// }
-///
-/// get_result().map_err(|error| error!("found error: {error}"))
 /// ```
 #[macro_export]
-macro_rules! error {
-   ($($t:tt)*) => {
-      $crate::Error(std::sync::Arc::new($crate::private::anyhow::anyhow!($($t)*)))
+macro_rules! chain {
+   ($($link:expr),* $(,)?) => {
+      $crate::Chain::new()
+         $(.push_front_display($link))*
    };
 }
 
 /// A macro that boils down to:
 ///
 /// ```rs
-/// return Err(error!(arguments));
+/// return Err(chain!(arguments));
 /// ```
 #[macro_export]
 macro_rules! bail {
-   ($($t:tt)*) => {{
-      Err($crate::error!($($t)*))?;
+   ($($link:expr),* $(,)?) => {{
+      Err($crate::chain!($($link),*))?;
       unreachable!()
    }};
 }
 
-/// The type of the context accepted by [`Contextful`].
-pub trait Context = fmt::Display + Send + Sync + 'static;
+/// A type alias for concise use of [`Chain`] with [`Result`](result::Result).
+pub type Result<T> = result::Result<T, Chain>;
 
-/// A trait to add context to [`Error`].
-pub trait Contextful<T> {
-   /// Appends the context to the error chain.
-   fn context(self, context: impl Context) -> Result<T>;
+pub trait StdDisplay = fmt::Display + Send + Sync + 'static;
 
-   fn context_tags(self, context: &impl tag::DisplayTags) -> Result<T>;
-
-   /// Appends the context to the error chain, lazily.
-   fn with_context<C: Context>(self, context: impl FnOnce() -> C) -> Result<T>;
+enum Link {
+   StdDisplay(Box<dyn StdDisplay>),
+   Tags(tag::Tags<'static>),
 }
 
-impl<T> Contextful<T> for Option<T> {
-   fn context(self, context: impl Context) -> Result<T> {
-      anyhow::Context::context(self, context).map_err(|error| Error(Arc::new(error)))
+/// A chain.
+#[derive(Clone, Dupe)]
+pub struct Chain(rpds::ListSync<Link>);
+
+impl Display for Chain {
+   fn display_styled(&self, writer: &mut dyn ust::Write) -> fmt::Result {
+      let mut chain = self.0.iter().peekable();
+      while let Some(link) = chain.next() {
+         terminal::indent!(
+            writer,
+            header = if chain.peek().is_none() {
+               "error:"
+            } else {
+               "cause:"
+            }
+            .red()
+            .bold(),
+         );
+
+         #[expect(clippy::pattern_type_mismatch)]
+         match link {
+            Link::StdDisplay(display) => {
+               let string = display.to_string();
+               let mut chars = string.char_indices();
+
+               if let Some((_, first)) = chars.next()
+                  && let Some((second_start, second)) = chars.next()
+                  && second.is_lowercase()
+               {
+                  writeln!(
+                     writer,
+                     "{first_lowercase}{rest}",
+                     first_lowercase = first.to_lowercase(),
+                     rest = &string[second_start..],
+                  )?;
+               } else {
+                  writeln!(writer, "{string}")?;
+               }
+            },
+
+            Link::Tags(tags) => {
+               tags.display_styled(writer)?;
+               writeln!(writer)?;
+            },
+         }
+      }
+
+      Ok(())
+   }
+}
+
+impl Chain {
+   #[must_use]
+   pub fn new() -> Self {
+      Self(rpds::List::new_sync())
    }
 
-   fn context_tags(self, context: &impl tag::DisplayTags) -> Result<T> {
-      anyhow::Context::with_context(self, || {
-         let tags: tag::Tags<'_> = context.into();
-         ErrorTags(tags.into_owned())
+   #[must_use]
+   pub fn push_front_display(&self, display: impl StdDisplay) -> Self {
+      Self(self.0.push_front(Link::StdDisplay(Box::new(display))))
+   }
+
+   #[must_use]
+   pub fn push_front_tags(&self, display: &impl tag::DisplayTags) -> Self {
+      Self(
+         self
+            .0
+            .push_front(Link::Tags(tag::Tags::from(display).into_owned())),
+      )
+   }
+}
+
+pub trait OptionExt<T> {
+   fn ok_or_chain(self, display: impl StdDisplay) -> Result<T>;
+
+   fn ok_or_chain_with<D: StdDisplay>(self, display: impl FnOnce() -> D) -> Result<T>;
+
+   fn ok_or_tag(self, tags: &impl tag::DisplayTags) -> Result<T>;
+}
+
+impl<T> OptionExt<T> for Option<T> {
+   fn ok_or_chain(self, display: impl StdDisplay) -> Result<T> {
+      self.ok_or_else(|| Chain::new().push_front_display(display))
+   }
+
+   fn ok_or_chain_with<D: StdDisplay>(self, display: impl FnOnce() -> D) -> Result<T> {
+      self.ok_or_else(|| Chain::new().push_front_display(display()))
+   }
+
+   fn ok_or_tag(self, tags: &impl tag::DisplayTags) -> Result<T> {
+      self.ok_or_else(|| Chain::new().push_front_tags(tags))
+   }
+}
+
+pub trait ResultExt<T> {
+   fn chain_err(self, display: impl StdDisplay) -> Result<T>;
+
+   fn chain_err_with<D: StdDisplay>(self, display: impl FnOnce() -> D) -> Result<T>;
+
+   fn tag_err(self, tags: &impl tag::DisplayTags) -> Result<T>;
+}
+
+impl<T, E: StdDisplay> ResultExt<T> for result::Result<T, E> {
+   fn chain_err(self, display: impl StdDisplay) -> Result<T> {
+      self.map_err(|exist| {
+         Chain::new()
+            .push_front_display(exist)
+            .push_front_display(display)
       })
-      .map_err(move |error| Error(Arc::new(error)))
    }
 
-   fn with_context<C: Context>(self, context: impl FnOnce() -> C) -> Result<T> {
-      anyhow::Context::with_context(self, context).map_err(|error| Error(Arc::new(error)))
-   }
-}
-
-impl<T, E: error::Error + Send + Sync + 'static> Contextful<T> for result::Result<T, E> {
-   fn context(self, context: impl Context) -> Result<T> {
-      anyhow::Context::context(self, context).map_err(|error| Error(Arc::new(error)))
-   }
-
-   fn context_tags(self, context: &impl tag::DisplayTags) -> Result<T> {
-      anyhow::Context::with_context(self, || {
-         let tags: tag::Tags<'_> = context.into();
-         ErrorTags(tags.into_owned())
+   fn chain_err_with<D: StdDisplay>(self, display: impl FnOnce() -> D) -> Result<T> {
+      self.map_err(|exist| {
+         Chain::new()
+            .push_front_display(exist)
+            .push_front_display(display())
       })
-      .map_err(move |error| Error(Arc::new(error)))
    }
 
-   fn with_context<C: Context>(self, context: impl FnOnce() -> C) -> Result<T> {
-      anyhow::Context::with_context(self, context).map_err(|error| Error(Arc::new(error)))
-   }
-}
-
-impl fmt::Display for ErrorTags {
-   fn fmt(&self, writer: &mut fmt::Formatter<'_>) -> fmt::Result {
-      <Self as fmt::Debug>::fmt(self, writer)
+   fn tag_err(self, tags: &impl tag::DisplayTags) -> Result<T> {
+      self.map_err(|exist| Chain::new().push_front_display(exist).push_front_tags(tags))
    }
 }
 
-impl error::Error for ErrorTags {}
+impl<T> ResultExt<T> for result::Result<T, Chain> {
+   fn chain_err(self, display: impl StdDisplay) -> Result<T> {
+      self.map_err(|chain| chain.push_front_display(display))
+   }
+
+   fn chain_err_with<D: StdDisplay>(self, display: impl FnOnce() -> D) -> Result<T> {
+      self.map_err(|chain| chain.push_front_display(display()))
+   }
+
+   fn tag_err(self, tags: &impl tag::DisplayTags) -> Result<T> {
+      self.map_err(|chain| chain.push_front_tags(tags))
+   }
+}
 
 /// The termination type. Meant to be used as the return type of the main
 /// function.
 ///
-/// Can be created directly or from an `Error` with the `?` operator. Will
+/// Can be created directly or from a [`Chain`] with the `?` operator. Will
 /// pretty print the error.
-#[derive(Clone)]
-pub struct Termination(Option<Error>);
+#[derive(Clone, Dupe)]
+pub struct Termination(result::Result<(), Chain>);
 
 impl ops::Try for Termination {
    type Output = ();
-   type Residual = Termination;
+   type Residual = Self;
 
    fn from_output((): Self::Output) -> Self {
       Self::success()
@@ -226,19 +219,26 @@ impl ops::Try for Termination {
 
    fn branch(self) -> ops::ControlFlow<Self::Residual, Self::Output> {
       match self.0 {
-         None => ops::ControlFlow::Continue(()),
-         Some(error) => ops::ControlFlow::Break(Self(Some(error))),
+         Ok(()) => ops::ControlFlow::Continue(()),
+         Err(_) => ops::ControlFlow::Break(self),
       }
    }
 }
 
-impl<T, E: error::Error + Send + Sync + 'static> ops::FromResidual<result::Result<T, E>>
-   for Termination
-{
+impl<T, E: StdDisplay> ops::FromResidual<result::Result<T, E>> for Termination {
    fn from_residual(result: result::Result<T, E>) -> Self {
       match result {
          Ok(_) => Self::success(),
-         Err(error) => Self(Some(Error(Arc::new(error.into())))),
+         Err(display) => Self::error(Chain::new().push_front_display(display)),
+      }
+   }
+}
+
+impl<T> ops::FromResidual<result::Result<T, Chain>> for Termination {
+   fn from_residual(result: result::Result<T, Chain>) -> Self {
+      match result {
+         Ok(_) => Self::success(),
+         Err(chain) => Self::error(chain),
       }
    }
 }
@@ -252,10 +252,12 @@ impl ops::FromResidual<Termination> for Termination {
 impl process::Termination for Termination {
    fn report(self) -> process::ExitCode {
       match self.0 {
-         None => process::ExitCode::SUCCESS,
+         Ok(()) => process::ExitCode::SUCCESS,
 
-         Some(error) => {
-            let _ = write!(io::stderr(), "{error:?}");
+         Err(chain) => {
+            let writer = &mut terminal::stderr();
+            let _ = chain.display_styled(writer);
+            let _ = writer.finish();
             process::ExitCode::FAILURE
          },
       }
@@ -263,15 +265,15 @@ impl process::Termination for Termination {
 }
 
 impl Termination {
-   /// Creates a [`Termination`] from the provided [`Error`].
-   #[must_use]
-   pub fn error(error: Error) -> Self {
-      Self(Some(error))
-   }
-
    /// Creates a successful [`Termination`] that returns success.
    #[must_use]
    pub fn success() -> Self {
-      Self(None)
+      Self(Ok(()))
+   }
+
+   /// Creates a [`Termination`] from the provided [`Error`].
+   #[must_use]
+   pub fn error(error: Chain) -> Self {
+      Self(Err(error))
    }
 }

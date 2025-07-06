@@ -6,8 +6,9 @@ use std::{
 use async_trait::async_trait;
 use bytes::Bytes;
 use cab_error::{
-   Contextful as _,
+   OptionExt as _,
    Result,
+   ResultExt as _,
    bail,
 };
 use dup::{
@@ -151,7 +152,7 @@ impl Path {
    }
 
    pub async fn list(&self) -> Result<List<Subpath>> {
-      let root = self.root.dupe().context_tags(&|tags: &mut tag::Tags| {
+      let root = self.root.dupe().ok_or_tag(&|tags: &mut tag::Tags| {
          tags.write("tried to list rootless path ");
          tags.extend(self);
       })?;
@@ -159,14 +160,14 @@ impl Path {
       root
          .list(&self.subpath)
          .await
-         .context_tags(&|tags: &mut tag::Tags| {
+         .tag_err(&|tags: &mut tag::Tags| {
             tags.write("failed to read ");
             tags.extend(self);
          })
    }
 
    pub async fn read(&self) -> Result<Bytes> {
-      let root = self.root.dupe().context_tags(&|tags: &mut tag::Tags| {
+      let root = self.root.dupe().ok_or_tag(&|tags: &mut tag::Tags| {
          tags.write("tried to read rootless path ");
          tags.extend(self);
       })?;
@@ -174,14 +175,14 @@ impl Path {
       root
          .read(&self.subpath)
          .await
-         .context_tags(&|tags: &mut tag::Tags| {
+         .tag_err(&|tags: &mut tag::Tags| {
             tags.write("failed to read ");
             tags.extend(self);
          })
    }
 
    pub async fn write(&self, content: Bytes) -> Result<()> {
-      let root = self.root.dupe().context_tags(&|tags: &mut tag::Tags| {
+      let root = self.root.dupe().ok_or_tag(&|tags: &mut tag::Tags| {
          tags.write("tried to write to rootless path ");
          tags.extend(self);
       })?;
@@ -189,7 +190,7 @@ impl Path {
       root
          .write(&self.subpath, content)
          .await
-         .context_tags(&|tags: &mut tag::Tags| {
+         .tag_err(&|tags: &mut tag::Tags| {
             tags.write("failed to write to ");
             tags.extend(self);
          })

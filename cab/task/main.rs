@@ -9,7 +9,7 @@ use std::{
 use cab::{
    error::{
       self,
-      Contextful as _,
+      ResultExt as _,
    },
    syntax,
 };
@@ -67,7 +67,7 @@ async fn main() -> error::Termination {
 
          let diff_tool = which("difft")
             .or_else(|_| which("diff"))
-            .context("failed to find diff tool")?;
+            .chain_err("failed to find diff tool")?;
 
          let parse_oracle = syntax::ParseOracle::new();
 
@@ -75,7 +75,7 @@ async fn main() -> error::Termination {
          let root = root.parent().unwrap().join("target").join("cab-noder-fuzz");
 
          fs::read_dir(&root)
-            .context("failed to list cab-syntax/test/data")?
+            .chain_err("failed to list cab-syntax/test/data")?
             .filter_map(|entry| {
                let mut path = entry.ok()?.path();
 
@@ -89,7 +89,7 @@ async fn main() -> error::Termination {
                }))
             })
             .try_for_each(|(source_file, expected_display_file)| {
-               let source = fs::read_to_string(&source_file).with_context(|| {
+               let source = fs::read_to_string(&source_file).chain_err_with(|| {
                   format!(
                      "failed to read source file {source_file}",
                      source_file = source_file.display(),
@@ -97,7 +97,7 @@ async fn main() -> error::Termination {
                })?;
 
                let expected_display =
-                  fs::read_to_string(&expected_display_file).with_context(|| {
+                  fs::read_to_string(&expected_display_file).chain_err_with(|| {
                      format!(
                         "failed to read expected display file {expected_display_file}",
                         expected_display_file = expected_display_file.display(),
@@ -113,35 +113,35 @@ async fn main() -> error::Termination {
 
                if expected_display == actual_display {
                   write!(err, "expected and actual display matched for ")
-                     .context("failed to write to stderr")?;
-                  write(err, &name.green()).context("failed to write to stderr")?;
+                     .chain_err("failed to write to stderr")?;
+                  write(err, &name.green()).chain_err("failed to write to stderr")?;
                   return Ok(());
                }
 
-               write!(err, "behaviour has changed for ").context("failed to write to stderr")?;
-               write(err, &name.yellow()).context("failed to write to stderr")?;
+               write!(err, "behaviour has changed for ").chain_err("failed to write to stderr")?;
+               write(err, &name.yellow()).chain_err("failed to write to stderr")?;
                write!(err, "! diffing expected vs actual display")
-                  .context("failed to write to stderr")?;
+                  .chain_err("failed to write to stderr")?;
 
                let mut child = process::Command::new(&diff_tool)
                   .arg(&expected_display_file)
                   .arg("/dev/stdin")
                   .stdin(process::Stdio::piped())
                   .spawn()
-                  .context("failed to spawn diff tool")?;
+                  .chain_err("failed to spawn diff tool")?;
 
                if let Some(mut stdin) = child.stdin.take() {
                   write!(stdin, "{actual_display}")
-                     .context("failed to feed display to diff tool")?;
+                     .chain_err("failed to feed display to diff tool")?;
                }
 
                child
                   .wait()
-                  .context("failed to wait for diff tool to complete")?;
+                  .chain_err("failed to wait for diff tool to complete")?;
 
                if overwrite {
                   eprintln!("overwriting old test case...");
-                  fs::write(&expected_display_file, &actual_display).with_context(|| {
+                  fs::write(&expected_display_file, &actual_display).chain_err_with(|| {
                      format!(
                         "failed to override expected display file {expected_display_file} with \
                          actual display",
@@ -156,7 +156,7 @@ async fn main() -> error::Termination {
                   error::bail!("failed fast");
                }
 
-               Ok::<(), error::Error>(())
+               Ok::<(), error::Chain>(())
             })?;
 
          if fail_count > 0 {
