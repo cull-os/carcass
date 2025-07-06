@@ -3,7 +3,6 @@ use std::{
    sync::Arc,
 };
 
-use async_once_cell::OnceCell;
 use async_trait::async_trait;
 use bytes::Bytes;
 use cab_error::{
@@ -11,10 +10,7 @@ use cab_error::{
    Result,
    ResultExt as _,
 };
-use dashmap::DashMap;
-use dup::Dupe as _;
 use rpds::ListSync as List;
-use rustc_hash::FxBuildHasher;
 use tokio::fs;
 
 use super::{
@@ -26,21 +22,12 @@ use crate::Value;
 /// Creates an entry from a given fs path.
 #[must_use]
 pub fn fs(config: Value, path: Value) -> impl Root {
-   Fs {
-      config,
-      path,
-
-      entries: DashMap::with_hasher(FxBuildHasher),
-      contents: DashMap::with_hasher(FxBuildHasher),
-   }
+   Fs { config, path }
 }
 
 struct Fs {
    config: Value,
    path:   Value,
-
-   entries:  DashMap<Subpath, OnceCell<Result<List<Subpath>>>, FxBuildHasher>,
-   contents: DashMap<Subpath, OnceCell<Result<Bytes>>, FxBuildHasher>,
 }
 
 #[async_trait]
@@ -58,63 +45,53 @@ impl Root for Fs {
    }
 
    async fn list(self: Arc<Self>, subpath: &Subpath) -> Result<List<Subpath>> {
-      self
-         .entries
-         .entry(subpath.dupe())
-         .or_default()
-         .get_or_init(async {
-            let mut contents = Vec::new();
+      let mut contents = List::new_sync();
 
-            let path = self.to_pathbuf(subpath);
+      let path = self.to_pathbuf(subpath);
 
-            let mut read = fs::read_dir(&path)
-               .await
-               .chain_err_with(|| format!("failed to read dir '{path}'", path = path.display()))?;
-
-            while let Some(entry) = read.next_entry().await.chain_err_with(|| {
-               format!("failed to read entry of '{path}'", path = path.display())
-            })? {
-               let name = entry.file_name();
-               let name = name.to_str().ok_or_chain_with(|| {
-                  format!(
-                     "entry with name similar to '{name}' contains invalid UTF-8",
-                     name = name.display()
-                  )
-               })?;
-
-               contents.push(subpath.push_front(name.into()));
-            }
-
-            todo!()
-         })
+      let mut read = fs::read_dir(&path)
          .await
-         .dupe()
+         .chain_err_with(|| format!("failed to read dir '{path}'", path = path.display()))?;
+
+      while let Some(entry) = read
+         .next_entry()
+         .await
+         .chain_err_with(|| format!("failed to read entry of '{path}'", path = path.display()))?
+      {
+         let name = entry.file_name();
+         let name = name.to_str().ok_or_chain_with(|| {
+            format!(
+               "entry with name similar to '{name}' has a name that is not valid UTF-8",
+               name = name.display()
+            )
+         })?;
+
+         contents = contents.push_front(subpath.push_front(name.into()));
+      }
+
+      Ok(contents)
    }
 
    async fn read(self: Arc<Self>, subpath: &Subpath) -> Result<Bytes> {
-      self
-         .contents
-         .entry(subpath.dupe())
-         .or_default()
-         .get_or_init(async {
-            let path = self.to_pathbuf(subpath);
+      let path = self.to_pathbuf(subpath);
 
-            let content = fs::read(&path)
-               .await
-               .chain_err_with(|| format!("failed to read '{path}'", path = path.display()))?;
-
-            Ok(Bytes::from(content))
-         })
+      let content = fs::read(&path)
          .await
-         .dupe()
+         .chain_err_with(|| format!("failed to read '{path}'", path = path.display()))?;
+
+      Ok(Bytes::from(content))
    }
 
    async fn is_writeable(&self) -> bool {
       true
    }
 
-   async fn write(self: Arc<Self>, _subpath: &Subpath, _content: Bytes) -> Result<()> {
-      todo!()
+   async fn write(self: Arc<Self>, subpath: &Subpath, content: Bytes) -> Result<()> {
+      let path = self.to_pathbuf(subpath);
+
+      fs::write(&path, &content)
+         .await
+         .chain_err_with(|| format!("failed to write to '{path}'", path = path.display()))
    }
 }
 

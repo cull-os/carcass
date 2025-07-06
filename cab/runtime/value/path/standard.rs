@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use async_once_cell::OnceCell;
 use async_trait::async_trait;
 use bytes::Bytes;
 use cab_error::{
@@ -8,7 +7,6 @@ use cab_error::{
    ResultExt as _,
    bail,
 };
-use dup::Dupe as _;
 use tokio::io::{
    self,
    AsyncReadExt as _,
@@ -23,14 +21,10 @@ use crate::Value;
 
 #[must_use]
 pub fn standard() -> impl Root {
-   Standard {
-      content: OnceCell::new(),
-   }
+   Standard
 }
 
-struct Standard {
-   content: OnceCell<Result<Bytes>>,
-}
+struct Standard;
 
 #[async_trait]
 impl Root for Standard {
@@ -51,20 +45,14 @@ impl Root for Standard {
          bail!("standard only contains a single leaf");
       }
 
-      self
-         .content
-         .get_or_init(async {
-            let mut buffer = Vec::new();
+      let mut buffer = Vec::new();
 
-            io::stdin()
-               .read_to_end(&mut buffer)
-               .await
-               .chain_err("failed to read from standard in")?;
-
-            Ok(Bytes::from(buffer))
-         })
+      io::stdin()
+         .read_to_end(&mut buffer)
          .await
-         .dupe()
+         .chain_err("failed to read from standard in")?;
+
+      Ok(Bytes::from(buffer))
    }
 
    async fn is_writeable(&self) -> bool {
