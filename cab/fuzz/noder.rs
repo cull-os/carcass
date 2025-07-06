@@ -74,7 +74,7 @@ fuzz_target!(|source: &str| -> Corpus {
       )
    };
 
-   if source_file.exists() {
+   let result = if source_file.exists() {
       write!(
          out,
          " seems like it was already known before, skipping writing "
@@ -91,5 +91,9 @@ fuzz_target!(|source: &str| -> Corpus {
       write(out, &base_file.green().bold()).unwrap();
 
       Corpus::Keep
-   }
+   };
+
+   ust::Write::finish(out).unwrap();
+
+   result
 });
