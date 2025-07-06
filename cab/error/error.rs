@@ -17,10 +17,13 @@ use std::{
 use derive_more::Deref;
 use dup::Dupe;
 use ust::{
-   Display,
+   Display as _,
    Write as _,
    style::StyledExt as _,
-   terminal,
+   terminal::{
+      self,
+      tag,
+   },
 };
 
 /// A type alias for concice use of [`Error`].
@@ -56,7 +59,8 @@ impl fmt::Debug for Error {
                .bold(),
             );
 
-            match error.downcast_ref::<Displayable>() {
+            match error.downcast_ref::<ErrorTags>() {
+               // FIXME: This branch never happens because anyhow doesn't expose the type directly.
                Some(displayable) => displayable.display_styled(message)?,
                None => write!(message, "{error}")?,
             }
@@ -87,11 +91,17 @@ impl fmt::Debug for Error {
 }
 
 #[derive(Deref)]
-struct Displayable(Box<dyn Display + Send + Sync + 'static>);
+struct ErrorTags(tag::Tags<'static>);
 
-impl fmt::Debug for Displayable {
+impl fmt::Debug for ErrorTags {
    fn fmt(&self, writer: &mut fmt::Formatter<'_>) -> fmt::Result {
-      let mut writer = terminal::writer(terminal::StyleChoice::Never, writer);
+      // TODO: Remove this hack, this only exists because anyhow
+      // wraps the errors in the chain and prevents us from getting
+      // ErrorTags in the Debug of Error (which shouldn't do this either).
+      //
+      // Move off of anyhow & make Termination handle this all.
+      let mut writer = terminal::writer_from_stderr(writer);
+      // let mut writer = terminal::writer(terminal::StyleChoice::Never, writer);
 
       self.display_styled(&mut writer)?;
 
@@ -100,13 +110,94 @@ impl fmt::Debug for Displayable {
    }
 }
 
-impl fmt::Display for Displayable {
+/// Creates an [`Error`] from the provided string literal.
+///
+/// # Example
+///
+/// ```rs
+/// fn get_result() -> Result<()> {
+///     unimplemented!()
+/// }
+///
+/// get_result().map_err(|error| error!("found error: {error}"))
+/// ```
+#[macro_export]
+macro_rules! error {
+   ($($t:tt)*) => {
+      $crate::Error(std::sync::Arc::new($crate::private::anyhow::anyhow!($($t)*)))
+   };
+}
+
+/// A macro that boils down to:
+///
+/// ```rs
+/// return Err(error!(arguments));
+/// ```
+#[macro_export]
+macro_rules! bail {
+   ($($t:tt)*) => {{
+      Err($crate::error!($($t)*))?;
+      unreachable!()
+   }};
+}
+
+/// The type of the context accepted by [`Contextful`].
+pub trait Context = fmt::Display + Send + Sync + 'static;
+
+/// A trait to add context to [`Error`].
+pub trait Contextful<T> {
+   /// Appends the context to the error chain.
+   fn context(self, context: impl Context) -> Result<T>;
+
+   fn context_tags(self, context: &impl tag::DisplayTags) -> Result<T>;
+
+   /// Appends the context to the error chain, lazily.
+   fn with_context<C: Context>(self, context: impl FnOnce() -> C) -> Result<T>;
+}
+
+impl<T> Contextful<T> for Option<T> {
+   fn context(self, context: impl Context) -> Result<T> {
+      anyhow::Context::context(self, context).map_err(|error| Error(Arc::new(error)))
+   }
+
+   fn context_tags(self, context: &impl tag::DisplayTags) -> Result<T> {
+      anyhow::Context::with_context(self, || {
+         let tags: tag::Tags<'_> = context.into();
+         ErrorTags(tags.into_owned())
+      })
+      .map_err(move |error| Error(Arc::new(error)))
+   }
+
+   fn with_context<C: Context>(self, context: impl FnOnce() -> C) -> Result<T> {
+      anyhow::Context::with_context(self, context).map_err(|error| Error(Arc::new(error)))
+   }
+}
+
+impl<T, E: error::Error + Send + Sync + 'static> Contextful<T> for result::Result<T, E> {
+   fn context(self, context: impl Context) -> Result<T> {
+      anyhow::Context::context(self, context).map_err(|error| Error(Arc::new(error)))
+   }
+
+   fn context_tags(self, context: &impl tag::DisplayTags) -> Result<T> {
+      anyhow::Context::with_context(self, || {
+         let tags: tag::Tags<'_> = context.into();
+         ErrorTags(tags.into_owned())
+      })
+      .map_err(move |error| Error(Arc::new(error)))
+   }
+
+   fn with_context<C: Context>(self, context: impl FnOnce() -> C) -> Result<T> {
+      anyhow::Context::with_context(self, context).map_err(|error| Error(Arc::new(error)))
+   }
+}
+
+impl fmt::Display for ErrorTags {
    fn fmt(&self, writer: &mut fmt::Formatter<'_>) -> fmt::Result {
       <Self as fmt::Debug>::fmt(self, writer)
    }
 }
 
-impl error::Error for Displayable {}
+impl error::Error for ErrorTags {}
 
 /// The termination type. Meant to be used as the return type of the main
 /// function.
@@ -173,80 +264,5 @@ impl Termination {
    #[must_use]
    pub fn success() -> Self {
       Self(None)
-   }
-}
-
-/// Creates an [`Error`] from the provided string literal.
-///
-/// # Example
-///
-/// ```rs
-/// fn get_result() -> Result<()> {
-///     unimplemented!()
-/// }
-///
-/// get_result().map_err(|error| error!("found error: {error}"))
-/// ```
-#[macro_export]
-macro_rules! error {
-   ($($t:tt)*) => {
-      $crate::Error(std::sync::Arc::new($crate::private::anyhow::anyhow!($($t)*)))
-   };
-}
-
-/// A macro that boils down to:
-///
-/// ```rs
-/// return Err(error!(arguments));
-/// ```
-#[macro_export]
-macro_rules! bail {
-   ($($t:tt)*) => {{
-      Err($crate::error!($($t)*))?;
-      unreachable!()
-   }};
-}
-
-/// The type of the context accepted by [`Contextful`].
-pub trait Context = fmt::Display + Send + Sync + 'static;
-
-/// A trait to add context to [`Error`].
-pub trait Contextful<T> {
-   /// Appends the context to the error chain.
-   fn context(self, context: impl Context) -> Result<T>;
-
-   fn context_tags<D: Display + Send + Sync + 'static>(self, context: impl Into<D>) -> Result<T>;
-
-   /// Appends the context to the error chain, lazily.
-   fn with_context<C: Context>(self, context: impl FnOnce() -> C) -> Result<T>;
-}
-
-impl<T> Contextful<T> for Option<T> {
-   fn context(self, context: impl Context) -> Result<T> {
-      anyhow::Context::context(self, context).map_err(|error| Error(Arc::new(error)))
-   }
-
-   fn context_tags<D: Display + Send + Sync + 'static>(self, context: impl Into<D>) -> Result<T> {
-      anyhow::Context::context(self, Displayable(Box::new(context.into())))
-         .map_err(move |error| Error(Arc::new(error)))
-   }
-
-   fn with_context<C: Context>(self, context: impl FnOnce() -> C) -> Result<T> {
-      anyhow::Context::with_context(self, context).map_err(|error| Error(Arc::new(error)))
-   }
-}
-
-impl<T, E: error::Error + Send + Sync + 'static> Contextful<T> for result::Result<T, E> {
-   fn context(self, context: impl Context) -> Result<T> {
-      anyhow::Context::context(self, context).map_err(|error| Error(Arc::new(error)))
-   }
-
-   fn context_tags<D: Display + Send + Sync + 'static>(self, context: impl Into<D>) -> Result<T> {
-      anyhow::Context::context(self, Displayable(Box::new(context.into())))
-         .map_err(move |error| Error(Arc::new(error)))
-   }
-
-   fn with_context<C: Context>(self, context: impl FnOnce() -> C) -> Result<T> {
-      anyhow::Context::with_context(self, context).map_err(|error| Error(Arc::new(error)))
    }
 }

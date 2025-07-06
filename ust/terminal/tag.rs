@@ -49,6 +49,19 @@ impl Tag<'_> {
    pub fn is_node(&self) -> bool {
       matches!(*self, Self::Group(..) | Self::Indent(..))
    }
+
+   #[must_use]
+   pub fn into_owned(self) -> Tag<'static> {
+      match self {
+         Self::Text(styled) => {
+            Tag::Text(Cow::<str>::Owned(styled.value.into_owned()).style(styled.style))
+         },
+         Self::Space => Tag::Space,
+         Self::Newline(count) => Tag::Newline(count),
+         Self::Group(width) => Tag::Group(width),
+         Self::Indent(count) => Tag::Indent(count),
+      }
+   }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -101,18 +114,6 @@ impl Data<'_> {
 
 #[derive(Debug)]
 pub struct Tags<'a>(Vec<Data<'a>>);
-
-pub trait DisplayTags {
-   fn display_tags<'a>(&'a self, tags: &mut Tags<'a>);
-}
-
-impl<D: DisplayTags> Display for D {
-   fn display_styled(&self, writer: &mut dyn Write) -> fmt::Result {
-      let mut tags = Tags(Vec::new());
-      self.display_tags(&mut tags);
-      tags.display_styled(writer)
-   }
-}
 
 impl Debug for Tags<'_> {
    fn debug_styled(&self, writer: &mut dyn Write) -> fmt::Result {
@@ -308,7 +309,109 @@ impl Display for Tags<'_> {
    }
 }
 
+pub trait DisplayTags {
+   fn display_tags<'a>(&'a self, tags: &mut Tags<'a>);
+}
+
+impl<F: Fn(&mut Tags<'_>)> DisplayTags for F {
+   fn display_tags<'a>(&'a self, tags: &mut Tags<'a>) {
+      self(tags);
+   }
+}
+
+impl<D: DisplayTags> Display for D {
+   fn display_styled(&self, writer: &mut dyn Write) -> fmt::Result {
+      let tags: Tags<'_> = self.into();
+      tags.display_styled(writer)
+   }
+}
+
+impl<'a, D: DisplayTags> From<&'a D> for Tags<'a> {
+   fn from(value: &'a D) -> Self {
+      let mut this = Self(Vec::new());
+      value.display_tags(&mut this);
+      this
+   }
+}
+
 impl<'a> Tags<'a> {
+   #[must_use]
+   pub fn into_owned(self) -> Tags<'static> {
+      Tags(
+         self
+            .0
+            .into_iter()
+            .map(|data| {
+               Data {
+                  tag: data.tag.into_owned(),
+                  ..data
+               }
+            })
+            .collect(),
+      )
+   }
+
+   pub fn extend(&mut self, display: &impl DisplayTags) {
+      let tags: Tags<'_> = display.into();
+      self.0.extend(tags.into_owned().0);
+   }
+
+   pub fn write(&mut self, tag: impl Into<Tag<'a>>) {
+      self.write_if(tag, Condition::Always);
+   }
+
+   pub fn write_if(&mut self, tag: impl Into<Tag<'a>>, condition: Condition) {
+      self.write_if_with(tag, condition, |_| {});
+   }
+
+   pub fn write_with(&mut self, tag: impl Into<Tag<'a>>, closure: impl FnOnce(&mut Self)) {
+      self.write_if_with(tag, Condition::Always, closure);
+   }
+
+   pub fn write_if_with(
+      &mut self,
+      tag: impl Into<Tag<'a>>,
+      condition: Condition,
+      closure: impl FnOnce(&mut Self),
+   ) {
+      let tag = tag.into();
+
+      let tag_is_node = tag.is_node();
+      let tag_should_pop =
+         tag == Tag::Space && self.0.last().is_some_and(|data| data.tag == Tag::Space);
+
+      let index = self.0.len();
+      self.0.push(Data {
+         tag,
+         len: 0,
+         condition,
+         measure: RwLock::new(Measure {
+            width:  0,
+            column: 0,
+         }),
+      });
+
+      let len = self.0.len();
+      closure(self);
+      let len = self.0.len() - len;
+
+      assert!(
+         tag_is_node || len == 0,
+         "inserted children for non-node {tag:?}",
+         tag = self.0[index].tag
+      );
+
+      if tag_should_pop {
+         self.0.pop();
+      } else {
+         self.0[index].len = len;
+      }
+   }
+
+   fn children(&self) -> TagsIter<'_> {
+      TagsIter(self.0.iter())
+   }
+
    fn layout(&self, column_max: usize) {
       #[derive(Debug)]
       struct Layer {
@@ -379,62 +482,6 @@ impl<'a> Tags<'a> {
          column_max,
       }
       .layout(self.children());
-   }
-
-   pub fn write(&mut self, tag: impl Into<Tag<'a>>) {
-      self.write_if(tag, Condition::Always);
-   }
-
-   pub fn write_if(&mut self, tag: impl Into<Tag<'a>>, condition: Condition) {
-      self.write_if_with(tag, condition, |_| {});
-   }
-
-   pub fn write_with(&mut self, tag: impl Into<Tag<'a>>, closure: impl FnOnce(&mut Self)) {
-      self.write_if_with(tag, Condition::Always, closure);
-   }
-
-   pub fn write_if_with(
-      &mut self,
-      tag: impl Into<Tag<'a>>,
-      condition: Condition,
-      closure: impl FnOnce(&mut Self),
-   ) {
-      let tag = tag.into();
-
-      let tag_is_node = tag.is_node();
-      let tag_should_pop =
-         tag == Tag::Space && self.0.last().is_some_and(|data| data.tag == Tag::Space);
-
-      let index = self.0.len();
-      self.0.push(Data {
-         tag,
-         len: 0,
-         condition,
-         measure: RwLock::new(Measure {
-            width:  0,
-            column: 0,
-         }),
-      });
-
-      let len = self.0.len();
-      closure(self);
-      let len = self.0.len() - len;
-
-      assert!(
-         tag_is_node || len == 0,
-         "inserted children for non-node {tag:?}",
-         tag = self.0[index].tag
-      );
-
-      if tag_should_pop {
-         self.0.pop();
-      } else {
-         self.0[index].len = len;
-      }
-   }
-
-   fn children(&self) -> TagsIter<'_> {
-      TagsIter(self.0.iter())
    }
 }
 

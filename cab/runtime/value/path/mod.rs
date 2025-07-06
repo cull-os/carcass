@@ -143,35 +143,47 @@ impl Path {
    }
 
    pub async fn list(&self) -> Result<List<Subpath>> {
-      let root = self
-         .root
-         .dupe()
-         .context("tried to list rootless path 'TODO'")?;
+      let root = self.root.dupe().context_tags(&|tags: &mut tag::Tags| {
+         tags.write("tried to list rootless path ");
+         tags.extend(self);
+      })?;
 
       root
          .list(&self.subpath)
          .await
-         .context("failed to read TODO")
+         .context_tags(&|tags: &mut tag::Tags| {
+            tags.write("failed to read ");
+            tags.extend(self);
+         })
    }
 
    pub async fn read(&self) -> Result<Bytes> {
-      let root = self.root.dupe().context("tried to read rootless path")?;
+      let root = self.root.dupe().context_tags(&|tags: &mut tag::Tags| {
+         tags.write("tried to read rootless path ");
+         tags.extend(self);
+      })?;
 
       root
          .read(&self.subpath)
          .await
-         .context("failed to read TODO")
+         .context_tags(&|tags: &mut tag::Tags| {
+            tags.write("failed to read ");
+            tags.extend(self);
+         })
    }
 
    pub async fn write(&self, content: Bytes) -> Result<()> {
-      let root = self
-         .root
-         .dupe()
-         .context("tried to write to rootless path 'TODO'")?;
+      let root = self.root.dupe().context_tags(&|tags: &mut tag::Tags| {
+         tags.write("tried to write to rootless path ");
+         tags.extend(self);
+      })?;
 
       root
          .write(&self.subpath, content)
          .await
-         .context("failed to write to TODO")
+         .context_tags(&|tags: &mut tag::Tags| {
+            tags.write("failed to write to ");
+            tags.extend(self);
+         })
    }
 }
