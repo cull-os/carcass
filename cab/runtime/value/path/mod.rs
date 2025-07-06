@@ -1,4 +1,7 @@
-use std::sync::Arc;
+use std::{
+   iter,
+   sync::Arc,
+};
 
 use async_trait::async_trait;
 use bytes::Bytes;
@@ -138,7 +141,12 @@ impl Path {
    pub fn get(&self, subpath: Arc<str>) -> Self {
       Self {
          root:    self.root.dupe(),
-         subpath: self.subpath.iter().duped().chain([subpath]).collect(),
+         subpath: self
+            .subpath
+            .iter()
+            .duped()
+            .chain(iter::once(subpath))
+            .collect(),
       }
    }
 
