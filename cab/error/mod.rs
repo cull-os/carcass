@@ -69,7 +69,8 @@ pub struct Chain(rpds::ListSync<Link>);
 
 impl Display for Chain {
    fn display_styled(&self, writer: &mut dyn ust::Write) -> fmt::Result {
-      let mut chain = self.0.iter().peekable();
+      let reverse = self.0.reverse();
+      let mut chain = reverse.iter().peekable();
       while let Some(link) = chain.next() {
          terminal::indent!(
             writer,
