@@ -17,4 +17,4 @@ workspace = true
 dup.path = "../../dup"
 ust.path = "../../ust"
 
-rpds.workspace        = true
+rpds.workspace = true
