@@ -197,6 +197,8 @@ impl<'a> Compiler<'a> {
       self.push_u64(*index as _);
    }
 
+   // TODO: Optimize in such a way that we don't actually emit the two instructions
+   // if the bytecode produced by `with` doesn't have any references or binds.
    fn emit_scope(&mut self, span: Span, with: impl FnOnce(&mut Self)) {
       self.scopes.push(Scope::new());
 
