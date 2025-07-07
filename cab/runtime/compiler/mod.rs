@@ -131,11 +131,11 @@ struct Compiler<'a> {
 impl<'a> Compiler<'a> {
    fn new(path: value::Path) -> Self {
       Compiler {
-         codes:   vec![Code::new(path)],
-         scopes:  vec![Scope::global()],
-         reports: Vec::new(),
+         codes:  vec![Code::new(path)],
+         scopes: vec![Scope::global()],
 
-         dead: 0,
+         reports: Vec::new(),
+         dead:    0,
       }
    }
 
@@ -197,14 +197,20 @@ impl<'a> Compiler<'a> {
       self.push_u64(*index as _);
    }
 
-   // TODO: Optimize in such a way that we don't actually emit the two instructions
-   // if the bytecode produced by `with` doesn't have any references or binds.
    fn emit_scope(&mut self, span: Span, with: impl FnOnce(&mut Self)) {
+      let parent_empty = self.scope().is_empty();
+
       self.scopes.push(Scope::new());
 
-      self.push_operation(span, Operation::ScopeStart);
-      with(self);
-      self.push_operation(span, Operation::ScopeEnd);
+      if parent_empty {
+         with(self);
+      } else {
+         self.push_operation(span, Operation::ScopeStart);
+
+         with(self);
+
+         self.push_operation(span, Operation::ScopeEnd);
+      }
 
       for local in self.scopes.pop().expect("scope was just pushed").finish() {
          self.reports.push(
