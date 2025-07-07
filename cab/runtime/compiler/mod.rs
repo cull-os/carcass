@@ -225,24 +225,13 @@ impl<'a> Compiler<'a> {
       }
    }
 
-   #[builder(finish_fn(name = "with"))]
-   fn emit_thunk(
-      &mut self,
-      #[builder(start_fn)] span: Span,
-      #[builder(finish_fn)] with: impl FnOnce(&mut Self),
-      #[builder(default)] if_: bool,
-   ) {
-      if !if_ {
-         with(self);
-         return;
-      }
-
+   fn emit_thunk_start(&mut self) {
       let path = self.code().path().dupe();
       self.codes.push(Code::new(path));
+   }
 
-      with(self);
+   fn emit_thunk_end(&mut self, span: Span) {
       self.push_operation(span, Operation::Return);
-
       let code = self.codes.pop().expect(EXPECT_CODE);
 
       self.emit_push(
@@ -255,6 +244,23 @@ impl<'a> Compiler<'a> {
       );
    }
 
+   #[builder(finish_fn(name = "with"))]
+   fn emit_thunk(
+      &mut self,
+      #[builder(start_fn)] span: Span,
+      #[builder(finish_fn)] with: impl FnOnce(&mut Self),
+      #[builder(default = true)] if_: bool,
+   ) {
+      if !if_ {
+         with(self);
+         return;
+      }
+
+      self.emit_thunk_start();
+      with(self);
+      self.emit_thunk_end(span);
+   }
+
    fn emit_parenthesis(&mut self, parenthesis: &'a node::Parenthesis) {
       self.emit_scope(parenthesis.span(), |this| {
          this.emit(parenthesis.expression().expect(EXPECT_VALID));
@@ -262,13 +268,22 @@ impl<'a> Compiler<'a> {
    }
 
    fn emit_list(&mut self, list: &'a node::List) {
+      let items = list.items().collect::<SmallVec<_, 8>>();
+      let spans = items
+         .iter()
+         .map(|item| item.span())
+         .collect::<SmallVec<_, 8>>();
+
+      for item in items {
+         self.emit_thunk_start();
+         self.emit_scope(item.span(), |this| this.emit(item));
+      }
+
       self.emit_push(list.span(), Value::List(List::new_sync()));
 
-      let items = list.items().collect::<SmallVec<_, 8>>();
-      for item in items.into_iter().rev() {
-         self.emit_scope(item.span(), |this| this.emit(item));
-
+      for span in spans {
          self.push_operation(list.span(), Operation::Construct);
+         self.emit_thunk_end(span);
       }
    }
 
