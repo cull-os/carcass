@@ -410,7 +410,7 @@ impl Kind {
    pub const IDENTIFIERS: EnumSet<Kind> =
       enum_set!(TOKEN_IDENTIFIER | TOKEN_QUOTED_IDENTIFIER_START);
 
-   /// Whether if this token can be used as a lambda argument.
+   /// Whether this token can be used as a lambda argument.
    ///
    /// ```txt
    /// max 42 (38) + 61
@@ -424,13 +424,13 @@ impl Kind {
       arguments.contains(self) || self.is_error() // Error nodes are expressions.
    }
 
-   /// Whether if the token should be ignored by the noder.
+   /// Whether the token should be ignored by the noder.
    #[must_use]
    pub fn is_trivia(self) -> bool {
       matches!(self, TOKEN_COMMENT | TOKEN_SPACE)
    }
 
-   /// Whether if this token is erroneous.
+   /// Whether this token is erroneous.
    #[must_use]
    pub fn is_error(self) -> bool {
       matches!(

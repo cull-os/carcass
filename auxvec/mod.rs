@@ -200,7 +200,7 @@ pub enum VectorKey {
    #[display("AT_IGNOREPPC")]
    #[doc(alias = "AT_IGNOREPPC")]
    IgnorePowerPC                            = 22,
-   /// A boolean indicating whether if `exec` was setuid or something
+   /// A boolean indicating whether `exec` was setuid or something
    /// similar to it
    ///
    /// Referred to as `AT_SECURE` in [`libc`].

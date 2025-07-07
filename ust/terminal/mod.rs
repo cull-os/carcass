@@ -84,7 +84,7 @@ pub fn number_hex_width(number: impl AsPrimitive<f64>) -> usize {
 /// Calculates the width of the string on a best-effort basis.
 #[must_use]
 pub fn width(s: &str) -> usize {
-   /// Return whether if the given string is an emoji.
+   /// Returns whether the given string is an emoji.
    fn is_emoji(s: &str) -> bool {
       !s.is_ascii() && s.chars().any(unic_emoji_char::is_emoji)
    }

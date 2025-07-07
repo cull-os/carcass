@@ -455,4 +455,10 @@ pub trait Segmented: ops::Deref<Target = red::Node> {
          straights,
       }
    }
+
+   fn is_trivial(&self) -> bool {
+      let mut segments = self.segments().into_iter().peekable();
+
+      segments.next().is_some_and(|segment| segment.is_content()) && segments.peek().is_none()
+   }
 }

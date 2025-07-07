@@ -444,13 +444,12 @@ impl<'a> Compiler<'a> {
    }
 
    fn emit_path(&mut self, path: &'a node::Path) {
-      self.emit_thunk(path.span()).with(|this| {
+      let needs_thunk = path.root().is_some() || !path.subpath().is_trivial();
+
+      self.emit_thunk(path.span()).if_(needs_thunk).with(|this| {
          if let Some(root) = path.root() {
-            let segments = root
-               .type_()
-               .segments()
-               .into_iter()
-               .collect::<SmallVec<_, 4>>();
+            let type_ = root.type_();
+            let segments = type_.segments().into_iter().collect::<SmallVec<_, 4>>();
 
             for segment in &segments {
                match *segment {
@@ -466,8 +465,8 @@ impl<'a> Compiler<'a> {
                }
             }
 
-            if segments.len() != 1 || !segments[0].is_content() {
-               this.push_operation(path.span(), Operation::Interpolate);
+            if !type_.is_trivial() {
+               this.push_operation(type_.span(), Operation::Interpolate);
                this.push_u64(segments.len() as _);
             }
 
@@ -484,39 +483,36 @@ impl<'a> Compiler<'a> {
             }
          }
 
-         if let Some(subpath) = path.subpath() {
-            let segments = subpath.segments().into_iter().collect::<SmallVec<_, 4>>();
+         let subpath = path.subpath();
+         let segments = subpath.segments().into_iter().collect::<SmallVec<_, 4>>();
 
-            for segment in &segments {
-               match *segment {
-                  Segment::Content { span, ref content } => {
-                     this.emit_push(
-                        span,
-                        value::Path::rootless(
-                           content
-                              .split(value::path::SEPARATOR)
-                              .filter(|part| !part.is_empty())
-                              .map(Into::into)
-                              .collect(),
-                        )
-                        .into(),
-                     );
-                  },
+         for segment in &segments {
+            match *segment {
+               Segment::Content { span, ref content } => {
+                  this.emit_push(
+                     span,
+                     value::Path::rootless(
+                        content
+                           .split(value::path::SEPARATOR)
+                           .filter(|part| !part.is_empty())
+                           .map(Into::into)
+                           .collect(),
+                     )
+                     .into(),
+                  );
+               },
 
-                  Segment::Interpolation(interpolation) => {
-                     this.emit_scope(interpolation.span(), |this| {
-                        this.emit_force(interpolation.expression());
-                     });
-                  },
-               }
+               Segment::Interpolation(interpolation) => {
+                  this.emit_scope(interpolation.span(), |this| {
+                     this.emit_force(interpolation.expression());
+                  });
+               },
             }
+         }
 
-            if segments.len() != 1 || !segments[0].is_content() {
-               this.push_operation(path.span(), Operation::Interpolate);
-               this.push_u64(segments.len() as _);
-            }
-         } else {
-            this.emit_push(path.span(), Value::Nope);
+         if !subpath.is_trivial() {
+            this.push_operation(subpath.span(), Operation::Interpolate);
+            this.push_u64(segments.len() as _);
          }
 
          if path.root().is_some() {
@@ -532,7 +528,13 @@ impl<'a> Compiler<'a> {
       #[builder(finish_fn)] span: Span,
       #[builder(default)] is_bind: bool,
    ) {
-      self.emit_thunk(span).with(|this| {
+      let needs_thunk =
+         // References are always thunked.
+         !is_bind ||
+         // Binds are thunked if they aren't trivial.
+         !identifier.value().is_trivial();
+
+      self.emit_thunk(span).if_(needs_thunk).with(|this| {
          let name = match identifier.value() {
             node::IdentifierValueRef::Plain(plain) => {
                if is_bind {
@@ -569,7 +571,7 @@ impl<'a> Compiler<'a> {
                   }
                }
 
-               if segments.len() != 1 || !segments[0].is_content() {
+               if !quoted.is_trivial() {
                   this.push_operation(span, Operation::Interpolate);
                   this.push_u64(segments.len() as _);
                }
@@ -593,6 +595,7 @@ impl<'a> Compiler<'a> {
             },
          };
 
+         // TODO: Scope logic is wrong. Don't locate it all immediately, do it in scopes.
          if is_bind {
             this.scope().push(span, name);
             return;
@@ -616,28 +619,33 @@ impl<'a> Compiler<'a> {
    }
 
    fn emit_string(&mut self, string: &'a node::SString) {
-      self.emit_thunk(string.span()).with(|this| {
-         let segments = string.segments().into_iter().collect::<SmallVec<_, 4>>();
+      let needs_thunk = !string.is_trivial();
 
-         for segment in &segments {
-            match *segment {
-               Segment::Content { span, ref content } => {
-                  this.emit_push(span, Value::String(content.as_str().into()));
-               },
+      self
+         .emit_thunk(string.span())
+         .if_(needs_thunk)
+         .with(|this| {
+            let segments = string.segments().into_iter().collect::<SmallVec<_, 4>>();
 
-               Segment::Interpolation(interpolation) => {
-                  this.emit_scope(interpolation.span(), |this| {
-                     this.emit_force(interpolation.expression());
-                  });
-               },
+            for segment in &segments {
+               match *segment {
+                  Segment::Content { span, ref content } => {
+                     this.emit_push(span, Value::String(content.as_str().into()));
+                  },
+
+                  Segment::Interpolation(interpolation) => {
+                     this.emit_scope(interpolation.span(), |this| {
+                        this.emit_force(interpolation.expression());
+                     });
+                  },
+               }
             }
-         }
 
-         if segments.len() != 1 || !segments[0].is_content() {
-            this.push_operation(string.span(), Operation::Interpolate);
-            this.push_u64(segments.len() as _);
-         }
-      });
+            if !string.is_trivial() {
+               this.push_operation(string.span(), Operation::Interpolate);
+               this.push_u64(segments.len() as _);
+            }
+         });
    }
 
    fn emit_if(&mut self, if_: &'a node::If) {

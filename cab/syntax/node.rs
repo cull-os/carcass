@@ -644,7 +644,7 @@ impl InfixOperator {
         }
    }
 
-   /// Whether if this operator actually owns a token. Not owning a token means
+   /// Whether this operator actually owns a token. Not owning a token means
    /// that the operator doesn't actually "exist".
    #[must_use]
    pub fn is_token_owning(self) -> bool {
@@ -878,7 +878,7 @@ node! {
 impl Path {
    get_node! { root -> Option<&PathRoot> }
 
-   get_node! { subpath -> Option<&PathSubpath> }
+   get_node! { subpath -> &PathSubpath }
 
    pub fn validate(&self, to: &mut Vec<Report>) {
       let mut report = lazy!(Report::error("invalid path"));
@@ -907,16 +907,14 @@ impl Path {
          }
       }
 
-      if let Some(subpath) = self.subpath() {
-         let segments = subpath.segments();
-         segments.validate(to, &mut report);
+      let segments = self.subpath().segments();
+      segments.validate(to, &mut report);
 
-         // Only assert if the report wasn't initialized, because
-         // ./foo/bar\<newline-here> actually gets parsed as a
-         // multiline segment. And when that happens report is ready.
-         if !ready!(report) {
-            assert!(!segments.is_multiline);
-         }
+      // Only assert if the report wasn't initialized, because
+      // ./foo/bar\<newline-here> actually gets parsed as a
+      // multiline segment. And when that happens report is ready.
+      if !ready!(report) {
+         assert!(!segments.is_multiline);
       }
 
       if let Some(report) = read!(report) {
@@ -991,6 +989,17 @@ reffed! {
       Plain(token::Identifier),
       /// A quoted identifier backed by a [`IdentifierQuoted`].
       Quoted(IdentifierQuoted),
+   }
+}
+
+impl IdentifierValueRef<'_> {
+   /// Return whether this value can be treated as a literal.
+   #[must_use]
+   pub fn is_trivial(self) -> bool {
+      match self {
+         IdentifierValueRef::Plain(_) => true,
+         IdentifierValueRef::Quoted(quoted) => quoted.is_trivial(),
+      }
    }
 }
 

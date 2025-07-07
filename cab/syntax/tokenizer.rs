@@ -12,7 +12,7 @@ pub fn tokenize(source: &str) -> impl Iterator<Item = (Kind, &str)> {
    Tokenizer::new(source)
 }
 
-/// Returns whether if this identifier can be represented without quotes.
+/// Returns whether this identifier can be represented without quotes.
 pub fn is_valid_plain_identifier(s: &str) -> bool {
    let mut chars = s.chars();
 
@@ -39,8 +39,9 @@ fn is_valid_path_subpath_character(c: char) -> bool {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Context<'a> {
-   PathSubpathTryStart,
+   PathSubpathStart,
    PathSubpath,
+   PathSubpathEmpty,
    PathSubpathEnd,
 
    PathRootType,
@@ -211,7 +212,7 @@ impl<'a> Tokenizer<'a> {
       loop {
          if let Some('>' | ':') = self.peek_character() {
             self.context_pop(Context::PathRootType);
-            self.context_push(Context::PathSubpathTryStart);
+            self.context_push(Context::PathSubpathStart);
             self.context_push(Context::PathRootTypeEnd);
 
             return TOKEN_CONTENT;
@@ -278,17 +279,25 @@ impl<'a> Tokenizer<'a> {
             return Some(TOKEN_PATH_ROOT_TYPE_END);
          },
 
-         Some(Context::PathSubpathTryStart) => {
-            self.context_pop(Context::PathSubpathTryStart);
+         Some(Context::PathSubpathStart) => {
+            self.context_pop(Context::PathSubpathStart);
 
             if self.peek_character() == Some('/') {
                self.context_push(Context::PathSubpath);
-
-               return Some(TOKEN_PATH_SUBPATH_START);
+            } else {
+               self.context_push(Context::PathSubpathEnd);
+               self.context_push(Context::PathSubpathEmpty);
             }
+
+            return Some(TOKEN_PATH_SUBPATH_START);
          },
          Some(Context::PathSubpath) => {
             return Some(self.consume_path_subpath());
+         },
+         Some(Context::PathSubpathEmpty) => {
+            self.context_pop(Context::PathSubpathEmpty);
+
+            return Some(TOKEN_CONTENT);
          },
          Some(Context::PathSubpathEnd) => {
             self.context_pop(Context::PathSubpathEnd);
