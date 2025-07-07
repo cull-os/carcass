@@ -264,7 +264,8 @@ impl<'a> Compiler<'a> {
    fn emit_list(&mut self, list: &'a node::List) {
       self.emit_push(list.span(), Value::List(List::new_sync()));
 
-      for item in list.items() {
+      let items = list.items().collect::<SmallVec<_, 8>>();
+      for item in items.into_iter().rev() {
          self.emit_scope(item.span(), |this| this.emit(item));
 
          self.push_operation(list.span(), Operation::Construct);

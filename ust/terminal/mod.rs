@@ -407,10 +407,10 @@ fn write_report(
       ref points,
    } = *report;
 
-   let mut labels: SmallVec<_, 2> = labels
+   let mut labels = labels
       .iter()
       .map(|label| (source.positions(label.span), label))
-      .collect();
+      .collect::<SmallVec<_, 2>>();
 
    // Sort by line, and when labels are on the same line, sort by column. The one
    // that ends the last will be the last.

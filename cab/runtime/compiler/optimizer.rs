@@ -32,7 +32,7 @@ impl<'a> From<node::ExpressionRef<'a>> for Boolean<'a> {
          return Self::Other(expression);
       };
 
-      let content: SmallVec<Cow<'_, str>, 4> = match identifier.value() {
+      let content = match identifier.value() {
          node::IdentifierValueRef::Plain(plain) => smallvec![plain.text().into()],
 
          node::IdentifierValueRef::Quoted(quoted) => {
@@ -46,7 +46,7 @@ impl<'a> From<node::ExpressionRef<'a>> for Boolean<'a> {
                      Segment::Interpolation(_) => None,
                   }
                })
-               .collect()
+               .collect::<SmallVec<Cow<'_, str>, 4>>()
          },
       };
 
