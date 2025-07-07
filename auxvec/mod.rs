@@ -472,7 +472,9 @@ impl Vector<'_> {
 
       Vector {
          // Offset by one to get the start of the auxiliary vector.
-         start:    unsafe { environ_entry.offset(1) }.cast(),
+         start:    unsafe { environ_entry.offset(1) }
+            .cast::<(usize, usize)>()
+            .cast_mut(),
          _phantom: marker::PhantomData,
       }
    }
