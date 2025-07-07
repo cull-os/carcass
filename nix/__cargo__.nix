@@ -9,7 +9,35 @@
     projects = lib.filterAttrs (_: projectConfig: projectConfig.type == "cargo") config.projects;
   in
     lib.foldl' lib.recursiveUpdate {} <| lib.attrValues <| lib.flip lib.mapAttrs projects (projectName: projectConfig: let
-    src = pkgs.crane.cleanCargoSource projectConfig.source;
+    # src = pkgs.crane.cleanCargoSource projectConfig.source;
+
+    src = lib.cleanSourceWith {
+      src = lib.cleanSource projectConfig.source;
+
+      filter = path: type: let
+        path'   = toString path;
+        base   = baseNameOf path';
+        parent = baseNameOf <| dirOf path';
+
+        matchesSuffix = lib.any (extension: lib.hasSuffix extension base) [
+          # Keep Rust sources
+          ".rs"
+
+          # Keep all TOML files as they are commonly used to configure other
+          # cargo-based tools.
+          ".toml"
+
+          # Keep markdown as it is commonly include_str!'d.
+          ".md"
+        ];
+
+        # Cargo.toml already captured above
+        isCargoFile = base == "Cargo.lock";
+
+        # .cargo/config.toml already captured above
+        isCargoConfig = parent == ".cargo" && base == "config";
+      in type == "directory" || matchesSuffix || isCargoFile || isCargoConfig;
+    };
 
     cargoArguments = {
       inherit src;
@@ -91,12 +119,6 @@
       "${projectName}-audit" = pkgs.crane.cargoAudit {
         inherit (inputs) advisory-db;
         inherit src;
-      };
-
-      "${projectName}-deny" = pkgs.crane.cargoDeny {
-        inherit src;
-
-        cargoDenyChecks = "--config ${../.deny.toml}";
       };
     };
   });

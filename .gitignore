@@ -21,7 +21,6 @@
 
 # LINTERS
 !.clippy.toml
-!.deny.toml
 
 # PROJECTS
 !auxvec/
