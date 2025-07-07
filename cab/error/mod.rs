@@ -205,7 +205,7 @@ impl<T> ResultExt<T> for result::Result<T, Chain> {
 /// function.
 ///
 /// Can be created directly or from a [`Chain`] with the `?` operator. Will
-/// pretty print the error.
+/// pretty print the chain.
 #[derive(Clone, Dupe)]
 pub struct Termination(result::Result<(), Chain>);
 
@@ -271,9 +271,9 @@ impl Termination {
       Self(Ok(()))
    }
 
-   /// Creates a [`Termination`] from the provided [`Error`].
+   /// Creates a [`Termination`] from the provided [`Chain`].
    #[must_use]
-   pub fn error(error: Chain) -> Self {
-      Self(Err(error))
+   pub fn error(chain: Chain) -> Self {
+      Self(Err(chain))
    }
 }

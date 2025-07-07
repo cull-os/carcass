@@ -19,7 +19,6 @@ use super::{
 };
 use crate::Value;
 
-/// Creates an entry from a given fs path.
 #[must_use]
 pub fn fs(config: Value, path: Value) -> impl Root {
    Fs { config, path }

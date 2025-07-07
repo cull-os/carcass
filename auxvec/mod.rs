@@ -56,55 +56,56 @@ pub enum VectorKey {
    /// The above snippet was done on a 64 bit system. On a 32 bit one, you'd do
    /// `--format x4`.
    ///
-   /// Referred to as `AT_NULL` in [`libc`].
+   /// Referred to as `AT_NULL` in libc.
    #[display("AT_NULL")]
    #[doc(alias = "AT_NULL")]
    End                                      = 0,
    /// Entry should be ignored.
    ///
-   /// Referred to as `AT_IGNORE` in [`libc`].
+   /// Referred to as `AT_IGNORE` in libc.
    #[display("AT_IGNORE")]
    #[doc(alias = "AT_IGNORE")]
    Ignored                                  = 1,
    /// Program's file descriptor.
    ///
-   /// Referred to as `AT_EXECFD` in [`libc`].
+   /// Referred to as `AT_EXECFD` in libc.
    #[display("AT_EXECFD")]
    #[doc(alias = "AT_EXECFD")]
    Fd                                       = 2,
    /// Pointer to the program's header table.
    ///
-   /// Referred to as `AT_PHDR` in [`libc`].
+   /// Referred to as `AT_PHDR` in libc.
    #[display("AT_PHDR")]
    #[doc(alias = "AT_PHDR")]
    ProgramHeadersPointer                    = 3,
-   /// Size of the [`ProgramHeadersPointer`] entry value in bytes.
+   /// Size of the [`ProgramHeadersPointer`](Self::ProgramHeadersPointer) entry
+   /// value in bytes.
    ///
-   /// Referred to as `AT_PHENT` in [`libc`].
+   /// Referred to as `AT_PHENT` in libc.
    #[display("AT_PHENT")]
    #[doc(alias = "AT_PHENT")]
    ProgramHeadersSize                       = 4,
    /// The total count of of program headers.
    ///
-   /// Referred to as `AT_PHNUM` in [`libc`].
+   /// Referred to as `AT_PHNUM` in libc.
    #[display("AT_PHNUM")]
    #[doc(alias = "AT_PHNUM")]
    ProgramHeadersLength                     = 5,
    /// System page size in bytes.
    ///
-   /// Referred to as `AT_PAGESZ` in [`libc`].
+   /// Referred to as `AT_PAGESZ` in libc.
    #[display("AT_PAGESZ")]
    #[doc(alias = "AT_PAGESZ")]
    PageSize                                 = 6,
    /// Pointer to the base of the interpreter.
    ///
-   /// Referred to as `AT_BASE` in [`libc`].
+   /// Referred to as `AT_BASE` in libc.
    #[display("AT_BASE")]
    #[doc(alias = "AT_BASE")]
    InterpreterBasePointer                   = 7,
    /// Flags.
    ///
-   /// Referred to as `AT_FLAGS` in [`libc`].
+   /// Referred to as `AT_FLAGS` in libc.
    #[display("AT_FLAGS")]
    #[doc(alias = "AT_FLAGS")]
    Flags                                    = 8,
@@ -112,7 +113,7 @@ pub enum VectorKey {
    ///
    /// Basically where the interpreter should transfer control to.
    ///
-   /// Referred to as `AT_ENTRY` in [`libc`].
+   /// Referred to as `AT_ENTRY` in libc.
    #[display("AT_ENTRY")]
    #[doc(alias = "AT_ENTRY")]
    Entrypoint                               = 9,
@@ -121,73 +122,73 @@ pub enum VectorKey {
    /// The value of is non-zero if the program is in another
    /// format than ELF, for example in the old COFF format.
    ///
-   /// Referred to as `AT_NOTELF` in [`libc`].
+   /// Referred to as `AT_NOTELF` in libc.
    #[display("AT_NOTELF")]
    #[doc(alias = "AT_NOTELF")]
    NotElf                                   = 10,
    /// Real UID.
    ///
-   /// Referred to as `AT_UID` in [`libc`].
+   /// Referred to as `AT_UID` in libc.
    #[display("AT_UID")]
    #[doc(alias = "AT_UID")]
    RealUid                                  = 11,
    /// Effective UID.
    ///
-   /// Referred to as `AT_EUID` in [`libc`].
+   /// Referred to as `AT_EUID` in libc.
    #[display("AT_EUID")]
    #[doc(alias = "AT_EUID")]
    EffectiveUid                             = 12,
    /// Real GID.
    ///
-   /// Referred to as `AT_GID` in [`libc`].
+   /// Referred to as `AT_GID` in libc.
    #[display("AT_GID")]
    #[doc(alias = "AT_GID")]
    RealGid                                  = 13,
    /// Effective GID.
    ///
-   /// Referred to as `AT_EGID` in [`libc`].
+   /// Referred to as `AT_EGID` in libc.
    #[display("AT_EGID")]
    #[doc(alias = "AT_EGID")]
    EffectiveGid                             = 14,
    /// String identifying the ELF's target platform.
    ///
-   /// Referred to as `AT_PLATFORM` in [`libc`].
+   /// Referred to as `AT_PLATFORM` in libc.
    #[display("AT_PLATFORM")]
    #[doc(alias = "AT_PLATFORM")]
    Platform                                 = 15,
    /// Arch-dependent hints about processor capabilities.
    ///
-   /// Referred to as `AT_HWCAP` in [`libc`].
+   /// Referred to as `AT_HWCAP` in libc.
    #[display("AT_HWCAP")]
    #[doc(alias = "AT_HWCAP")]
    HardwareCapability                       = 16,
    /// Frequency of [`times()`](https://man7.org/linux/man-pages/man2/times.2.html).
    ///
-   /// Referred to as `AT_CLKTCK` in [`libc`].
+   /// Referred to as `AT_CLKTCK` in libc.
    #[display("AT_CLKTCK")]
    #[doc(alias = "AT_CLKTCK")]
    ClockTickFrequency                       = 17,
    /// Used FPU control word.
    ///
-   /// Referred to as `AT_FPUCW` in [`libc`].
+   /// Referred to as `AT_FPUCW` in libc.
    #[display("AT_FPUCW")]
    #[doc(alias = "AT_FPUCW")]
    FpuControlWord                           = 18,
    /// Data cache block size in bytes.
    ///
-   /// Referred to as `AT_DCACHEBSIZE` in [`libc`].
+   /// Referred to as `AT_DCACHEBSIZE` in libc.
    #[display("AT_DCACHEBSIZE")]
    #[doc(alias = "AT_DCACHEBSIZE")]
    DataCacheBlockSize                       = 19,
    /// Instruction cache block size in bytes.
    ///
-   /// Referred to as `AT_ICACHEBSIZE` in [`libc`].
+   /// Referred to as `AT_ICACHEBSIZE` in libc.
    #[display("AT_ICACHEBSIZE")]
    #[doc(alias = "AT_ICACHEBSIZE")]
    InstructionCacheBlockSize                = 20,
    /// Unified cache block size in bytes.
    ///
-   /// Referred to as `AT_UCACHEBSIZE` in [`libc`].
+   /// Referred to as `AT_UCACHEBSIZE` in libc.
    #[display("AT_UCACHEBSIZE")]
    #[doc(alias = "AT_UCACHEBSIZE")]
    UnifiedCacheBlockSize                    = 21,
@@ -196,74 +197,74 @@ pub enum VectorKey {
    ///
    /// Must be >16.
    ///
-   /// Referred to as `AT_IGNOREPPC` in [`libc`].
+   /// Referred to as `AT_IGNOREPPC` in libc.
    #[display("AT_IGNOREPPC")]
    #[doc(alias = "AT_IGNOREPPC")]
    IgnorePowerPC                            = 22,
    /// A boolean indicating whether `exec` was setuid or something
    /// similar to it
    ///
-   /// Referred to as `AT_SECURE` in [`libc`].
+   /// Referred to as `AT_SECURE` in libc.
    #[display("AT_SECURE")]
    #[doc(alias = "AT_SECURE")]
    Secure                                   = 23,
    /// String identifying real platforms.
    ///
-   /// Referred to as `AT_BASE_PLATFORM` in [`libc`].
+   /// Referred to as `AT_BASE_PLATFORM` in libc.
    #[display("AT_BASE_PLATFORM")]
    #[doc(alias = "AT_BASE_PLATFORM")]
    BasePlatform                             = 24,
    /// Address of 16, random bytes.
    ///
-   /// Referred to as `AT_RANDOM` in [`libc`].
+   /// Referred to as `AT_RANDOM` in libc.
    #[display("AT_RANDOM")]
    #[doc(alias = "AT_RANDOM")]
    Random                                   = 25,
-   /// Extension of [`HardwareCabability`].
+   /// Extension of [`HardwareCapability`](Self::HardwareCapability).
    ///
-   /// Referred to as `AT_HWCAP2` in [`libc`].
+   /// Referred to as `AT_HWCAP2` in libc.
    #[display("AT_HWCAP2")]
    #[doc(alias = "AT_HWCAP2")]
    HardwareCapability2                      = 26,
    /// Restartable Sequences (rseq) supported feature size.
    ///
-   /// Referred to as `AT_RSEQ_FEATURE_SIZE` in [`libc`].
+   /// Referred to as `AT_RSEQ_FEATURE_SIZE` in libc.
    #[display("AT_RSEQ_FEATURE_SIZE")]
    #[doc(alias = "AT_RSEQ_FEATURE_SIZE")]
    RestartableSequencesSupportedFeatureSize = 27,
    /// Restartable Sequences (rseq) allocation alignment.
    ///
-   /// Referred to as `AT_RSEQ_ALIGN` in [`libc`].
+   /// Referred to as `AT_RSEQ_ALIGN` in libc.
    #[display("AT_RSEQ_ALIGN")]
    #[doc(alias = "AT_RSEQ_ALIGN")]
    RestartableSequencesAllocationAlignment  = 28,
-   /// Extension of [`HardwareCabability`].
+   /// Extension of [`HardwareCapability`](Self::HardwareCapability).
    ///
-   /// Referred to as `AT_HWCAP3` in [`libc`].
+   /// Referred to as `AT_HWCAP3` in libc.
    #[display("AT_HWCAP3")]
    #[doc(alias = "AT_HWCAP3")]
    HardwareCapability3                      = 29,
    /// ///
-   /// Referred to as `AT_HWCAP4` in [`libc`].
-   /// Extension of [`HardwareCabability`].
+   /// Referred to as `AT_HWCAP4` in libc.
+   /// Extension of [`HardwareCapability`](Self::HardwareCapability).
    #[doc(alias = "AT_HWCAP4")]
    HardwareCapability4                      = 30,
    /// Pointer to the null-terminated filename of the executable.
    ///
-   /// Referred to as `AT_EXECFN` in [`libc`].
+   /// Referred to as `AT_EXECFN` in libc.
    #[display("AT_EXECFN")]
    #[doc(alias = "AT_EXECFN")]
    FilenamePointer                          = 31,
    /// Pointer to the global system page used for system calls and other.
    /// nice things.
    ///
-   /// Referred to as `AT_SYSINFO` in [`libc`].
+   /// Referred to as `AT_SYSINFO` in libc.
    #[display("AT_SYSINFO")]
    #[doc(alias = "AT_SYSINFO")]
    SystemCallPagePointer                    = 32,
    /// Pointer to the system call page [virtual dynamic shared object (VDSO)](https://man7.org/linux/man-pages/man7/vdso.7.html).
    ///
-   /// Referred to as `AT_SYSINFO_EHDR` in [`libc`].
+   /// Referred to as `AT_SYSINFO_EHDR` in libc.
    #[display("AT_SYSINFO_EHDR")]
    #[doc(alias = "AT_SYSINFO_EHDR")]
    SystemCallPageElfHeaderPointer           = 33,
@@ -275,19 +276,19 @@ pub enum VectorKey {
    ///
    /// Applies to all `CacheShape`.
    ///
-   /// Referred to as `AT_L1I_CACHESHAPE` in [`libc`].
+   /// Referred to as `AT_L1I_CACHESHAPE` in libc.
    #[display("AT_L1I_CACHESHAPE")]
    #[doc(alias = "AT_L1I_CACHESHAPE")]
    L1ICacheShape                            = 34,
-   /// Referred to as `AT_L1D_CACHESHAPE` in [`libc`].
+   /// Referred to as `AT_L1D_CACHESHAPE` in libc.
    #[display("AT_L1D_CACHESHAPE")]
    #[doc(alias = "AT_L1D_CACHESHAPE")]
    L1DCacheShape                            = 35,
-   /// Referred to as `AT_L2_CACHESHAPE` in [`libc`].
+   /// Referred to as `AT_L2_CACHESHAPE` in libc.
    #[display("AT_L2_CACHESHAPE")]
    #[doc(alias = "AT_L2_CACHESHAPE")]
    L2CacheShape                             = 36,
-   /// Referred to as `AT_L3_CACHESHAPE` in [`libc`].
+   /// Referred to as `AT_L3_CACHESHAPE` in libc.
    #[display("AT_L3_CACHESHAPE")]
    #[doc(alias = "AT_L3_CACHESHAPE")]
    L3CacheShape                             = 37,
@@ -299,35 +300,35 @@ pub enum VectorKey {
    /// `Geometry` are comprised of cache line size in bytes in the bottom 16
    /// bits and the cache associativity in the next 16 bits.
    ///
-   /// Referred to as `AT_L1I_CACHESIZE` in [`libc`].
+   /// Referred to as `AT_L1I_CACHESIZE` in libc.
    #[display("AT_L1I_CACHESIZE")]
    #[doc(alias = "AT_L1I_CACHESIZE")]
    L1ICacheSize                             = 40,
-   /// Referred to as `AT_L1I_CACHEGEOMETRY` in [`libc`].
+   /// Referred to as `AT_L1I_CACHEGEOMETRY` in libc.
    #[display("AT_L1I_CACHEGEOMETRY")]
    #[doc(alias = "AT_L1I_CACHEGEOMETRY")]
    L1ICacheGeometry                         = 41,
-   /// Referred to as `AT_L1D_CACHESIZE` in [`libc`].
+   /// Referred to as `AT_L1D_CACHESIZE` in libc.
    #[display("AT_L1D_CACHESIZE")]
    #[doc(alias = "AT_L1D_CACHESIZE")]
    L1DCacheSize                             = 42,
-   /// Referred to as `AT_L1D_CACHEGEOMETRY` in [`libc`].
+   /// Referred to as `AT_L1D_CACHEGEOMETRY` in libc.
    #[display("AT_L1D_CACHEGEOMETRY")]
    #[doc(alias = "AT_L1D_CACHEGEOMETRY")]
    L1DCacheGeometry                         = 43,
-   /// Referred to as `AT_L2_CACHESIZE` in [`libc`].
+   /// Referred to as `AT_L2_CACHESIZE` in libc.
    #[display("AT_L2_CACHESIZE")]
    #[doc(alias = "AT_L2_CACHESIZE")]
    L2CacheSize                              = 44,
-   /// Referred to as `AT_L2_CACHEGEOMETRY` in [`libc`].
+   /// Referred to as `AT_L2_CACHEGEOMETRY` in libc.
    #[display("AT_L2_CACHEGEOMETRY")]
    #[doc(alias = "AT_L2_CACHEGEOMETRY")]
    L2CacheGeometry                          = 45,
-   /// Referred to as `AT_L3_CACHESIZE` in [`libc`].
+   /// Referred to as `AT_L3_CACHESIZE` in libc.
    #[display("AT_L3_CACHESIZE")]
    #[doc(alias = "AT_L3_CACHESIZE")]
    L3CacheSize                              = 46,
-   /// Referred to as `AT_L3_CACHEGEOMETRY` in [`libc`].
+   /// Referred to as `AT_L3_CACHEGEOMETRY` in libc.
    #[display("AT_L3_CACHEGEOMETRY")]
    #[doc(alias = "AT_L3_CACHEGEOMETRY")]
    L3CacheGeometry                          = 47,
@@ -337,7 +338,7 @@ pub enum VectorKey {
    // ?? 50 ??
    /// Stack needed for signal delivery.
    ///
-   /// Referred to as `AT_MINSIGSTKSZ` in [`libc`].
+   /// Referred to as `AT_MINSIGSTKSZ` in libc.
    #[display("AT_MINSIGSTKSZ")]
    #[doc(alias = "AT_MINSIGSTKSZ")]
    SignalStackSizeMinimum                   = 51,
