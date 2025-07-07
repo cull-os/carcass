@@ -243,7 +243,7 @@ impl<'a> Scope<'a> {
       self.locals.is_empty()
    }
 
-   pub fn finish(&self) -> impl Iterator<Item = &Local> {
+   pub fn finish(&self) -> impl Iterator<Item = &Local<'a>> {
       self.locals.iter().filter(|local| {
          let unused = !local.used;
 

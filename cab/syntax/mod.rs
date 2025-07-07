@@ -8,7 +8,6 @@
    iter_intersperse,
    lazy_cell_into_inner,
    lazy_get,
-   let_chains,
    trait_alias
 )]
 

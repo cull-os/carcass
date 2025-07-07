@@ -18,7 +18,7 @@ cab-error.path  = "../error"
 cab-span.path   = "../span"
 cab-syntax.path = "../syntax"
 
-dup      = { path = "../../dup", features = [ "bytes", "rpds" ] }
+dup      = { features = [ "bytes", "rpds" ], path = "../../dup" }
 ust.path = "../../ust"
 
 async-once-cell.workspace = true

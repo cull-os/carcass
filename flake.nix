@@ -25,9 +25,14 @@
 
   inputs = {
     systems.url     = "github:nix-systems/default";
-    flake-parts.url = "github:hercules-ci/flake-parts";
 
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+
+    flake-parts = {
+      url = "github:hercules-ci/flake-parts";
+
+      inputs.nixpkgs-lib.follows = "nixpkgs";
+    };
 
     # RUST
     crane.url   = "github:ipetkov/crane";

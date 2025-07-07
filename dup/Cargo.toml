@@ -21,7 +21,7 @@ rpds  = [ "dep:rpds", "dep:archery" ]
 [dependencies]
 dup-macros.path = "./macros"
 
-bytes = { workspace = true, optional = true }
+bytes = { optional = true, workspace = true }
 
-archery = { workspace = true, optional = true }
-rpds    = { workspace = true, optional = true }
+archery = { optional = true, workspace = true }
+rpds    = { optional = true, workspace = true }

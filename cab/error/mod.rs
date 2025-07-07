@@ -1,6 +1,6 @@
 //! Error handling utilities.
 
-#![feature(gen_blocks, if_let_guard, let_chains, trait_alias, try_trait_v2)]
+#![feature(gen_blocks, if_let_guard, trait_alias, try_trait_v2)]
 
 use std::{
    fmt::{
