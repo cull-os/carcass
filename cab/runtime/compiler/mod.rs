@@ -197,11 +197,11 @@ impl<'a> Compiler<'a> {
       self.push_u64(*index as _);
    }
 
-   fn emit_scope(&mut self, span: Span, closure: impl FnOnce(&mut Self)) {
+   fn emit_scope(&mut self, span: Span, with: impl FnOnce(&mut Self)) {
       self.scopes.push(Scope::new());
 
       self.push_operation(span, Operation::ScopeStart);
-      closure(self);
+      with(self);
       self.push_operation(span, Operation::ScopeEnd);
 
       for local in self.scopes.pop().expect("scope was just pushed").finish() {
@@ -217,11 +217,22 @@ impl<'a> Compiler<'a> {
       }
    }
 
-   fn emit_thunk(&mut self, span: Span, closure: impl FnOnce(&mut Self)) {
+   #[builder(finish_fn(name = "with"))]
+   fn emit_thunk(
+      &mut self,
+      #[builder(start_fn)] span: Span,
+      #[builder(finish_fn)] with: impl FnOnce(&mut Self),
+      #[builder(default)] if_: bool,
+   ) {
+      if !if_ {
+         with(self);
+         return;
+      }
+
       let path = self.code().path().dupe();
       self.codes.push(Code::new(path));
 
-      closure(self);
+      with(self);
       self.push_operation(span, Operation::Return);
 
       let code = self.codes.pop().expect(EXPECT_CODE);
@@ -255,7 +266,7 @@ impl<'a> Compiler<'a> {
    fn emit_attributes(&mut self, attributes: &'a node::Attributes) {
       match attributes.expression() {
          Some(expression) => {
-            self.emit_thunk(attributes.span(), |this| {
+            self.emit_thunk(attributes.span()).with(|this| {
                this.emit_scope(attributes.span(), |this| {
                   this.emit(expression);
                   this.push_operation(expression.span(), Operation::ScopePush);
@@ -270,7 +281,7 @@ impl<'a> Compiler<'a> {
    }
 
    fn emit_prefix_operation(&mut self, operation: &'a node::PrefixOperation) {
-      self.emit_thunk(operation.span(), |this| {
+      self.emit_thunk(operation.span()).with(|this| {
          this.emit(operation.right());
 
          this.push_operation(operation.span(), match operation.operator() {
@@ -282,7 +293,7 @@ impl<'a> Compiler<'a> {
    }
 
    fn emit_infix_operation(&mut self, operation: &'a node::InfixOperation) {
-      self.emit_thunk(operation.span(), |this| {
+      self.emit_thunk(operation.span()).with(|this| {
          match operation.operator() {
             node::InfixOperator::Sequence => {
                this.emit_force(operation.left());
@@ -433,7 +444,7 @@ impl<'a> Compiler<'a> {
    }
 
    fn emit_path(&mut self, path: &'a node::Path) {
-      self.emit_thunk(path.span(), |this| {
+      self.emit_thunk(path.span()).with(|this| {
          if let Some(root) = path.root() {
             let segments = root
                .type_()
@@ -514,14 +525,14 @@ impl<'a> Compiler<'a> {
       });
    }
 
-   #[builder]
+   #[builder(finish_fn(name = "span"))]
    fn emit_identifier(
       &mut self,
       #[builder(start_fn)] identifier: &'a node::Identifier,
-      span: Span,
+      #[builder(finish_fn)] span: Span,
       #[builder(default)] is_bind: bool,
    ) {
-      self.emit_thunk(span, |this| {
+      self.emit_thunk(span).with(|this| {
          let name = match identifier.value() {
             node::IdentifierValueRef::Plain(plain) => {
                if is_bind {
@@ -605,7 +616,7 @@ impl<'a> Compiler<'a> {
    }
 
    fn emit_string(&mut self, string: &'a node::SString) {
-      self.emit_thunk(string.span(), |this| {
+      self.emit_thunk(string.span()).with(|this| {
          let segments = string.segments().into_iter().collect::<SmallVec<_, 4>>();
 
          for segment in &segments {
@@ -630,7 +641,7 @@ impl<'a> Compiler<'a> {
    }
 
    fn emit_if(&mut self, if_: &'a node::If) {
-      self.emit_thunk(if_.span(), |this| {
+      self.emit_thunk(if_.span()).with(|this| {
          this.emit_force(if_.condition());
          let to_consequence = {
             this.push_operation(if_.span(), Operation::JumpIf);
@@ -685,15 +696,11 @@ impl<'a> Compiler<'a> {
             };
             self
                .emit_identifier(identifier)
-               .span(bind.span())
                .is_bind(true)
-               .call();
+               .span(bind.span());
          },
          node::ExpressionRef::Identifier(identifier) => {
-            self
-               .emit_identifier(identifier)
-               .span(identifier.span())
-               .call();
+            self.emit_identifier(identifier).span(identifier.span());
          },
 
          node::ExpressionRef::SString(string) => self.emit_string(string),

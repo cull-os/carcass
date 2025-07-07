@@ -364,15 +364,15 @@ impl<'a> Tags<'a> {
       self.write_if_with(tag, condition, |_| {});
    }
 
-   pub fn write_with(&mut self, tag: impl Into<Tag<'a>>, closure: impl FnOnce(&mut Self)) {
-      self.write_if_with(tag, Condition::Always, closure);
+   pub fn write_with(&mut self, tag: impl Into<Tag<'a>>, with: impl FnOnce(&mut Self)) {
+      self.write_if_with(tag, Condition::Always, with);
    }
 
    pub fn write_if_with(
       &mut self,
       tag: impl Into<Tag<'a>>,
       condition: Condition,
-      closure: impl FnOnce(&mut Self),
+      with: impl FnOnce(&mut Self),
    ) {
       let tag = tag.into();
 
@@ -392,7 +392,7 @@ impl<'a> Tags<'a> {
       });
 
       let len = self.0.len();
-      closure(self);
+      with(self);
       let len = self.0.len() - len;
 
       assert!(

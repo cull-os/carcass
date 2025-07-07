@@ -35,12 +35,12 @@ pub trait Display {
 pub fn with<W: Write + ?Sized, T>(
    writer: &mut W,
    style: style::Style,
-   closure: impl FnOnce(&mut W) -> T,
+   with: impl FnOnce(&mut W) -> T,
 ) -> T {
    let style_previous = writer.get_style();
 
    writer.set_style(style);
-   let result = closure(writer);
+   let result = with(writer);
 
    writer.set_style(style_previous);
    result
