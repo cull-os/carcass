@@ -3,6 +3,7 @@ use std::{
    sync::Arc,
 };
 
+use async_once_cell::OnceCell;
 use async_trait::async_trait;
 use bytes::Bytes;
 use cab_error::{
@@ -11,6 +12,7 @@ use cab_error::{
    ResultExt as _,
    bail,
 };
+use dashmap::DashMap;
 use dup::{
    Dupe,
    IteratorDupedExt as _,
@@ -34,7 +36,9 @@ pub use standard::standard;
 
 pub const SEPARATOR: char = '/';
 
-pub type Subpath = List<Arc<str>>;
+pub type Part = Arc<str>;
+
+pub type Subpath = List<Part>;
 
 #[async_trait]
 pub trait Root: Send + Sync + 'static {
@@ -67,6 +71,9 @@ pub trait Root: Send + Sync + 'static {
 pub struct Path {
    root:    Option<Arc<dyn Root>>,
    subpath: Subpath,
+
+   read_cache: Arc<DashMap<Subpath, OnceCell<Result<Bytes>>>>,
+   list_cache: Arc<DashMap<Subpath, OnceCell<Result<List<Subpath>>>>>,
 }
 
 impl tag::DisplayTags for Path {
@@ -125,6 +132,9 @@ impl Path {
       Self {
          root: Some(root),
          subpath,
+
+         read_cache: Arc::new(DashMap::new()),
+         list_cache: Arc::new(DashMap::new()),
       }
    }
 
@@ -133,52 +143,78 @@ impl Path {
       Self {
          root: None,
          subpath,
+
+         read_cache: Arc::new(DashMap::new()),
+         list_cache: Arc::new(DashMap::new()),
       }
    }
 }
 
 impl Path {
    #[must_use]
-   pub fn get(&self, subpath: Arc<str>) -> Self {
+   pub fn get(&self, part: Part) -> Self {
       Self {
          root:    self.root.dupe(),
          subpath: self
             .subpath
             .iter()
             .duped()
-            .chain(iter::once(subpath))
+            .chain(iter::once(part))
             .collect(),
+
+         read_cache: self.read_cache.dupe(),
+         list_cache: self.list_cache.dupe(),
       }
    }
 
    pub async fn list(&self) -> Result<List<Subpath>> {
-      let root = self.root.dupe().ok_or_tag(&|tags: &mut tag::Tags| {
-         tags.write("tried to list rootless path ");
-         tags.extend(self);
-      })?;
+      let cache = self.list_cache.get(&self.subpath).unwrap_or_else(|| {
+         self.list_cache.entry(self.subpath.dupe()).or_default();
+         self.list_cache.get(&self.subpath).unwrap()
+      });
 
-      root
-         .list(&self.subpath)
-         .await
-         .tag_err(&|tags: &mut tag::Tags| {
-            tags.write("failed to read ");
-            tags.extend(self);
+      cache
+         .get_or_init(async {
+            let root = self.root.dupe().ok_or_tag(&|tags: &mut tag::Tags| {
+               tags.write("tried to list rootless path ");
+               tags.extend(self);
+            })?;
+
+            root
+               .list(&self.subpath)
+               .await
+               .tag_err(&|tags: &mut tag::Tags| {
+                  tags.write("failed to read ");
+                  tags.extend(self);
+               })
          })
+         .await
+         .dupe()
    }
 
    pub async fn read(&self) -> Result<Bytes> {
-      let root = self.root.dupe().ok_or_tag(&|tags: &mut tag::Tags| {
-         tags.write("tried to read rootless path ");
-         tags.extend(self);
-      })?;
+      let cache = self.read_cache.get(&self.subpath).unwrap_or_else(|| {
+         self.read_cache.entry(self.subpath.dupe()).or_default();
+         self.read_cache.get(&self.subpath).unwrap()
+      });
 
-      root
-         .read(&self.subpath)
-         .await
-         .tag_err(&|tags: &mut tag::Tags| {
-            tags.write("failed to read ");
-            tags.extend(self);
+      cache
+         .get_or_init(async {
+            let root = self.root.dupe().ok_or_tag(&|tags: &mut tag::Tags| {
+               tags.write("tried to read rootless path ");
+               tags.extend(self);
+            })?;
+
+            root
+               .read(&self.subpath)
+               .await
+               .tag_err(&|tags: &mut tag::Tags| {
+                  tags.write("failed to read ");
+                  tags.extend(self);
+               })
          })
+         .await
+         .dupe()
    }
 
    pub async fn write(&self, content: Bytes) -> Result<()> {
