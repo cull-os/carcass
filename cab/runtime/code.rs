@@ -78,7 +78,7 @@ pub struct Code {
 
 impl Display for Code {
    fn display_styled(&self, writer: &mut dyn Write) -> fmt::Result {
-      const STYLE_JUMP_ADDRESS: style::Style = style::Color::BrightYellow.fg().bold();
+      const STYLE_JUMP_ADDRESS: style::Style = style::Color::BrightYellow.fg().bold().underline();
 
       let mut codes = VecDeque::from([(0_u64, self)]);
 
@@ -86,6 +86,7 @@ impl Display for Code {
          let highlighted = RefCell::new(Vec::<ByteIndex>::new());
          let index_width = 2 + terminal::number_hex_width(code.bytes.len() - 1);
 
+         // INDENT: "0x123 | "
          let index = RefCell::new(ByteIndex(0));
          let mut index_previous = None::<usize>;
          terminal::indent!(writer, index_width + 3, |writer| {
@@ -113,11 +114,11 @@ impl Display for Code {
                   write!(writer, "{index:>#index_width$X}")?;
                }
 
-               write!(writer, " {TOP_TO_BOTTOM} ")
+               write!(writer, " {TOP_TO_BOTTOM}")
             })?;
 
             index_previous.replace(index);
-            Ok(index_width + 3)
+            Ok(index_width + 2)
          });
 
          if **index.borrow() < code.bytes.len() {
