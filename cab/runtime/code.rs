@@ -78,6 +78,8 @@ pub struct Code {
 
 impl Display for Code {
    fn display_styled(&self, writer: &mut dyn Write) -> fmt::Result {
+      const STYLE_JUMP_ADDRESS: style::Style = style::Color::BrightYellow.fg().bold();
+
       let mut codes = VecDeque::from([(0_u64, self)]);
 
       while let Some((code_index, code)) = codes.pop_back() {
@@ -90,7 +92,7 @@ impl Display for Code {
             let index = *index.borrow();
 
             let style = if highlighted.borrow().contains(&index) {
-               style::Style::new().cyan().bold()
+               STYLE_JUMP_ADDRESS
             } else {
                STYLE_GUTTER
             };
@@ -221,7 +223,7 @@ impl Display for Code {
 
                      highlighted.borrow_mut().push(ByteIndex(u16 as _));
 
-                     with(writer, style::Color::Cyan.fg().bold(), |writer| {
+                     with(writer, STYLE_JUMP_ADDRESS, |writer| {
                         write!(writer, "{u16:#X}")
                      })?;
                      index.borrow_mut().0 += size;
