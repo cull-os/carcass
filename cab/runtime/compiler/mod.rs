@@ -468,7 +468,8 @@ impl<'a> Compiler<'a> {
    }
 
    fn emit_path(&mut self, path: &'a node::Path) {
-      let needs_thunk = path.root().is_some() || !path.subpath().is_trivial();
+      let needs_thunk =
+         path.root().is_some() || path.subpath().is_some_and(|subpath| !subpath.is_trivial());
 
       self.emit_thunk(path.span()).if_(needs_thunk).with(|this| {
          if let Some(root) = path.root() {
@@ -507,36 +508,42 @@ impl<'a> Compiler<'a> {
             }
          }
 
-         let subpath = path.subpath();
-         let segments = subpath.segments().into_iter().collect::<SmallVec<_, 4>>();
+         if let Some(subpath) = path.subpath() {
+            let segments = subpath.segments().into_iter().collect::<SmallVec<_, 4>>();
 
-         for segment in &segments {
-            match *segment {
-               Segment::Content { span, ref content } => {
-                  this.emit_push(
-                     span,
-                     value::Path::rootless(
-                        content
-                           .split(value::path::SEPARATOR)
-                           .filter(|part| !part.is_empty())
-                           .map(Into::into)
-                           .collect(),
-                     )
-                     .into(),
-                  );
-               },
+            for segment in &segments {
+               match *segment {
+                  Segment::Content { span, ref content } => {
+                     this.emit_push(
+                        span,
+                        value::Path::rootless(
+                           content
+                              .split(value::path::SEPARATOR)
+                              .filter(|part| !part.is_empty())
+                              .map(Into::into)
+                              .collect(),
+                        )
+                        .into(),
+                     );
+                  },
 
-               Segment::Interpolation(interpolation) => {
-                  this.emit_scope(interpolation.span(), |this| {
-                     this.emit_force(interpolation.expression());
-                  });
-               },
+                  Segment::Interpolation(interpolation) => {
+                     this.emit_scope(interpolation.span(), |this| {
+                        this.emit_force(interpolation.expression());
+                     });
+                  },
+               }
             }
-         }
 
-         if !subpath.is_trivial() {
-            this.push_operation(subpath.span(), Operation::Interpolate);
-            this.push_u64(segments.len() as _);
+            if !subpath.is_trivial() {
+               this.push_operation(subpath.span(), Operation::Interpolate);
+               this.push_u64(segments.len() as _);
+            }
+         } else {
+            this.emit_push(
+               path.span(),
+               value::Path::rootless(rpds::List::new_sync()).into(),
+            );
          }
 
          if path.root().is_some() {

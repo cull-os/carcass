@@ -878,7 +878,7 @@ node! {
 impl Path {
    get_node! { root -> Option<&PathRoot> }
 
-   get_node! { subpath -> &PathSubpath }
+   get_node! { subpath -> Option<&PathSubpath> }
 
    pub fn validate(&self, to: &mut Vec<Report>) {
       let mut report = lazy!(Report::error("invalid path"));
@@ -907,14 +907,16 @@ impl Path {
          }
       }
 
-      let segments = self.subpath().segments();
-      segments.validate(to, &mut report);
+      if let Some(subpath) = self.subpath() {
+         let segments = subpath.segments();
+         segments.validate(to, &mut report);
 
-      // Only assert if the report wasn't initialized, because
-      // ./foo/bar\<newline-here> actually gets parsed as a
-      // multiline segment. And when that happens report is ready.
-      if !ready!(report) {
-         assert!(!segments.is_multiline);
+         // Only assert if the report wasn't initialized, because
+         // ./foo/bar\<newline-here> actually gets parsed as a
+         // multiline segment. And when that happens report is ready.
+         if !ready!(report) {
+            assert!(!segments.is_multiline);
+         }
       }
 
       if let Some(report) = read!(report) {

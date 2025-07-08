@@ -435,7 +435,9 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
             this.node_path_root(until | TOKEN_PATH_SUBPATH_START);
          }
 
-         this.node_delimited();
+         if this.peek_direct() == Some(TOKEN_PATH_SUBPATH_START) {
+            this.node_delimited();
+         }
       });
    }
 

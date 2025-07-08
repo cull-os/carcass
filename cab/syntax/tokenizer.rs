@@ -41,7 +41,6 @@ fn is_valid_path_subpath_character(c: char) -> bool {
 enum Context<'a> {
    PathSubpathStart,
    PathSubpath,
-   PathSubpathEmpty,
    PathSubpathEnd,
 
    PathRootType,
@@ -212,7 +211,6 @@ impl<'a> Tokenizer<'a> {
       loop {
          if let Some('>' | ':') = self.peek_character() {
             self.context_pop(Context::PathRootType);
-            self.context_push(Context::PathSubpathStart);
             self.context_push(Context::PathRootTypeEnd);
 
             return TOKEN_CONTENT;
@@ -276,28 +274,21 @@ impl<'a> Tokenizer<'a> {
             assert_matches!(self.consume_character(), Some('>' | ':'));
             self.context_pop(Context::PathRootTypeEnd);
 
+            if self.peek_character() == Some('/') {
+               self.context_push(Context::PathSubpathStart);
+            }
+
             return Some(TOKEN_PATH_ROOT_TYPE_END);
          },
 
          Some(Context::PathSubpathStart) => {
             self.context_pop(Context::PathSubpathStart);
-
-            if self.peek_character() == Some('/') {
-               self.context_push(Context::PathSubpath);
-            } else {
-               self.context_push(Context::PathSubpathEnd);
-               self.context_push(Context::PathSubpathEmpty);
-            }
+            self.context_push(Context::PathSubpath);
 
             return Some(TOKEN_PATH_SUBPATH_START);
          },
          Some(Context::PathSubpath) => {
             return Some(self.consume_path_subpath());
-         },
-         Some(Context::PathSubpathEmpty) => {
-            self.context_pop(Context::PathSubpathEmpty);
-
-            return Some(TOKEN_CONTENT);
          },
          Some(Context::PathSubpathEnd) => {
             self.context_pop(Context::PathSubpathEnd);
