@@ -912,7 +912,7 @@ impl Path {
          segments.validate(to, &mut report);
 
          // Only assert if the report wasn't initialized, because
-         // ./foo/bar\<newline-here> actually gets parsed as a
+         // /etc/ssl\<newline-here> actually gets parsed as a
          // multiline segment. And when that happens report is ready.
          if !ready!(report) {
             assert!(!segments.is_multiline);

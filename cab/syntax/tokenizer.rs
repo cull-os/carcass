@@ -502,13 +502,6 @@ impl<'a> Tokenizer<'a> {
 
             TOKEN_PATH_SUBPATH_START
          },
-         // ./bar/baz.txt
-         start @ '.' if let Some('.' | '/') = self.peek_character() => {
-            self.offset -= start.len_utf8();
-            self.context_push(Context::PathSubpath);
-
-            TOKEN_PATH_SUBPATH_START
-         },
          // /bar/baz.txt
          start @ '/'
             if self
@@ -607,9 +600,9 @@ mod tests {
    #[test]
    fn path() {
       assert_token_matches!(
-         r"../foo\(𓃰)///baz",
+         r"/foo\(𓃰)///baz",
          (TOKEN_PATH_SUBPATH_START, ""),
-         (TOKEN_CONTENT, "../foo"),
+         (TOKEN_CONTENT, "/foo"),
          (TOKEN_INTERPOLATION_START, r"\("),
          (TOKEN_IDENTIFIER, "𓃰"),
          (TOKEN_INTERPOLATION_END, ")"),
