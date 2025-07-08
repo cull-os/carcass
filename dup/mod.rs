@@ -223,6 +223,43 @@ mod bytes {
    impl Dupe for bytes::BytesMut {}
 }
 
+#[cfg(feature = "cstree")]
+mod cstree {
+   use cstree::util;
+
+   use super::Dupe;
+
+   impl Dupe for cstree::RawSyntaxKind {}
+
+   impl Dupe for cstree::build::Checkpoint {}
+
+   impl Dupe for cstree::green::GreenNode {}
+   impl Dupe for cstree::green::GreenNodeChildren<'_> {}
+   impl Dupe for cstree::green::GreenToken {}
+
+   impl Dupe for cstree::interning::TokenKey {}
+
+   impl<T> Dupe for cstree::sync::Arc<T> {}
+
+   impl<S: cstree::Syntax, D> Dupe for cstree::syntax::ResolvedNode<S, D> {}
+   impl<S: cstree::Syntax, D> Dupe for cstree::syntax::ResolvedToken<S, D> {}
+
+   impl<S: cstree::Syntax, D> Dupe for cstree::syntax::SyntaxElementChildren<'_, S, D> {}
+   impl<S: cstree::Syntax, D> Dupe for cstree::syntax::SyntaxNode<S, D> {}
+   impl<S: cstree::Syntax, D> Dupe for cstree::syntax::SyntaxNodeChildren<'_, S, D> {}
+   impl<I: Clone, S: cstree::Syntax, D> Dupe for cstree::syntax::SyntaxText<'_, '_, I, S, D> {}
+   impl<S: cstree::Syntax, D> Dupe for cstree::syntax::SyntaxToken<S, D> {}
+
+   impl Dupe for cstree::text::TextRange {}
+   impl Dupe for cstree::text::TextSize {}
+
+   impl Dupe for cstree::traversal::Direction {}
+   impl<T: Dupe> Dupe for cstree::traversal::WalkEvent<T> {}
+
+   impl<N: Dupe, T: Dupe> Dupe for cstree::util::NodeOrToken<N, T> {}
+   impl<T: Dupe> Dupe for util::TokenAtOffset<T> {}
+}
+
 #[cfg(feature = "rpds")]
 mod rpds {
    use std::{

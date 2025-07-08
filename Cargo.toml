@@ -102,7 +102,7 @@ cstree = { features = [
   "derive",
   "lasso_compat",
   "multi_threaded_interning",
-], git = "https://github.com/domenicquirl/cstree" }
+], git = "https://github.com/RGBCube/cstree", branch = "fix-derive" }
 
 # TODO: Pick one of enumflags2 and enumset. I (RGBCube) added enumset2 for const support in ust.
 archery              = "1.2.1"

@@ -376,7 +376,7 @@ checksum = "d0a5c400df2834b80a4c3327b3aad3a4c4cd4de0629063962b03235697506a28"
 [[package]]
 name = "cstree"
 version = "0.12.2"
-source = "git+https://github.com/domenicquirl/cstree#fb8cc54104cd73ac21aa1c44b89570b4b93a0ef9"
+source = "git+https://github.com/RGBCube/cstree?branch=fix-derive#c2129bf15bd732bcd96ca3eb7d686adf1f99bc3f"
 dependencies = [
  "cstree_derive",
  "indexmap",
@@ -390,7 +390,7 @@ dependencies = [
 [[package]]
 name = "cstree_derive"
 version = "0.12.2"
-source = "git+https://github.com/domenicquirl/cstree#fb8cc54104cd73ac21aa1c44b89570b4b93a0ef9"
+source = "git+https://github.com/RGBCube/cstree?branch=fix-derive#c2129bf15bd732bcd96ca3eb7d686adf1f99bc3f"
 dependencies = [
  "proc-macro2",
  "quote",
