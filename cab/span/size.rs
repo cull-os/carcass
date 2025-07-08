@@ -20,7 +20,9 @@ impl<I: Into<Self>> ops::Add<I> for Size {
    type Output = Self;
 
    fn add(self, that: I) -> Self::Output {
-      Self(*self + *that.into())
+      into!(that);
+
+      Self(*self + *that)
    }
 }
 
@@ -29,7 +31,9 @@ impl<I: Into<Self>> ops::Sub<I> for Size {
 
    #[track_caller]
    fn sub(self, that: I) -> Self::Output {
-      Self(*self - *that.into())
+      into!(that);
+
+      Self(*self - *that)
    }
 }
 
@@ -72,7 +76,7 @@ impl From<Size> for usize {
 
 impl From<usize> for Size {
    fn from(that: usize) -> Self {
-      Self(that.try_into().expect("usize must fit in u32"))
+      Self(u32::try_from(that).expect("usize must fit in u32"))
    }
 }
 
@@ -84,7 +88,9 @@ impl From<Size> for cstree::text::TextSize {
 
 impl From<cstree::text::TextSize> for Size {
    fn from(that: cstree::text::TextSize) -> Self {
-      Self(that.into())
+      into!(that);
+
+      Self(that)
    }
 }
 

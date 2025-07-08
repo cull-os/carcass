@@ -79,9 +79,9 @@ async fn main() -> error::Termination {
    let path: Arc<dyn value::path::Root> = if source == "-" {
       Arc::new(value::path::standard())
    } else {
-      Arc::new(value::path::blob(runtime::Value::String(
-         source.as_str().into(),
-      )))
+      Arc::new(value::path::blob(runtime::Value::String(Arc::from(
+         source.as_str(),
+      ))))
    };
    let path = value::Path::new(path, List::new_sync());
 

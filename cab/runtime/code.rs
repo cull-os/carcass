@@ -192,9 +192,7 @@ impl Display for Code {
                      })?;
 
                      match code[ValueIndex(
-                        value_index
-                           .try_into()
-                           .expect("value index must fit in usize"),
+                        usize::try_from(value_index).expect("value index must fit in usize"),
                      )] {
                         Value::Blueprint(ref code) => {
                            codes.push_front((value_index_unique, code));
@@ -296,7 +294,9 @@ impl Code {
    #[must_use]
    pub fn read_u64(&self, index: ByteIndex) -> (u64, usize) {
       let encoded = match self.bytes.get(*index..*index + ENCODED_U64_LEN) {
-         Some(slice) => slice.try_into().expect("size was statically checked"),
+         Some(slice) => {
+            <[u8; ENCODED_U64_LEN]>::try_from(slice).expect("size was statically checked")
+         },
 
          None => {
             let mut buffer = [0; ENCODED_U64_LEN];
@@ -317,12 +317,13 @@ impl Code {
 
    #[must_use]
    pub fn read_u16(&self, index: ByteIndex) -> (u16, usize) {
-      let encoded = self
-         .bytes
-         .get(*index..*index + ENCODED_U16_LEN)
-         .expect("byte index must be valid")
-         .try_into()
-         .expect("size was statically checked");
+      let encoded = <[u8; ENCODED_U16_LEN]>::try_from(
+         self
+            .bytes
+            .get(*index..*index + ENCODED_U16_LEN)
+            .expect("byte index must be valid"),
+      )
+      .expect("size was statically checked");
 
       (u16::from_le_bytes(encoded), ENCODED_U16_LEN)
    }
@@ -352,19 +353,13 @@ impl Code {
 
       (
          (self.path.dupe(), span),
-         self.bytes[*index]
-            .try_into()
-            .expect("byte index must be valid"),
+         Operation::try_from(self.bytes[*index]).expect("byte index must be valid"),
          ENCODED_OPERATION_LEN,
       )
    }
 
    pub fn point_here(&mut self, index: ByteIndex) {
-      let here: u16 = self
-         .bytes
-         .len()
-         .try_into()
-         .expect("bytes len must fit in u16");
+      let here = u16::try_from(self.bytes.len()).expect("bytes len must fit in u16");
 
       self.bytes[*index..*index + ENCODED_U16_LEN].copy_from_slice(&here.to_le_bytes());
    }

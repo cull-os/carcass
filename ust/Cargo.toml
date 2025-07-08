@@ -19,6 +19,7 @@ workspace = true
 
 [dependencies]
 cab-span.path = "../cab/span"
+cab-util.path = "../cab/util"
 
 const-str.workspace            = true
 derive_more.workspace          = true

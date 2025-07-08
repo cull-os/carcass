@@ -48,18 +48,17 @@ impl From<Thunk> for Value {
 impl Thunk {
    #[must_use]
    pub fn suspended(location: Location, code: Code) -> Self {
-      Self(
-         RwLock::new(ThunkInner::Suspended {
-            location,
-            code,
-            locals: HashMap::with_hasher(FxBuildHasher),
-         })
-         .into(),
-      )
+      Self(Arc::new(RwLock::new(ThunkInner::Suspended {
+         location,
+         code,
+         locals: HashMap::with_hasher(FxBuildHasher),
+      })))
    }
 
    #[must_use]
    pub fn suspended_native(native: impl FnOnce() -> Value + Send + Sync + 'static) -> Self {
-      Self(RwLock::new(ThunkInner::SuspendedNative(Box::new(native))).into())
+      Self(Arc::new(RwLock::new(ThunkInner::SuspendedNative(
+         Box::new(native),
+      ))))
    }
 }

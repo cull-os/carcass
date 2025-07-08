@@ -331,7 +331,7 @@ fn resolve_style<'a>(
       let mut content_offset = Size::new(0_u32);
       let mut style_offset: usize = 0;
 
-      while content_offset < content.len().into() {
+      while (*content_offset as usize) < content.len() {
          let current_style =
             styles[style_offset..]
                .iter()
@@ -348,7 +348,7 @@ fn resolve_style<'a>(
                .filter(|&(_, style)| style.span.start > content_offset)
                .map(|(relative_offset, style)| (relative_offset, style.span.start))
                .next()
-               .unwrap_or((styles.len() - style_offset, content.len().into()));
+               .unwrap_or((styles.len() - style_offset, Size::new(content.len())));
 
             style_offset += relative_offset;
 
@@ -476,8 +476,7 @@ fn write_report(
          if !(line_is_first && line_is_last) {
             line.strikes.push(LineStrike {
                id: LineStrikeId(
-                  label_index
-                     .try_into()
+                  u8::try_from(label_index)
                      .expect("overlapping label count must not exceed u8::MAX"),
                ),
 
@@ -811,8 +810,8 @@ fn write_report(
             // HACK: wrap may split the current line into multiple
             // lines, so the label pointer may be too far left.
             // Just max it to 60 for now.
-            let span_start = label.span.start().min(Some(60_u32.into()));
-            let span_end = label.span.end().min(60_u32.into());
+            let span_start = label.span.start().min(Some(Size::new(60_u32)));
+            let span_end = label.span.end().min(Size::new(60_u32));
 
             // DEDENT: "<strike-prefix> "
             dedent!(writer);

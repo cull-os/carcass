@@ -13,6 +13,7 @@ use cab_span::{
    Size,
    Span,
 };
+use cab_util::into;
 use dup::Dupe;
 use enumset::EnumSet;
 use peekmore::{
@@ -108,11 +109,12 @@ impl ParseOracle {
 
       let node = red::Node::new_root_with_resolver(green_node, self.cache.interner().dupe());
 
-      let expression: node::ExpressionRef<'_> = node
-         .first_child()
-         .expect("noder output must contain a single parse root node")
-         .try_into()
-         .expect("parse root node must contain an expression");
+      let expression = node::ExpressionRef::try_from(
+         node
+            .first_child()
+            .expect("noder output must contain a single parse root node"),
+      )
+      .expect("parse root node must contain an expression");
 
       noder.reports.retain({
          let mut last_span = None;
@@ -323,7 +325,13 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
       Span::new(start, self.offset)
    }
 
-   fn next_expect(&mut self, expected: EnumSet<Kind>, until: EnumSet<Kind>) -> Option<Kind> {
+   fn next_expect(
+      &mut self,
+      expected: impl Into<EnumSet<Kind>>,
+      until: EnumSet<Kind>,
+   ) -> Option<Kind> {
+      into!(expected);
+
       let expected_at = self.checkpoint();
 
       match self.peek() {
@@ -349,7 +357,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
    fn node_parenthesis(&mut self, until: EnumSet<Kind>) {
       self.node(NODE_PARENTHESIS).with(|this| {
          this.next_expect(
-            TOKEN_PARENTHESIS_LEFT.into(),
+            TOKEN_PARENTHESIS_LEFT,
             until | Kind::EXPRESSIONS | TOKEN_PARENTHESIS_RIGHT,
          );
 
@@ -367,7 +375,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
    fn node_list(&mut self, until: EnumSet<Kind>) {
       self.node(NODE_LIST).with(|this| {
          this.next_expect(
-            TOKEN_BRACKET_LEFT.into(),
+            TOKEN_BRACKET_LEFT,
             until | Kind::EXPRESSIONS | TOKEN_BRACKET_RIGHT,
          );
 
@@ -382,7 +390,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
    fn node_attributes(&mut self, until: EnumSet<Kind>) {
       self.node(NODE_ATTRIBUTES).with(|this| {
          this.next_expect(
-            TOKEN_CURLYBRACE_LEFT.into(),
+            TOKEN_CURLYBRACE_LEFT,
             until | Kind::EXPRESSIONS | TOKEN_CURLYBRACE_RIGHT,
          );
 
@@ -422,7 +430,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
          }
 
          // DONE: >
-         this.next_expect(TOKEN_MORE.into(), until);
+         this.next_expect(TOKEN_MORE, until);
 
          // EITHER:
          // <root>
@@ -446,7 +454,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
 
    fn node_bind(&mut self, until: EnumSet<Kind>) {
       self.node(NODE_BIND).with(|this| {
-         this.next_expect(TOKEN_AT.into(), Kind::IDENTIFIERS);
+         this.next_expect(TOKEN_AT, Kind::IDENTIFIERS);
 
          this.next_while_trivia();
          this.node_expression_single(until);
@@ -512,24 +520,24 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
 
    fn node_interpolation(&mut self) {
       self.node(NODE_INTERPOLATION).with(|this| {
-         this.next_expect(TOKEN_INTERPOLATION_START.into(), EnumSet::empty());
+         this.next_expect(TOKEN_INTERPOLATION_START, EnumSet::empty());
 
-         this.node_expression(TOKEN_INTERPOLATION_END.into());
+         this.node_expression(EnumSet::new() | TOKEN_INTERPOLATION_END);
 
-         this.next_expect(TOKEN_INTERPOLATION_END.into(), EnumSet::empty());
+         this.next_expect(TOKEN_INTERPOLATION_END, EnumSet::empty());
       });
    }
 
    fn node_integer(&mut self, until: EnumSet<Kind>) {
       self
          .node(NODE_INTEGER)
-         .with(|this| this.next_expect(TOKEN_INTEGER.into(), until));
+         .with(|this| this.next_expect(TOKEN_INTEGER, until));
    }
 
    fn node_float(&mut self, until: EnumSet<Kind>) {
       self
          .node(NODE_FLOAT)
-         .with(|this| this.next_expect(TOKEN_FLOAT.into(), until));
+         .with(|this| this.next_expect(TOKEN_FLOAT, until));
    }
 
    fn node_if(&mut self, until: EnumSet<Kind>) {
@@ -537,7 +545,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
 
       self.node(NODE_IF).with(|this| {
          this.next_expect(
-            TOKEN_KEYWORD_IF.into(),
+            TOKEN_KEYWORD_IF,
             until | Kind::EXPRESSIONS | TOKEN_KEYWORD_THEN | TOKEN_KEYWORD_ELSE,
          );
 
@@ -547,7 +555,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
          );
 
          this.next_expect(
-            TOKEN_KEYWORD_THEN.into(),
+            TOKEN_KEYWORD_THEN,
             until | Kind::EXPRESSIONS | TOKEN_KEYWORD_ELSE,
          );
 
@@ -556,7 +564,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
             until | Kind::EXPRESSIONS | TOKEN_KEYWORD_ELSE,
          );
 
-         this.next_expect(TOKEN_KEYWORD_ELSE.into(), until | Kind::EXPRESSIONS);
+         this.next_expect(TOKEN_KEYWORD_ELSE, until | Kind::EXPRESSIONS);
 
          this.node_expression_binding_power(if_then_else_binding_power, until);
       });

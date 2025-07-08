@@ -357,13 +357,19 @@ pub trait Segmented: ops::Deref<Target = red::Node> {
             match child {
                red::ElementRef::Node(node) => {
                   Some(SegmentRawRef::Interpolation(
-                     node
-                        .try_into()
+                     <&node::Interpolation>::try_from(node)
                         .expect("child node of segmented node must be interpolation"),
                   ))
                },
 
-               red::ElementRef::Token(token) => token.try_into().map(SegmentRawRef::Content).ok(),
+               // The reason we are not asserting here is because invalid
+               // segmented nodes sometimes contain non-content tokens,
+               // it's not worth it to fix this as it'll error anyway.
+               red::ElementRef::Token(token) => {
+                  <&token::Content>::try_from(token)
+                     .map(SegmentRawRef::Content)
+                     .ok()
+               },
             }
          })
          .enumerate()

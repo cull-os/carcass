@@ -1,4 +1,4 @@
-use std::borrow::Cow;
+use std::sync::Arc;
 
 use cab_error::{
    Result,
@@ -237,7 +237,7 @@ impl<'a> Compiler<'a> {
       self.emit_push(
          span,
          // if code.references_parent {
-         Value::Blueprint(code.into()),
+         Value::Blueprint(Arc::new(code)),
          // } else {
          //     Value::Thunk(Arc::new(Mutex::new(Thunk::suspended(location, context.code))))
          // }
@@ -299,7 +299,7 @@ impl<'a> Compiler<'a> {
          },
 
          None => {
-            self.emit_push(attributes.span(), value::Attributes::new().into());
+            self.emit_push(attributes.span(), Value::from(value::Attributes::new()));
          },
       }
    }
@@ -479,7 +479,7 @@ impl<'a> Compiler<'a> {
             for segment in &segments {
                match *segment {
                   Segment::Content { span, ref content } => {
-                     this.emit_push(span, Value::String(content.as_str().into()));
+                     this.emit_push(span, Value::String(Arc::from(content.as_str())));
                   },
 
                   Segment::Interpolation(interpolation) => {
@@ -516,14 +516,13 @@ impl<'a> Compiler<'a> {
                   Segment::Content { span, ref content } => {
                      this.emit_push(
                         span,
-                        value::Path::rootless(
+                        Value::from(value::Path::rootless(
                            content
                               .split(value::path::SEPARATOR)
                               .filter(|part| !part.is_empty())
-                              .map(Into::into)
+                              .map(Arc::from)
                               .collect(),
-                        )
-                        .into(),
+                        )),
                      );
                   },
 
@@ -542,7 +541,7 @@ impl<'a> Compiler<'a> {
          } else {
             this.emit_push(
                path.span(),
-               value::Path::rootless(rpds::List::new_sync()).into(),
+               Value::from(value::Path::rootless(rpds::List::new_sync())),
             );
          }
 
@@ -569,9 +568,9 @@ impl<'a> Compiler<'a> {
          let name = match identifier.value() {
             node::IdentifierValueRef::Plain(plain) => {
                if is_bind {
-                  this.emit_push(span, Value::Bind(plain.text().into()));
+                  this.emit_push(span, Value::Bind(Arc::from(plain.text())));
                } else {
-                  this.emit_push(span, Value::Reference(plain.text().into()));
+                  this.emit_push(span, Value::Reference(Arc::from(plain.text())));
                   this.push_operation(span, Operation::Resolve);
                }
 
@@ -587,9 +586,9 @@ impl<'a> Compiler<'a> {
                         this.emit_push(
                            span,
                            if is_bind {
-                              Value::Bind(content.as_str().into())
+                              Value::Bind(Arc::from(content.as_str()))
                            } else {
-                              Value::Reference(content.as_str().into())
+                              Value::Reference(Arc::from(content.as_str()))
                            },
                         );
                      },
@@ -616,7 +615,7 @@ impl<'a> Compiler<'a> {
                      .into_iter()
                      .filter_map(|segment| {
                         match segment {
-                           Segment::Content { content, .. } => Some(Cow::Owned(content)),
+                           Segment::Content { content, .. } => Some(content),
 
                            Segment::Interpolation(_) => None,
                         }
@@ -661,7 +660,7 @@ impl<'a> Compiler<'a> {
             for segment in &segments {
                match *segment {
                   Segment::Content { span, ref content } => {
-                     this.emit_push(span, Value::String(content.as_str().into()));
+                     this.emit_push(span, Value::String(Arc::from(content.as_str())));
                   },
 
                   Segment::Interpolation(interpolation) => {
@@ -748,7 +747,7 @@ impl<'a> Compiler<'a> {
             self.emit_push(rune.span(), Value::Rune(rune.value()));
          },
          node::ExpressionRef::Integer(integer) => {
-            self.emit_push(integer.span(), Value::Integer(integer.value().into()));
+            self.emit_push(integer.span(), Value::Integer(Arc::new(integer.value())));
          },
          node::ExpressionRef::Float(float) => {
             self.emit_push(float.span(), Value::Float(float.value()));

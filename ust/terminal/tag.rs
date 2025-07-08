@@ -9,6 +9,7 @@ use std::{
    sync::RwLock,
 };
 
+use cab_util::into;
 use derive_more::Deref;
 
 use crate::{
@@ -34,7 +35,8 @@ pub enum Tag<'a> {
 
 impl<'a, I: Into<Cow<'a, str>>> From<I> for Tag<'a> {
    fn from(value: I) -> Self {
-      Self::Text(value.into().styled())
+      into!(value);
+      Self::Text(value.styled())
    }
 }
 
@@ -374,7 +376,7 @@ impl<'a> Tags<'a> {
       condition: Condition,
       with: impl FnOnce(&mut Self),
    ) {
-      let tag = tag.into();
+      into!(tag);
 
       let tag_is_node = tag.is_node();
       let tag_should_pop =

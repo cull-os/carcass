@@ -65,7 +65,7 @@ impl Root for Fs {
             )
          })?;
 
-         contents = contents.push_front(subpath.push_front(name.into()));
+         contents = contents.push_front(subpath.push_front(Arc::from(name)));
       }
 
       Ok(contents)

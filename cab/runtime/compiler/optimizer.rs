@@ -33,7 +33,7 @@ impl<'a> From<node::ExpressionRef<'a>> for Boolean<'a> {
       };
 
       let content = match identifier.value() {
-         node::IdentifierValueRef::Plain(plain) => smallvec![plain.text().into()],
+         node::IdentifierValueRef::Plain(plain) => smallvec![Cow::Borrowed(plain.text())],
 
          node::IdentifierValueRef::Quoted(quoted) => {
             quoted
@@ -41,7 +41,7 @@ impl<'a> From<node::ExpressionRef<'a>> for Boolean<'a> {
                .into_iter()
                .filter_map(|segment| {
                   match segment {
-                     Segment::Content { content, .. } => Some(content.into()),
+                     Segment::Content { content, .. } => Some(Cow::Owned(content)),
 
                      Segment::Interpolation(_) => None,
                   }
@@ -89,9 +89,9 @@ impl<'a> Compiler<'a> {
       };
 
       match (
-         operation.left().into(),
+         Boolean::from(operation.left()),
          operation.operator(),
-         operation.right().into(),
+         Boolean::from(operation.right()),
       ) {
          // false ||, false |
          (False(boolean), Or | Any, Other(expression))
@@ -135,7 +135,7 @@ impl<'a> Compiler<'a> {
                   ),
             );
 
-            operation.into()
+            node::ExpressionRef::from(operation)
          },
 
          // true &&, true &
@@ -180,10 +180,10 @@ impl<'a> Compiler<'a> {
                   ),
             );
 
-            operation.into()
+            node::ExpressionRef::from(operation)
          },
 
-         _ => operation.into(),
+         _ => node::ExpressionRef::from(operation),
       }
    }
 
