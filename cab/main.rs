@@ -26,6 +26,7 @@ use ust::{
 };
 
 const FAIL_STDOUT: &str = "failed to write to stdout";
+const FAIL_STDERR: &str = "failed to write to stderr";
 
 #[derive(clap::Parser)]
 #[command(version, about)]
@@ -121,12 +122,14 @@ async fn main() -> error::Termination {
 
             Dump::Syntax => {
                let parse_oracle = syntax::ParseOracle::new();
-               let expression = parse_oracle
-                  .parse(syntax::tokenize(&source))
-                  .extractlnln(err, &path, &source)?;
+               let parse = parse_oracle.parse(syntax::tokenize(&source));
 
-               write!(out, "{node:#?}", node = expression.parent().unwrap())
-                  .chain_err(FAIL_STDOUT)?;
+               if let Err(error) = parse.dupe().extractlnln(err, &path, &source) {
+                  error.display_styled(err).chain_err(FAIL_STDERR)?;
+                  writeln!(err).chain_err(FAIL_STDERR)?;
+               }
+
+               write!(out, "{node:#?}", node = &parse.node).chain_err(FAIL_STDOUT)?;
             },
          }
       },
