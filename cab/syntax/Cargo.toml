@@ -18,7 +18,7 @@ cab-error.path = "../error"
 cab-span.path  = "../span"
 cab-util.path  = "../util"
 
-dup.path = "../../dup"
+dup      = { features = [ "cstree" ], path = "../../dup" }
 ust.path = "../../ust"
 
 bon.workspace         = true

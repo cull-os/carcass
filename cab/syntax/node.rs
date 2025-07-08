@@ -19,6 +19,7 @@ use cab_util::{
    reffed,
 };
 use derive_more::Deref;
+use dup::Dupe;
 use paste::paste;
 use ust::report::Report;
 
@@ -42,7 +43,7 @@ macro_rules! node {
       struct $name:ident;
    ) => {
       $(#[$attribute])*
-      #[derive(Deref, Debug, Clone, PartialEq, Eq, Hash)]
+      #[derive(Deref, Debug, Dupe, Clone, PartialEq, Eq, Hash)]
       #[repr(transparent)]
       pub struct $name(red::Node);
 
@@ -85,7 +86,7 @@ macro_rules! node {
    ) => {
       reffed! {
          $(#[$attribute])*
-         #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+         #[derive(Debug, Clone, Dupe, PartialEq, Eq, Hash)]
          pub enum $name {
             $($variant($variant),)*
          }

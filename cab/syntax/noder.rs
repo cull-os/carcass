@@ -1,4 +1,7 @@
-use std::fmt::Write as _;
+use std::{
+   fmt::Write as _,
+   sync::Arc,
+};
 
 use cab_error::{
    Result,
@@ -10,7 +13,7 @@ use cab_span::{
    Size,
    Span,
 };
-use dup::Dupe as _;
+use dup::Dupe;
 use enumset::EnumSet;
 use peekmore::{
    PeekMore as _,
@@ -37,7 +40,7 @@ use crate::{
 
 /// A parse result that contains a node, a [`node::Expression`] and a
 /// list of [`Report`]s.
-#[derive(Debug)]
+#[derive(Debug, Clone, Dupe, PartialEq, Eq)]
 pub struct Parse {
    /// The [`node::Expression`].
    pub expression: node::Expression,
@@ -46,7 +49,7 @@ pub struct Parse {
    pub node: red::Node,
 
    /// Issues reported during parsing.
-   pub reports: Vec<Report>,
+   pub reports: Arc<[Report]>,
 }
 
 impl Parse {
@@ -58,11 +61,11 @@ impl Parse {
    ) -> Result<node::Expression> {
       let mut fail = 0;
 
-      for report in self.reports {
+      for report in &*self.reports {
          fail += usize::from(report.severity >= report::Severity::Error);
 
          writer
-            .write_report(&report, location, source)
+            .write_report(report, location, source)
             .chain_err("failed to write report")?;
 
          write!(writer, "\n\n").chain_err("failed to write report")?;
@@ -133,7 +136,7 @@ impl ParseOracle {
       Parse {
          expression: expression.to_owned(),
          node,
-         reports: noder.reports,
+         reports: Arc::from(noder.reports),
       }
    }
 }

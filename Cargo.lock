@@ -488,6 +488,7 @@ version = "0.0.1"
 dependencies = [
  "archery",
  "bytes",
+ "cstree",
  "dup-macros",
  "rpds",
 ]

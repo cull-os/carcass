@@ -128,7 +128,7 @@ impl LabelSeverity {
 }
 
 /// A label for a span.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Label {
    /// The span.
    pub span:     Span,
@@ -186,7 +186,7 @@ impl PointSeverity {
 }
 
 /// A spanless label, also known as a point. Displayed at the end of the report.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Point {
    /// The severity of the point.
    pub severity: PointSeverity,
@@ -230,7 +230,7 @@ impl Severity {
    }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Report {
    pub severity: Severity,
    pub title:    Cow<'static, str>,
