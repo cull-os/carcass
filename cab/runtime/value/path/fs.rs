@@ -29,13 +29,13 @@ fn to_pathbuf(subpath: &Subpath) -> Result<PathBuf> {
 
       let drive = parts.by_ref().next().ok_or_tag(&|tags: &mut tag::Tags| {
          tags.write(
-            "cannot act on paths without a component to specify the drive on window, please \
+            "cannot act on paths without a component to specify the drive on windows, please \
              specify the drive like so: ",
          );
          tags.write("\\(".yellow());
          tags.write("path.fs");
          tags.write(")/C/path/to/file.txt".yellow());
-         tags.write("\nthat is equivalent to ");
+         tags.write("\nthat expression above is equivalent to ");
          tags.write("C:\\path\\to\\file.txt".yellow());
       })?;
 
