@@ -13,17 +13,40 @@ use cab_error::{
 };
 use rpds::ListSync as List;
 use tokio::fs;
+use ust::{
+   style::StyledExt as _,
+   terminal::tag,
+};
 
 use super::{
    Root,
    Subpath,
 };
 
-fn to_pathbuf(subpath: &Subpath) -> PathBuf {
-   // TODO: Handle Windows's odd roots.
-   iter::once("/")
-      .chain(subpath.iter().map(|arc| &**arc))
-      .collect::<PathBuf>()
+fn to_pathbuf(subpath: &Subpath) -> Result<PathBuf> {
+   Ok(if cfg!(target_os = "windows") {
+      let mut parts = subpath.iter();
+
+      let drive = parts.by_ref().next().ok_or_tag(&|tags: &mut tag::Tags| {
+         tags.write(
+            "cannot act on paths without a component to specify the drive on window, please \
+             specify the drive like so: ",
+         );
+         tags.write("\\(".yellow());
+         tags.write("path.fs");
+         tags.write(")/C/path/to/file.txt".yellow());
+         tags.write("\nthat is equivalent to ");
+         tags.write("C:\\path\\to\\file.txt".yellow());
+      })?;
+
+      iter::once(&*format!("{drive}:\\"))
+         .chain(parts.map(|arc| &**arc))
+         .collect::<PathBuf>()
+   } else {
+      iter::once("/")
+         .chain(subpath.iter().map(|arc| &**arc))
+         .collect::<PathBuf>()
+   })
 }
 
 #[must_use]
@@ -42,7 +65,7 @@ impl Root for Fs {
    async fn list(self: Arc<Self>, subpath: &Subpath) -> Result<List<Subpath>> {
       let mut contents = Vec::new();
 
-      let path = to_pathbuf(subpath);
+      let path = to_pathbuf(subpath)?;
 
       let mut read = fs::read_dir(&path)
          .await
@@ -70,7 +93,7 @@ impl Root for Fs {
    }
 
    async fn read(self: Arc<Self>, subpath: &Subpath) -> Result<Bytes> {
-      let path = to_pathbuf(subpath);
+      let path = to_pathbuf(subpath)?;
 
       let content = fs::read(&path)
          .await
@@ -84,7 +107,7 @@ impl Root for Fs {
    }
 
    async fn write(self: Arc<Self>, subpath: &Subpath, content: Bytes) -> Result<()> {
-      let path = to_pathbuf(subpath);
+      let path = to_pathbuf(subpath)?;
 
       fs::write(&path, &content)
          .await
