@@ -1,4 +1,5 @@
 use std::{
+   iter,
    path::PathBuf,
    sync::Arc,
 };
@@ -17,17 +18,20 @@ use super::{
    Root,
    Subpath,
 };
-use crate::Value;
+
+fn to_pathbuf(subpath: &Subpath) -> PathBuf {
+   // TODO: Handle Windows's odd roots.
+   iter::once("/")
+      .chain(subpath.iter().map(|arc| &**arc))
+      .collect::<PathBuf>()
+}
 
 #[must_use]
-pub fn fs(config: Value, path: Value) -> impl Root {
-   Fs { config, path }
+pub fn fs() -> impl Root {
+   Fs
 }
 
-struct Fs {
-   config: Value,
-   path:   Value,
-}
+struct Fs;
 
 #[async_trait]
 impl Root for Fs {
@@ -35,18 +39,10 @@ impl Root for Fs {
       "fs"
    }
 
-   fn config(&self) -> Option<&Value> {
-      Some(&self.config)
-   }
-
-   fn path(&self) -> Option<&Value> {
-      Some(&self.path)
-   }
-
    async fn list(self: Arc<Self>, subpath: &Subpath) -> Result<List<Subpath>> {
       let mut contents = Vec::new();
 
-      let path = self.to_pathbuf(subpath);
+      let path = to_pathbuf(subpath);
 
       let mut read = fs::read_dir(&path)
          .await
@@ -74,7 +70,7 @@ impl Root for Fs {
    }
 
    async fn read(self: Arc<Self>, subpath: &Subpath) -> Result<Bytes> {
-      let path = self.to_pathbuf(subpath);
+      let path = to_pathbuf(subpath);
 
       let content = fs::read(&path)
          .await
@@ -88,27 +84,10 @@ impl Root for Fs {
    }
 
    async fn write(self: Arc<Self>, subpath: &Subpath, content: Bytes) -> Result<()> {
-      let path = self.to_pathbuf(subpath);
+      let path = to_pathbuf(subpath);
 
       fs::write(&path, &content)
          .await
          .chain_err_with(|| format!("failed to write to '{path}'", path = path.display()))
-   }
-}
-
-impl Fs {
-   fn to_pathbuf(&self, subpath: &Subpath) -> PathBuf {
-      let Value::Path(ref path) = self.path else {
-         unreachable!()
-      };
-
-      assert!(path.root.is_none());
-
-      path
-         .subpath
-         .iter()
-         .map(|arc| &**arc)
-         .chain(subpath.iter().map(|arc| &**arc))
-         .collect::<PathBuf>()
    }
 }

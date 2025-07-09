@@ -44,9 +44,9 @@ pub type Subpath = List<Part>;
 pub trait Root: Send + Sync + 'static {
    fn type_(&self) -> &'static str;
 
-   fn config(&self) -> Option<&Value>;
-
-   fn path(&self) -> Option<&Value>;
+   fn config(&self) -> Option<&Value> {
+      None
+   }
 
    async fn list(self: Arc<Self>, subpath: &Subpath) -> Result<List<Subpath>> {
       let _ = subpath;
@@ -86,31 +86,18 @@ impl tag::DisplayTags for Path {
       if let Some(ref root) = self.root {
          let type_ = root.type_();
          let config = root.config();
-         let path = root.path();
 
-         tags.write("<".yellow());
+         tags.write("\\(".yellow());
+         tags.write("path");
+         tags.write(".".magenta());
          tags.write(type_.yellow());
 
-         match config {
-            None => {
-               if let Some(path) = path {
-                  tags.write("::".yellow());
-                  path.display_tags(tags);
-               }
-            },
-
-            Some(config) => {
-               tags.write(":".yellow());
-               config.display_tags(tags);
-
-               if let Some(path) = path {
-                  tags.write(":".yellow());
-                  path.display_tags(tags);
-               }
-            },
+         if let Some(config) = config {
+            tags.write(" ".yellow());
+            config.display_tags(tags);
          }
 
-         tags.write(">".yellow());
+         tags.write(")".yellow());
       }
 
       for part in &self.subpath {

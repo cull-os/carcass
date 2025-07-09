@@ -272,22 +272,14 @@ pub enum Kind {
    #[display("content")]
    TOKEN_CONTENT,
 
-   /// The start of a path root type.
-   #[display("a root")]
-   #[static_text("<")]
-   TOKEN_PATH_ROOT_TYPE_START,
-   /// The end of a path root type.
-   #[display("the closing delimiter of a root")]
-   TOKEN_PATH_ROOT_TYPE_END,
-
-   /// A zero width token for the start of a path subpath. Has no content.
+   /// A zero width token for the start of a path. Has no content.
    #[display("a path")]
    #[static_text("")]
-   TOKEN_PATH_SUBPATH_START,
-   /// A zero width token for the end of a path subpath. Has no content.
+   TOKEN_PATH_START,
+   /// A zero width token for the end of a path. Has no content.
    #[display("the closing delimiter of a path")]
    #[static_text("")]
-   TOKEN_PATH_SUBPATH_END,
+   TOKEN_PATH_END,
 
    #[display("'@'")]
    #[static_text("@")]
@@ -343,12 +335,6 @@ pub enum Kind {
 
    #[display("a path")]
    NODE_PATH,
-   #[display("{}", unreachable!())]
-   NODE_PATH_ROOT,
-   #[display("{}", unreachable!())]
-   NODE_PATH_ROOT_TYPE,
-   #[display("{}", unreachable!())]
-   NODE_PATH_SUBPATH,
 
    /// A node that starts with a [`TOKEN_AT`] and has a [`NODE_IDENTIFIER`] as
    /// a child, used for binding expressions to identifiers.
@@ -397,7 +383,7 @@ impl Kind {
          | TOKEN_INTEGER
          | TOKEN_FLOAT
          | TOKEN_KEYWORD_IF
-         | TOKEN_PATH_SUBPATH_START
+         | TOKEN_PATH_START
          | TOKEN_AT
          | TOKEN_IDENTIFIER
          | TOKEN_QUOTED_IDENTIFIER_START
@@ -442,8 +428,7 @@ impl Kind {
    #[must_use]
    pub fn into_node_and_closing(self) -> Option<(Kind, Kind)> {
       Some(match self {
-         TOKEN_PATH_SUBPATH_START => (NODE_PATH_SUBPATH, TOKEN_PATH_SUBPATH_END),
-         TOKEN_PATH_ROOT_TYPE_START => (NODE_PATH_ROOT_TYPE, TOKEN_PATH_ROOT_TYPE_END),
+         TOKEN_PATH_START => (NODE_PATH, TOKEN_PATH_END),
          TOKEN_QUOTED_IDENTIFIER_START => (NODE_IDENTIFIER, TOKEN_QUOTED_IDENTIFIER_END),
          TOKEN_STRING_START => (NODE_STRING, TOKEN_STRING_END),
          TOKEN_RUNE_START => (NODE_RUNE, TOKEN_RUNE_END),

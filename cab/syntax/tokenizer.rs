@@ -1,5 +1,3 @@
-use std::assert_matches::assert_matches;
-
 use smallvec::SmallVec;
 
 use crate::Kind::{
@@ -33,18 +31,14 @@ fn is_valid_identifier_character(c: char) -> bool {
    c.is_alphanumeric() || matches!(c, '_' | '-' | '\'')
 }
 
-fn is_valid_path_subpath_character(c: char) -> bool {
-   c.is_alphanumeric() || matches!(c, '.' | '/' | '_' | '-' | '\\')
+fn is_valid_path_character(c: char) -> bool {
+   c.is_alphanumeric() || matches!(c, '.' | '/' | '_' | '-' | '\\' | '(' | ')')
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Context<'a> {
-   PathSubpathStart,
-   PathSubpath,
-   PathSubpathEnd,
-
-   PathRootType,
-   PathRootTypeEnd,
+   Path,
+   PathEnd,
 
    Delimited {
       before: Option<&'a str>,
@@ -207,35 +201,14 @@ impl<'a> Tokenizer<'a> {
       }
    }
 
-   fn consume_path_root_type(&mut self) -> Kind {
-      loop {
-         if let Some('>' | ':') = self.peek_character() {
-            self.context_pop(Context::PathRootType);
-            self.context_push(Context::PathRootTypeEnd);
-
-            return TOKEN_CONTENT;
-         }
-
-         if self.peek_character().is_none() {
-            self.context_pop(Context::PathRootType);
-
-            return TOKEN_CONTENT;
-         }
-
-         if let Some(kind) = self.consume_delimited_segment() {
-            return kind;
-         }
-      }
-   }
-
-   fn consume_path_subpath(&mut self) -> Kind {
+   fn consume_path(&mut self) -> Kind {
       loop {
          if self
             .peek_character()
-            .is_none_or(|c| !is_valid_path_subpath_character(c))
+            .is_none_or(|c| !is_valid_path_character(c))
          {
-            self.context_pop(Context::PathSubpath);
-            self.context_push(Context::PathSubpathEnd);
+            self.context_pop(Context::Path);
+            self.context_push(Context::PathEnd);
 
             return TOKEN_CONTENT;
          }
@@ -267,33 +240,13 @@ impl<'a> Tokenizer<'a> {
       let start = self.offset;
 
       match self.context.last().copied() {
-         Some(Context::PathRootType) => {
-            return Some(self.consume_path_root_type());
+         Some(Context::Path) => {
+            return Some(self.consume_path());
          },
-         Some(Context::PathRootTypeEnd) => {
-            assert_matches!(self.consume_character(), Some('>' | ':'));
-            self.context_pop(Context::PathRootTypeEnd);
+         Some(Context::PathEnd) => {
+            self.context_pop(Context::PathEnd);
 
-            if self.peek_character() == Some('/') {
-               self.context_push(Context::PathSubpathStart);
-            }
-
-            return Some(TOKEN_PATH_ROOT_TYPE_END);
-         },
-
-         Some(Context::PathSubpathStart) => {
-            self.context_pop(Context::PathSubpathStart);
-            self.context_push(Context::PathSubpath);
-
-            return Some(TOKEN_PATH_SUBPATH_START);
-         },
-         Some(Context::PathSubpath) => {
-            return Some(self.consume_path_subpath());
-         },
-         Some(Context::PathSubpathEnd) => {
-            self.context_pop(Context::PathSubpathEnd);
-
-            return Some(TOKEN_PATH_SUBPATH_END);
+            return Some(TOKEN_PATH_END);
          },
 
          Some(Context::Delimited { before, end }) => {
@@ -417,10 +370,13 @@ impl<'a> Tokenizer<'a> {
          '[' => TOKEN_BRACKET_LEFT,
          ']' => TOKEN_BRACKET_RIGHT,
 
+         '.' => TOKEN_PERIOD,
          '/' if self.try_consume_character('/') => TOKEN_SLASH_SLASH,
          '{' => TOKEN_CURLYBRACE_LEFT,
          '}' => TOKEN_CURLYBRACE_RIGHT,
 
+         '<' if self.try_consume_character('=') => TOKEN_LESS_EQUAL,
+         '<' => TOKEN_LESS,
          '>' if self.try_consume_character('=') => TOKEN_MORE_EQUAL,
          '>' => TOKEN_MORE,
 
@@ -439,6 +395,12 @@ impl<'a> Tokenizer<'a> {
          '-' => TOKEN_MINUS,
          '*' => TOKEN_ASTERISK,
          '^' => TOKEN_CARET,
+         '/' if self
+            .peek_character()
+            .is_none_or(|c| !is_valid_path_character(c)) =>
+         {
+            TOKEN_SLASH
+         },
 
          '0' if let Some('b' | 'B' | 'o' | 'O' | 'x' | 'X') = self.peek_character() => {
             let is_valid_digit = match self.consume_character() {
@@ -498,29 +460,16 @@ impl<'a> Tokenizer<'a> {
          // \(foo)/bar/baz.txt
          start @ '\\' => {
             self.offset -= start.len_utf8();
-            self.context_push(Context::PathSubpath);
+            self.context_push(Context::Path);
 
-            TOKEN_PATH_SUBPATH_START
+            TOKEN_PATH_START
          },
          // /bar/baz.txt
-         start @ '/'
-            if self
-               .peek_character()
-               .is_some_and(is_valid_path_subpath_character) =>
-         {
+         start @ '/' if self.peek_character().is_some_and(is_valid_path_character) => {
             self.offset -= start.len_utf8();
-            self.context_push(Context::PathSubpath);
+            self.context_push(Context::Path);
 
-            TOKEN_PATH_SUBPATH_START
-         },
-         // <self>/bar/baz.txt
-         '<' if self
-            .peek_character()
-            .is_some_and(|c| is_valid_initial_identifier_character(c) || c == '\\') =>
-         {
-            self.context_push(Context::PathRootType);
-
-            TOKEN_PATH_ROOT_TYPE_START
+            TOKEN_PATH_START
          },
 
          '@' => TOKEN_AT,
@@ -542,13 +491,6 @@ impl<'a> Tokenizer<'a> {
             }
          },
 
-         // TODO: Reorder `Syntax` and parse these in the same order.
-         '.' => TOKEN_PERIOD,
-         '/' => TOKEN_SLASH,
-
-         '<' if self.try_consume_character('=') => TOKEN_LESS_EQUAL,
-         '<' => TOKEN_LESS,
-
          _ => TOKEN_ERROR_UNKNOWN,
       })
    }
@@ -556,6 +498,8 @@ impl<'a> Tokenizer<'a> {
 
 #[cfg(test)]
 mod tests {
+   use std::assert_matches::assert_matches;
+
    use super::*;
 
    macro_rules! assert_token_matches {
@@ -601,13 +545,13 @@ mod tests {
    fn path() {
       assert_token_matches!(
          r"/foo\(𓃰)///baz",
-         (TOKEN_PATH_SUBPATH_START, ""),
+         (TOKEN_PATH_START, ""),
          (TOKEN_CONTENT, "/foo"),
          (TOKEN_INTERPOLATION_START, r"\("),
          (TOKEN_IDENTIFIER, "𓃰"),
          (TOKEN_INTERPOLATION_END, ")"),
          (TOKEN_CONTENT, "///baz"),
-         (TOKEN_PATH_SUBPATH_END, ""),
+         (TOKEN_PATH_END, ""),
       );
    }
 

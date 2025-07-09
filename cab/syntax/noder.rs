@@ -405,53 +405,6 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
       });
    }
 
-   fn node_path_root(&mut self, until: EnumSet<Kind>) {
-      self.node(NODE_PATH_ROOT).with(|this| {
-         let end = this.node_delimited();
-
-         if end == Some(">") {
-            // DONE: <root>
-            return;
-         }
-
-         // DONE: <root:
-
-         if this.next_if(TOKEN_COLON) {
-            // DONE: :path
-            this.node_expression_single(until | TOKEN_MORE);
-         } else {
-            // DONE: config
-            this.node_expression_single(until | TOKEN_COLON | Kind::EXPRESSIONS | TOKEN_MORE);
-
-            // DONE: :path
-            if this.next_if(TOKEN_COLON) {
-               this.node_expression_single(until | TOKEN_MORE);
-            }
-         }
-
-         // DONE: >
-         this.next_expect(TOKEN_MORE, until);
-
-         // EITHER:
-         // <root>
-         // <root::path>
-         // <root:config>
-         // <root:config:path>
-      });
-   }
-
-   fn node_path(&mut self, until: EnumSet<Kind>) {
-      self.node(NODE_PATH).with(|this| {
-         if this.peek() == Some(TOKEN_PATH_ROOT_TYPE_START) {
-            this.node_path_root(until | TOKEN_PATH_SUBPATH_START);
-         }
-
-         if this.peek_direct() == Some(TOKEN_PATH_SUBPATH_START) {
-            this.node_delimited();
-         }
-      });
-   }
-
    fn node_bind(&mut self, until: EnumSet<Kind>) {
       self.node(NODE_BIND).with(|this| {
          this.next_expect(TOKEN_AT, Kind::IDENTIFIERS);
@@ -471,15 +424,13 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
       }
    }
 
-   fn node_delimited(&mut self) -> Option<&str> {
+   fn node_delimited(&mut self) {
       let start_of_delimited = self.checkpoint();
 
       let (node, end) = self
          .next()
          .into_node_and_closing()
          .expect("node_delimited must be called right before a starting delimiter");
-
-      let mut end_delimiter = None;
 
       self.node(node).from(start_of_delimited).with(|this| {
          loop {
@@ -493,7 +444,6 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
                },
 
                Some(other) if other == end => {
-                  end_delimiter = this.tokens.peek().map(|&(_, slice)| slice);
                   this.next_direct();
                   break;
                },
@@ -514,8 +464,6 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
             }
          }
       });
-
-      end_delimiter
    }
 
    fn node_interpolation(&mut self) {
@@ -580,9 +528,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
 
          Some(TOKEN_CURLYBRACE_LEFT) => self.node_attributes(until),
 
-         Some(TOKEN_PATH_ROOT_TYPE_START | TOKEN_PATH_SUBPATH_START) => self.node_path(until),
-
-         Some(TOKEN_STRING_START | TOKEN_RUNE_START) => {
+         Some(TOKEN_PATH_START | TOKEN_STRING_START | TOKEN_RUNE_START) => {
             self.node_delimited();
          },
 

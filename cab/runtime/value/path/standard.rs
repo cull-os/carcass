@@ -36,10 +36,6 @@ impl Root for Standard {
       None
    }
 
-   fn path(&self) -> Option<&Value> {
-      None
-   }
-
    async fn read(self: Arc<Self>, subpath: &Subpath) -> Result<Bytes> {
       if !subpath.is_empty() {
          bail!("standard only contains a single leaf");

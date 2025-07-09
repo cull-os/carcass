@@ -780,144 +780,25 @@ impl Interpolation {
 // PATH
 
 node! {
-   #[from(NODE_PATH_ROOT_TYPE)]
-   /// A path root type.
-   struct PathRootType;
-}
-
-impl Segmented for PathRootType {}
-
-impl PathRootType {
-   get_token! { token_delimiter_left -> TOKEN_LESS }
-
-   pub fn token_delimiter_right(&self) -> Option<&red::Token> {
-      let token = self
-         .children_with_tokens()
-         .filter_map(red::ElementRef::into_token)
-         .last();
-
-      if let Some(token) = token {
-         assert!((TOKEN_MORE | TOKEN_COLON).contains(token.kind()));
-      }
-
-      token
-   }
-}
-
-node! {
-   #[from(NODE_PATH_ROOT)]
-   /// A path root.
-   struct PathRoot;
-}
-
-impl PathRoot {
-   #[must_use]
-   pub fn token_delimiter_left(&self) -> &red::Token {
-      self.type_().token_delimiter_left()
-   }
-
-   get_node! { type_ -> &PathRootType }
-
-   pub fn config(&self) -> Option<ExpressionRef<'_>> {
-      // Right after the header, must be a node.
-      self
-         .children_with_tokens()
-         .nth(1)
-         .and_then(red::ElementRef::into_node)
-         .and_then(|node| ExpressionRef::try_from(node).ok())
-   }
-
-   get_token! { token_colon -> Option<TOKEN_COLON> }
-
-   pub fn path(&self) -> Option<ExpressionRef<'_>> {
-      self
-         .children_with_tokens()
-         .skip_while(|element| {
-            element
-               .into_token()
-               .is_none_or(|token| token.kind() != TOKEN_COLON)
-         })
-         .nth(1)
-         .and_then(red::ElementRef::into_node)
-         .and_then(|node| ExpressionRef::try_from(node).ok())
-   }
-
-   pub fn token_delimiter_right(&self) -> Option<&red::Token> {
-      let header_delimiter_right = self.type_().token_delimiter_right();
-
-      let token = if header_delimiter_right.is_none_or(|token| token.kind() == TOKEN_MORE) {
-         header_delimiter_right
-      } else {
-         self
-            .children_with_tokens()
-            .filter_map(red::ElementRef::into_token)
-            .last()
-      };
-
-      if let Some(token) = token {
-         assert_eq!(token.kind(), TOKEN_MORE);
-      }
-
-      token
-   }
-}
-
-node! {
-   #[from(NODE_PATH_SUBPATH)]
-   /// A path subpath.
-   struct PathSubpath;
-}
-
-impl Segmented for PathSubpath {}
-
-node! {
    #[from(NODE_PATH)]
    /// A path.
    struct Path;
 }
 
+impl Segmented for Path {}
+
 impl Path {
-   get_node! { root -> Option<&PathRoot> }
-
-   get_node! { subpath -> Option<&PathSubpath> }
-
    pub fn validate(&self, to: &mut Vec<Report>) {
       let mut report = lazy!(Report::error("invalid path"));
 
-      if let Some(root) = self.root() {
-         let mut report = lazy!(Report::error("invalid path root"));
+      let segments = self.segments();
+      segments.validate(to, &mut report);
 
-         let segments = root.type_().segments();
-         segments.validate(to, &mut report);
-
-         if segments.is_multiline {
-            force!(report).push_primary(root.type_().span(), "here");
-            force!(report).push_tip("path roots cannot contain newlines");
-         }
-
-         if let Some(config) = root.config() {
-            config.validate(to);
-         }
-
-         if let Some(path) = root.path() {
-            path.validate(to);
-         }
-
-         if let Some(report) = read!(report) {
-            to.push(report);
-         }
-      }
-
-      if let Some(subpath) = self.subpath() {
-         let segments = subpath.segments();
-         segments.validate(to, &mut report);
-
-         // Only assert if the report wasn't initialized, because
-         // /etc/ssl\<newline-here> actually gets parsed as a
-         // multiline segment. And when that happens report is ready.
-         if !ready!(report) {
-            assert!(!segments.is_multiline);
-         }
+      // Only assert if the report wasn't initialized, because
+      // /etc/ssl\<newline-here> actually gets parsed as a
+      // multiline segment. And when that happens report is ready.
+      if !ready!(report) {
+         assert!(!segments.is_multiline);
       }
 
       if let Some(report) = read!(report) {

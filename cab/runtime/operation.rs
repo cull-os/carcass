@@ -24,8 +24,6 @@ pub enum Operation {
 
    AssertBoolean,
 
-   RootSet,
-
    // PREFIX
    Swwallation,
    Negation,
@@ -96,8 +94,6 @@ impl Operation {
          Operation::Resolve => &[],
 
          Operation::AssertBoolean => &[],
-
-         Operation::RootSet => &[],
 
          Operation::Swwallation | Operation::Negation => &[],
 

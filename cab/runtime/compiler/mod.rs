@@ -468,85 +468,37 @@ impl<'a> Compiler<'a> {
    }
 
    fn emit_path(&mut self, path: &'a node::Path) {
-      let needs_thunk =
-         path.root().is_some() || path.subpath().is_some_and(|subpath| !subpath.is_trivial());
+      let needs_thunk = !path.is_trivial();
 
       self.emit_thunk(path.span()).if_(needs_thunk).with(|this| {
-         if let Some(root) = path.root() {
-            let type_ = root.type_();
-            let segments = type_.segments().into_iter().collect::<SmallVec<_, 4>>();
+         let segments = path.segments().into_iter().collect::<SmallVec<_, 4>>();
 
-            for segment in &segments {
-               match *segment {
-                  Segment::Content { span, ref content } => {
-                     this.emit_push(span, Value::String(Arc::from(content.as_str())));
-                  },
+         for segment in &segments {
+            match *segment {
+               Segment::Content { span, ref content } => {
+                  this.emit_push(
+                     span,
+                     Value::from(value::Path::rootless(
+                        content
+                           .split(value::path::SEPARATOR)
+                           .filter(|part| !part.is_empty())
+                           .map(Arc::from)
+                           .collect(),
+                     )),
+                  );
+               },
 
-                  Segment::Interpolation(interpolation) => {
-                     this.emit_scope(interpolation.span(), |this| {
-                        this.emit_force(interpolation.expression());
-                     });
-                  },
-               }
-            }
-
-            if !type_.is_trivial() {
-               this.push_operation(type_.span(), Operation::Interpolate);
-               this.push_u64(segments.len() as _);
-            }
-
-            if let Some(config) = root.config() {
-               this.emit(config);
-            } else {
-               this.emit_push(root.span(), Value::Nope);
-            }
-
-            if let Some(path) = root.path() {
-               this.emit(path);
-            } else {
-               this.emit_push(root.span(), Value::Nope);
+               Segment::Interpolation(interpolation) => {
+                  this.emit_scope(interpolation.span(), |this| {
+                     this.emit_force(interpolation.expression());
+                  });
+               },
             }
          }
 
-         if let Some(subpath) = path.subpath() {
-            let segments = subpath.segments().into_iter().collect::<SmallVec<_, 4>>();
-
-            for segment in &segments {
-               match *segment {
-                  Segment::Content { span, ref content } => {
-                     this.emit_push(
-                        span,
-                        Value::from(value::Path::rootless(
-                           content
-                              .split(value::path::SEPARATOR)
-                              .filter(|part| !part.is_empty())
-                              .map(Arc::from)
-                              .collect(),
-                        )),
-                     );
-                  },
-
-                  Segment::Interpolation(interpolation) => {
-                     this.emit_scope(interpolation.span(), |this| {
-                        this.emit_force(interpolation.expression());
-                     });
-                  },
-               }
-            }
-
-            if !subpath.is_trivial() {
-               this.push_operation(subpath.span(), Operation::Interpolate);
-               this.push_u64(segments.len() as _);
-            }
-         } else {
-            this.emit_push(
-               path.span(),
-               Value::from(value::Path::rootless(rpds::List::new_sync())),
-            );
-         }
-
-         if path.root().is_some() {
-            this.push_operation(path.span(), Operation::RootSet);
+         if !path.is_trivial() {
+            this.push_operation(path.span(), Operation::Interpolate);
+            this.push_u64(segments.len() as _);
          }
       });
    }
