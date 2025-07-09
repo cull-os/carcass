@@ -7,7 +7,7 @@ use std::{
 use async_trait::async_trait;
 use bytes::Bytes;
 use cab_error::{
-   OptionExt as _,
+   OptionExt,
    Result,
    ResultExt as _,
 };
@@ -29,15 +29,34 @@ fn to_pathbuf(subpath: &Subpath) -> Result<PathBuf> {
 
       let drive = parts.by_ref().next().ok_or_tag(&|tags: &mut tag::Tags| {
          tags.write(
-            "cannot act on paths without a component to specify the drive on windows, please \
+            "cannot act on paths without a component to specify the drive on Windows, please \
              specify the drive like so: ",
          );
          tags.write("\\(".yellow());
          tags.write("path.fs");
-         tags.write(")/C/path/to/file.txt".yellow());
+         tags.write(")/c/path/to/file.txt".yellow());
          tags.write("\nthat expression above is equivalent to ");
          tags.write("C:\\path\\to\\file.txt".yellow());
       })?;
+
+      if !drive.chars().all(|c| c.is_ascii_lowercase()) {
+         // TODO: Macro to make this better (not None.ok_or_tag).
+         None.ok_or_tag(&|tags: &mut tag::Tags| {
+            tags.write("drive components must be lowercase, like so: ");
+            tags.write("\\(".yellow());
+            tags.write("path.fs");
+            tags.write(")/".yellow());
+            tags.write("c".red());
+            tags.write("C".green());
+            tags.write("/path/to/file.txt".yellow());
+            tags.write("\nwhy? WSL compatibility");
+         })?;
+      }
+
+      // Make it uppercase (only on windows) just becase.
+      // The kernel doesn't care, but it's cooler to read
+      // C:\ rather than c:\.
+      let drive = drive.to_ascii_uppercase();
 
       iter::once(&*format!("{drive}:\\"))
          .chain(parts.map(|arc| &**arc))
