@@ -44,7 +44,7 @@ impl Root for Fs {
    }
 
    async fn list(self: Arc<Self>, subpath: &Subpath) -> Result<List<Subpath>> {
-      let mut contents = List::new_sync();
+      let mut contents = Vec::new();
 
       let path = self.to_pathbuf(subpath);
 
@@ -65,10 +65,12 @@ impl Root for Fs {
             )
          })?;
 
-         contents = contents.push_front(subpath.push_front(Arc::from(name)));
+         contents.push(subpath.push_front(Arc::from(name)));
       }
 
-      Ok(contents)
+      contents.sort_unstable();
+
+      Ok(rpds::List::from_iter(contents))
    }
 
    async fn read(self: Arc<Self>, subpath: &Subpath) -> Result<Bytes> {
