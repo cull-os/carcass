@@ -39,6 +39,22 @@ macro_rules! chain {
    };
 }
 
+/// Creates a [`Chain`] from the provided [`tag::DisplayTags`].
+///
+/// # Example
+///
+/// ```rs
+/// fn get_result() -> Result<()> {
+///   Err(chain!("can't get the result"))
+/// }
+/// ```
+#[macro_export]
+macro_rules! chain_tags {
+   ($tag:expr) => {
+      $crate::Chain::new().push_front_tags($tag)
+   };
+}
+
 /// A macro that boils down to:
 ///
 /// ```rs
@@ -48,6 +64,19 @@ macro_rules! chain {
 macro_rules! bail {
    ($($t:tt)*) => {{
       Err($crate::chain!($($t)*))?;
+      unreachable!()
+   }};
+}
+
+/// A macro that boils down to:
+///
+/// ```rs
+/// return Err(chain_tag!(arguments));
+/// ```
+#[macro_export]
+macro_rules! bail_tags {
+   ($tag:expr) => {{
+      Err($crate::chain_tags!($tag))?;
       unreachable!()
    }};
 }

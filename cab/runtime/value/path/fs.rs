@@ -7,9 +7,10 @@ use std::{
 use async_trait::async_trait;
 use bytes::Bytes;
 use cab_error::{
-   OptionExt,
+   OptionExt as _,
    Result,
    ResultExt as _,
+   bail_tags,
 };
 use rpds::ListSync as List;
 use tokio::fs;
@@ -40,8 +41,7 @@ fn to_pathbuf(subpath: &Subpath) -> Result<PathBuf> {
       })?;
 
       if !drive.chars().all(|c| c.is_ascii_lowercase()) {
-         // TODO: Macro to make this better (not None.ok_or_tag).
-         None.ok_or_tag(&|tags: &mut tag::Tags| {
+         bail_tags!(&|tags: &mut tag::Tags| {
             tags.write("drive components must be lowercase, like so: ");
             tags.write("\\(".yellow());
             tags.write("path.fs");
@@ -50,7 +50,7 @@ fn to_pathbuf(subpath: &Subpath) -> Result<PathBuf> {
             tags.write("C".green());
             tags.write("/path/to/file.txt".yellow());
             tags.write("\nwhy? WSL compatibility");
-         })?;
+         });
       }
 
       // Make it uppercase (only on windows) just becase.
