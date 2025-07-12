@@ -1,0 +1,31 @@
+[package]
+name        = "con"
+description = "True Mesh VPN"
+license     = "MPL-2.0"
+repository  = "https://github.com/cull-os/carcass/tree/master/con"
+publish     = true
+version     = "0.0.1"
+
+authors.workspace = true
+edition.workspace = true
+
+[lib]
+path = "mod.rs"
+
+[[bin]]
+name = "con"
+path = "main.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+cyn.path = "../cyn"
+dup.path = "../dup"
+ust.path = "../ust"
+
+clap.workspace  = true
+p2p.workspace   = true
+serde.workspace = true
+tokio.workspace = true
+toml.workspace  = true

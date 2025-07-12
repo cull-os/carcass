@@ -1,0 +1,19 @@
+*
+!.gitignore
+
+# DOCUMENTATION
+!*.md
+
+# NIX
+!*.nix
+
+# BUILD SYSTEMS
+!Cargo.toml
+
+# SOURCES
+!**/
+!*.rs
+
+# DIRENV
+!.envrc
+.direnv
