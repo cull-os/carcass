@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use bytes::Bytes;
-use cab_error::{
+use cyn::{
    Result,
    bail,
 };

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use cab_error::{
+use cyn::{
    Result,
    ResultExt as _,
    bail,

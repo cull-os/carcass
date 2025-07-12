@@ -14,10 +14,10 @@ path = "mod.rs"
 workspace = true
 
 [dependencies]
-cab-error.path  = "../error"
 cab-span.path   = "../span"
 cab-syntax.path = "../syntax"
 
+cyn.path = "../../cyn"
 dup      = { features = [ "bytes", "rpds" ], path = "../../dup" }
 ust.path = "../../ust"
 

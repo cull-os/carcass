@@ -17,6 +17,7 @@ workspace = true
 [dependencies]
 cab.path = "../"
 
+cyn.path = "../../cyn"
 ust.path = "../../ust"
 
 clap.workspace  = true

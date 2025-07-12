@@ -6,14 +6,12 @@ use std::{
    process,
 };
 
-use cab::{
-   error::{
-      self,
-      ResultExt as _,
-   },
-   syntax,
-};
+use cab::syntax;
 use clap::Parser as _;
+use cyn::{
+   self,
+   ResultExt as _,
+};
 use ust::{
    Write as _,
    style::StyledExt as _,
@@ -53,7 +51,7 @@ enum Check {
 }
 
 #[tokio::main]
-async fn main() -> error::Termination {
+async fn main() -> cyn::Termination {
    let cli = Cli::parse();
 
    let err = &mut terminal::stderr();
@@ -153,10 +151,10 @@ async fn main() -> error::Termination {
                fail_count += 1;
 
                if fail_fast {
-                  error::bail!("failed fast");
+                  cyn::bail!("failed fast");
                }
 
-               Ok::<(), error::Chain>(())
+               Ok::<(), cyn::Chain>(())
             })?;
 
          if fail_count > 0 {
@@ -164,12 +162,12 @@ async fn main() -> error::Termination {
                eprintln!("behaviour has changed for {fail_count} test cases");
             }
 
-            error::bail!("exiting due to {fail_count} previous errors");
+            cyn::bail!("exiting due to {fail_count} previous errors");
          }
       },
    }
 
    err.finish()?;
 
-   error::Termination::success()
+   cyn::Termination::success()
 }

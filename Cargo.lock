@@ -187,23 +187,14 @@ checksum = "d71b6127be86fdcfddb610f7182ac57211d4b18a3e9c82eb2d17662f2227ad6a"
 name = "cab"
 version = "0.0.1"
 dependencies = [
- "cab-error",
  "cab-runtime",
  "cab-span",
  "cab-syntax",
  "clap",
+ "cyn",
  "dup",
  "rpds",
  "tokio",
- "ust",
-]
-
-[[package]]
-name = "cab-error"
-version = "0.0.1"
-dependencies = [
- "dup",
- "rpds",
  "ust",
 ]
 
@@ -225,10 +216,10 @@ dependencies = [
  "async-trait",
  "bon",
  "bytes",
- "cab-error",
  "cab-span",
  "cab-syntax",
  "const-str",
+ "cyn",
  "dashmap 7.0.0-rc2",
  "derive_more",
  "dup",
@@ -256,10 +247,10 @@ name = "cab-syntax"
 version = "0.0.1"
 dependencies = [
  "bon",
- "cab-error",
  "cab-span",
  "cab-util",
  "cstree",
+ "cyn",
  "derive_more",
  "dup",
  "enumset",
@@ -277,6 +268,7 @@ version = "0.0.1"
 dependencies = [
  "cab",
  "clap",
+ "cyn",
  "tokio",
  "ust",
  "which",
@@ -395,6 +387,15 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "cyn"
+version = "0.0.1"
+dependencies = [
+ "dup",
+ "rpds",
+ "ust",
 ]
 
 [[package]]

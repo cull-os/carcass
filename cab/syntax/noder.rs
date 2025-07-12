@@ -3,17 +3,17 @@ use std::{
    sync::Arc,
 };
 
-use cab_error::{
-   Result,
-   ResultExt as _,
-   bail,
-};
 use cab_span::{
    IntoSize as _,
    Size,
    Span,
 };
 use cab_util::into;
+use cyn::{
+   Result,
+   ResultExt as _,
+   bail,
+};
 use dup::Dupe;
 use enumset::EnumSet;
 use peekmore::{

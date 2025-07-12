@@ -1,5 +1,5 @@
 [package]
-name                 = "cab-error"
+name                 = "cyn"
 authors.workspace    = true
 edition.workspace    = true
 license.workspace    = true
@@ -14,7 +14,7 @@ path = "mod.rs"
 workspace = true
 
 [dependencies]
-dup.path = "../../dup"
-ust.path = "../../ust"
+dup.path = "../dup"
+ust.path = "../ust"
 
 rpds.workspace = true

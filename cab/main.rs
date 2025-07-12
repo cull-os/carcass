@@ -4,14 +4,14 @@ use std::{
 };
 
 use cab::{
-   error::{
-      self,
-      ResultExt as _,
-   },
    runtime,
    syntax,
 };
 use clap::Parser as _;
+use cyn::{
+   self,
+   ResultExt as _,
+};
 use dup::Dupe as _;
 use rpds::ListSync as List;
 use runtime::value;
@@ -68,7 +68,7 @@ enum Dump {
 }
 
 #[tokio::main]
-async fn main() -> error::Termination {
+async fn main() -> cyn::Termination {
    let cli = Cli::parse();
 
    let out = &mut terminal::stdout();
@@ -138,5 +138,5 @@ async fn main() -> error::Termination {
    out.finish()?;
    err.finish()?;
 
-   error::Termination::success()
+   cyn::Termination::success()
 }

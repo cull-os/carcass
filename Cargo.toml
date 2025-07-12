@@ -1,5 +1,22 @@
 [workspace]
-members  = [ "auxvec", "dup", "dup/*", "ust", "cab", "cab/*" ]
+members = [
+  "auxvec",
+
+  "dup",
+  "dup/macros",
+
+  "cab",
+  "cab/fuzz",
+  "cab/runtime",
+  "cab/span",
+  "cab/syntax",
+  "cab/task",
+  "cab/util",
+
+  "cyn",
+
+  "ust",
+]
 resolver = "3"
 
 metadata.crane.name = "cab"
@@ -98,11 +115,11 @@ use_debug                         = "allow"
 wildcard_enum_match_arm           = "allow"
 
 [workspace.dependencies]
-cstree = { features = [
+cstree = { branch = "fix-derive", features = [
   "derive",
   "lasso_compat",
   "multi_threaded_interning",
-], git = "https://github.com/RGBCube/cstree", branch = "fix-derive" }
+], git = "https://github.com/RGBCube/cstree" }
 
 # TODO: Pick one of enumflags2 and enumset. I (RGBCube) added enumset2 for const support in ust.
 archery              = "1.2.1"

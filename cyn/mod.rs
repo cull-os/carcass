@@ -1,4 +1,4 @@
-//! Error handling utilities.
+//! Error and chain handling utilities.
 
 #![feature(gen_blocks, if_let_guard, trait_alias, try_trait_v2)]
 
