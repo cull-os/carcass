@@ -37,7 +37,7 @@ struct Cli {
 
 #[derive(clap::Subcommand, Debug, Clone)]
 enum Command {
-   // Compile an expression.
+   /// Compile an expression.
    Compile {
       #[clap(default_value = "-")]
       source: String,
