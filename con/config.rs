@@ -6,13 +6,41 @@ use p2p::identity::{
    ed25519,
 };
 
+mod keypair {
+   use serde::{
+      Deserialize as _,
+      de,
+   };
+
+   use super::*;
+
+   pub fn serialize<S: serde::Serializer>(
+      keypair: &ed25519::Keypair,
+      serializer: S,
+   ) -> Result<S::Ok, S::Error> {
+      let encoded = multibase::encode(multibase::Base::Base58Btc, keypair.to_bytes());
+
+      serializer.serialize_str(&encoded)
+   }
+
+   pub fn deserialize<'de, D: serde::Deserializer<'de>>(
+      deserializer: D,
+   ) -> Result<ed25519::Keypair, D::Error> {
+      let string = String::deserialize(deserializer)?;
+      let (_, mut decoded) = multibase::decode(&string).map_err(de::Error::custom)?;
+
+      ed25519::Keypair::try_from_bytes(&mut decoded).map_err(de::Error::custom)
+   }
+}
+
 #[derive(serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct Config {
    pub name: Option<String>,
 
-   pub key:         p2p::PeerId,
-   pub private_key: String,
+   pub id:      p2p::PeerId,
+   #[serde(rename = "private-key", with = "keypair")]
+   pub keypair: ed25519::Keypair,
 
    pub interface: String,
 
@@ -43,8 +71,8 @@ impl Config {
             .to_string(),
          ),
 
-         key:         p2p::PeerId::from_public_key(&p2p_id::PublicKey::from(keypair.public())),
-         private_key: multibase::encode(multibase::Base::Base58Btc, keypair.to_bytes()),
+         id: p2p::PeerId::from_public_key(&p2p_id::PublicKey::from(keypair.public())),
+         keypair,
 
          interface: "con".to_owned(),
 

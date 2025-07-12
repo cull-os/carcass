@@ -86,11 +86,11 @@ async fn main() -> cyn::Termination {
          let config: con::Config = match toml::from_str(&config) {
             Ok(config) => config,
             Err(error) => {
-               let mut report = report::Report::error(error.message().to_owned());
-
-               if let Some(span) = error.span() {
-                  report.push_primary(span, "here");
-               }
+               let report = if let Some(span) = error.span() {
+                  report::Report::error("invalid config").primary(span, error.message().to_owned())
+               } else {
+                  report::Report::error(error.message().to_owned())
+               };
 
                err.write_report(
                   &report,
@@ -101,7 +101,7 @@ async fn main() -> cyn::Termination {
 
                write!(err, "\n\n").chain_err(FAIL_STDERR)?;
 
-               cyn::bail!("failed to parse config");
+               cyn::bail!("failed to parse config due to 1 previous error");
             },
          };
       },
