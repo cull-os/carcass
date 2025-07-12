@@ -1,3 +1,5 @@
+use std::fmt;
+
 use derive_more::{
    Deref,
    DerefMut,
@@ -5,6 +7,12 @@ use derive_more::{
 use enumflags2::{
    BitFlags,
    bitflags,
+};
+
+use crate::{
+   Display,
+   Write,
+   with,
 };
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
@@ -356,6 +364,14 @@ macro_rules! wrap_styled {
          }
       )*
    };
+}
+
+impl<D: fmt::Display> Display for Styled<D> {
+   fn display_styled(&self, writer: &mut dyn Write) -> fmt::Result {
+      with(writer, self.style, |writer| {
+         write!(writer, "{value}", value = **self)
+      })
+   }
 }
 
 pub trait StyledExt

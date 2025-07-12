@@ -32,6 +32,18 @@ pub trait Display {
    fn display_styled(&self, writer: &mut dyn Write) -> fmt::Result;
 }
 
+pub fn display(display: &impl fmt::Display) -> impl Display {
+   struct FmtDisplay<'a, D: fmt::Display>(&'a D);
+
+   impl<D: fmt::Display> Display for FmtDisplay<'_, D> {
+      fn display_styled(&self, writer: &mut dyn Write) -> fmt::Result {
+         write!(writer, "{inner}", inner = self.0)
+      }
+   }
+
+   FmtDisplay(display)
+}
+
 pub fn with<W: Write + ?Sized, T>(
    writer: &mut W,
    style: style::Style,
@@ -46,13 +58,8 @@ pub fn with<W: Write + ?Sized, T>(
    result
 }
 
-pub fn write(
-   writer: &mut (impl Write + ?Sized),
-   styled: &style::Styled<impl fmt::Display>,
-) -> fmt::Result {
-   with(writer, styled.style, |writer| {
-      write!(writer, "{value}", value = **styled)
-   })
+pub fn write(writer: &mut dyn Write, styled: &impl Display) -> fmt::Result {
+   styled.display_styled(writer)
 }
 
 pub trait Write: fmt::Write {
