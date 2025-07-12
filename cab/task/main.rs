@@ -30,7 +30,7 @@ struct Cli {
 enum Command {
    Check {
       /// Whether to immediately exit after the first failure.
-      #[arg(short, long, global = true)]
+      #[arg(long, global = true)]
       fail_fast: bool,
 
       #[command(subcommand)]
@@ -45,7 +45,7 @@ enum Check {
    Syntax {
       /// Whether to overwrite test cases that do not match with the actual
       /// result.
-      #[arg(short, long, conflicts_with = "fail_fast")]
+      #[arg(long, conflicts_with = "fail_fast")]
       overwrite: bool,
    },
 }

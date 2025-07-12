@@ -59,7 +59,7 @@ enum Dump {
    /// Dump the provided file's tokens.
    Token {
       /// If specified, the output will be colored instead of typed.
-      #[arg(long, short, global = true)]
+      #[arg(global = true)]
       color: bool,
    },
 
