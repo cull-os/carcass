@@ -1,11 +1,12 @@
 [package]
-name                 = "cyn"
-authors.workspace    = true
-edition.workspace    = true
-license.workspace    = true
-publish.workspace    = true
-repository.workspace = true
-version.workspace    = true
+name       = "cyn"
+license    = "MPL-2.0"
+repository = "https://github.com/cull-os/carcass/tree/master/cyn"
+publish    = true
+version    = "0.0.1"
+
+authors.workspace = true
+edition.workspace = true
 
 [lib]
 path = "mod.rs"
@@ -14,7 +15,7 @@ path = "mod.rs"
 workspace = true
 
 [dependencies]
-dup.path = "../dup"
+dup      = { features = [ "rpds" ], path = "../dup" }
 ust.path = "../ust"
 
 rpds.workspace = true
