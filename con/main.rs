@@ -1,13 +1,13 @@
-use std::{
-   fmt::Write as _,
-   path::PathBuf,
-};
+use std::fmt::Write as _;
 
 use clap::Parser as _;
 use cyn::ResultExt as _;
-use tokio::fs;
+use tokio::io::{
+   self,
+   AsyncReadExt as _,
+};
 use ust::{
-   Write,
+   Write as _,
    report,
    style::StyledExt as _,
    terminal,
@@ -25,12 +25,14 @@ struct Cli {
 
 #[derive(clap::Subcommand, Debug, Clone)]
 enum Command {
-   /// Start daemon.
-   Start {
-      /// Path to daemon configuration.
-      #[arg(long)]
-      config: PathBuf,
+   /// Configuration related commands,
+   Config {
+      #[command(subcommand)]
+      command: Config,
    },
+
+   /// Start daemon. Configuration is read from stdin.
+   Start,
 
    /// Show inbox.
    Inbox,
@@ -48,6 +50,12 @@ enum Command {
    Down,
 }
 
+#[derive(clap::Subcommand, Debug, Clone)]
+enum Config {
+   /// Generate a new configuration.
+   Generate,
+}
+
 #[tokio::main]
 async fn main() -> cyn::Termination {
    let cli = Cli::parse();
@@ -56,19 +64,26 @@ async fn main() -> cyn::Termination {
    let err = &mut terminal::stderr();
 
    match cli.command {
-      Command::Start {
-         config: config_path,
+      Command::Config {
+         command: Config::Generate,
       } => {
-         let config = fs::read_to_string(&config_path).await.chain_err_with(|| {
-            format!(
-               "failed to read config from '{path}'",
-               path = config_path.display(),
-            )
-         })?;
+         let config = con::Config::generate()?;
 
-         let config = report::PositionStr::new(&config);
+         let config = toml::to_string_pretty(&config)
+            .chain_err("failed to generate config, this is a bug")?;
 
-         let config = match toml::from_str::<con::Config>(&config) {
+         writeln!(out, "{config}").chain_err(FAIL_STDOUT)?;
+      },
+
+      Command::Start => {
+         let mut config = String::new();
+
+         io::stdin()
+            .read_to_string(&mut config)
+            .await
+            .chain_err("failed to read config from stdin")?;
+
+         let config: con::Config = match toml::from_str(&config) {
             Ok(config) => config,
             Err(error) => {
                let mut report = report::Report::error(error.message().to_owned());
@@ -77,8 +92,12 @@ async fn main() -> cyn::Termination {
                   report.push_primary(span, "here");
                }
 
-               err.write_report(&report, &config_path.display().yellow(), &config)
-                  .chain_err(FAIL_STDERR)?;
+               err.write_report(
+                  &report,
+                  &"<stdin>".yellow(),
+                  &report::PositionStr::new(&config),
+               )
+               .chain_err(FAIL_STDERR)?;
 
                write!(err, "\n\n").chain_err(FAIL_STDERR)?;
 
