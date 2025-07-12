@@ -1,11 +1,25 @@
-use std::fmt::Write as _;
+use std::{
+   env,
+   fmt::Write as _,
+   io as std_io,
+};
 
 use clap::Parser as _;
 use cyn::ResultExt as _;
+use libp2p::{
+   self as p2p,
+   futures::StreamExt as _,
+   noise as p2p_noise,
+   ping as p2p_ping,
+   swarm as p2p_swarm,
+   tcp as p2p_tcp,
+   yamux as p2p_yamux,
+};
 use tokio::io::{
    self,
    AsyncReadExt as _,
 };
+use tracing_subscriber::filter as tracing_filter;
 use ust::{
    Write as _,
    report,
@@ -31,8 +45,11 @@ enum Command {
       command: Config,
    },
 
-   /// Start daemon. Configuration is read from stdin.
-   Start,
+   /// Node related commands.
+   Node {
+      #[command(subcommand)]
+      command: Node,
+   },
 
    /// Show inbox.
    Inbox,
@@ -42,12 +59,6 @@ enum Command {
 
    /// Ping peer.
    Ping,
-
-   /// Start network.
-   Up,
-
-   /// Stop network.
-   Down,
 }
 
 #[derive(clap::Subcommand, Debug, Clone)]
@@ -56,8 +67,41 @@ enum Config {
    Generate,
 }
 
+#[derive(clap::Subcommand, Debug, Clone)]
+enum Node {
+   /// Start node. Configuration is read from stdin.
+   Start,
+
+   /// Reload already running node. Configuration is read from stdin.
+   Reload,
+}
+
 #[tokio::main]
 async fn main() -> cyn::Termination {
+   {
+      const VARIABLE: &str = "CON_LOG";
+
+      tracing_subscriber::fmt()
+         .with_writer(std_io::stderr)
+         .with_env_filter(
+            tracing_subscriber::EnvFilter::builder()
+               .with_env_var(VARIABLE)
+               .with_default_directive(tracing_filter::LevelFilter::INFO.into())
+               .from_env()
+               .chain_err_with(|| {
+                  format!(
+                     "failed to initialize tracing from environment variable '{VARIABLE}' with \
+                      content '{content}'",
+                     content = env::var_os(VARIABLE)
+                        .expect("unset variable cannot be invalid")
+                        .display(),
+                  )
+               })?,
+         )
+         .try_init()
+         .chain_err("failed to initialize tracing")?;
+   }
+
    let cli = Cli::parse();
 
    let out = &mut terminal::stdout();
@@ -75,7 +119,9 @@ async fn main() -> cyn::Termination {
          writeln!(out, "{config}").chain_err(FAIL_STDOUT)?;
       },
 
-      Command::Start => {
+      Command::Node {
+         command: Node::Start,
+      } => {
          let mut config = String::new();
 
          io::stdin()
@@ -104,12 +150,46 @@ async fn main() -> cyn::Termination {
                cyn::bail!("failed to parse config due to 1 previous error");
             },
          };
+
+         let mut swarm = p2p::SwarmBuilder::with_existing_identity(config.keypair.into())
+            .with_tokio()
+            .with_tcp(
+               p2p_tcp::Config::default(),
+               p2p_noise::Config::new,
+               p2p_yamux::Config::default,
+            )?
+            .with_quic()
+            .with_behaviour(|_| p2p_ping::Behaviour::default())
+            .unwrap()
+            .build();
+
+         swarm.listen_on("/ip6/::1/tcp/0".parse().unwrap()).unwrap();
+
+         for peer in &config.peers {
+            // HACK
+            let remote: p2p::Multiaddr = peer.name.as_ref().unwrap().parse().unwrap();
+            tracing::info!("dialing {remote}");
+            swarm.dial(remote)?;
+         }
+
+         #[expect(clippy::infinite_loop)]
+         loop {
+            match swarm.select_next_some().await {
+               p2p_swarm::SwarmEvent::NewListenAddr { address, .. } => {
+                  tracing::info!("listening on {address:?}");
+               },
+               p2p_swarm::SwarmEvent::Behaviour(event) => tracing::info!("behaviour: {event:?}"),
+               other => tracing::info!("other: {other:?}"),
+            }
+         }
       },
+      Command::Node {
+         command: Node::Reload,
+      } => todo!(),
+
       Command::Inbox => todo!(),
       Command::Peers => todo!(),
       Command::Ping => todo!(),
-      Command::Up => todo!(),
-      Command::Down => todo!(),
    }
 
    out.finish()?;

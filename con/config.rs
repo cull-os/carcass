@@ -1,9 +1,12 @@
 use std::str::FromStr as _;
 
 use cyn::ResultExt as _;
-use p2p::identity::{
-   self as p2p_id,
-   ed25519,
+use libp2p::{
+   self as p2p,
+   identity::{
+      self as p2p_id,
+      ed25519,
+   },
 };
 
 mod keypair {
@@ -61,7 +64,7 @@ impl Config {
    pub fn generate() -> cyn::Result<Self> {
       let keypair = ed25519::Keypair::generate();
 
-      Ok(Self {
+      let config = Self {
          name: Some(
             heck::AsKebabCase(
                hostname::get()
@@ -104,6 +107,19 @@ impl Config {
          .iter()
          .map(|multiaddr| p2p::Multiaddr::from_str(multiaddr).expect("literals are valid"))
          .collect(),
-      })
+      };
+
+      if let Some(ref name) = config.name {
+         tracing::info!("generated node name '{name}' from hostname");
+      }
+
+      tracing::info!("generated node id '{id}'", id = config.id);
+      tracing::info!(
+         "using inferface '{interface}'",
+         interface = config.interface,
+      );
+      tracing::info!("using {n} bootstrap peers", n = config.bootstrap.len());
+
+      Ok(config)
    }
 }
