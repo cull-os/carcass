@@ -21,8 +21,8 @@ use libp2p::{
 
 use crate::{
    Config,
+   Interface,
    address,
-   interface,
    vpn,
 };
 
@@ -32,7 +32,6 @@ pub struct Behaviour {
    pub relay:    p2p_relay::Behaviour,
    pub dcutr:    p2p_dcutr::Behaviour,
    pub kad:      p2p_kad::Behaviour<p2p_kad_store::MemoryStore>,
-   pub vpn:      vpn::Behaviour,
 }
 
 impl Behaviour {
@@ -102,7 +101,7 @@ pub async fn run(config: Config) -> cyn::Result<()> {
       .bootstrap()
       .chain_err("failed to start DHT bootstrap")?;
 
-   let _tun_interface = interface::Interface::create(
+   let tun_interface = Interface::create(
       &config.interface,
       address::generate_v4(&config.id),
       address::generate_v6(&config.id),
