@@ -31,6 +31,7 @@ heck.workspace               = true
 hostname.workspace           = true
 libp2p                       = { features = [ "full" ], workspace = true }
 multibase.workspace          = true
+ringbuf.workspace            = true
 rustc-hash.workspace         = true
 serde.workspace              = true
 thiserror.workspace          = true
