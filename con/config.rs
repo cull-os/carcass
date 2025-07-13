@@ -110,15 +110,15 @@ impl Config {
       };
 
       if let Some(ref name) = config.name {
-         tracing::info!("generated node name '{name}' from hostname");
+         tracing::info!("Generated node name '{name}' from hostname.");
       }
 
-      tracing::info!("generated node id '{id}'", id = config.id);
+      tracing::info!("Generated node id '{id}'.", id = config.id);
       tracing::info!(
-         "using inferface '{interface}'",
+         "Using inferface '{interface}'.",
          interface = config.interface,
       );
-      tracing::info!("using {n} bootstrap peers", n = config.bootstrap.len());
+      tracing::info!("Using {n} bootstrap peers.", n = config.bootstrap.len());
 
       Ok(config)
    }

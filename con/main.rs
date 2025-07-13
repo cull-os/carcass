@@ -2,6 +2,7 @@ use std::{
    env,
    fmt::Write as _,
    io as std_io,
+   str::FromStr as _,
 };
 
 use clap::Parser as _;
@@ -10,7 +11,6 @@ use libp2p::{
    self as p2p,
    futures::StreamExt as _,
    noise as p2p_noise,
-   ping as p2p_ping,
    swarm as p2p_swarm,
    tcp as p2p_tcp,
    yamux as p2p_yamux,
@@ -151,7 +151,7 @@ async fn main() -> cyn::Termination {
             },
          };
 
-         let mut swarm = p2p::SwarmBuilder::with_existing_identity(config.keypair.into())
+         let mut swarm = p2p::SwarmBuilder::with_existing_identity(config.keypair.clone().into())
             .with_tokio()
             .with_tcp(
                p2p_tcp::Config::default(),
@@ -159,27 +159,22 @@ async fn main() -> cyn::Termination {
                p2p_yamux::Config::default,
             )?
             .with_quic()
-            .with_behaviour(|_| p2p_ping::Behaviour::default())
+            .with_behaviour(|keypair| con::Behaviour::new(keypair, &config))
             .unwrap()
             .build();
 
-         swarm.listen_on("/ip6/::1/tcp/0".parse().unwrap()).unwrap();
-
-         for peer in &config.peers {
-            // HACK
-            let remote: p2p::Multiaddr = peer.name.as_ref().unwrap().parse().unwrap();
-            tracing::info!("dialing {remote}");
-            swarm.dial(remote)?;
-         }
+         swarm
+            .listen_on(p2p::Multiaddr::from_str("/ip6/::/tcp/0").expect("literal is valid"))
+            .chain_err("failed to listen on local port")?;
 
          #[expect(clippy::infinite_loop)]
          loop {
             match swarm.select_next_some().await {
                p2p_swarm::SwarmEvent::NewListenAddr { address, .. } => {
-                  tracing::info!("listening on {address:?}");
+                  tracing::info!("Listening on {address:?}.");
                },
-               p2p_swarm::SwarmEvent::Behaviour(event) => tracing::info!("behaviour: {event:?}"),
-               other => tracing::info!("other: {other:?}"),
+               p2p_swarm::SwarmEvent::Behaviour(event) => tracing::info!("Behaviour: {event:?}."),
+               other => tracing::info!("Other: {other:?}."),
             }
          }
       },
