@@ -63,6 +63,7 @@ pub struct Peer {
 impl Config {
    pub fn generate() -> cyn::Result<Self> {
       let keypair = ed25519::Keypair::generate();
+      let id = p2p::PeerId::from_public_key(&p2p_id::PublicKey::from(keypair.public()));
 
       let config = Self {
          name: Some(
@@ -74,7 +75,7 @@ impl Config {
             .to_string(),
          ),
 
-         id: p2p::PeerId::from_public_key(&p2p_id::PublicKey::from(keypair.public())),
+         id,
          keypair,
 
          interface: "con".to_owned(),
@@ -115,7 +116,7 @@ impl Config {
 
       tracing::info!("Generated node id '{id}'.", id = config.id);
       tracing::info!(
-         "Using inferface '{interface}'.",
+         "Using interface '{interface}'.",
          interface = config.interface,
       );
       tracing::info!("Using {n} bootstrap peers.", n = config.bootstrap.len());

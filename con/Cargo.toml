@@ -24,13 +24,16 @@ cyn.path = "../cyn"
 dup.path = "../dup"
 ust.path = "../ust"
 
+async-trait.workspace        = true
 clap.workspace               = true
 heck.workspace               = true
 hostname.workspace           = true
 libp2p                       = { features = [ "full" ], workspace = true }
 multibase.workspace          = true
+rustc-hash.workspace         = true
 serde.workspace              = true
 tokio.workspace              = true
 toml.workspace               = true
 tracing.workspace            = true
 tracing-subscriber.workspace = true
+tun.workspace                = true

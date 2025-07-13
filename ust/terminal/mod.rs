@@ -544,7 +544,7 @@ fn write_report(
 
                // Line being:
                // <<<pointed-at>>><<<rest>>>
-               //                 ^^^^^^^^^^ length of this
+               //                 ^^^^^^^^^^ len of this
                let rest = roof - label.span.end;
 
                let end = line.content.as_str().size() - rest;

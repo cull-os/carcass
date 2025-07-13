@@ -2,19 +2,10 @@ use std::{
    env,
    fmt::Write as _,
    io as std_io,
-   str::FromStr as _,
 };
 
 use clap::Parser as _;
 use cyn::ResultExt as _;
-use libp2p::{
-   self as p2p,
-   futures::StreamExt as _,
-   noise as p2p_noise,
-   swarm as p2p_swarm,
-   tcp as p2p_tcp,
-   yamux as p2p_yamux,
-};
 use tokio::io::{
    self,
    AsyncReadExt as _,
@@ -151,32 +142,7 @@ async fn main() -> cyn::Termination {
             },
          };
 
-         let mut swarm = p2p::SwarmBuilder::with_existing_identity(config.keypair.clone().into())
-            .with_tokio()
-            .with_tcp(
-               p2p_tcp::Config::default(),
-               p2p_noise::Config::new,
-               p2p_yamux::Config::default,
-            )?
-            .with_quic()
-            .with_behaviour(|keypair| con::Behaviour::new(keypair, &config))
-            .unwrap()
-            .build();
-
-         swarm
-            .listen_on(p2p::Multiaddr::from_str("/ip6/::/tcp/0").expect("literal is valid"))
-            .chain_err("failed to listen on local port")?;
-
-         #[expect(clippy::infinite_loop)]
-         loop {
-            match swarm.select_next_some().await {
-               p2p_swarm::SwarmEvent::NewListenAddr { address, .. } => {
-                  tracing::info!("Listening on {address:?}.");
-               },
-               p2p_swarm::SwarmEvent::Behaviour(event) => tracing::info!("Behaviour: {event:?}."),
-               other => tracing::info!("Other: {other:?}."),
-            }
-         }
+         con::run(config).await?;
       },
       Command::Node {
          command: Node::Reload,
