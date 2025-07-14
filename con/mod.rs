@@ -14,5 +14,3 @@ mod interface;
 pub use interface::Interface;
 
 pub mod ip;
-
-pub mod vpn;
