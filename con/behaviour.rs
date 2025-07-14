@@ -218,9 +218,7 @@ pub async fn run(config: Config) -> cyn::Result<()> {
 
             // Send packet to peer
             let packet = ip::Packet::new(packet.to_vec());
-            if let Err(error) = swarm.behaviour_mut().ip.send(&peer_id, packet) {
-               tracing::warn!("Failed to send packet to peer {peer_id}: {error}.");
-            }
+            swarm.behaviour_mut().ip.send(&peer_id, packet);
          },
       }
    }

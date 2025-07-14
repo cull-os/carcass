@@ -21,6 +21,7 @@ use libp2p::{
    },
    swarm::{
       self as p2p_swarm,
+      dial_opts as p2p_swarm_dial_opts,
       handler as p2p_swarm_handler,
    },
 };
@@ -235,32 +236,31 @@ impl p2p_swarm::ConnectionHandler for Handler {
 pub trait Policy = FnMut(&p2p::PeerId) -> Result<(), p2p_swarm::ConnectionDenied> + 'static;
 
 pub struct Behaviour<P: Policy> {
-   policy: P,
+   inbound_policy: P,
+   inbound_queue:  VecDeque<Packet>,
 
-   handlers: FxHashMap<p2p::PeerId, PacketProducer>,
-
-   queue: VecDeque<Packet>,
+   outbound_handlers: FxHashMap<p2p::PeerId, PacketProducer>,
+   outbound_packets:  VecDeque<(p2p::PeerId, Packet)>,
 }
 
 impl<P: Policy> Behaviour<P> {
-   pub fn new(policy: P) -> Self {
+   pub fn new(inbound_policy: P) -> Self {
       Self {
-         policy,
+         inbound_policy,
+         inbound_queue: VecDeque::new(),
 
-         handlers: FxHashMap::with_hasher(FxBuildHasher),
-
-         queue: VecDeque::new(),
+         outbound_handlers: FxHashMap::with_hasher(FxBuildHasher),
+         outbound_packets: VecDeque::new(),
       }
    }
 
-   pub fn send(&mut self, peer_id: &p2p::PeerId, packet: Packet) -> Result<(), &'static str> {
-      let Some(producer) = self.handlers.get_mut(peer_id) else {
-         return Err("peer not connected");
+   pub fn send(&mut self, peer_id: &p2p::PeerId, packet: Packet) {
+      let Some(producer) = self.outbound_handlers.get_mut(peer_id) else {
+         self.outbound_packets.push_back((*peer_id, packet));
+         return;
       };
 
       let _ = producer.try_push(packet);
-
-      Ok(())
    }
 }
 
@@ -276,11 +276,22 @@ impl<P: Policy> p2p_swarm::NetworkBehaviour for Behaviour<P> {
       _local_addr: &p2p::Multiaddr,
       _remote_addr: &p2p::Multiaddr,
    ) -> Result<Handler, p2p_swarm::ConnectionDenied> {
-      (self.policy)(&peer_id)?;
+      (self.inbound_policy)(&peer_id)?;
 
-      let (producer, consumer) = ringbuf::StaticRb::default().split();
+      let (mut producer, consumer) = ringbuf::StaticRb::default().split();
 
-      self.handlers.insert(peer_id, producer);
+      let mut index = 0;
+      while index < self.outbound_packets.len() {
+         if self.outbound_packets[index].0 == peer_id {
+            let (_, packet) = self.outbound_packets.remove(index).expect("index is valid");
+
+            let _ = producer.try_push(packet);
+         } else {
+            index += 1;
+         }
+      }
+
+      self.outbound_handlers.insert(peer_id, producer);
 
       Ok(Handler::new(consumer))
    }
@@ -293,9 +304,20 @@ impl<P: Policy> p2p_swarm::NetworkBehaviour for Behaviour<P> {
       _role_override: p2p_core::Endpoint,
       _port_use: p2p_core_transport::PortUse,
    ) -> Result<Handler, p2p_swarm::ConnectionDenied> {
-      let (producer, consumer) = ringbuf::StaticRb::default().split();
+      let (mut producer, consumer) = ringbuf::StaticRb::default().split();
 
-      self.handlers.insert(peer_id, producer);
+      let mut index = 0;
+      while index < self.outbound_packets.len() {
+         if self.outbound_packets[index].0 == peer_id {
+            let (_, packet) = self.outbound_packets.remove(index).expect("index is valid");
+
+            let _ = producer.try_push(packet);
+         } else {
+            index += 1;
+         }
+      }
+
+      self.outbound_handlers.insert(peer_id, producer);
 
       Ok(Handler::new(consumer))
    }
@@ -308,14 +330,27 @@ impl<P: Policy> p2p_swarm::NetworkBehaviour for Behaviour<P> {
       _connection_id: p2p_swarm::ConnectionId,
       packet: Packet,
    ) {
-      self.queue.push_back(packet);
+      self.inbound_queue.push_back(packet);
    }
 
    fn poll(
       &mut self,
       _context: &mut task::Context<'_>,
    ) -> task::Poll<p2p_swarm::ToSwarm<Packet, ()>> {
-      match self.queue.pop_front() {
+      // Check if we have any pending packets that need connections.
+      #[expect(clippy::pattern_type_mismatch)]
+      if let Some((peer_id, _)) = self
+         .outbound_packets
+         .iter()
+         .find(|(peer_id, _)| !self.outbound_handlers.contains_key(peer_id))
+      {
+         return task::Poll::Ready(p2p_swarm::ToSwarm::Dial {
+            opts: p2p_swarm_dial_opts::DialOpts::peer_id(*peer_id).build(),
+         });
+      }
+
+      // Then check for incoming packets to emit.
+      match self.inbound_queue.pop_front() {
          Some(packet) => task::Poll::Ready(p2p_swarm::ToSwarm::GenerateEvent(packet)),
          None => task::Poll::Pending,
       }
