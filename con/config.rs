@@ -41,6 +41,7 @@ mod keypair {
 pub struct Config {
    pub name: Option<String>,
 
+   #[serde(rename = "key")]
    pub id:      p2p::PeerId,
    #[serde(rename = "private-key", with = "keypair")]
    pub keypair: ed25519::Keypair,
@@ -57,7 +58,8 @@ pub struct Config {
 pub struct Peer {
    pub name: Option<String>,
 
-   pub key: p2p::PeerId,
+   #[serde(rename = "key")]
+   pub id: p2p::PeerId,
 }
 
 impl Config {

@@ -240,7 +240,7 @@ pub struct Behaviour<P: Policy> {
    inbound_queue:  VecDeque<Packet>,
 
    outbound_handlers: FxHashMap<p2p::PeerId, PacketProducer>,
-   outbound_packets:  VecDeque<(p2p::PeerId, Packet)>,
+   outbound_packets:  FxHashMap<p2p::PeerId, Vec<Packet>>,
 }
 
 impl<P: Policy> Behaviour<P> {
@@ -250,13 +250,17 @@ impl<P: Policy> Behaviour<P> {
          inbound_queue: VecDeque::new(),
 
          outbound_handlers: FxHashMap::with_hasher(FxBuildHasher),
-         outbound_packets: VecDeque::new(),
+         outbound_packets: FxHashMap::with_hasher(FxBuildHasher),
       }
    }
 
    pub fn send(&mut self, peer_id: &p2p::PeerId, packet: Packet) {
       let Some(producer) = self.outbound_handlers.get_mut(peer_id) else {
-         self.outbound_packets.push_back((*peer_id, packet));
+         self
+            .outbound_packets
+            .entry(*peer_id)
+            .or_default()
+            .push(packet);
          return;
       };
 
@@ -280,15 +284,8 @@ impl<P: Policy> p2p_swarm::NetworkBehaviour for Behaviour<P> {
 
       let (mut producer, consumer) = ringbuf::StaticRb::default().split();
 
-      let mut index = 0;
-      while index < self.outbound_packets.len() {
-         if self.outbound_packets[index].0 == peer_id {
-            let (_, packet) = self.outbound_packets.remove(index).expect("index is valid");
-
-            let _ = producer.try_push(packet);
-         } else {
-            index += 1;
-         }
+      if let Some(packets) = self.outbound_packets.remove(&peer_id) {
+         producer.push_iter(packets.into_iter());
       }
 
       self.outbound_handlers.insert(peer_id, producer);
@@ -306,15 +303,8 @@ impl<P: Policy> p2p_swarm::NetworkBehaviour for Behaviour<P> {
    ) -> Result<Handler, p2p_swarm::ConnectionDenied> {
       let (mut producer, consumer) = ringbuf::StaticRb::default().split();
 
-      let mut index = 0;
-      while index < self.outbound_packets.len() {
-         if self.outbound_packets[index].0 == peer_id {
-            let (_, packet) = self.outbound_packets.remove(index).expect("index is valid");
-
-            let _ = producer.try_push(packet);
-         } else {
-            index += 1;
-         }
+      if let Some(packets) = self.outbound_packets.remove(&peer_id) {
+         producer.push_iter(packets.into_iter());
       }
 
       self.outbound_handlers.insert(peer_id, producer);
@@ -337,16 +327,14 @@ impl<P: Policy> p2p_swarm::NetworkBehaviour for Behaviour<P> {
       &mut self,
       _context: &mut task::Context<'_>,
    ) -> task::Poll<p2p_swarm::ToSwarm<Packet, ()>> {
-      // Check if we have any pending packets that need connections.
-      #[expect(clippy::pattern_type_mismatch)]
-      if let Some((peer_id, _)) = self
-         .outbound_packets
-         .iter()
-         .find(|(peer_id, _)| !self.outbound_handlers.contains_key(peer_id))
-      {
-         return task::Poll::Ready(p2p_swarm::ToSwarm::Dial {
-            opts: p2p_swarm_dial_opts::DialOpts::peer_id(*peer_id).build(),
-         });
+      // Check for outbound packets and dial.
+      #[expect(clippy::iter_over_hash_type)]
+      for outbound_peer_id in self.outbound_packets.keys() {
+         if !self.outbound_handlers.contains_key(outbound_peer_id) {
+            return task::Poll::Ready(p2p_swarm::ToSwarm::Dial {
+               opts: p2p_swarm_dial_opts::DialOpts::peer_id(*outbound_peer_id).build(),
+            });
+         }
       }
 
       // Then check for incoming packets to emit.

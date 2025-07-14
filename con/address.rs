@@ -33,30 +33,30 @@ pub fn generate_v6(peer_id: &p2p::PeerId) -> net::Ipv6Addr {
    net::Ipv6Addr::from(addr)
 }
 
-/// Generate an IPv6 address for a given name.
-#[must_use]
-#[expect(clippy::cast_possible_truncation)]
-pub fn generate_named_v6(peer_id: &p2p::PeerId, name: &str) -> net::Ipv6Addr {
-   assert!(name.len() < u8::MAX as usize, "name len must fit in a byte",);
+// /// Generate an IPv6 address for a given name.
+// #[must_use]
+// #[expect(clippy::cast_possible_truncation)]
+// pub fn generate_named_v6(peer_id: &p2p::PeerId, name: &str) -> net::Ipv6Addr
+// {    assert!(name.len() < u8::MAX as usize, "name len must fit in a byte",);
 
-   let mut addr = V6_BASE;
+//    let mut addr = V6_BASE;
 
-   let mut net_id = *b"\xDE\xAD\xBE\xEF";
-   for (index, byte) in peer_id.to_bytes().into_iter().enumerate() {
-      net_id[index % net_id.len()] ^= byte;
-   }
+//    let mut net_id = *b"\xDE\xAD\xBE\xEF";
+//    for (index, byte) in peer_id.to_bytes().into_iter().enumerate() {
+//       net_id[index % net_id.len()] ^= byte;
+//    }
 
-   addr[10..14].copy_from_slice(&net_id);
+//    addr[10..14].copy_from_slice(&net_id);
 
-   let mut name_id = *b"\xFF\xFE";
-   for (index, &byte) in name.as_bytes().iter().enumerate() {
-      name_id[index % name_id.len()] ^= byte.wrapping_mul(index as u8);
-   }
+//    let mut name_id = *b"\xFF\xFE";
+//    for (index, &byte) in name.as_bytes().iter().enumerate() {
+//       name_id[index % name_id.len()] ^= byte.wrapping_mul(index as u8);
+//    }
 
-   addr[14..].copy_from_slice(&name_id);
+//    addr[14..].copy_from_slice(&name_id);
 
-   net::Ipv6Addr::from(addr)
-}
+//    net::Ipv6Addr::from(addr)
+// }
 
 pub struct Map {
    peer_to_v4: FxHashMap<p2p::PeerId, net::Ipv4Addr>,
@@ -76,34 +76,32 @@ impl Map {
       }
    }
 
-   pub fn register(&mut self, peer_id: p2p::PeerId) {
-      let v4 = generate_v4(&peer_id);
-      let v6 = generate_v6(&peer_id);
+   // TODO: Make sure these don't collide.
 
-      self.peer_to_v4.insert(peer_id, v4);
-      self.peer_to_v6.insert(peer_id, v6);
-      self.v4_to_peer.insert(v4, peer_id);
-      self.v6_to_peer.insert(v6, peer_id);
+   pub fn v4_of(&mut self, peer_id: p2p::PeerId) -> net::Ipv4Addr {
+      *self.peer_to_v4.entry(peer_id).or_insert_with(|| {
+         let v4 = generate_v4(&peer_id);
+         self.v4_to_peer.insert(v4, peer_id);
+         v4
+      })
    }
 
-   #[must_use]
-   pub fn get_v4(&self, peer_id: &p2p::PeerId) -> Option<net::Ipv4Addr> {
-      self.peer_to_v4.get(peer_id).copied()
-   }
-
-   #[must_use]
-   pub fn get_v6(&self, peer_id: &p2p::PeerId) -> Option<net::Ipv6Addr> {
-      self.peer_to_v6.get(peer_id).copied()
+   pub fn v6_of(&mut self, peer_id: p2p::PeerId) -> net::Ipv6Addr {
+      *self.peer_to_v6.entry(peer_id).or_insert_with(|| {
+         let v6 = generate_v6(&peer_id);
+         self.v6_to_peer.insert(v6, peer_id);
+         v6
+      })
    }
 
    #[must_use]
    #[expect(clippy::trivially_copy_pass_by_ref)]
-   pub fn get_peer_by_v4(&self, addr: &net::Ipv4Addr) -> Option<p2p::PeerId> {
+   pub fn peer_of_v4(&self, addr: &net::Ipv4Addr) -> Option<p2p::PeerId> {
       self.v4_to_peer.get(addr).copied()
    }
 
    #[must_use]
-   pub fn get_peer_by_v6(&self, addr: &net::Ipv6Addr) -> Option<p2p::PeerId> {
+   pub fn peer_of_v6(&self, addr: &net::Ipv6Addr) -> Option<p2p::PeerId> {
       self.v6_to_peer.get(addr).copied()
    }
 }
@@ -129,13 +127,12 @@ mod tests {
       let mut map = Map::new();
 
       let peer_id = new_peer_id(&[0x12, 0x34]);
-      map.register(peer_id);
 
-      let v4 = map.get_v4(&peer_id).unwrap();
-      let v6 = map.get_v6(&peer_id).unwrap();
+      let v4 = map.v4_of(peer_id);
+      let v6 = map.v6_of(peer_id);
 
-      assert_eq!(map.get_peer_by_v4(&v4), Some(peer_id));
-      assert_eq!(map.get_peer_by_v6(&v6), Some(peer_id));
+      assert_eq!(map.peer_of_v4(&v4), Some(peer_id));
+      assert_eq!(map.peer_of_v6(&v6), Some(peer_id));
 
       assert_eq!(v4, generate_v4(&peer_id));
       assert_eq!(v6, generate_v6(&peer_id));

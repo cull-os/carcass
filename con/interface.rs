@@ -6,6 +6,8 @@ use derive_more::{
    DerefMut,
 };
 
+pub const MTU: u16 = 1420;
+
 #[derive(Deref, DerefMut)]
 pub struct Interface {
    #[deref]
@@ -18,12 +20,14 @@ pub struct Interface {
 
 impl Interface {
    pub fn create(name: &str, v4: net::Ipv4Addr, v6: net::Ipv6Addr) -> cyn::Result<Self> {
+      tracing::info!("Creating TUN device '{name}' with IPv4 {v4} and IPv6 {v6}.");
+
       let mut config = tun::Configuration::default();
 
       config.tun_name(name);
       config.address(v4);
       config.netmask(net::Ipv4Addr::new(255, 255, 0, 0));
-      config.mtu(1420);
+      config.mtu(MTU);
       config.up();
 
       #[cfg(any(target_os = "macos", target_os = "ios"))]
@@ -32,8 +36,6 @@ impl Interface {
       });
 
       let device = tun::create_as_async(&config).chain_err("failed to create tun device")?;
-
-      tracing::info!("Created TUN interface '{name}' with IPv4 {v4} and IPv6 {v6}.");
 
       Ok(Self { device, v4, v6 })
    }

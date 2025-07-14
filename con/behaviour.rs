@@ -32,6 +32,7 @@ use tokio::{
 use crate::{
    Config,
    Interface,
+   MTU,
    address,
    ip,
 };
@@ -145,7 +146,7 @@ pub async fn run(config: Config) -> cyn::Result<()> {
          new(
             keypair.clone(),
             config.bootstrap.iter(),
-            config.peers.iter().map(|peer| peer.key).collect(),
+            config.peers.iter().map(|peer| peer.id).collect(),
          )
       })
       .unwrap()
@@ -161,17 +162,18 @@ pub async fn run(config: Config) -> cyn::Result<()> {
       .bootstrap()
       .chain_err("failed to start DHT bootstrap")?;
 
-   let mut tun_buffer = vec![0_u8; 1420];
+   let mut tun_buffer = vec![0_u8; MTU as usize];
    let mut tun_interface = Interface::create(
       &config.interface,
       address::generate_v4(&config.id),
       address::generate_v6(&config.id),
-   )
-   .chain_err("failed to create tun interface")?;
+   )?;
 
    let mut address_map = address::Map::new();
+
    for peer in &config.peers {
-      address_map.register(peer.key);
+      address_map.v4_of(peer.id);
+      address_map.v6_of(peer.id);
    }
 
    loop {
@@ -183,6 +185,8 @@ pub async fn run(config: Config) -> cyn::Result<()> {
                },
 
                p2p_swarm::SwarmEvent::Behaviour(BehaviourEvent::Ip(packet)) => {
+                  tracing::trace!("Got packet: {packet:?}");
+
                   if let Err(error) = tun_interface.write_all(&packet).await {
                      tracing::warn!("Failed to write packet to TUN interface: {error}");
                   }
@@ -201,18 +205,20 @@ pub async fn run(config: Config) -> cyn::Result<()> {
 
             let packet = &tun_buffer[..packet_len];
 
+            tracing::warn!("Got tun packet: {packet:?}");
+
             let Some(ip) = ip_of(packet) else {
                tracing::warn!("Ignoring invalid tun packet (could not determine ip) {packet:?}");
                continue;
             };
 
             let peer_id = match ip {
-               net::IpAddr::V4(v4) => address_map.get_peer_by_v4(&v4),
-               net::IpAddr::V6(v6) => address_map.get_peer_by_v6(&v6),
+               net::IpAddr::V4(v4) => address_map.peer_of_v4(&v4),
+               net::IpAddr::V6(v6) => address_map.peer_of_v6(&v6),
             };
 
             let Some(peer_id) = peer_id else {
-               tracing::warn!("Tried to send packet to ip {ip} not in peer list, dropping.");
+               tracing::warn!("Tried to send packet to ip {ip} not in peer map, dropping.");
                continue;
             };
 

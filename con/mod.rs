@@ -13,6 +13,9 @@ pub mod config;
 pub use config::Config;
 
 mod interface;
-pub use interface::Interface;
+pub use interface::{
+   Interface,
+   MTU,
+};
 
 pub mod ip;
