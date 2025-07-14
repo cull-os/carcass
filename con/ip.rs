@@ -33,8 +33,6 @@ use tokio::io;
 
 const PROTOCOL: p2p_swarm::StreamProtocol = p2p_swarm::StreamProtocol::new("/ip/0.0.1");
 
-pub trait Policy = FnMut(&p2p::PeerId) -> Result<(), p2p_swarm::ConnectionDenied> + 'static;
-
 #[derive(Debug, Deref, Clone)]
 pub struct Packet(Vec<u8>);
 
@@ -77,13 +75,13 @@ impl Packet {
    }
 }
 
-enum Action {
+enum HandlerAction {
    Reading(BoxFuture<'static, io::Result<(p2p::Stream, Packet)>>),
    Writing(BoxFuture<'static, io::Result<p2p::Stream>>),
    Idle(Option<p2p_swarm::Stream>),
 }
 
-impl Default for Action {
+impl Default for HandlerAction {
    fn default() -> Self {
       Self::Idle(None)
    }
@@ -95,16 +93,14 @@ type PacketConsumer = ringbuf::CachingCons<Arc<ringbuf::StaticRb<Packet, PACKET_
 
 pub struct Handler {
    consumer: PacketConsumer,
-
-   action: Action,
+   action:   HandlerAction,
 }
 
 impl Handler {
    fn new(consumer: PacketConsumer) -> Self {
       Handler {
          consumer,
-
-         action: Action::default(),
+         action: HandlerAction::default(),
       }
    }
 }
@@ -146,15 +142,15 @@ impl p2p_swarm::ConnectionHandler for Handler {
       };
 
       match self.action {
-         Action::Reading(_) => {
+         HandlerAction::Reading(_) => {
             stream_new.close();
          },
 
-         Action::Writing(_) => {
+         HandlerAction::Writing(_) => {
             stream_new.close();
          },
 
-         Action::Idle(ref mut stream) => {
+         HandlerAction::Idle(ref mut stream) => {
             if let Some(mut old) = stream.replace(stream_new) {
                old.close();
             }
@@ -183,14 +179,14 @@ impl p2p_swarm::ConnectionHandler for Handler {
       };
 
       match mem::take(&mut self.action) {
-         Action::Reading(mut read) => {
+         HandlerAction::Reading(mut read) => {
             let Ready(result) = pin!(&mut read).poll(context) else {
                return Pending;
             };
 
             match result {
                Ok((stream, packet)) => {
-                  self.action = Action::Idle(Some(stream));
+                  self.action = HandlerAction::Idle(Some(stream));
 
                   return Ready(NotifyBehaviour(packet));
                },
@@ -201,13 +197,13 @@ impl p2p_swarm::ConnectionHandler for Handler {
             }
          },
 
-         Action::Writing(mut write) => {
+         HandlerAction::Writing(mut write) => {
             let Ready(result) = pin!(&mut write).poll(context) else {
                return Pending;
             };
 
             match result {
-               Ok(stream) => self.action = Action::Idle(Some(stream)),
+               Ok(stream) => self.action = HandlerAction::Idle(Some(stream)),
 
                Err(error) => {
                   tracing::warn!("Failed to write packet to stream: {error}");
@@ -215,15 +211,15 @@ impl p2p_swarm::ConnectionHandler for Handler {
             }
          },
 
-         Action::Idle(Some(stream)) => {
+         HandlerAction::Idle(Some(stream)) => {
             if let Some(packet) = self.consumer.try_pop() {
-               self.action = Action::Writing(Box::pin(packet.write_to(stream)));
+               self.action = HandlerAction::Writing(Box::pin(packet.write_to(stream)));
             } else {
-               self.action = Action::Reading(Box::pin(Packet::read_from(stream)));
+               self.action = HandlerAction::Reading(Box::pin(Packet::read_from(stream)));
             }
          },
 
-         Action::Idle(None) => {
+         HandlerAction::Idle(None) => {
             return Ready(OutboundSubstreamRequest {
                protocol: self.listen_protocol(),
             });
@@ -234,11 +230,14 @@ impl p2p_swarm::ConnectionHandler for Handler {
    }
 }
 
-pub struct Behaviour<P: Policy> {
-   inbound_policy: P,
-   inbound_queue:  VecDeque<Packet>,
+pub trait Policy = FnMut(&p2p::PeerId) -> Result<(), p2p_swarm::ConnectionDenied> + 'static;
 
-   peer_to_producer: FxHashMap<p2p::PeerId, PacketProducer>,
+pub struct Behaviour<P: Policy> {
+   policy: P,
+
+   handlers: FxHashMap<p2p::PeerId, PacketProducer>,
+
+   queue: VecDeque<Packet>,
 }
 
 impl<P: Policy> p2p_swarm::NetworkBehaviour for Behaviour<P> {
@@ -253,11 +252,11 @@ impl<P: Policy> p2p_swarm::NetworkBehaviour for Behaviour<P> {
       _local_addr: &p2p::Multiaddr,
       _remote_addr: &p2p::Multiaddr,
    ) -> Result<Handler, p2p_swarm::ConnectionDenied> {
-      (self.inbound_policy)(&peer_id)?;
+      (self.policy)(&peer_id)?;
 
       let (producer, consumer) = ringbuf::StaticRb::default().split();
 
-      self.peer_to_producer.insert(peer_id, producer);
+      self.handlers.insert(peer_id, producer);
 
       Ok(Handler::new(consumer))
    }
@@ -272,7 +271,7 @@ impl<P: Policy> p2p_swarm::NetworkBehaviour for Behaviour<P> {
    ) -> Result<Handler, p2p_swarm::ConnectionDenied> {
       let (producer, consumer) = ringbuf::StaticRb::default().split();
 
-      self.peer_to_producer.insert(peer_id, producer);
+      self.handlers.insert(peer_id, producer);
 
       Ok(Handler::new(consumer))
    }
@@ -285,14 +284,14 @@ impl<P: Policy> p2p_swarm::NetworkBehaviour for Behaviour<P> {
       _connection_id: p2p_swarm::ConnectionId,
       packet: Packet,
    ) {
-      self.inbound_queue.push_back(packet);
+      self.queue.push_back(packet);
    }
 
    fn poll(
       &mut self,
       _context: &mut task::Context<'_>,
    ) -> task::Poll<p2p_swarm::ToSwarm<Packet, ()>> {
-      match self.inbound_queue.pop_front() {
+      match self.queue.pop_front() {
          Some(packet) => task::Poll::Ready(p2p_swarm::ToSwarm::GenerateEvent(packet)),
          None => task::Poll::Pending,
       }
