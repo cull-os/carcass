@@ -26,9 +26,12 @@ use libp2p::{
 };
 use ringbuf::traits::{
    Consumer as _,
-   Split,
+   Split as _,
 };
-use rustc_hash::FxHashMap;
+use rustc_hash::{
+   FxBuildHasher,
+   FxHashMap,
+};
 use tokio::io;
 
 const PROTOCOL: p2p_swarm::StreamProtocol = p2p_swarm::StreamProtocol::new("/ip/0.0.1");
@@ -135,25 +138,18 @@ impl p2p_swarm::ConnectionHandler for Handler {
          (),
       >,
    ) {
-      let mut stream_new = match event {
+      let stream_new = match event {
          p2p_swarm_handler::ConnectionEvent::FullyNegotiatedInbound(new) => new.protocol,
          p2p_swarm_handler::ConnectionEvent::FullyNegotiatedOutbound(new) => new.protocol,
          _ => return,
       };
 
       match self.action {
-         HandlerAction::Reading(_) => {
-            stream_new.close();
-         },
-
-         HandlerAction::Writing(_) => {
-            stream_new.close();
-         },
+         HandlerAction::Reading(_) => {},
+         HandlerAction::Writing(_) => {},
 
          HandlerAction::Idle(ref mut stream) => {
-            if let Some(mut old) = stream.replace(stream_new) {
-               old.close();
-            }
+            *stream = Some(stream_new);
          },
       }
    }
@@ -238,6 +234,18 @@ pub struct Behaviour<P: Policy> {
    handlers: FxHashMap<p2p::PeerId, PacketProducer>,
 
    queue: VecDeque<Packet>,
+}
+
+impl<P: Policy> Behaviour<P> {
+   pub fn new(policy: P) -> Self {
+      Self {
+         policy,
+
+         handlers: FxHashMap::with_hasher(FxBuildHasher),
+
+         queue: VecDeque::new(),
+      }
+   }
 }
 
 impl<P: Policy> p2p_swarm::NetworkBehaviour for Behaviour<P> {

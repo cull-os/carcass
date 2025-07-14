@@ -1,3 +1,5 @@
+#![feature(trait_alias)]
+
 pub mod address;
 
 mod behaviour;

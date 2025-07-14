@@ -23,57 +23,69 @@ use crate::{
    Config,
    Interface,
    address,
-   vpn,
+   ip,
 };
 
 #[derive(p2p_swarm::NetworkBehaviour)]
-pub struct Behaviour {
+pub struct Behaviour<P: ip::Policy> {
    pub identify: p2p_identify::Behaviour,
    pub relay:    p2p_relay::Behaviour,
    pub dcutr:    p2p_dcutr::Behaviour,
    pub kad:      p2p_kad::Behaviour<p2p_kad_store::MemoryStore>,
+   pub ip:       ip::Behaviour<P>,
 }
 
-impl Behaviour {
-   #[must_use]
-   pub fn new(keypair: &p2p_id::Keypair, config: &Config) -> Behaviour {
-      let peer_id = keypair.public().to_peer_id();
+#[must_use]
+#[expect(clippy::needless_pass_by_value)]
+pub fn new<'a>(
+   keypair: p2p_id::Keypair,
+   bootstrap: impl Iterator<Item = &'a p2p::Multiaddr>,
+   peers: Vec<p2p::PeerId>,
+) -> Behaviour<impl ip::Policy> {
+   let peer_id = keypair.public().to_peer_id();
 
-      let identify = p2p_identify::Behaviour::new(p2p_identify::Config::new(
-         p2p_identify::PROTOCOL_NAME.to_string(),
-         keypair.public(),
-      ));
+   let identify = p2p_identify::Behaviour::new(p2p_identify::Config::new(
+      p2p_identify::PROTOCOL_NAME.to_string(),
+      keypair.public(),
+   ));
 
-      let relay = p2p_relay::Behaviour::new(peer_id, p2p_relay::Config::default());
+   let relay = p2p_relay::Behaviour::new(peer_id, p2p_relay::Config::default());
 
-      let dcutr = p2p_dcutr::Behaviour::new(peer_id);
+   let dcutr = p2p_dcutr::Behaviour::new(peer_id);
 
-      let mut kad = p2p_kad::Behaviour::new(peer_id, p2p_kad_store::MemoryStore::new(peer_id));
+   let mut kad = p2p_kad::Behaviour::new(peer_id, p2p_kad_store::MemoryStore::new(peer_id));
 
-      // Add bootstrap peers to Kademlia DHT for peer discovery.
-      for addr in &config.bootstrap {
-         let Some(peer_id) = addr.iter().find_map(|protocol| {
-            let p2p_multiaddr::Protocol::P2p(peer_id) = protocol else {
-               return None;
-            };
-
-            Some(peer_id)
-         }) else {
-            continue;
+   // Add bootstrap peers to Kademlia DHT for peer discovery.
+   for addr in bootstrap {
+      let Some(peer_id) = addr.iter().find_map(|protocol| {
+         let p2p_multiaddr::Protocol::P2p(peer_id) = protocol else {
+            return None;
          };
 
-         kad.add_address(&peer_id, addr.clone());
+         Some(peer_id)
+      }) else {
+         continue;
+      };
+
+      kad.add_address(&peer_id, addr.clone());
+   }
+
+   let ip = ip::Behaviour::new(move |peer_id| {
+      if !peers.contains(peer_id) {
+         return Err(p2p_swarm::ConnectionDenied::new(format!(
+            "peer '{peer_id}' is not in the peer list"
+         )));
       }
 
-      let vpn = vpn::new();
+      Ok(())
+   });
 
-      Behaviour {
-         identify,
-         relay,
-         dcutr,
-         kad,
-         vpn,
-      }
+   Behaviour {
+      identify,
+      relay,
+      dcutr,
+      kad,
+      ip,
    }
 }
 
@@ -87,7 +99,13 @@ pub async fn run(config: Config) -> cyn::Result<()> {
       )
       .chain_err("failed to create tcp transport layer")?
       .with_quic()
-      .with_behaviour(|keypair| Behaviour::new(keypair, &config))
+      .with_behaviour(|keypair| {
+         new(
+            keypair.clone(),
+            config.bootstrap.iter(),
+            config.peers.iter().map(|peer| peer.key).collect(),
+         )
+      })
       .unwrap()
       .build();
 
