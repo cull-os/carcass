@@ -26,6 +26,7 @@ use libp2p::{
 };
 use ringbuf::traits::{
    Consumer as _,
+   Producer as _,
    Split as _,
 };
 use rustc_hash::{
@@ -40,6 +41,11 @@ const PROTOCOL: p2p_swarm::StreamProtocol = p2p_swarm::StreamProtocol::new("/ip/
 pub struct Packet(Vec<u8>);
 
 impl Packet {
+   #[must_use]
+   pub fn new(data: Vec<u8>) -> Self {
+      Self(data)
+   }
+
    pub async fn read_from(mut stream: p2p::Stream) -> io::Result<(p2p::Stream, Self)> {
       let mut len = [0_u8; 2];
 
@@ -245,6 +251,16 @@ impl<P: Policy> Behaviour<P> {
 
          queue: VecDeque::new(),
       }
+   }
+
+   pub fn send(&mut self, peer_id: &p2p::PeerId, packet: Packet) -> Result<(), &'static str> {
+      let Some(producer) = self.handlers.get_mut(peer_id) else {
+         return Err("peer not connected");
+      };
+
+      let _ = producer.try_push(packet);
+
+      Ok(())
    }
 }
 

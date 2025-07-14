@@ -1,4 +1,7 @@
-use std::str::FromStr as _;
+use std::{
+   net,
+   str::FromStr as _,
+};
 
 use cyn::ResultExt as _;
 use libp2p::{
@@ -17,6 +20,13 @@ use libp2p::{
    swarm as p2p_swarm,
    tcp as p2p_tcp,
    yamux as p2p_yamux,
+};
+use tokio::{
+   io::{
+      AsyncReadExt as _,
+      AsyncWriteExt as _,
+   },
+   select,
 };
 
 use crate::{
@@ -89,6 +99,38 @@ pub fn new<'a>(
    }
 }
 
+#[expect(
+   clippy::missing_asserts_for_indexing,
+   reason = "clippy is too dumb to see if guards"
+)]
+fn ip_of(packet: &[u8]) -> Option<net::IpAddr> {
+   Some(match packet.first()? >> 4 {
+      4 => {
+         if packet.len() < 20 {
+            return None;
+         }
+
+         let slice = &packet[16..20];
+
+         net::IpAddr::V4(net::Ipv4Addr::new(slice[0], slice[1], slice[2], slice[3]))
+      },
+
+      6 => {
+         if packet.len() < 40 {
+            return None;
+         }
+
+         let slice = &packet[24..40];
+
+         net::IpAddr::V6(net::Ipv6Addr::from(
+            <[u8; 16]>::try_from(slice).expect("asdasd"),
+         ))
+      },
+
+      _ => return None,
+   })
+}
+
 pub async fn run(config: Config) -> cyn::Result<()> {
    let mut swarm = p2p::SwarmBuilder::with_existing_identity(config.keypair.clone().into())
       .with_tokio()
@@ -119,21 +161,67 @@ pub async fn run(config: Config) -> cyn::Result<()> {
       .bootstrap()
       .chain_err("failed to start DHT bootstrap")?;
 
-   let tun_interface = Interface::create(
+   let mut tun_buffer = vec![0_u8; 1420];
+   let mut tun_interface = Interface::create(
       &config.interface,
       address::generate_v4(&config.id),
       address::generate_v6(&config.id),
    )
    .chain_err("failed to create tun interface")?;
 
-   #[expect(clippy::infinite_loop)]
+   let mut address_map = address::Map::new();
+   for peer in &config.peers {
+      address_map.register(peer.key);
+   }
+
    loop {
-      match swarm.select_next_some().await {
-         p2p_swarm::SwarmEvent::NewListenAddr { address, .. } => {
-            tracing::info!("Listening on {address:?}.");
+      select! {
+         swarm_event = swarm.select_next_some() => {
+            match swarm_event {
+               p2p_swarm::SwarmEvent::NewListenAddr { address, .. } => {
+                  tracing::info!("Listening on {address:?}.");
+               },
+
+               p2p_swarm::SwarmEvent::Behaviour(BehaviourEvent::Ip(packet)) => {
+                  if let Err(error) = tun_interface.write_all(&packet).await {
+                     tracing::warn!("Failed to write packet to TUN interface: {error}");
+                  }
+               },
+
+               other => tracing::debug!("Other swarm event: {other:?}."),
+            }
          },
-         p2p_swarm::SwarmEvent::Behaviour(event) => tracing::info!("Behaviour: {event:?}."),
-         other => tracing::info!("Other: {other:?}."),
+
+         tun_result = tun_interface.read(&mut tun_buffer) => {
+            let Ok(packet_len) = tun_result.inspect_err(|error| {
+               tracing::warn!("Failed to read from TUN interface: {error}");
+            }) else {
+               continue;
+            };
+
+            let packet = &tun_buffer[..packet_len];
+
+            let Some(ip) = ip_of(packet) else {
+               tracing::warn!("Ignoring invalid tun packet (could not determine ip) {packet:?}");
+               continue;
+            };
+
+            let peer_id = match ip {
+               net::IpAddr::V4(v4) => address_map.get_peer_by_v4(&v4),
+               net::IpAddr::V6(v6) => address_map.get_peer_by_v6(&v6),
+            };
+
+            let Some(peer_id) = peer_id else {
+               tracing::warn!("Tried to send packet to ip {ip} not in peer list, dropping.");
+               continue;
+            };
+
+            // Send packet to peer
+            let packet = ip::Packet::new(packet.to_vec());
+            if let Err(error) = swarm.behaviour_mut().ip.send(&peer_id, packet) {
+               tracing::warn!("Failed to send packet to peer {peer_id}: {error}.");
+            }
+         },
       }
    }
 }
