@@ -18,19 +18,12 @@ use enumset::{
    enum_set,
 };
 
-pub use self::{
-   noder::{
-      Parse,
-      ParseOracle,
-   },
-   tokenizer::{
-      is_valid_plain_identifier,
-      tokenize,
-   },
-};
-
 pub mod node;
 mod noder;
+pub use noder::{
+   Parse,
+   ParseOracle,
+};
 
 mod segment;
 pub use segment::{
@@ -45,6 +38,10 @@ pub use segment::{
 
 pub mod token;
 mod tokenizer;
+pub use tokenizer::{
+   is_valid_plain_identifier,
+   tokenize,
+};
 
 #[expect(dead_code)]
 mod red {

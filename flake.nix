@@ -24,7 +24,7 @@
   };
 
   inputs = {
-    systems.url     = "github:nix-systems/default";
+    systems.url = "github:nix-systems/default";
 
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
 
