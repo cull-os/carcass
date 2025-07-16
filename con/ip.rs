@@ -136,6 +136,11 @@ impl p2p_swarm::ConnectionHandler for Handler {
 
    fn on_behaviour_event(&mut self, _event: Self::FromBehaviour) {}
 
+   #[tracing::instrument(
+      level = "trace",
+      name = "ConnectionHandler::on_connection_event",
+      skip(self)
+   )]
    fn on_connection_event(
       &mut self,
       event: p2p_swarm_handler::ConnectionEvent<
@@ -184,6 +189,7 @@ impl p2p_swarm::ConnectionHandler for Handler {
       match mem::take(&mut self.action) {
          HandlerAction::Reading(mut read) => {
             let Ready(result) = pin!(&mut read).poll(context) else {
+               self.action = HandlerAction::Reading(read);
                return Pending;
             };
 
@@ -202,6 +208,7 @@ impl p2p_swarm::ConnectionHandler for Handler {
 
          HandlerAction::Writing(mut write) => {
             let Ready(result) = pin!(&mut write).poll(context) else {
+               self.action = HandlerAction::Writing(write);
                return Pending;
             };
 
@@ -323,6 +330,7 @@ impl<P: Policy> p2p_swarm::NetworkBehaviour for Behaviour<P> {
       self.inbound_queue.push_back(packet);
    }
 
+   #[tracing::instrument(level = "trace", name = "NetworkBehaviour::poll", skip(self, _context))]
    fn poll(
       &mut self,
       _context: &mut task::Context<'_>,
