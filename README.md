@@ -4,7 +4,7 @@ The Cull monorepository.
 
 ## Projects
 
-- [`aux`](./aux/README.md): Auxiliary vector (auxv) reader and modifier.
+- [`auxvec`](./auxvec/README.md): Auxiliary vector (auxv) reader and modifier.
 - [`cab`](./cab/README.md): A reproducible contextful-expression language (WIP).
 - [`dup`](./dup/README.md): Cheap clone trait for distinguishing expensive
   clones from things that should have been Copy.
