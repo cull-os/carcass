@@ -17,17 +17,17 @@ pub fn is_valid_plain_identifier(s: &str) -> bool {
    chars
       .by_ref()
       .next()
-      .is_some_and(is_valid_initial_identifier_character)
-      && chars.all(is_valid_identifier_character)
+      .is_some_and(is_valid_initial_plain_identifier_character)
+      && chars.all(is_valid_plain_identifier_character)
 }
 
-fn is_valid_initial_identifier_character(c: char) -> bool {
+fn is_valid_initial_plain_identifier_character(c: char) -> bool {
    let invalid = c.is_ascii_digit() || c == '-' || c == '\'';
 
-   !invalid && is_valid_identifier_character(c)
+   !invalid && is_valid_plain_identifier_character(c)
 }
 
-fn is_valid_identifier_character(c: char) -> bool {
+fn is_valid_plain_identifier_character(c: char) -> bool {
    c.is_alphanumeric() || matches!(c, '_' | '-' | '\'')
 }
 
@@ -442,14 +442,14 @@ impl<'a> Tokenizer<'a> {
             }
          },
 
-         initial_letter if is_valid_initial_identifier_character(initial_letter) => {
+         initial_letter if is_valid_initial_plain_identifier_character(initial_letter) => {
             const KEYWORDS: phf::Map<&'static str, Kind> = phf::phf_map! {
                 "if" => TOKEN_KEYWORD_IF,
                 "then" => TOKEN_KEYWORD_THEN,
                 "else" => TOKEN_KEYWORD_ELSE,
             };
 
-            self.consume_while(is_valid_identifier_character);
+            self.consume_while(is_valid_plain_identifier_character);
 
             KEYWORDS
                .get(self.consumed_since(start))
