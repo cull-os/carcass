@@ -818,10 +818,19 @@ node! {
 impl Bind {
    get_token! { token_at -> TOKEN_AT }
 
-   get_node! { identifier -> ExpressionRef<'_> }
+   get_node! { expression -> ExpressionRef<'_> }
+
+   #[must_use]
+   pub fn identifier(&self) -> &Identifier {
+      let ExpressionRef::Identifier(identifier) = self.expression() else {
+         unreachable!("node must be valid")
+      };
+
+      identifier
+   }
 
    pub fn validate(&self, to: &mut Vec<Report>) {
-      let identifier = self.identifier();
+      let identifier = self.expression();
 
       if let ExpressionRef::Identifier(identifier) = identifier {
          identifier.validate(to);

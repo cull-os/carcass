@@ -1,3 +1,5 @@
+#![expect(dead_code)]
+
 use std::borrow::Cow;
 
 use cab_span::Span;
@@ -202,7 +204,8 @@ impl<'a> Scope<'a> {
       index
    }
 
-   pub fn locate<'this>(
+   // See comment below.
+   fn locate<'this>(
       scopes: &'this mut [Scope<'a>],
       name: &LocalName<'a>,
    ) -> LocalPosition<'this, 'a> {
@@ -232,18 +235,13 @@ impl<'a> Scope<'a> {
       LocalPosition::Undefined
    }
 
-   pub fn is_user_defined(scopes: &mut [Scope<'a>], name: &'a str) -> bool {
-      !matches!(
-         Self::locate(&mut scopes[1..], &LocalName::plain(name)),
-         LocalPosition::Undefined
-      )
-   }
-
    pub fn is_empty(&self) -> bool {
       self.locals.is_empty()
    }
 
-   pub fn finish(&self) -> impl Iterator<Item = &Local<'a>> {
+   // TODO: Unprivate when scope & undefined handling is saner.
+   // Control flow is not guaranteed to be left to right.
+   fn finish(&self) -> impl Iterator<Item = &Local<'a>> {
       self.locals.iter().filter(|local| {
          let unused = !local.used;
 

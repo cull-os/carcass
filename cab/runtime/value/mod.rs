@@ -46,7 +46,7 @@ pub enum Value {
    Integer(Arc<num::BigInt>),
    Float(f64),
 
-   Thunk(Thunk),
+   Thunk(Thunk), // Unused for now.
    Blueprint(Arc<Code>),
 
    Nope,

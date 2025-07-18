@@ -1,10 +1,8 @@
-use std::sync::Arc;
-
-use cyn::{
-   Result,
-   ResultExt as _,
-   bail,
+use std::{
+   ops,
+   sync::Arc,
 };
+
 use cab_span::{
    IntoSpan as _,
    Span,
@@ -13,6 +11,11 @@ use cab_syntax::{
    Segment,
    Segmented as _,
    node,
+};
+use cyn::{
+   Result,
+   ResultExt as _,
+   bail,
 };
 use dup::Dupe as _;
 use rpds::ListSync as List;
@@ -27,20 +30,15 @@ use ust::{
 };
 
 use crate::{
-   ByteIndex,
    Code,
    Operation,
    Value,
-   ValueIndex,
    value,
 };
-
-mod optimizer;
 
 mod scope;
 use scope::{
    LocalName,
-   LocalPosition,
    Scope,
 };
 
@@ -125,7 +123,20 @@ struct Compiler<'a> {
    scopes: Vec<Scope<'a>>,
 
    reports: Vec<Report>,
-   dead:    usize,
+}
+
+impl ops::Deref for Compiler<'_> {
+   type Target = Code;
+
+   fn deref(&self) -> &Self::Target {
+      self.codes.last().expect(EXPECT_CODE)
+   }
+}
+
+impl ops::DerefMut for Compiler<'_> {
+   fn deref_mut(&mut self) -> &mut Self::Target {
+      self.codes.last_mut().expect(EXPECT_CODE)
+   }
 }
 
 impl<'a> Compiler<'a> {
@@ -135,56 +146,11 @@ impl<'a> Compiler<'a> {
          scopes: vec![Scope::global()],
 
          reports: Vec::new(),
-         dead:    0,
       }
-   }
-
-   fn code(&mut self) -> &mut Code {
-      self.codes.last_mut().expect(EXPECT_CODE)
    }
 
    fn scope(&mut self) -> &mut Scope<'a> {
       self.scopes.last_mut().expect(EXPECT_SCOPE)
-   }
-
-   fn push_u64(&mut self, data: u64) -> ByteIndex {
-      if self.dead > 0 {
-         return ByteIndex::dummy();
-      }
-
-      self.code().push_u64(data)
-   }
-
-   fn push_u16(&mut self, data: u16) -> ByteIndex {
-      if self.dead > 0 {
-         return ByteIndex::dummy();
-      }
-
-      self.code().push_u16(data)
-   }
-
-   fn push_operation(&mut self, span: Span, operation: Operation) -> ByteIndex {
-      if self.dead > 0 {
-         return ByteIndex::dummy();
-      }
-
-      self.code().push_operation(span, operation)
-   }
-
-   fn value(&mut self, value: Value) -> ValueIndex {
-      if self.dead > 0 {
-         return ValueIndex::dummy();
-      }
-
-      self.code().value(value)
-   }
-
-   fn point_here(&mut self, index: ByteIndex) {
-      if self.dead > 0 {
-         return;
-      }
-
-      self.code().point_here(index);
    }
 }
 
@@ -212,21 +178,21 @@ impl<'a> Compiler<'a> {
          self.push_operation(span, Operation::ScopeEnd);
       }
 
-      for local in self.scopes.pop().expect("scope was just pushed").finish() {
-         self.reports.push(
-            Report::warn(if let Ok(name) = TryInto::<&str>::try_into(&local.name) {
-               format!("unused bind '{name}'")
-            } else {
-               "unused bind".to_owned()
-            })
-            .primary(local.span, "no usage")
-            .tip("remove this or rename it to start with '_'"),
-         );
-      }
+      // for local in self.scopes.pop().expect("scope was just pushed").finish()
+      // {    self.reports.push(
+      //       Report::warn(if let Ok(name) =
+      // TryInto::<&str>::try_into(&local.name) {          format!("unused
+      // bind '{name}'")       } else {
+      //          "unused bind".to_owned()
+      //       })
+      //       .primary(local.span, "no usage")
+      //       .tip("remove this or rename it to start with '_'"),
+      //    );
+      // }
    }
 
    fn emit_thunk_start(&mut self) {
-      let path = self.code().path().dupe();
+      let path = self.path().dupe();
       self.codes.push(Code::new(path));
    }
 
@@ -234,14 +200,7 @@ impl<'a> Compiler<'a> {
       self.push_operation(span, Operation::Return);
       let code = self.codes.pop().expect(EXPECT_CODE);
 
-      self.emit_push(
-         span,
-         // if code.references_parent {
-         Value::Blueprint(Arc::new(code)),
-         // } else {
-         //     Value::Thunk(Arc::new(Mutex::new(Thunk::suspended(location, context.code))))
-         // }
-      );
+      self.emit_push(span, Value::Blueprint(Arc::new(code)));
    }
 
    #[builder(finish_fn(name = "with"))]
@@ -577,26 +536,26 @@ impl<'a> Compiler<'a> {
             },
          };
 
-         // TODO: Scope logic is wrong. Don't locate it all immediately, do it in scopes.
          if is_bind {
             this.scope().push(span, name);
-            return;
+            // return;
          }
 
-         match Scope::locate(&mut this.scopes, &name) {
-            LocalPosition::Undefined => {
-               this.reports.push(
-                  Report::warn(if let Ok(name) = TryInto::<&str>::try_into(&name) {
-                     format!("undefined reference '{name}'")
-                  } else {
-                     "undefined reference".to_owned()
-                  })
-                  .primary(span, "no definition"),
-               );
-            },
+         // TODO: Scope logic is wrong. Don't locate it all immediately, do it
+         // in scopes. match Scope::locate(&mut this.scopes, &name) {
+         //    LocalPosition::Undefined => {
+         //       this.reports.push(
+         //          Report::warn(if let Ok(name) =
+         // TryInto::<&str>::try_into(&name) {
+         // format!("undefined reference '{name}'")          } else {
+         //             "undefined reference".to_owned()
+         //          })
+         //          .primary(span, "no definition"),
+         //       );
+         //    },
 
-            mut position => position.mark_used(),
-         }
+         //    mut position => position.mark_used(),
+         // }
       });
    }
 
@@ -658,8 +617,6 @@ impl<'a> Compiler<'a> {
    }
 
    fn emit(&mut self, expression: node::ExpressionRef<'a>) {
-      let expression = self.optimize(expression);
-
       match expression {
          node::ExpressionRef::Error(_) => unreachable!("{EXPECT_VALID}"),
 
@@ -681,11 +638,8 @@ impl<'a> Compiler<'a> {
          node::ExpressionRef::Path(path) => self.emit_path(path),
 
          node::ExpressionRef::Bind(bind) => {
-            let node::ExpressionRef::Identifier(identifier) = bind.identifier() else {
-               unreachable!("{EXPECT_VALID}")
-            };
             self
-               .emit_identifier(identifier)
+               .emit_identifier(bind.identifier())
                .is_bind(true)
                .span(bind.span());
          },
@@ -707,12 +661,6 @@ impl<'a> Compiler<'a> {
 
          node::ExpressionRef::If(if_) => self.emit_if(if_),
       }
-   }
-
-   fn emit_dead(&mut self, expression: node::ExpressionRef<'a>) {
-      self.dead += 1;
-      self.emit(expression);
-      self.dead -= 1;
    }
 
    fn emit_force(&mut self, expression: node::ExpressionRef<'a>) {
