@@ -12,7 +12,10 @@ use std::{
 };
 
 use cab_span::Span;
-use derive_more::Deref;
+use derive_more::{
+   Deref,
+   DerefMut,
+};
 use dup::Dupe as _;
 use ust::{
    COLORS,
@@ -43,11 +46,11 @@ use crate::{
    value,
 };
 
-const ENCODED_U64_LEN: usize = 9;
-const ENCODED_U16_LEN: usize = 0_u16.to_le_bytes().len();
+const ENCODED_U64_LEN_MAX: usize = 9;
+const ENCODED_U16_LEN_MAX: usize = 0_u16.to_le_bytes().len();
 const ENCODED_OPERATION_LEN: usize = 1;
 
-#[derive(Deref, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Deref, DerefMut, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ByteIndex(usize);
 
 impl ByteIndex {
@@ -57,7 +60,7 @@ impl ByteIndex {
    }
 }
 
-#[derive(Deref, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Deref, DerefMut, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ValueIndex(usize);
 
 impl ValueIndex {
@@ -80,17 +83,22 @@ impl Display for Code {
    fn display_styled(&self, writer: &mut dyn Write) -> fmt::Result {
       const STYLE_JUMP_ADDRESS: style::Style = style::Color::BrightYellow.fg().bold().underline();
 
-      let mut codes = VecDeque::from([(0_u64, self)]);
+      enum CodeType {
+         Thunk,
+         Lambda,
+      }
 
-      while let Some((code_index, code)) = codes.pop_back() {
+      let mut codes = VecDeque::from([(0_usize, CodeType::Thunk, self)]);
+
+      while let Some((code_index, code_type, code)) = codes.pop_back() {
          let highlighted = RefCell::new(Vec::<ByteIndex>::new());
-         let index_width = 2 + terminal::number_hex_width(code.bytes.len() - 1);
 
          // INDENT: "0x123 | "
-         let index = RefCell::new(ByteIndex(0));
+         let index_width = 2 + terminal::number_hex_width(code.bytes.len() - 1);
+         let indent_index = RefCell::new(ByteIndex(0));
          let mut index_previous = None::<usize>;
          terminal::indent!(writer, index_width + 3, |writer| {
-            let index = *index.borrow();
+            let index = *indent_index.borrow();
 
             let style = if highlighted.borrow().contains(&index) {
                STYLE_JUMP_ADDRESS
@@ -121,7 +129,7 @@ impl Display for Code {
             Ok(index_width + 2)
          });
 
-         if **index.borrow() < code.bytes.len() {
+         if **indent_index.borrow() < code.bytes.len() {
             // DEDENT: "| "
             terminal::dedent!(writer, 2);
 
@@ -134,107 +142,106 @@ impl Display for Code {
             );
 
             with(writer, style::Color::Red.fg().bold(), |writer| {
-               write!(writer, "{code_index:#X}")
+               write!(writer, "{code_index:#X} ")
             })?;
+
+            match code_type {
+               CodeType::Thunk => write(writer, &"(thunk)".cyan().bold())?,
+               CodeType::Lambda => write(writer, &"(lambda)".magenta().bold())?,
+            }
          }
 
          let mut indent: usize = 0;
 
-         while **index.borrow() < code.bytes.len() {
-            let (_, operation, size) = code.read_operation(*index.borrow());
+         let mut items = code.iter().peekable();
+         while let Some((index, item)) = items.next() {
+            *indent_index.borrow_mut() = index;
 
-            terminal::indent!(
-               writer,
-               (indent - usize::from(operation == Operation::ScopeEnd)) * INDENT_WIDTH as usize,
-            );
+            match item {
+               CodeItem::Operation(operation) => {
+                  terminal::indent!(
+                     writer,
+                     (indent - usize::from(operation == Operation::ScopeEnd))
+                        * INDENT_WIDTH as usize,
+                  );
 
-            writeln!(writer)?;
+                  writeln!(writer)?;
 
-            if operation == Operation::ScopeEnd {
-               indent -= 1;
-               write(writer, &"}".style(COLORS[indent % COLORS.len()]))?;
-               write!(writer, " ")?;
-            }
+                  if operation == Operation::ScopeEnd {
+                     indent -= 1;
+                     write(writer, &"}".style(COLORS[indent % COLORS.len()]))?;
+                     write!(writer, " ")?;
+                  }
 
-            with(writer, style::Color::Yellow.fg(), |writer| {
-               write!(writer, "{operation:?}")
-            })?;
+                  with(writer, style::Color::Yellow.fg(), |writer| {
+                     write!(writer, "{operation:?}")
+                  })?;
 
-            if operation == Operation::ScopeStart {
-               write!(writer, " ")?;
-               write(writer, &"{".style(COLORS[indent % COLORS.len()]))?;
-               indent += 1;
-            }
+                  if operation == Operation::ScopeStart {
+                     write!(writer, " ")?;
+                     write(writer, &"{".style(COLORS[indent % COLORS.len()]))?;
+                     indent += 1;
+                  }
 
-            index.borrow_mut().0 += size;
+                  if let Some(&(_, CodeItem::Argument(_))) = items.peek() {
+                     write(writer, &'('.bright_black().bold())?;
+                  }
+               },
 
-            let mut arguments = operation.arguments().iter().enumerate().peekable();
-            while let Some((argument_index, &argument)) = arguments.next() {
-               if argument_index == 0 {
-                  write(writer, &'('.bright_black().bold())?;
-               }
+               CodeItem::Argument(argument) => {
+                  match argument {
+                     Argument::U16(u16) => write(writer, &u16.magenta())?,
 
-               match argument {
-                  Argument::U64 => {
-                     let (u64, size) = code.read_u64(*index.borrow());
+                     Argument::U64(u64) => write(writer, &u64.blue())?,
 
-                     write(writer, &u64.blue())?;
-                     index.borrow_mut().0 += size;
-                  },
+                     Argument::ValueIndex(value_index) => {
+                        let value_index_unique = code_index.add(2) * value_index.add(2);
 
-                  Argument::ValueIndex => {
-                     let (value_index, size) = code.read_u64(*index.borrow());
+                        with(writer, style::Color::Blue.fg().bold(), |writer| {
+                           write!(writer, "{value_index:#X} ", value_index = *value_index)
+                        })?;
 
-                     let value_index_unique = code_index.add(2) * value_index.add(2);
+                        match code[value_index] {
+                           ref value @ (Value::Thunkprint(ref code) | Value::Lambda(ref code)) => {
+                              codes.push_front((
+                                 value_index_unique,
+                                 match *value {
+                                    Value::Thunkprint(_) => CodeType::Thunk,
+                                    Value::Lambda(_) => CodeType::Lambda,
+                                    _ => unreachable!(),
+                                 },
+                                 code,
+                              ));
 
-                     with(writer, style::Color::Blue.fg().bold(), |writer| {
-                        write!(writer, "{value_index:#X} ")
-                     })?;
+                              write(writer, &"-> ".bright_black().bold())?;
+                              with(writer, style::Color::Red.fg().bold(), |writer| {
+                                 write!(writer, "{value_index_unique:#X}")
+                              })?;
+                           },
 
-                     match code[ValueIndex(
-                        usize::try_from(value_index).expect("value index must fit in usize"),
-                     )] {
-                        Value::Thunkprint(ref code) => {
-                           codes.push_front((value_index_unique, code));
-                           write(writer, &"-> ".bright_black().bold())?;
-                           with(writer, style::Color::Red.fg().bold(), |writer| {
-                              write!(writer, "{value_index_unique:#X}")
-                           })?;
-                        },
+                           ref value => {
+                              write(writer, &":: ".bright_black().bold())?;
+                              value.display_styled(writer)?;
+                           },
+                        }
+                     },
 
-                        ref value => {
-                           write(writer, &":: ".bright_black().bold())?;
-                           value.display_styled(writer)?;
-                        },
-                     }
-                     index.borrow_mut().0 += size;
-                  },
+                     Argument::ByteIndex(byte_index) => {
+                        highlighted.borrow_mut().push(byte_index);
 
-                  Argument::U16 => {
-                     let (u16, size) = code.read_u16(*index.borrow());
+                        with(writer, STYLE_JUMP_ADDRESS, |writer| {
+                           write!(writer, "{byte_index:#X}", byte_index = *byte_index)
+                        })?;
+                     },
+                  }
 
-                     write(writer, &u16.magenta())?;
-                     index.borrow_mut().0 += size;
-                  },
+                  let delimiter = match items.peek() {
+                     Some(&(_, CodeItem::Argument(_))) => ", ",
+                     _ => ")",
+                  };
 
-                  Argument::ByteIndex => {
-                     let (u16, size) = code.read_u16(*index.borrow());
-
-                     highlighted.borrow_mut().push(ByteIndex(u16 as _));
-
-                     with(writer, STYLE_JUMP_ADDRESS, |writer| {
-                        write!(writer, "{u16:#X}")
-                     })?;
-                     index.borrow_mut().0 += size;
-                  },
-               }
-
-               write(
-                  writer,
-                  &if arguments.peek().is_none() { ')' } else { ',' }
-                     .bright_black()
-                     .bold(),
-               )?;
+                  write(writer, &delimiter.bright_black().bold())?;
+               },
             }
          }
 
@@ -248,11 +255,66 @@ impl Display for Code {
    }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CodeItem {
+   Operation(Operation),
+   Argument(Argument),
+}
+
 impl Code {
    pub fn value(&mut self, value: Value) -> ValueIndex {
       let index = ValueIndex(self.values.len());
       self.values.push(value);
       index
+   }
+
+   fn iter(&self) -> impl Iterator<Item = (ByteIndex, CodeItem)> {
+      gen move {
+         let mut index = ByteIndex(0);
+
+         while *index < self.bytes.len() {
+            let (_, operation, size) = self.read_operation(index);
+
+            yield (index, CodeItem::Operation(operation));
+            *index += size;
+
+            match operation {
+               Operation::Push => {
+                  let (value, size) = self.read_u64(index);
+
+                  yield (
+                     index,
+                     CodeItem::Argument(Argument::ValueIndex(ValueIndex(
+                        usize::try_from(value).expect("value index must be valid"),
+                     ))),
+                  );
+
+                  *index += size;
+               },
+
+               Operation::Jump | Operation::JumpIf => {
+                  let (value, size) = self.read_u16(index);
+
+                  yield (
+                     index,
+                     CodeItem::Argument(Argument::ByteIndex(ByteIndex(usize::from(value)))),
+                  );
+
+                  *index += size;
+               },
+
+               Operation::Interpolate => {
+                  let (value, size) = self.read_u64(index);
+
+                  yield (index, CodeItem::Argument(Argument::U64(value)));
+
+                  *index += size;
+               },
+
+               _ => {},
+            }
+         }
+      }
    }
 }
 
@@ -283,7 +345,7 @@ impl Code {
    }
 
    pub fn push_u64(&mut self, data: u64) -> ByteIndex {
-      let mut encoded = [0; ENCODED_U64_LEN];
+      let mut encoded = [0; ENCODED_U64_LEN_MAX];
       let len = vu128::encode_u64(&mut encoded, data);
 
       let index = ByteIndex(self.bytes.len());
@@ -293,13 +355,13 @@ impl Code {
 
    #[must_use]
    pub fn read_u64(&self, index: ByteIndex) -> (u64, usize) {
-      let encoded = match self.bytes.get(*index..*index + ENCODED_U64_LEN) {
+      let encoded = match self.bytes.get(*index..*index + ENCODED_U64_LEN_MAX) {
          Some(slice) => {
-            <[u8; ENCODED_U64_LEN]>::try_from(slice).expect("size was statically checked")
+            <[u8; ENCODED_U64_LEN_MAX]>::try_from(slice).expect("size was statically checked")
          },
 
          None => {
-            let mut buffer = [0; ENCODED_U64_LEN];
+            let mut buffer = [0; ENCODED_U64_LEN_MAX];
             buffer[..self.bytes.len() - *index]
                .copy_from_slice(self.bytes.get(*index..).expect("byte index must be valid"));
             buffer
@@ -317,15 +379,15 @@ impl Code {
 
    #[must_use]
    pub fn read_u16(&self, index: ByteIndex) -> (u16, usize) {
-      let encoded = <[u8; ENCODED_U16_LEN]>::try_from(
+      let encoded = <[u8; ENCODED_U16_LEN_MAX]>::try_from(
          self
             .bytes
-            .get(*index..*index + ENCODED_U16_LEN)
+            .get(*index..*index + ENCODED_U16_LEN_MAX)
             .expect("byte index must be valid"),
       )
       .expect("size was statically checked");
 
-      (u16::from_le_bytes(encoded), ENCODED_U16_LEN)
+      (u16::from_le_bytes(encoded), ENCODED_U16_LEN_MAX)
    }
 
    pub fn push_operation(&mut self, span: Span, operation: Operation) -> ByteIndex {
@@ -361,6 +423,6 @@ impl Code {
    pub fn point_here(&mut self, index: ByteIndex) {
       let here = u16::try_from(self.bytes.len()).expect("bytes len must fit in u16");
 
-      self.bytes[*index..*index + ENCODED_U16_LEN].copy_from_slice(&here.to_le_bytes());
+      self.bytes[*index..*index + ENCODED_U16_LEN_MAX].copy_from_slice(&here.to_le_bytes());
    }
 }

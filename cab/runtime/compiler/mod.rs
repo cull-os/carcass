@@ -196,11 +196,23 @@ impl<'a> Emitter<'a> {
       self.codes.push(Code::new(path));
    }
 
-   fn emit_thunk_end(&mut self, span: Span) {
+   #[builder(finish_fn(name = "is_lambda"))]
+   fn emit_thunk_end(
+      &mut self,
+      #[builder(start_fn)] span: Span,
+      #[builder(finish_fn)] is_lambda: bool,
+   ) {
       self.push_operation(span, Operation::Return);
       let code = self.codes.pop().expect(EXPECT_CODE);
 
-      self.emit_push(span, Value::Thunkprint(Arc::new(code)));
+      self.emit_push(
+         span,
+         if is_lambda {
+            Value::Lambda(Arc::new(code))
+         } else {
+            Value::Thunkprint(Arc::new(code))
+         },
+      );
    }
 
    #[builder(finish_fn(name = "with"))]
@@ -209,6 +221,7 @@ impl<'a> Emitter<'a> {
       #[builder(start_fn)] span: Span,
       #[builder(finish_fn)] with: impl FnOnce(&mut Self),
       #[builder(default = true)] if_: bool,
+      #[builder(default = false)] is_lambda: bool,
    ) {
       if !if_ {
          with(self);
@@ -217,7 +230,7 @@ impl<'a> Emitter<'a> {
 
       self.emit_thunk_start();
       with(self);
-      self.emit_thunk_end(span);
+      self.emit_thunk_end(span).is_lambda(is_lambda);
    }
 
    fn emit_parenthesis(&mut self, parenthesis: &'a node::Parenthesis) {
@@ -242,7 +255,7 @@ impl<'a> Emitter<'a> {
 
       for span in spans {
          self.push_operation(list.span(), Operation::Construct);
-         self.emit_thunk_end(span);
+         self.emit_thunk_end(span).is_lambda(false);
       }
    }
 
@@ -368,36 +381,41 @@ impl<'a> Emitter<'a> {
             },
 
             node::InfixOperator::Lambda => {
-               this.emit_scope(operation.span(), |this| {
-                  // @foo => bar, `@foo` is the right parameter of the equality comparision,
-                  // and the left parameter is the argument.
-                  this.emit(operation.left());
-                  this.push_operation(operation.left().span(), Operation::Equal);
+               this
+                  .emit_thunk(operation.span())
+                  .is_lambda(true)
+                  .with(|this| {
+                     this.emit_scope(operation.span(), |this| {
+                        // @foo => bar, `@foo` is the right parameter of the equality comparision,
+                        // and the left parameter is the argument.
+                        this.emit(operation.left());
+                        this.push_operation(operation.left().span(), Operation::Equal);
 
-                  let to_body = {
-                     this.push_operation(operation.left().span(), Operation::JumpIf);
-                     this.push_u16(u16::default())
-                  };
+                        let to_body = {
+                           this.push_operation(operation.left().span(), Operation::JumpIf);
+                           this.push_u16(u16::default())
+                        };
 
-                  this.push_operation(operation.span(), Operation::Pop);
-                  this.emit_push(
-                     operation.left().span(),
-                     Value::Error(Arc::new(Value::String(Arc::from(
-                        "parameters were not equal, TODO make error value better",
-                     )))),
-                  );
+                        this.push_operation(operation.span(), Operation::Pop);
+                        this.emit_push(
+                           operation.left().span(),
+                           Value::Error(Arc::new(Value::String(Arc::from(
+                              "parameters were not equal, TODO make error value better",
+                           )))),
+                        );
 
-                  let over_body = {
-                     this.push_operation(operation.span(), Operation::Jump);
-                     this.push_u16(u16::default())
-                  };
+                        let over_body = {
+                           this.push_operation(operation.span(), Operation::Jump);
+                           this.push_u16(u16::default())
+                        };
 
-                  this.point_here(to_body);
-                  this.push_operation(operation.span(), Operation::Pop);
-                  this.emit(operation.right());
+                        this.point_here(to_body);
+                        this.push_operation(operation.span(), Operation::Pop);
+                        this.emit(operation.right());
 
-                  this.point_here(over_body);
-               });
+                        this.point_here(over_body);
+                     });
+                  });
                return;
             },
 

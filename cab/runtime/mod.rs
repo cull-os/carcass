@@ -1,6 +1,11 @@
 //! Runtime implementation.
 
-#![feature(iter_intersperse, str_from_raw_parts)]
+#![feature(
+   gen_blocks,
+   impl_trait_in_assoc_type,
+   iter_intersperse,
+   str_from_raw_parts
+)]
 
 use cab_span::Span;
 

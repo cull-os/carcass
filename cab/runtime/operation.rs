@@ -1,3 +1,8 @@
+use crate::{
+   ByteIndex,
+   ValueIndex,
+};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, num_enum::TryFromPrimitive)]
 #[repr(u8)]
 pub enum Operation {
@@ -57,68 +62,8 @@ pub enum Operation {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Argument {
-   U64,
-   ValueIndex,
-
-   U16,
-   ByteIndex,
-}
-
-impl Operation {
-   #[must_use]
-   pub fn arguments(self) -> &'static [Argument] {
-      use Argument::{
-         ByteIndex,
-         U64,
-         ValueIndex,
-      };
-
-      match self {
-         Operation::Return => &[],
-
-         Operation::Push => &[ValueIndex],
-         Operation::Pop => &[],
-
-         Operation::Swap => &[],
-
-         Operation::Jump | Operation::JumpIf => &[ByteIndex],
-
-         Operation::Force => &[],
-
-         Operation::ScopeStart
-         | Operation::ScopeEnd
-         | Operation::ScopePush
-         | Operation::ScopeSwap => &[],
-
-         Operation::Interpolate => &[U64],
-
-         Operation::Resolve => &[],
-
-         Operation::AssertBoolean => &[],
-
-         Operation::Swwallation | Operation::Negation => &[],
-
-         Operation::Not => &[],
-
-         Operation::Concat | Operation::Construct => &[],
-
-         Operation::Call => &[],
-
-         Operation::Update
-         | Operation::LessOrEqual
-         | Operation::Less
-         | Operation::MoreOrEqual
-         | Operation::More => &[],
-
-         Operation::Equal => &[],
-
-         Operation::All | Operation::Any => &[],
-
-         Operation::Addition
-         | Operation::Subtraction
-         | Operation::Multiplication
-         | Operation::Power
-         | Operation::Division => &[],
-      }
-   }
+   U16(u16),
+   U64(u64),
+   ValueIndex(ValueIndex),
+   ByteIndex(ByteIndex),
 }

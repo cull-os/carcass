@@ -3,7 +3,10 @@
 use std::borrow::Cow;
 
 use cab_span::Span;
-use derive_more::Deref;
+use derive_more::{
+   Deref,
+   DerefMut,
+};
 use smallvec::{
    SmallVec,
    smallvec,
@@ -13,7 +16,7 @@ const GLOBALS: &[&str] = &["false", "true"];
 
 const BY_NAME_EXPECT: &str = "by-name locals must have at least one item per entry";
 
-#[derive(Deref, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Deref, DerefMut, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct LocalIndex(usize);
 
 #[derive(Debug, Clone, Eq)]

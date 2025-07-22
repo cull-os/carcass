@@ -1,10 +1,13 @@
 use std::ops;
 
 use cab_util::into;
-use derive_more::Deref;
+use derive_more::{
+   Deref,
+   DerefMut,
+};
 
 /// Byte len of a source code element.
-#[derive(Deref, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Deref, DerefMut, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Size(u32);
 
 impl Size {
