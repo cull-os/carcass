@@ -30,16 +30,18 @@ pub use thunk::Thunk;
 #[warn(variant_size_differences)]
 #[derive(Clone, Dupe)]
 pub enum Value {
+   Error(Arc<Value>),
+
    Boolean(bool),
 
    List(List<Value>),
-
    Attributes(Attributes),
 
    Path(Path),
 
    Bind(Arc<str>),
    Reference(Arc<str>),
+
    String(Arc<str>),
 
    Rune(char),
@@ -47,7 +49,10 @@ pub enum Value {
    Float(f64),
 
    Thunk(Thunk), // Unused for now.
-   Blueprint(Arc<Code>),
+
+   Thunkprint(Arc<Code>),
+
+   Lambda(Arc<Code>),
 }
 
 impl tag::DisplayTags for Value {
@@ -79,6 +84,25 @@ impl tag::DisplayTags for Value {
       }
 
       match *self {
+         Value::Error(ref value) => {
+            tags.write("throw ".red().bold());
+
+            // No need to add special logic,
+            // only `Error` can generate tags that can
+            // cause parse errors when nested right now.
+            //
+            // Maybe in the future.
+            if let Value::Error(_) = **value {
+               tags.write("(".yellow());
+            }
+
+            value.display_tags(tags);
+
+            if let Value::Error(_) = **value {
+               tags.write(")".yellow());
+            }
+         },
+
          Value::Boolean(true) => tags.write("true".magenta().bold()),
          Value::Boolean(false) => tags.write("false".magenta().bold()),
 
@@ -157,7 +181,9 @@ impl tag::DisplayTags for Value {
 
          Value::Float(float) => tags.write(float.to_string().cyan().bold()),
 
-         Value::Thunk(_) | Value::Blueprint(_) => tags.write("_".bright_black().bold()),
+         Value::Thunk(_) | Value::Thunkprint(_) | Value::Lambda(_) => {
+            tags.write("_".bright_black().bold());
+         },
       }
    }
 }

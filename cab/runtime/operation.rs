@@ -67,7 +67,6 @@ impl Operation {
    pub fn arguments(self) -> &'static [Argument] {
       use Argument::{
          ByteIndex,
-         U16,
          U64,
          ValueIndex,
       };

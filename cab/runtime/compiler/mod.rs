@@ -200,7 +200,7 @@ impl<'a> Emitter<'a> {
       self.push_operation(span, Operation::Return);
       let code = self.codes.pop().expect(EXPECT_CODE);
 
-      self.emit_push(span, Value::Blueprint(Arc::new(code)));
+      self.emit_push(span, Value::Thunkprint(Arc::new(code)));
    }
 
    #[builder(finish_fn(name = "with"))]
@@ -367,7 +367,39 @@ impl<'a> Emitter<'a> {
                return;
             },
 
-            node::InfixOperator::Lambda => todo!(),
+            node::InfixOperator::Lambda => {
+               this.emit_scope(operation.span(), |this| {
+                  // @foo => bar, `@foo` is the right parameter of the equality comparision,
+                  // and the left parameter is the argument.
+                  this.emit(operation.left());
+                  this.push_operation(operation.left().span(), Operation::Equal);
+
+                  let to_body = {
+                     this.push_operation(operation.left().span(), Operation::JumpIf);
+                     this.push_u16(u16::default())
+                  };
+
+                  this.push_operation(operation.span(), Operation::Pop);
+                  this.emit_push(
+                     operation.left().span(),
+                     Value::Error(Arc::new(Value::String(Arc::from(
+                        "parameters were not equal, TODO make error value better",
+                     )))),
+                  );
+
+                  let over_body = {
+                     this.push_operation(operation.span(), Operation::Jump);
+                     this.push_u16(u16::default())
+                  };
+
+                  this.point_here(to_body);
+                  this.push_operation(operation.span(), Operation::Pop);
+                  this.emit(operation.right());
+
+                  this.point_here(over_body);
+               });
+               return;
+            },
 
             _ => {
                this.emit(operation.left());

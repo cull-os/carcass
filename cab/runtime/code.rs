@@ -194,7 +194,7 @@ impl Display for Code {
                      match code[ValueIndex(
                         usize::try_from(value_index).expect("value index must fit in usize"),
                      )] {
-                        Value::Blueprint(ref code) => {
+                        Value::Thunkprint(ref code) => {
                            codes.push_front((value_index_unique, code));
                            write(writer, &"-> ".bright_black().bold())?;
                            with(writer, style::Color::Red.fg().bold(), |writer| {
