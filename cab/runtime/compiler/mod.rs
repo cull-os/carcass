@@ -42,8 +42,8 @@ use scope::{
    Scope,
 };
 
-const EXPECT_CODE: &str = "compiler must have at least one code at all times";
-const EXPECT_SCOPE: &str = "compiler must have at least one scope at all times";
+const EXPECT_CODE: &str = "emitter must have at least one code at all times";
+const EXPECT_SCOPE: &str = "emitter must have at least one scope at all times";
 const EXPECT_VALID: &str = "syntax must be valid";
 const EXPECT_HANDLED: &str = "case was handled";
 
@@ -99,33 +99,33 @@ impl CompileOracle {
       #[builder(start_fn)] expression: node::ExpressionRef<'_>,
       #[builder(finish_fn)] path: value::Path,
    ) -> Compile {
-      let mut compiler = Compiler::new(path);
+      let mut emitter = Emitter::new(path);
 
-      compiler.emit_scope(expression.span(), |this| {
+      emitter.emit_scope(expression.span(), |this| {
          this.emit_force(expression);
       });
-      compiler.push_operation(expression.span(), Operation::Return);
+      emitter.push_operation(expression.span(), Operation::Return);
 
-      compiler
+      emitter
          .reports
          .sort_by_key(|report| report.labels.iter().map(|label| label.span.start).min());
 
       Compile {
-         code: compiler.codes.pop().expect(EXPECT_CODE),
+         code: emitter.codes.pop().expect(EXPECT_CODE),
 
-         reports: compiler.reports,
+         reports: emitter.reports,
       }
    }
 }
 
-struct Compiler<'a> {
+struct Emitter<'a> {
    codes:  Vec<Code>,
    scopes: Vec<Scope<'a>>,
 
    reports: Vec<Report>,
 }
 
-impl ops::Deref for Compiler<'_> {
+impl ops::Deref for Emitter<'_> {
    type Target = Code;
 
    fn deref(&self) -> &Self::Target {
@@ -133,15 +133,15 @@ impl ops::Deref for Compiler<'_> {
    }
 }
 
-impl ops::DerefMut for Compiler<'_> {
+impl ops::DerefMut for Emitter<'_> {
    fn deref_mut(&mut self) -> &mut Self::Target {
       self.codes.last_mut().expect(EXPECT_CODE)
    }
 }
 
-impl<'a> Compiler<'a> {
+impl<'a> Emitter<'a> {
    fn new(path: value::Path) -> Self {
-      Compiler {
+      Emitter {
          codes:  vec![Code::new(path)],
          scopes: vec![Scope::global()],
 
@@ -155,7 +155,7 @@ impl<'a> Compiler<'a> {
 }
 
 #[bon::bon]
-impl<'a> Compiler<'a> {
+impl<'a> Emitter<'a> {
    fn emit_push(&mut self, span: Span, value: Value) {
       let index = self.value(value);
 
