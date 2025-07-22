@@ -412,7 +412,7 @@ impl<'a> Emitter<'a> {
 
             node::InfixOperator::ImplicitApply
             | node::InfixOperator::Apply
-            | node::InfixOperator::Pipe => todo!(),
+            | node::InfixOperator::Pipe => Operation::Call,
 
             node::InfixOperator::Concat => Operation::Concat,
             node::InfixOperator::Construct => Operation::Construct,

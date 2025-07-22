@@ -34,6 +34,8 @@ pub enum Operation {
    Concat,
    Construct,
 
+   Call,
+
    Update,
 
    LessOrEqual,
@@ -99,6 +101,8 @@ impl Operation {
          Operation::Not => &[],
 
          Operation::Concat | Operation::Construct => &[],
+
+         Operation::Call => &[],
 
          Operation::Update
          | Operation::LessOrEqual
