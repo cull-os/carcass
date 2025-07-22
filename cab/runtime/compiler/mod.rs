@@ -311,7 +311,6 @@ impl<'a> Emitter<'a> {
                // <right>
                // <old-scope>
                this.push_operation(operation.span(), Operation::Swap);
-               this.push_u16(1);
 
                // <old-scope>
                // <right>
@@ -320,7 +319,6 @@ impl<'a> Emitter<'a> {
                // <old-scope>
                // <right-forced>
                this.push_operation(operation.span(), Operation::Swap);
-               this.push_u16(1);
 
                // <right-forced>
                // <old-scope>

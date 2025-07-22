@@ -78,7 +78,7 @@ impl Operation {
          Operation::Push => &[ValueIndex],
          Operation::Pop => &[],
 
-         Operation::Swap => &[U16],
+         Operation::Swap => &[],
 
          Operation::Jump | Operation::JumpIf => &[ByteIndex],
 
