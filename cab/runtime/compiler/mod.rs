@@ -332,11 +332,11 @@ impl<'a> Emitter<'a> {
                this.emit_force(operation.left());
                let to_right = {
                   this.push_operation(operation.span(), Operation::JumpIf);
-                  this.push_u16(0)
+                  this.push_u16(u16::default())
                };
                let over_right = {
                   this.push_operation(operation.span(), Operation::Jump);
-                  this.push_u16(0)
+                  this.push_u16(u16::default())
                };
 
                this.point_here(to_right);
@@ -356,7 +356,7 @@ impl<'a> Emitter<'a> {
 
                let to_end = {
                   this.push_operation(operation.span(), Operation::JumpIf);
-                  this.push_u16(0)
+                  this.push_u16(u16::default())
                };
 
                this.push_operation(operation.span(), Operation::Pop);
@@ -594,7 +594,7 @@ impl<'a> Emitter<'a> {
          this.emit_force(if_.condition());
          let to_consequence = {
             this.push_operation(if_.span(), Operation::JumpIf);
-            this.push_u16(0)
+            this.push_u16(u16::default())
          };
 
          this.push_operation(if_.span(), Operation::Pop);
@@ -603,7 +603,7 @@ impl<'a> Emitter<'a> {
          });
          let over_consequence = {
             this.push_operation(if_.span(), Operation::Jump);
-            this.push_u16(0)
+            this.push_u16(u16::default())
          };
 
          this.point_here(to_consequence);
