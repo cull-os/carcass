@@ -171,3 +171,15 @@ async fn main() -> cyn::Termination {
 
    cyn::Termination::success()
 }
+
+#[cfg(test)]
+mod tests {
+   use clap::CommandFactory as _;
+
+   use super::*;
+
+   #[test]
+   fn cli() {
+      Cli::command().debug_assert();
+   }
+}
