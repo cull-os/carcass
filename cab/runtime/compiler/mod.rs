@@ -369,6 +369,8 @@ impl<'a> Emitter<'a> {
                return;
             },
 
+            node::InfixOperator::Lambda => todo!(),
+
             _ => {
                this.emit(operation.left());
                this.emit(operation.right());
@@ -413,7 +415,7 @@ impl<'a> Emitter<'a> {
             node::InfixOperator::Power => Operation::Power,
             node::InfixOperator::Division => Operation::Division,
 
-            node::InfixOperator::Lambda => todo!(),
+            node::InfixOperator::Lambda => unreachable!("{EXPECT_HANDLED}"),
          };
 
          this.push_operation(operation.span(), operation_);
