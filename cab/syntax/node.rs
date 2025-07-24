@@ -266,7 +266,7 @@ node! {
 
       SString,
 
-      Rune,
+      Char,
       Integer,
       Float,
 
@@ -289,7 +289,7 @@ impl<'a> ExpressionRef<'a> {
          Self::Bind(bind) => bind.validate(to),
          Self::Identifier(identifier) => identifier.validate(to),
          Self::SString(string) => string.validate(to),
-         Self::Rune(rune) => rune.validate(to),
+         Self::Char(char) => char.validate(to),
          Self::If(if_else) => if_else.validate(to),
 
          Self::Error(_) | Self::Integer(_) | Self::Float(_) => {},
@@ -957,17 +957,17 @@ impl SString {
    }
 }
 
-// RUNE
+// CHAR
 
 node! {
-   #[from(NODE_RUNE)]
-   /// A rune. Also known as a character.
-   struct Rune;
+   #[from(NODE_CHAR)]
+   /// A character.
+   struct Char;
 }
 
-impl Segmented for Rune {}
+impl Segmented for Char {}
 
-impl Rune {
+impl Char {
    #[must_use]
    pub fn value(&self) -> char {
       let Segment::Content { content, .. } = self.segments().into_iter().next().unwrap() else {
@@ -978,13 +978,13 @@ impl Rune {
    }
 
    pub fn validate(&self, to: &mut Vec<Report>) {
-      let mut report = lazy!(Report::error("invalid rune"));
+      let mut report = lazy!(Report::error("invalid char"));
 
       let segments = self.segments();
       segments.validate(to, &mut report);
 
       if segments.is_multiline {
-         force!(report).push_primary(self.span(), "runes cannot cannot contain newlines");
+         force!(report).push_primary(self.span(), "chars cannot cannot contain newlines");
       }
 
       if !ready!(report) {
@@ -997,13 +997,13 @@ impl Rune {
 
                Segment::Interpolation(interpolation) => {
                   force!(report)
-                     .push_primary(interpolation.span(), "runes cannot contain interpolation");
+                     .push_primary(interpolation.span(), "chars cannot contain interpolation");
                },
             }
          }
 
          match got {
-            0 => force!(report).push_primary(self.span(), "empty rune"),
+            0 => force!(report).push_primary(self.span(), "empty char"),
             1 => {},
             _ => force!(report).push_primary(self.span(), "too long"),
          }

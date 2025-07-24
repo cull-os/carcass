@@ -44,7 +44,7 @@ pub enum Value {
 
    String(Arc<str>),
 
-   Rune(char),
+   Char(char),
    Integer(Arc<num::BigInt>),
    Float(f64),
 
@@ -168,11 +168,11 @@ impl tag::DisplayTags for Value {
             tags.write("\"".green());
          },
 
-         Value::Rune(rune) => {
+         Value::Char(char) => {
             tags.write("'".green());
-            match escape(rune) {
+            match escape(char) {
                Some(escaped) => tags.write(escaped.style(ESCAPED_STYLE)),
-               None => tags.write(rune.to_string().green()),
+               None => tags.write(char.to_string().green()),
             }
             tags.write("'".green());
          },

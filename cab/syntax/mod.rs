@@ -298,10 +298,10 @@ pub enum Kind {
    #[display("the closing delimiter of a string")]
    TOKEN_STRING_END,
 
-   #[display("a rune")]
-   TOKEN_RUNE_START,
-   #[display("the closing delimiter of a rune")]
-   TOKEN_RUNE_END,
+   #[display("a char")]
+   TOKEN_CHAR_START,
+   #[display("the closing delimiter of a char")]
+   TOKEN_CHAR_END,
 
    #[display("{}", unreachable!())]
    NODE_PARSE_ROOT,
@@ -357,8 +357,8 @@ pub enum Kind {
 
    /// A stringlike that can only contain a single character delimited by `'`.
    /// See [`NODE_STRING`] for the definition of stringlike.
-   #[display("a rune")]
-   NODE_RUNE,
+   #[display("a char")]
+   NODE_CHAR,
 
    #[display("an integer")]
    NODE_INTEGER,
@@ -385,7 +385,7 @@ impl Kind {
          | TOKEN_IDENTIFIER
          | TOKEN_QUOTED_IDENTIFIER_START
          | TOKEN_STRING_START
-         | TOKEN_RUNE_START
+         | TOKEN_CHAR_START
    );
 
    /// An enumset of all identifier starter token kinds.
@@ -428,7 +428,7 @@ impl Kind {
          TOKEN_PATH_START => (NODE_PATH, TOKEN_PATH_END),
          TOKEN_QUOTED_IDENTIFIER_START => (NODE_IDENTIFIER, TOKEN_QUOTED_IDENTIFIER_END),
          TOKEN_STRING_START => (NODE_STRING, TOKEN_STRING_END),
-         TOKEN_RUNE_START => (NODE_RUNE, TOKEN_RUNE_END),
+         TOKEN_CHAR_START => (NODE_CHAR, TOKEN_CHAR_END),
          _ => return None,
       })
    }

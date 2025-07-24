@@ -263,7 +263,7 @@ impl<'a> Tokenizer<'a> {
             return Some(match end {
                '`' => TOKEN_QUOTED_IDENTIFIER_END,
                '"' => TOKEN_STRING_END,
-               '\'' => TOKEN_RUNE_END,
+               '\'' => TOKEN_CHAR_END,
                _ => unreachable!(),
             });
          },
@@ -486,7 +486,7 @@ impl<'a> Tokenizer<'a> {
             match start {
                '`' => TOKEN_QUOTED_IDENTIFIER_START,
                '\"' => TOKEN_STRING_START,
-               '\'' => TOKEN_RUNE_START,
+               '\'' => TOKEN_CHAR_START,
                _ => unreachable!(),
             }
          },

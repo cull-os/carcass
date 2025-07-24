@@ -528,7 +528,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
 
          Some(TOKEN_CURLYBRACE_LEFT) => self.node_attributes(until),
 
-         Some(TOKEN_PATH_START | TOKEN_STRING_START | TOKEN_RUNE_START) => {
+         Some(TOKEN_PATH_START | TOKEN_STRING_START | TOKEN_CHAR_START) => {
             self.node_delimited();
          },
 

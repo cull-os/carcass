@@ -699,8 +699,8 @@ impl<'a> Emitter<'a> {
 
          node::ExpressionRef::SString(string) => self.emit_string(string),
 
-         node::ExpressionRef::Rune(rune) => {
-            self.emit_push(rune.span(), Value::Rune(rune.value()));
+         node::ExpressionRef::Char(char) => {
+            self.emit_push(char.span(), Value::Char(char.value()));
          },
          node::ExpressionRef::Integer(integer) => {
             self.emit_push(integer.span(), Value::Integer(Arc::new(integer.value())));
