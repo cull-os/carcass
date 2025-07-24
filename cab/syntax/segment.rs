@@ -396,18 +396,33 @@ pub trait Segmented: ops::Deref<Target = red::Node> {
                   }
 
                   if segment_is_first && line_is_first {
-                     if !line.trim().is_empty() {
-                        line_span_first.replace(Span::at(span.start, line.trim_end().len()));
-                     } else if let Some(&(_, segment)) = segments.peek() {
-                        line_span_first.replace(span.cover(segment.span()));
+                     let suffix_interpolation_span = line_is_last
+                        .then(|| segments.peek().map(|&(_, segment)| segment.span()))
+                        .flatten();
+
+                     if let Some(interpolation_span) = suffix_interpolation_span {
+                        line_span_first.replace(span.cover(interpolation_span));
+                     } else {
+                        let line = line.trim_end();
+
+                        if !line.is_empty() {
+                           line_span_first.replace(Span::at(span.start, line.len()));
+                        }
                      }
                   }
 
                   if segment_is_last && line_is_last {
-                     if !line.trim().is_empty() {
-                        line_span_last.replace(Span::at_end(span.end, line.trim_start().len()));
-                     } else if let Some(previous_span) = previous_segment_span {
-                        line_span_last.replace(span.cover(previous_span));
+                     let prefix_interpolation_span =
+                        line_is_first.then_some(previous_segment_span).flatten();
+
+                     if let Some(interpolation_span) = prefix_interpolation_span {
+                        line_span_last.replace(span.cover(interpolation_span));
+                     } else {
+                        let line = line.trim_start();
+
+                        if !line.is_empty() {
+                           line_span_last.replace(Span::at_end(span.end, line.len()));
+                        }
                      }
                   }
 
