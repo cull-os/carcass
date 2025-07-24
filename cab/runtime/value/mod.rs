@@ -81,10 +81,17 @@ impl tag::DisplayTags for Value {
 
       const ESCAPED_STYLE: style::Style = style::Color::Magenta.fg().bold();
 
-      fn display_tags_escaped<'a>(tags: &mut tag::Tags<'a>, s: &'a str, normal: style::Style) {
+      #[bon::builder]
+      fn display_tags_escaped<'a>(
+         #[builder(start_fn)] tags: &mut tag::Tags<'a>,
+         #[builder(start_fn)] s: &'a str,
+         #[builder(start_fn)] normal: style::Style,
+         delimiter: Option<(char, &'static str)>,
+      ) {
          for part in escape_string(s)
             .normal_style(normal)
             .escaped_style(ESCAPED_STYLE)
+            .maybe_delimiter(delimiter)
             .call()
          {
             tags.write(part);
@@ -152,33 +159,39 @@ impl tag::DisplayTags for Value {
             tags.write("@".blue().bold());
 
             if is_valid_plain_identifier(identifier) {
-               display_tags_escaped(tags, identifier, style::Color::Blue.fg());
+               display_tags_escaped(tags, identifier, style::Color::Blue.fg()).call();
             } else {
                tags.write("`".blue());
-               display_tags_escaped(tags, identifier, style::Color::Blue.fg());
+               display_tags_escaped(tags, identifier, style::Color::Blue.fg())
+                  .delimiter(('`', "\\`"))
+                  .call();
                tags.write("`".blue());
             }
          },
 
          Value::Reference(ref identifier) => {
             if is_valid_plain_identifier(identifier) {
-               display_tags_escaped(tags, identifier, style::Style::default());
+               display_tags_escaped(tags, identifier, style::Style::default()).call();
             } else {
                tags.write("`");
-               display_tags_escaped(tags, identifier, style::Style::default());
+               display_tags_escaped(tags, identifier, style::Style::default())
+                  .delimiter(('`', "\\`"))
+                  .call();
                tags.write("`");
             }
          },
 
          Value::String(ref string) => {
             tags.write("\"".green());
-            display_tags_escaped(tags, string, style::Color::Green.fg());
+            display_tags_escaped(tags, string, style::Color::Green.fg())
+               .delimiter(('"', "\\\""))
+               .call();
             tags.write("\"".green());
          },
 
          Value::Char(char) => {
             tags.write("'".green());
-            match escape(char) {
+            match escape(char).delimiter(('\'', "\\'")).call() {
                Some(escaped) => tags.write(escaped.style(ESCAPED_STYLE)),
                None => tags.write(char.to_string().green()),
             }

@@ -87,38 +87,49 @@ pub fn unescape_string(s: &str) -> Result<(String, bool), SmallVec<Span, 4>> {
    }
 }
 
-#[must_use]
-pub fn escape(c: char) -> Option<&'static str> {
+#[bon::builder]
+pub fn escape(
+   #[builder(start_fn)] c: char,
+   delimiter: Option<(char, &'static str)>,
+) -> Option<&'static str> {
    Some(match c {
       '\0' => "\\0",
       '\t' => "\\t",
       '\n' => "\\n",
       '\r' => "\\r",
 
+      c if let Some((delimiter, delimiter_escaped)) = delimiter
+         && c == delimiter =>
+      {
+         delimiter_escaped
+      },
+
       _ => return None,
    })
 }
 
 #[bon::builder]
-pub fn escape_string(
-   #[builder(start_fn)] s: &str,
+pub fn escape_string<'a>(
+   #[builder(start_fn)] s: &'a str,
    #[builder(default)] normal_style: style::Style,
    #[builder(default)] escaped_style: style::Style,
-) -> impl Iterator<Item = style::Styled<&str>> {
+   delimiter: Option<(char, &'static str)>,
+) -> impl Iterator<Item = style::Styled<&'a str>> {
    // Bon doesn't like generator syntax.
-   escape_string_impl(s, normal_style, escaped_style)
+   escape_string_impl(s, normal_style, escaped_style, delimiter)
 }
 
-fn escape_string_impl(
-   s: &str,
+fn escape_string_impl<'a>(
+   s: &'a str,
    normal: style::Style,
    escaped: style::Style,
-) -> impl Iterator<Item = style::Styled<&str>> {
+   delimiter: Option<(char, &'static str)>,
+) -> impl Iterator<Item = style::Styled<&'a str>> {
    gen move {
       let mut literal_start_offset = 0;
 
       for (offset, c) in s.char_indices() {
-         let Some(escaped_) = escape(c) else {
+         let Some(escaped_) = escape(c).maybe_delimiter(delimiter).call() else {
             continue;
          };
 
@@ -359,7 +370,7 @@ impl Segments<'_> {
                indents = indents
                   .into_iter()
                   .map(|c| {
-                     match escape(c) {
+                     match escape(c).delimiter(('\'', "\\'")).call() {
                         Some(escaped) => escaped.to_owned(),
                         None => format!("'{c}'"),
                      }
