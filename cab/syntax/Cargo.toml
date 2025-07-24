@@ -14,8 +14,8 @@ path = "mod.rs"
 workspace = true
 
 [dependencies]
-cab-span.path  = "../span"
-cab-util.path  = "../util"
+cab-span.path = "../span"
+cab-util.path = "../util"
 
 cyn.path = "../../cyn"
 dup      = { features = [ "cstree" ], path = "../../dup" }

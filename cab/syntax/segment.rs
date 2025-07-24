@@ -1,3 +1,11 @@
+// For the next poor soul that will step in this file:
+//
+// Beware that changing even the slighest thing will break 500 other cases. Way
+// too many hours have been spent on perfecting this, and every single invariant
+// is (probably) intended. Please reconsider editing this file.
+//
+// Comments? Ha!
+
 use std::{
    mem,
    ops,
@@ -45,8 +53,9 @@ pub fn unescape(c: char) -> Option<char> {
    })
 }
 
-pub fn unescape_string(s: &str) -> Result<String, SmallVec<Span, 4>> {
+pub fn unescape_string(s: &str) -> Result<(String, bool), SmallVec<Span, 4>> {
    let mut string = String::with_capacity(s.len());
+   let mut escaped_newline = false;
    let mut invalids = SmallVec::<Span, 4>::new();
 
    let mut chars = s.char_indices().peekable();
@@ -57,7 +66,9 @@ pub fn unescape_string(s: &str) -> Result<String, SmallVec<Span, 4>> {
       }
 
       let Some((_, next)) = chars.next() else {
-         invalids.push(Span::at(index, '\\'.len_utf8()));
+         // When a string ends with '\', it has to be followed by a newline.
+         // And that escapes the newline.
+         escaped_newline = true;
          continue;
       };
 
@@ -70,7 +81,7 @@ pub fn unescape_string(s: &str) -> Result<String, SmallVec<Span, 4>> {
    }
 
    if invalids.is_empty() {
-      Ok(string)
+      Ok((string, escaped_newline))
    } else {
       Err(invalids)
    }
@@ -161,9 +172,11 @@ impl Segment<'_> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Straight<'a> {
    Line {
-      span:               Span,
-      text:               &'a str,
+      span: Span,
+      text: &'a str,
+
       is_from_line_start: bool,
+      is_to_line_end:     bool,
 
       is_first: bool,
       is_last:  bool,
@@ -194,31 +207,58 @@ impl<'a> IntoIterator for Segments<'a> {
          let mut buffer = String::new();
          let mut buffer_span = None::<Span>;
 
-         let (indent, indent_width) = self.indent().expect("node must be valid");
+         let (indent, indent_width) = self
+            .indent()
+            .expect("string must be valid and not mix indents");
 
          for straight in self.straights {
             match straight {
                Straight::Line {
                   span,
-                  text,
+                  mut text,
                   is_from_line_start,
+                  is_to_line_end,
                   is_first,
                   is_last,
                } => {
-                  let unindented = if is_from_line_start {
-                     if text.trim_start().is_empty() {
-                        ""
-                     } else {
-                        assert!(text[..indent_width].chars().all(|c| c == indent.unwrap()));
-                        &text[indent_width..]
+                  if self.is_multiline {
+                     // Multiline strings' first and last lines are ignored:
+                     //
+                     // "<ignored>
+                     // <content>
+                     // <ignored>"
+                     if is_first || is_last {
+                        assert!(
+                           text.chars().all(char::is_whitespace),
+                           "multiline string must be valid and not have non-whitespace characters \
+                            in first and last lines"
+                        );
+                        continue;
                      }
-                  } else {
-                     text
-                  };
 
-                  buffer.push_str(&unescape_string(unindented).expect("node must be valid"));
+                     if is_to_line_end {
+                        text = text.trim_end();
+                     }
 
-                  if !is_first && !is_last {
+                     if is_from_line_start {
+                        text = if text.chars().all(char::is_whitespace) {
+                           ""
+                        } else {
+                           assert!(
+                              text[..indent_width].chars().all(|c| c == indent.unwrap()),
+                              "multiline string must be valid and not mix indents"
+                           );
+                           &text[indent_width..]
+                        }
+                     }
+                  }
+
+                  let (unescaped, escaped_newline) =
+                     unescape_string(text).expect("string content must be valid");
+
+                  buffer.push_str(&unescaped);
+
+                  if is_to_line_end && !escaped_newline {
                      buffer.push('\n');
                   }
 
@@ -264,7 +304,7 @@ impl Segments<'_> {
             continue;
          };
 
-         if text.trim_start().is_empty() {
+         if text.chars().all(char::is_whitespace) {
             continue;
          }
 
@@ -434,6 +474,7 @@ pub trait Segmented: ops::Deref<Target = red::Node> {
 
                      is_from_line_start: !(segment_is_first && line_is_first)
                         && !(previous_segment_span.is_some() && line_is_first),
+                     is_to_line_end:     !line_is_last,
 
                      is_first: segment_is_first && line_is_first,
                      is_last:  segment_is_last && line_is_last,
