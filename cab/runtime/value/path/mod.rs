@@ -90,7 +90,7 @@ impl tag::DisplayTags for Path {
          tags.write("\\(".yellow());
          tags.write("path");
          tags.write(".".magenta());
-         tags.write(type_.yellow());
+         tags.write(type_);
 
          if let Some(config) = config {
             tags.write(" ".yellow());
