@@ -269,7 +269,12 @@ impl<'a> IntoIterator for Segments<'a> {
 
                   buffer.push_str(&unescaped);
 
-                  if is_to_line_end && !escaped_newline {
+                  if escaped_newline {
+                     assert!(
+                        is_to_line_end,
+                        "cannot ecape newline without the line stretching to the line end"
+                     );
+                  } else if is_to_line_end {
                      buffer.push('\n');
                   }
 
