@@ -107,12 +107,6 @@ impl tag::DisplayTags for Path {
    }
 }
 
-impl From<Path> for Value {
-   fn from(path: Path) -> Self {
-      Value::Path(path)
-   }
-}
-
 impl Path {
    #[must_use]
    pub fn new(root: Arc<dyn Root>, subpath: Subpath) -> Self {

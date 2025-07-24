@@ -16,12 +16,15 @@ path = "mod.rs"
 workspace = true
 
 [features]
+arcstr = [ "dep:arcstr" ]
 bytes  = [ "dep:bytes" ]
 cstree = [ "dep:cstree" ]
 rpds   = [ "dep:rpds", "dep:archery" ]
 
 [dependencies]
 dup-macros.path = "./macros"
+
+arcstr = { optional = true, workspace = true }
 
 bytes = { optional = true, workspace = true }
 

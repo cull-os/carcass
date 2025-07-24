@@ -5,6 +5,7 @@ use cab_syntax::{
    escape_string,
    is_valid_plain_identifier,
 };
+use derive_more::From;
 use dup::Dupe;
 use rpds::ListSync as List;
 use ust::{
@@ -24,11 +25,14 @@ pub use attributes::Attributes;
 pub mod path;
 pub use path::Path;
 
+pub mod string;
+pub use string::SString;
+
 mod thunk;
 pub use thunk::Thunk;
 
 #[warn(variant_size_differences)]
-#[derive(Clone, Dupe)]
+#[derive(Clone, Dupe, From)]
 pub enum Value {
    Error(Arc<Value>),
 
@@ -39,10 +43,12 @@ pub enum Value {
 
    Path(Path),
 
-   Bind(Arc<str>),
-   Reference(Arc<str>),
+   #[from(ignore)]
+   Bind(SString),
+   #[from(ignore)]
+   Reference(SString),
 
-   String(Arc<str>),
+   String(SString),
 
    Char(char),
    Integer(Arc<num::BigInt>),
@@ -50,8 +56,10 @@ pub enum Value {
 
    Thunk(Thunk), // Unused for now.
 
+   #[from(ignore)]
    Thunkprint(Arc<Code>),
 
+   #[from(ignore)]
    Lambda(Arc<Code>),
 }
 

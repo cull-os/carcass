@@ -39,12 +39,6 @@ enum ThunkInner {
 #[derive(Clone, Dupe)]
 pub struct Thunk(Arc<RwLock<ThunkInner>>);
 
-impl From<Thunk> for Value {
-   fn from(thunk: Thunk) -> Self {
-      Value::Thunk(thunk)
-   }
-}
-
 impl Thunk {
    #[must_use]
    pub fn suspended(location: Location, code: Code) -> Self {

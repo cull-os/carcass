@@ -125,6 +125,7 @@ cstree = { branch = "fix-derive", features = [
 
 # TODO: Pick one of enumflags2 and enumset. I (RGBCube) added enumset2 for const support in ust.
 archery              = "1.2.1"
+arcstr               = "1.2.0"
 async-once-cell      = "0.5.4"
 async-trait          = "0.1.86"
 bon                  = "3.6.4"

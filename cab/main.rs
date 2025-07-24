@@ -14,7 +14,10 @@ use cyn::{
 };
 use dup::Dupe as _;
 use rpds::ListSync as List;
-use runtime::value;
+use runtime::{
+   Value,
+   value,
+};
 use ust::{
    COLORS,
    Display as _,
@@ -79,8 +82,8 @@ async fn main() -> cyn::Termination {
    let path: Arc<dyn value::path::Root> = if source == "-" {
       Arc::new(value::path::standard())
    } else {
-      Arc::new(value::path::blob(runtime::Value::String(Arc::from(
-         source.as_str(),
+      Arc::new(value::path::blob(Value::from(value::SString::from(
+         &**source,
       ))))
    };
    let path = value::Path::new(path, List::new_sync());

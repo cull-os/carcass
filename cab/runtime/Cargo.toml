@@ -18,9 +18,10 @@ cab-span.path   = "../span"
 cab-syntax.path = "../syntax"
 
 cyn.path = "../../cyn"
-dup      = { features = [ "bytes", "rpds" ], path = "../../dup" }
+dup      = { features = [ "arcstr", "bytes", "rpds" ], path = "../../dup" }
 ust.path = "../../ust"
 
+arcstr.workspace          = true
 async-once-cell.workspace = true
 async-trait.workspace     = true
 bon.workspace             = true

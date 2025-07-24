@@ -399,7 +399,7 @@ impl<'a> Emitter<'a> {
                         this.push_operation(operation.span(), Operation::Pop);
                         this.emit_push(
                            operation.left().span(),
-                           Value::Error(Arc::new(Value::String(Arc::from(
+                           Value::Error(Arc::new(Value::from(value::string::new!(
                               "parameters were not equal, TODO make error value better",
                            )))),
                         );
@@ -529,9 +529,9 @@ impl<'a> Emitter<'a> {
          let name = match identifier.value() {
             node::IdentifierValueRef::Plain(plain) => {
                if is_bind {
-                  this.emit_push(span, Value::Bind(Arc::from(plain.text())));
+                  this.emit_push(span, Value::Bind(value::SString::from(plain.text())));
                } else {
-                  this.emit_push(span, Value::Reference(Arc::from(plain.text())));
+                  this.emit_push(span, Value::Reference(value::SString::from(plain.text())));
                   this.push_operation(span, Operation::Resolve);
                }
 
@@ -547,9 +547,9 @@ impl<'a> Emitter<'a> {
                         this.emit_push(
                            span,
                            if is_bind {
-                              Value::Bind(Arc::from(content.as_str()))
+                              Value::Bind(value::SString::from(&**content))
                            } else {
-                              Value::Reference(Arc::from(content.as_str()))
+                              Value::Reference(value::SString::from(&**content))
                            },
                         );
                      },
@@ -621,7 +621,7 @@ impl<'a> Emitter<'a> {
             for segment in &segments {
                match *segment {
                   Segment::Content { span, ref content } => {
-                     this.emit_push(span, Value::String(Arc::from(content.as_str())));
+                     this.emit_push(span, Value::from(value::SString::from(&**content)));
                   },
 
                   Segment::Interpolation(interpolation) => {

@@ -214,6 +214,15 @@ mod containers {
    impl<A: Dupe, const N: usize> Dupe for [A; N] {}
 }
 
+#[cfg(feature = "arcstr")]
+mod arcstr {
+   use super::Dupe;
+
+   impl Dupe for arcstr::ArcStr {}
+
+   impl Dupe for arcstr::Substr {}
+}
+
 #[cfg(feature = "bytes")]
 mod bytes {
    use super::Dupe;
