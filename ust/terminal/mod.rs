@@ -871,8 +871,8 @@ fn write_report(
                   // INDENT: "<left-to-right><left-to-bottom> "
                   // INDENT: "               <top--to-bottom> "
                   let mut wrote = false;
-                  indent!(writer, *span_end as usize + 2, |writer| {
-                     for index in 0..*span_end {
+                  indent!(writer, *span_end as usize + 1, |writer| {
+                     for index in 0..span_end.saturating_sub(1) {
                         write(writer, &match () {
                            // If there is a label on the current line
                            // after this label that has a start or end
@@ -910,7 +910,7 @@ fn write_report(
 
                      wrote = true;
                      strike_prefix.borrow_mut()[top_to_right_index] = None;
-                     Ok(*span_end as usize + 1)
+                     Ok(*span_end as usize)
                   });
 
                   lnwrap(writer, [label
