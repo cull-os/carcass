@@ -16,6 +16,7 @@ workspace = true
 [dependencies]
 cab-span.path   = "../span"
 cab-syntax.path = "../syntax"
+cab-util.path   = "../util"
 
 cyn.path = "../../cyn"
 dup      = { features = [ "arcstr", "bytes", "rpds" ], path = "../../dup" }

@@ -566,6 +566,8 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
 
    #[stacksafe::stacksafe]
    fn node_expression_binding_power(&mut self, minimum_power: u16, until: EnumSet<Kind>) {
+      let mut noded = false;
+
       let start_of_expression = self.checkpoint();
 
       if let Some(operator) = self
@@ -575,41 +577,80 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
          let ((), right_power) = operator.binding_power();
 
          self.node(NODE_PREFIX_OPERATION).with(|this| {
+            noded = true;
+
             this.next();
-            this.node_expression_binding_power(right_power, until);
+
+            if this
+               .peek()
+               .is_some_and(|kind| Kind::EXPRESSIONS.contains(kind))
+            {
+               this.node_expression_binding_power(right_power, until);
+            }
          });
-      } else {
+      } else if self
+         .peek()
+         .is_some_and(|kind| Kind::EXPRESSIONS.contains(kind))
+      {
+         noded = true;
          self.node_expression_single(until);
       }
 
-      while let Some(operator) = self
-         .peek()
-         .and_then(|kind| node::InfixOperator::try_from(kind).ok())
-      {
-         let (left_power, right_power) = operator.binding_power();
-         if left_power < minimum_power {
-            break;
-         }
+      loop {
+         match self.peek() {
+            Some(kind) if let Ok(operator) = node::InfixOperator::try_from(kind) => {
+               let (left_power, right_power) = operator.binding_power();
+               if left_power < minimum_power {
+                  break;
+               }
 
-         let operator_token = operator.is_token_owning().then(|| self.next());
+               self
+                  .node(NODE_INFIX_OPERATION)
+                  .from(start_of_expression)
+                  .with(|this| {
+                     noded = true;
 
-         // Handle suffix-able infix operators. Not for purely suffix operators.
-         if let Some(operator_token) = operator_token
-            && node::SuffixOperator::try_from(operator_token).is_ok()
-            && self
-               .peek()
-               .is_none_or(|kind| !Kind::EXPRESSIONS.contains(kind))
-         {
-            self
-               .node(NODE_SUFFIX_OPERATION)
-               .from(start_of_expression)
-               .with(|_| {});
-         } else {
-            self
-               .node(NODE_INFIX_OPERATION)
-               .from(start_of_expression)
-               .with(|this| this.node_expression_binding_power(right_power, until));
+                     if operator.is_token_owning() {
+                        this.next();
+                     }
+
+                     if this
+                        .peek()
+                        .is_some_and(|kind| Kind::EXPRESSIONS.contains(kind))
+                     {
+                        this.node_expression_binding_power(right_power, until);
+                     }
+                  });
+            },
+
+            Some(kind) if let Ok(operator) = node::SuffixOperator::try_from(kind) => {
+               let (left_power, ()) = operator.binding_power();
+               if left_power < minimum_power {
+                  break;
+               }
+
+               self
+                  .node(NODE_SUFFIX_OPERATION)
+                  .from(start_of_expression)
+                  .with(|this| {
+                     noded = true;
+
+                     this.next();
+                  });
+            },
+
+            _ => break,
          }
+      }
+
+      if !noded {
+         let got_span = self.next_while(|kind| !until.contains(kind));
+
+         self.node(NODE_ERROR).from(start_of_expression).with(|_| {});
+
+         self
+            .reports
+            .push(unexpected(got_span).expected(Kind::EXPRESSIONS));
       }
    }
 

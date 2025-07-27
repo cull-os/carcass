@@ -298,7 +298,6 @@ impl<'a> ExpressionRef<'a> {
    }
 
    /// Iterates over all subexpressions delimited with the same operator.
-   #[expect(irrefutable_let_patterns)]
    pub fn same_items(self) -> impl Iterator<Item = ExpressionRef<'a>> {
       gen move {
          let mut expressions = VecDeque::from([self]);
@@ -308,14 +307,12 @@ impl<'a> ExpressionRef<'a> {
                ExpressionRef::InfixOperation(operation)
                   if let InfixOperator::Same = operation.operator() =>
                {
-                  expressions.push_front(operation.left());
-                  expressions.push_front(operation.right());
-               },
-
-               ExpressionRef::SuffixOperation(operation)
-                  if let SuffixOperator::Same = operation.operator() =>
-               {
-                  expressions.push_front(operation.left());
+                  if let Some(left) = operation.left() {
+                     expressions.push_front(left);
+                  }
+                  if let Some(right) = operation.right() {
+                     expressions.push_front(right);
+                  }
                },
 
                normal => yield normal,
@@ -493,7 +490,7 @@ node! {
 }
 
 impl PrefixOperation {
-   get_node! { right -> 0 @ ExpressionRef<'_> }
+   get_node! { right -> 0 @ Option<ExpressionRef<'_>> }
 
    /// Returns the operator token of this operation.
    pub fn operator_token(&self) -> &red::Token {
@@ -514,7 +511,9 @@ impl PrefixOperation {
    }
 
    pub fn validate(&self, to: &mut Vec<Report>) {
-      self.right().validate(to);
+      if let Some(right) = self.right() {
+         right.validate(to);
+      }
    }
 }
 
@@ -661,9 +660,27 @@ node! {
 }
 
 impl InfixOperation {
-   get_node! { left -> 0 @ ExpressionRef<'_> }
+   #[must_use]
+   pub fn left(&self) -> Option<ExpressionRef<'_>> {
+      self
+         .children_with_tokens()
+         .take_while(|element| {
+            // Take part before token.
+            element.into_token().is_none()
+         })
+         .find_map(|element| <ExpressionRef<'_>>::try_from(element.into_node()?).ok())
+   }
 
-   get_node! { right -> 1 @ ExpressionRef<'_> }
+   #[must_use]
+   pub fn right(&self) -> Option<ExpressionRef<'_>> {
+      self
+         .children_with_tokens()
+         .skip_while(|element| {
+            // Skip all until a token, aka the operator.
+            element.into_token().is_none()
+         })
+         .find_map(|element| <ExpressionRef<'_>>::try_from(element.into_node()?).ok())
+   }
 
    /// Returns the operator token of this operation.
    pub fn operator_token(&self) -> Option<&'_ red::Token> {
@@ -683,9 +700,9 @@ impl InfixOperation {
    }
 
    pub fn validate(&self, to: &mut Vec<Report>) {
-      let expressions = &[self.left(), self.right()];
+      let expressions = [self.left(), self.right()];
 
-      for expression in expressions {
+      for expression in expressions.iter().flatten() {
          expression.validate(to);
       }
 
@@ -694,7 +711,7 @@ impl InfixOperation {
          return;
       };
 
-      for expression in expressions {
+      for expression in expressions.iter().flatten() {
          if let &ExpressionRef::InfixOperation(operation) = expression
             && let child_operator @ (InfixOperator::Apply | InfixOperator::Pipe) =
                operation.operator()
@@ -714,19 +731,24 @@ impl InfixOperation {
 
 /// A suffix operator.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum SuffixOperator {
-   Same,
-}
+pub enum SuffixOperator {}
 
 impl TryFrom<Kind> for SuffixOperator {
    type Error = ();
 
+   #[expect(clippy::match_single_binding)]
    fn try_from(from: Kind) -> Result<Self, ()> {
       match from {
-         TOKEN_COMMA => Ok(Self::Same),
-
          _ => Err(()),
       }
+   }
+}
+
+impl SuffixOperator {
+   /// Returns the binding power of this operator.
+   #[must_use]
+   pub fn binding_power(self) -> (u16, ()) {
+      match self {}
    }
 }
 
@@ -737,7 +759,7 @@ node! {
 }
 
 impl SuffixOperation {
-   get_node! { left -> 0 @ ExpressionRef<'_> }
+   get_node! { left -> 0 @ Option<ExpressionRef<'_>> }
 
    /// Returns the operator token of this operation.
    pub fn operator_token(&self) -> &'_ red::Token {
@@ -758,7 +780,9 @@ impl SuffixOperation {
    }
 
    pub fn validate(&self, to: &mut Vec<Report>) {
-      self.left().validate(to);
+      if let Some(left) = self.left() {
+         left.validate(to);
+      }
    }
 }
 

@@ -12,6 +12,7 @@ use cab_syntax::{
    Segmented as _,
    node,
 };
+use cab_util::unwrap;
 use cyn::{
    Result,
    ResultExt as _,
@@ -277,203 +278,230 @@ impl<'a> Emitter<'a> {
    }
 
    fn emit_prefix_operation(&mut self, operation: &'a node::PrefixOperation) {
-      self.emit_thunk(operation.span()).with(|this| {
-         this.emit(operation.right());
+      let right = operation.right();
 
-         this.push_operation(operation.span(), match operation.operator() {
-            node::PrefixOperator::Swwallation => Operation::Swwallation,
-            node::PrefixOperator::Negation => Operation::Negation,
-            node::PrefixOperator::Not => Operation::Not,
+      self
+         .emit_thunk(operation.span())
+         .is_lambda(right.is_none())
+         .with(|this| {
+            if let Some(right) = right {
+               this.emit(right);
+            }
+
+            this.push_operation(operation.span(), match operation.operator() {
+               node::PrefixOperator::Swwallation => Operation::Swwallation,
+               node::PrefixOperator::Negation => Operation::Negation,
+               node::PrefixOperator::Not => Operation::Not,
+            });
          });
-      });
    }
 
    fn emit_infix_operation(&mut self, operation: &'a node::InfixOperation) {
-      self.emit_thunk(operation.span()).with(|this| {
-         match operation.operator() {
-            node::InfixOperator::Sequence => {
-               this.emit_force(operation.left());
-               this.push_operation(operation.span(), Operation::Pop);
+      let left = operation.left();
+      let right = operation.right();
 
-               this.emit(operation.right());
-               return;
-            },
+      self
+         .emit_thunk(operation.span())
+         .is_lambda(left.is_none() || right.is_none())
+         .with(|this| {
+            // TODO: Actually handle this.
+            unwrap!(left, right);
 
-            node::InfixOperator::Pipe => {
-               this.emit(operation.right());
-               this.emit(operation.left());
-            },
+            match operation.operator() {
+               node::InfixOperator::Sequence => {
+                  this.emit_force(left);
+                  this.push_operation(operation.span(), Operation::Pop);
 
-            node::InfixOperator::Select => {
-               let scopes = this.scopes.split_off(1);
+                  this.emit(right);
+                  return;
+               },
 
-               this.emit_scope(operation.right().span(), |this| {
-                  this.scope().push(Span::dummy(), LocalName::wildcard());
+               node::InfixOperator::Pipe => {
+                  this.emit(right);
+                  this.emit(left);
+               },
 
-                  this.emit(operation.right());
-               });
+               node::InfixOperator::Select => {
+                  let scopes = this.scopes.split_off(1);
 
-               this.scopes.extend(scopes);
+                  this.emit_scope(right.span(), |this| {
+                     this.scope().push(Span::dummy(), LocalName::wildcard());
 
-               this.emit(operation.left());
-
-               // <right>
-               // <left>
-               this.push_operation(operation.span(), Operation::ScopeSwap);
-
-               // <right>
-               // <old-scope>
-               this.push_operation(operation.span(), Operation::Swap);
-
-               // <old-scope>
-               // <right>
-               this.push_operation(operation.span(), Operation::Force);
-
-               // <old-scope>
-               // <right-forced>
-               this.push_operation(operation.span(), Operation::Swap);
-
-               // <right-forced>
-               // <old-scope>
-               this.push_operation(operation.span(), Operation::Pop);
-
-               // <right-forced>
-               return;
-            },
-
-            node::InfixOperator::And => {
-               this.emit_force(operation.left());
-               let to_right = {
-                  this.push_operation(operation.span(), Operation::JumpIf);
-                  this.push_u16(u16::default())
-               };
-               let over_right = {
-                  this.push_operation(operation.span(), Operation::Jump);
-                  this.push_u16(u16::default())
-               };
-
-               this.point_here(to_right);
-               this.push_operation(operation.span(), Operation::Pop);
-               this.emit_force(operation.right());
-               this.push_operation(operation.span(), Operation::AssertBoolean);
-
-               this.point_here(over_right);
-               return;
-            },
-
-            operator @ (node::InfixOperator::Or | node::InfixOperator::Implication) => {
-               this.emit_force(operation.left());
-               if operator == node::InfixOperator::Implication {
-                  this.push_operation(operation.span(), Operation::Not);
-               }
-
-               let to_end = {
-                  this.push_operation(operation.span(), Operation::JumpIf);
-                  this.push_u16(u16::default())
-               };
-
-               this.push_operation(operation.span(), Operation::Pop);
-               this.emit_force(operation.right());
-               this.push_operation(operation.span(), Operation::AssertBoolean);
-
-               this.point_here(to_end);
-               return;
-            },
-
-            node::InfixOperator::Lambda => {
-               this
-                  .emit_thunk(operation.span())
-                  .is_lambda(true)
-                  .with(|this| {
-                     this.emit_scope(operation.span(), |this| {
-                        // @foo => bar, `@foo` is the right parameter of the equality comparision,
-                        // and the left parameter is the argument.
-                        this.emit(operation.left());
-                        this.push_operation(operation.left().span(), Operation::Equal);
-
-                        let to_body = {
-                           this.push_operation(operation.left().span(), Operation::JumpIf);
-                           this.push_u16(u16::default())
-                        };
-
-                        this.push_operation(operation.span(), Operation::Pop);
-                        this.emit_push(
-                           operation.left().span(),
-                           Value::Error(Arc::new(Value::from(value::string::new!(
-                              "parameters were not equal, TODO make error value better",
-                           )))),
-                        );
-
-                        let over_body = {
-                           this.push_operation(operation.span(), Operation::Jump);
-                           this.push_u16(u16::default())
-                        };
-
-                        this.point_here(to_body);
-                        this.push_operation(operation.span(), Operation::Pop);
-                        this.emit(operation.right());
-
-                        this.point_here(over_body);
-                     });
+                     this.emit(right);
                   });
-               return;
-            },
 
-            _ => {
-               this.emit(operation.left());
-               this.emit(operation.right());
-            },
-         }
+                  this.scopes.extend(scopes);
 
-         let operation_ = match operation.operator() {
-            node::InfixOperator::Sequence => unreachable!("{EXPECT_HANDLED}"),
+                  this.emit(left);
 
-            node::InfixOperator::ImplicitApply
-            | node::InfixOperator::Apply
-            | node::InfixOperator::Pipe => Operation::Call,
+                  // <right>
+                  // <left>
+                  this.push_operation(operation.span(), Operation::ScopeSwap);
 
-            node::InfixOperator::Concat => Operation::Concat,
-            node::InfixOperator::Construct => Operation::Construct,
+                  // <right>
+                  // <old-scope>
+                  this.push_operation(operation.span(), Operation::Swap);
 
-            node::InfixOperator::Select => unreachable!("{EXPECT_HANDLED}"),
-            node::InfixOperator::Update => Operation::Update,
+                  // <old-scope>
+                  // <right>
+                  this.push_operation(operation.span(), Operation::Force);
 
-            node::InfixOperator::LessOrEqual => Operation::LessOrEqual,
-            node::InfixOperator::Less => Operation::Less,
-            node::InfixOperator::MoreOrEqual => Operation::MoreOrEqual,
-            node::InfixOperator::More => Operation::More,
+                  // <old-scope>
+                  // <right-forced>
+                  this.push_operation(operation.span(), Operation::Swap);
 
-            node::InfixOperator::Equal => Operation::Equal,
-            node::InfixOperator::NotEqual => {
-               this.push_operation(operation.span(), Operation::Equal);
-               this.push_operation(operation.span(), Operation::Not);
-               return;
-            },
+                  // <right-forced>
+                  // <old-scope>
+                  this.push_operation(operation.span(), Operation::Pop);
 
-            node::InfixOperator::And
-            | node::InfixOperator::Or
-            | node::InfixOperator::Implication => unreachable!("{EXPECT_HANDLED}"),
+                  // <right-forced>
+                  return;
+               },
 
-            node::InfixOperator::Same | node::InfixOperator::All => Operation::All,
-            node::InfixOperator::Any => Operation::Any,
+               node::InfixOperator::And => {
+                  this.emit_force(left);
+                  let to_right = {
+                     this.push_operation(operation.span(), Operation::JumpIf);
+                     this.push_u16(u16::default())
+                  };
+                  let over_right = {
+                     this.push_operation(operation.span(), Operation::Jump);
+                     this.push_u16(u16::default())
+                  };
 
-            node::InfixOperator::Addition => Operation::Addition,
-            node::InfixOperator::Subtraction => Operation::Subtraction,
-            node::InfixOperator::Multiplication => Operation::Multiplication,
-            node::InfixOperator::Power => Operation::Power,
-            node::InfixOperator::Division => Operation::Division,
+                  this.point_here(to_right);
+                  this.push_operation(operation.span(), Operation::Pop);
+                  this.emit_force(right);
+                  this.push_operation(operation.span(), Operation::AssertBoolean);
 
-            node::InfixOperator::Lambda => unreachable!("{EXPECT_HANDLED}"),
-         };
+                  this.point_here(over_right);
+                  return;
+               },
 
-         this.push_operation(operation.span(), operation_);
-      });
+               operator @ (node::InfixOperator::Or | node::InfixOperator::Implication) => {
+                  this.emit_force(left);
+                  if operator == node::InfixOperator::Implication {
+                     this.push_operation(operation.span(), Operation::Not);
+                  }
+
+                  let to_end = {
+                     this.push_operation(operation.span(), Operation::JumpIf);
+                     this.push_u16(u16::default())
+                  };
+
+                  this.push_operation(operation.span(), Operation::Pop);
+                  this.emit_force(right);
+                  this.push_operation(operation.span(), Operation::AssertBoolean);
+
+                  this.point_here(to_end);
+                  return;
+               },
+
+               node::InfixOperator::Lambda => {
+                  this
+                     .emit_thunk(operation.span())
+                     .is_lambda(true)
+                     .with(|this| {
+                        this.emit_scope(operation.span(), |this| {
+                           // @foo => bar, `@foo` is the right parameter of the equality
+                           // comparision, and the left parameter is the
+                           // argument.
+                           this.emit(left);
+                           this.push_operation(left.span(), Operation::Equal);
+
+                           let to_body = {
+                              this.push_operation(left.span(), Operation::JumpIf);
+                              this.push_u16(u16::default())
+                           };
+
+                           this.push_operation(operation.span(), Operation::Pop);
+                           this.emit_push(
+                              left.span(),
+                              Value::Error(Arc::new(Value::from(value::string::new!(
+                                 "parameters were not equal, TODO make error value better",
+                              )))),
+                           );
+
+                           let over_body = {
+                              this.push_operation(operation.span(), Operation::Jump);
+                              this.push_u16(u16::default())
+                           };
+
+                           this.point_here(to_body);
+                           this.push_operation(operation.span(), Operation::Pop);
+                           this.emit(right);
+
+                           this.point_here(over_body);
+                        });
+                     });
+                  return;
+               },
+
+               _ => {
+                  this.emit(left);
+                  this.emit(right);
+               },
+            }
+
+            let operation_ = match operation.operator() {
+               node::InfixOperator::Sequence => unreachable!("{EXPECT_HANDLED}"),
+
+               node::InfixOperator::ImplicitApply
+               | node::InfixOperator::Apply
+               | node::InfixOperator::Pipe => Operation::Call,
+
+               node::InfixOperator::Concat => Operation::Concat,
+               node::InfixOperator::Construct => Operation::Construct,
+
+               node::InfixOperator::Select => unreachable!("{EXPECT_HANDLED}"),
+               node::InfixOperator::Update => Operation::Update,
+
+               node::InfixOperator::LessOrEqual => Operation::LessOrEqual,
+               node::InfixOperator::Less => Operation::Less,
+               node::InfixOperator::MoreOrEqual => Operation::MoreOrEqual,
+               node::InfixOperator::More => Operation::More,
+
+               node::InfixOperator::Equal => Operation::Equal,
+               node::InfixOperator::NotEqual => {
+                  this.push_operation(operation.span(), Operation::Equal);
+                  this.push_operation(operation.span(), Operation::Not);
+                  return;
+               },
+
+               node::InfixOperator::And
+               | node::InfixOperator::Or
+               | node::InfixOperator::Implication => unreachable!("{EXPECT_HANDLED}"),
+
+               node::InfixOperator::Same | node::InfixOperator::All => Operation::All,
+               node::InfixOperator::Any => Operation::Any,
+
+               node::InfixOperator::Addition => Operation::Addition,
+               node::InfixOperator::Subtraction => Operation::Subtraction,
+               node::InfixOperator::Multiplication => Operation::Multiplication,
+               node::InfixOperator::Power => Operation::Power,
+               node::InfixOperator::Division => Operation::Division,
+
+               node::InfixOperator::Lambda => unreachable!("{EXPECT_HANDLED}"),
+            };
+
+            this.push_operation(operation.span(), operation_);
+         });
    }
 
+   #[expect(unreachable_code)]
    fn emit_suffix_operation(&mut self, operation: &'a node::SuffixOperation) {
-      match operation.operator() {
-         node::SuffixOperator::Same => self.emit(operation.left()),
-      }
+      let left = operation.left();
+
+      self
+         .emit_thunk(operation.span())
+         .is_lambda(left.is_none())
+         .with(|this| {
+            if let Some(left) = left {
+               this.emit(left);
+            }
+
+            this.push_operation(operation.span(), match operation.operator() {});
+         });
    }
 
    fn emit_path(&mut self, path: &'a node::Path) {

@@ -515,6 +515,7 @@ dependencies = [
  "bytes",
  "cab-span",
  "cab-syntax",
+ "cab-util",
  "const-str",
  "cyn",
  "dashmap 7.0.0-rc2",
