@@ -105,7 +105,6 @@ impl CompileOracle {
       emitter.emit_scope(expression.span(), |this| {
          this.emit_force(expression);
       });
-      emitter.push_operation(expression.span(), Operation::Return);
 
       emitter
          .reports
@@ -203,7 +202,6 @@ impl<'a> Emitter<'a> {
       #[builder(start_fn)] span: Span,
       #[builder(finish_fn)] is_lambda: bool,
    ) {
-      self.push_operation(span, Operation::Return);
       let code = self.codes.pop().expect(EXPECT_CODE);
 
       self.emit_push(

@@ -6,8 +6,6 @@ use crate::{
 #[derive(Debug, Clone, Copy, PartialEq, Eq, num_enum::TryFromPrimitive)]
 #[repr(u8)]
 pub enum Operation {
-   Return,
-
    Push,
    Pop,
 
