@@ -702,6 +702,16 @@ impl InfixOperation {
    pub fn validate(&self, to: &mut Vec<Report>) {
       let expressions = [self.left(), self.right()];
 
+      // TODO: Temporary.
+      if expressions.iter().any(Option::is_none) {
+         to.push(
+            Report::error("curried infix functions aren't supported yet")
+               .primary(self.span(), "unsupported")
+               .tip("create a lambda instead"),
+         );
+         return;
+      }
+
       for expression in expressions.iter().flatten() {
          expression.validate(to);
       }
