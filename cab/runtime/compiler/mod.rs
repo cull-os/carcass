@@ -666,6 +666,7 @@ impl<'a> Emitter<'a> {
       });
    }
 
+   #[stacksafe::stacksafe]
    fn emit(&mut self, expression: node::ExpressionRef<'a>) {
       match expression {
          node::ExpressionRef::Error(_) => unreachable!("{EXPECT_VALID}"),

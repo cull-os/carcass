@@ -277,6 +277,7 @@ node! {
 }
 
 impl<'a> ExpressionRef<'a> {
+   #[stacksafe::stacksafe]
    pub fn validate(self, to: &mut Vec<Report>) {
       match self {
          Self::Parenthesis(parenthesis) => parenthesis.validate(to),

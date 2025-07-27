@@ -30,3 +30,4 @@ paste.workspace       = true
 peekmore.workspace    = true
 phf.workspace         = true
 smallvec.workspace    = true
+stacksafe.workspace   = true

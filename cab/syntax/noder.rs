@@ -518,6 +518,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
       });
    }
 
+   #[stacksafe::stacksafe]
    fn node_expression_single(&mut self, until: EnumSet<Kind>) {
       let expected_at = self.checkpoint();
 
@@ -563,6 +564,7 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
       }
    }
 
+   #[stacksafe::stacksafe]
    fn node_expression_binding_power(&mut self, minimum_power: u16, until: EnumSet<Kind>) {
       let start_of_expression = self.checkpoint();
 
