@@ -855,7 +855,7 @@ dependencies = [
 [[package]]
 name = "cstree"
 version = "0.12.2"
-source = "git+https://github.com/RGBCube/cstree?branch=fix-derive#c2129bf15bd732bcd96ca3eb7d686adf1f99bc3f"
+source = "git+https://github.com/RGBCube/cstree?branch=syntax-text-rfind-char#15772fa12989dbdbc2498a6ad49ed751055fd60a"
 dependencies = [
  "cstree_derive",
  "indexmap",
@@ -869,7 +869,7 @@ dependencies = [
 [[package]]
 name = "cstree_derive"
 version = "0.12.2"
-source = "git+https://github.com/RGBCube/cstree?branch=fix-derive#c2129bf15bd732bcd96ca3eb7d686adf1f99bc3f"
+source = "git+https://github.com/RGBCube/cstree?branch=syntax-text-rfind-char#15772fa12989dbdbc2498a6ad49ed751055fd60a"
 dependencies = [
  "proc-macro2",
  "quote",

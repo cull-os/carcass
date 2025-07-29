@@ -126,3 +126,11 @@ impl IntoSize for String {
       self.len().into()
    }
 }
+
+impl<I: cstree::interning::Resolver + ?Sized, S: cstree::Syntax> IntoSize
+   for cstree::text::SyntaxText<'_, '_, I, S>
+{
+   fn size(&self) -> Size {
+      self.len().into()
+   }
+}

@@ -12,6 +12,7 @@ use std::{
 };
 
 use cab_span::{
+   IntoSize as _,
    IntoSpan as _,
    Span,
 };
@@ -73,7 +74,7 @@ pub fn unescape_string(s: &str) -> Result<(String, bool), SmallVec<Span, 4>> {
       };
 
       let Some(unescaped) = unescape(next) else {
-         invalids.push(Span::at(index, '\\'.len_utf8() + next.len_utf8()));
+         invalids.push(Span::at(index, '\\'.size() + next.size()));
          continue;
       };
 
@@ -154,10 +155,50 @@ reffed! {
 
 impl SegmentRawRef<'_> {
    #[must_use]
-   fn span(self) -> Span {
+   fn span_first_line(self) -> Span {
       match self {
-         Self::Content(content) => content.span(),
-         Self::Interpolation(interpolation) => interpolation.span(),
+         SegmentRawRef::Content(content) => {
+            match content.text().find('\n') {
+               Some(len) => Span::at(content.span().start, len),
+               None => content.span(),
+            }
+         },
+
+         SegmentRawRef::Interpolation(interpolation) => {
+            match interpolation.text().find_char('\n') {
+               Some(len) => Span::at(interpolation.span().start, len),
+               None => interpolation.span(),
+            }
+         },
+      }
+   }
+
+   #[must_use]
+   fn span_last_line(self) -> Span {
+      match self {
+         SegmentRawRef::Content(content) => {
+            match content.text().rfind('\n') {
+               Some(len) => {
+                  Span::at_end(
+                     content.span().end,
+                     content.text().size() - len - '\n'.size(),
+                  )
+               },
+               None => content.span(),
+            }
+         },
+
+         SegmentRawRef::Interpolation(interpolation) => {
+            match interpolation.text().rfind_char('\n') {
+               Some(len) => {
+                  Span::at_end(
+                     interpolation.span().end,
+                     interpolation.text().size() - len - '\n'.size(),
+                  )
+               },
+               None => interpolation.span(),
+            }
+         },
       }
    }
 }
@@ -406,7 +447,7 @@ pub trait Segmented: ops::Deref<Target = red::Node> {
 
       let mut straights = SmallVec::new();
 
-      let mut previous_segment_span = None::<Span>;
+      let mut previous_segment_span_last_line = None::<Span>;
       let mut segments = self
          .children_with_tokens()
          .filter_map(|child| {
@@ -453,7 +494,11 @@ pub trait Segmented: ops::Deref<Target = red::Node> {
 
                   if segment_is_first && line_is_first {
                      let suffix_interpolation_span = line_is_last
-                        .then(|| segments.peek().map(|&(_, segment)| segment.span()))
+                        .then(|| {
+                           segments
+                              .peek()
+                              .map(|&(_, segment)| segment.span_first_line())
+                        })
                         .flatten();
 
                      if let Some(interpolation_span) = suffix_interpolation_span {
@@ -462,34 +507,36 @@ pub trait Segmented: ops::Deref<Target = red::Node> {
                         let line = line.trim_end();
 
                         if !line.is_empty() {
-                           line_span_first.replace(Span::at(span.start, line.len()));
+                           line_span_first.replace(Span::at(span.start, line.size()));
                         }
                      }
                   }
 
                   if segment_is_last && line_is_last {
-                     let prefix_interpolation_span =
-                        line_is_first.then_some(previous_segment_span).flatten();
+                     let prefix_interpolation_span_last_line = line_is_first
+                        .then_some(previous_segment_span_last_line)
+                        .flatten();
 
-                     if let Some(interpolation_span) = prefix_interpolation_span {
-                        line_span_last.replace(span.cover(interpolation_span));
+                     if let Some(interpolation_span_last_line) = prefix_interpolation_span_last_line
+                     {
+                        line_span_last.replace(span.cover(interpolation_span_last_line));
                      } else {
                         let line = line.trim_start();
 
                         if !line.is_empty() {
-                           line_span_last.replace(Span::at_end(span.end, line.len()));
+                           line_span_last.replace(Span::at_end(span.end, line.size()));
                         }
                      }
                   }
 
                   #[expect(clippy::nonminimal_bool)]
                   straights.push(Straight::Line {
-                     span: Span::at(content.span().start + offset, line.len()),
+                     span: Span::at(content.span().start + offset, line.size()),
 
                      text: &content.text()[offset..offset + line.len()],
 
                      is_from_line_start: !(segment_is_first && line_is_first)
-                        && !(previous_segment_span.is_some() && line_is_first),
+                        && !(previous_segment_span_last_line.is_some() && line_is_first),
                      is_to_line_end:     line_is_first || !line_is_last,
 
                      is_first: segment_is_first && line_is_first,
@@ -515,7 +562,7 @@ pub trait Segmented: ops::Deref<Target = red::Node> {
             },
          }
 
-         previous_segment_span.replace(segment.span());
+         previous_segment_span_last_line.replace(segment.span_last_line());
 
          if segment_is_multiline {
             is_multiline = true;
