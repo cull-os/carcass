@@ -1,4 +1,5 @@
 use std::{
+   borrow::Cow,
    fmt::Write as _,
    sync::Arc,
 };
@@ -149,52 +150,46 @@ fn unexpected(
    #[builder(finish_fn)] mut expected: EnumSet<Kind>,
    got: Option<Kind>,
 ) -> Report {
-   let report = match got {
-      Some(kind) => Report::error(format!("didn't expect {kind}")),
-      None => Report::error("didn't expect end of file"),
-   };
-
-   let mut reason = if expected.is_empty() {
-      return report.primary(span, "expected end of file");
+   let report = if expected.is_empty() {
+      Report::error("expected end of file")
    } else {
-      String::from("expected ")
+      let mut title = String::from("expected ");
+
+      if expected.is_superset(Kind::EXPRESSIONS) {
+         expected.remove_all(Kind::EXPRESSIONS);
+
+         let separator = match expected.len() {
+            0 => "",
+            1 => " or ",
+            2.. => ", ",
+         };
+
+         let _ = write!(title, "an expression{separator}");
+      }
+
+      if expected.is_superset(Kind::IDENTIFIERS) {
+         expected.remove(TOKEN_QUOTED_IDENTIFIER_START);
+      }
+
+      for (index, item) in expected.into_iter().enumerate() {
+         let position = index + 1;
+
+         let separator = match position {
+            position if expected.len() == position => "",
+            position if expected.len() == position + 1 => " or ",
+            _ => ", ",
+         };
+
+         let _ = write!(title, "{item}{separator}");
+      }
+
+      Report::error(title)
    };
 
-   if expected.is_superset(Kind::EXPRESSIONS) {
-      expected.remove_all(Kind::EXPRESSIONS);
-
-      let separator = match expected.len() {
-         0 => "",
-         1 => " or ",
-         2.. => ", ",
-      };
-
-      let _ = write!(reason, "an expression{separator}");
-   }
-
-   if expected.is_superset(Kind::IDENTIFIERS) {
-      expected.remove(TOKEN_QUOTED_IDENTIFIER_START);
-   }
-
-   for (index, item) in expected.into_iter().enumerate() {
-      let position = index + 1;
-
-      let separator = match position {
-         position if expected.len() == position => "",
-         position if expected.len() == position + 1 => " or ",
-         _ => ", ",
-      };
-
-      let _ = write!(reason, "{item}{separator}");
-   }
-
-   let _ = if let Some(got) = got {
-      write!(reason, ", got {got}")
-   } else {
-      write!(reason, ", reached end of file")
-   };
-
-   report.primary(span, reason)
+   report.primary(span, match got {
+      Some(kind) => Cow::Owned(format!("got {kind}")),
+      None => Cow::Borrowed("reached end of file"),
+   })
 }
 
 struct Noder<'a, I: Iterator<Item = (Kind, &'a str)>> {
