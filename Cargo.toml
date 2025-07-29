@@ -8,7 +8,6 @@ members = [
   "cab",
   "cab/fuzz",
   "cab/runtime",
-  "cab/span",
   "cab/syntax",
   "cab/task",
   "cab/util",
@@ -16,6 +15,8 @@ members = [
   "con",
 
   "cyn",
+
+  "ranged",
 
   "ust",
 ]

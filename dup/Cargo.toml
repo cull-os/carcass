@@ -2,9 +2,11 @@
 name        = "dup"
 description = "Cheap clone trait for distinguishing expensive clones from things that should have been Copy"
 license     = "MPL-2.0"
+categories  = [ "rust-patterns" ]
+keywords    = [ "dupe", "arc", "clone", "cheap" ]
 repository  = "https://github.com/cull-os/carcass/tree/master/dup"
-publish     = true
 version     = "0.1.0"
+publish     = true
 
 authors.workspace = true
 edition.workspace = true

@@ -14,12 +14,12 @@ path = "mod.rs"
 workspace = true
 
 [dependencies]
-cab-span.path = "../span"
 cab-util.path = "../util"
 
-cyn.path = "../../cyn"
-dup      = { features = [ "cstree" ], path = "../../dup" }
-ust.path = "../../ust"
+cyn.path    = "../../cyn"
+dup         = { features = [ "cstree" ], path = "../../dup" }
+ranged.path = "../../ranged"
+ust.path    = "../../ust"
 
 bon.workspace         = true
 cstree.workspace      = true

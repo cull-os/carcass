@@ -20,13 +20,13 @@ use std::{
    },
 };
 
-use cab_span::{
+use itertools::Itertools as _;
+use num::traits::AsPrimitive;
+use ranged::{
    IntoSize as _,
    Size,
    Span,
 };
-use itertools::Itertools as _;
-use num::traits::AsPrimitive;
 use smallvec::SmallVec;
 use unicode_segmentation::UnicodeSegmentation as _;
 

@@ -3,7 +3,7 @@ use std::{
    sync::Arc,
 };
 
-use cab_span::{
+use ranged::{
    IntoSpan as _,
    Span,
 };

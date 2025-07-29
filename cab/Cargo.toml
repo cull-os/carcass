@@ -20,12 +20,12 @@ workspace = true
 
 [dependencies]
 cab-runtime.path = "./runtime"
-cab-span.path    = "./span"
 cab-syntax.path  = "./syntax"
 
-cyn.path = "../cyn"
-dup.path = "../dup"
-ust.path = "../ust"
+cyn.path    = "../cyn"
+dup.path    = "../dup"
+ranged.path = "../ranged"
+ust.path    = "../ust"
 
 clap.workspace  = true
 rpds.workspace  = true

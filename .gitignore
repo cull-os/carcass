@@ -24,10 +24,11 @@
 
 # PROJECTS
 !auxvec/
-!dup/
 !cab/
 !con/
 !cyn/
+!dup/
+!ranged/
 !ust/
 
 # BRANDING

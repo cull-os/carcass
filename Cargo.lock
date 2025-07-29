@@ -484,11 +484,11 @@ name = "cab"
 version = "0.0.1"
 dependencies = [
  "cab-runtime",
- "cab-span",
  "cab-syntax",
  "clap",
  "cyn",
  "dup",
+ "ranged",
  "rpds",
  "tokio",
  "ust",
@@ -513,7 +513,6 @@ dependencies = [
  "async-trait",
  "bon",
  "bytes",
- "cab-span",
  "cab-syntax",
  "cab-util",
  "const-str",
@@ -523,6 +522,7 @@ dependencies = [
  "dup",
  "num",
  "num_enum",
+ "ranged",
  "rpds",
  "rustc-hash",
  "smallvec 2.0.0-alpha.11",
@@ -533,20 +533,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "cab-span"
-version = "0.0.1"
-dependencies = [
- "cab-util",
- "cstree",
- "derive_more",
-]
-
-[[package]]
 name = "cab-syntax"
 version = "0.0.1"
 dependencies = [
  "bon",
- "cab-span",
  "cab-util",
  "cstree",
  "cyn",
@@ -557,6 +547,7 @@ dependencies = [
  "paste",
  "peekmore",
  "phf",
+ "ranged",
  "smallvec 2.0.0-alpha.11",
  "stacksafe",
  "ust",
@@ -3831,6 +3822,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ranged"
+version = "0.1.0"
+dependencies = [
+ "cab-util",
+ "cstree",
+ "derive_more",
+]
+
+[[package]]
 name = "rayon"
 version = "1.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4916,7 +4916,6 @@ dependencies = [
 name = "ust"
 version = "0.0.2"
 dependencies = [
- "cab-span",
  "cab-util",
  "const-str",
  "derive_more",
@@ -4924,6 +4923,7 @@ dependencies = [
  "itertools",
  "itoa",
  "num",
+ "ranged",
  "smallvec 2.0.0-alpha.11",
  "terminal_size",
  "unic-emoji-char",

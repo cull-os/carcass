@@ -2,7 +2,7 @@
 
 use std::borrow::Cow;
 
-use cab_span::Span;
+use ranged::Span;
 use derive_more::{
    Deref,
    DerefMut,

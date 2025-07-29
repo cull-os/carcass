@@ -7,7 +7,7 @@
    str_from_raw_parts
 )]
 
-use cab_span::Span;
+use ranged::Span;
 
 mod code;
 pub use code::{

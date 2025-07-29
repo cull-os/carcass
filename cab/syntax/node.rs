@@ -7,7 +7,7 @@ use std::{
    ptr,
 };
 
-use cab_span::{
+use ranged::{
    IntoSpan as _,
    Span,
 };

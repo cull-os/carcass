@@ -3,12 +3,12 @@ use std::{
    sync,
 };
 
-use cab_span::{
+use cab_util::into;
+use derive_more::Deref;
+use ranged::{
    Size,
    Span,
 };
-use cab_util::into;
-use derive_more::Deref;
 use smallvec::SmallVec;
 
 use crate::{

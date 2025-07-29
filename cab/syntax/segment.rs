@@ -11,7 +11,7 @@ use std::{
    ops,
 };
 
-use cab_span::{
+use ranged::{
    IntoSize as _,
    IntoSpan as _,
    Span,

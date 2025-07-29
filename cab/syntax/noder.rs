@@ -4,7 +4,7 @@ use std::{
    sync::Arc,
 };
 
-use cab_span::{
+use ranged::{
    IntoSize as _,
    Size,
    Span,

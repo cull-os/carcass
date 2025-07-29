@@ -3,8 +3,8 @@ name        = "con"
 description = "True Mesh VPN"
 license     = "MPL-2.0"
 repository  = "https://github.com/cull-os/carcass/tree/master/con"
-publish     = true
 version     = "0.0.1"
+publish     = true
 
 authors.workspace = true
 edition.workspace = true
