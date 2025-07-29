@@ -83,12 +83,14 @@ impl From<usize> for Size {
    }
 }
 
+#[cfg(feature = "cstree")]
 impl From<Size> for cstree::text::TextSize {
    fn from(this: Size) -> Self {
       cstree::text::TextSize::new(*this)
    }
 }
 
+#[cfg(feature = "cstree")]
 impl From<cstree::text::TextSize> for Size {
    fn from(that: cstree::text::TextSize) -> Self {
       into!(that);
@@ -127,6 +129,7 @@ impl IntoSize for String {
    }
 }
 
+#[cfg(feature = "cstree")]
 impl<I: cstree::interning::Resolver + ?Sized, S: cstree::Syntax> IntoSize
    for cstree::text::SyntaxText<'_, '_, I, S>
 {

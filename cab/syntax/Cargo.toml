@@ -16,10 +16,10 @@ workspace = true
 [dependencies]
 cab-util.path = "../util"
 
-cyn.path    = "../../cyn"
-dup         = { features = [ "cstree" ], path = "../../dup" }
-ranged.path = "../../ranged"
-ust.path    = "../../ust"
+cyn.path = "../../cyn"
+dup      = { features = [ "cstree" ], path = "../../dup" }
+ranged   = { features = [ "cstree" ], path = "../../ranged" }
+ust.path = "../../ust"
 
 bon.workspace         = true
 cstree.workspace      = true

@@ -17,10 +17,10 @@ workspace = true
 cab-syntax.path = "../syntax"
 cab-util.path   = "../util"
 
-cyn.path    = "../../cyn"
-dup         = { features = [ "arcstr", "bytes", "rpds" ], path = "../../dup" }
-ranged.path = "../../ranged"
-ust.path    = "../../ust"
+cyn.path = "../../cyn"
+dup      = { features = [ "arcstr", "bytes", "rpds" ], path = "../../dup" }
+ranged   = { features = [ "cstree" ], path = "../../ranged" }
+ust.path = "../../ust"
 
 arcstr.workspace          = true
 async-once-cell.workspace = true
