@@ -529,18 +529,29 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
 
          Some(TOKEN_CURLYBRACE_LEFT) => self.node_attributes(until),
 
-         Some(TOKEN_PATH_START | TOKEN_STRING_START | TOKEN_CHAR_START) => {
-            self.node_delimited();
-         },
-
-         Some(TOKEN_AT) => self.node_bind(until),
-
-         Some(next) if Kind::IDENTIFIERS.contains(next) => self.node_identifier(until),
-
          Some(TOKEN_INTEGER) => self.node_integer(until),
          Some(TOKEN_FLOAT) => self.node_float(until),
 
          Some(TOKEN_KEYWORD_IF) => self.node_if(until),
+
+         Some(TOKEN_PATH_START) => self.node_delimited(),
+
+         Some(TOKEN_AT) => self.node_bind(until),
+         Some(next) if Kind::IDENTIFIERS.contains(next) => self.node_identifier(until),
+
+         Some(TOKEN_STRING_START | TOKEN_CHAR_START) => self.node_delimited(),
+
+         // The rest are errors.
+         Some(kind) if Kind::EXPRESSIONS.contains(kind) => {
+            let start = self.offset;
+            self.node(NODE_ERROR).with(Self::next);
+
+            self.reports.push(
+               unexpected(Span::new(start, self.offset))
+                  .got(kind)
+                  .expected(Kind::EXPRESSIONS),
+            );
+         },
 
          got => {
             // Consume until the next token is either the limit, an

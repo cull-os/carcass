@@ -386,6 +386,10 @@ impl Kind {
          | TOKEN_QUOTED_IDENTIFIER_START
          | TOKEN_STRING_START
          | TOKEN_CHAR_START
+         // Error nodes are expressions.
+         | TOKEN_ERROR_UNKNOWN
+         | TOKEN_ERROR_NUMBER_NO_DIGIT
+         | TOKEN_ERROR_FLOAT_NO_EXPONENT
    );
 
    /// An enumset of all identifier starter token kinds.
@@ -403,22 +407,13 @@ impl Kind {
       let mut arguments = Self::EXPRESSIONS;
       arguments.remove(TOKEN_KEYWORD_IF);
 
-      arguments.contains(self) || self.is_error() // Error nodes are expressions.
+      arguments.contains(self)
    }
 
    /// Whether the token should be ignored by the noder.
    #[must_use]
    pub fn is_trivia(self) -> bool {
       matches!(self, TOKEN_COMMENT | TOKEN_SPACE)
-   }
-
-   /// Whether this token is erroneous.
-   #[must_use]
-   pub fn is_error(self) -> bool {
-      matches!(
-         self,
-         TOKEN_ERROR_UNKNOWN | TOKEN_ERROR_NUMBER_NO_DIGIT | TOKEN_ERROR_FLOAT_NO_EXPONENT
-      )
    }
 
    /// Returns the node and closing kinds of this starting delimiter.
