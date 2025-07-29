@@ -11,12 +11,12 @@ use std::{
    },
 };
 
-use ranged::Span;
 use derive_more::{
    Deref,
    DerefMut,
 };
 use dup::Dupe as _;
+use ranged::Span;
 use ust::{
    COLORS,
    Display,

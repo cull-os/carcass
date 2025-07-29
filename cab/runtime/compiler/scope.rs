@@ -2,11 +2,11 @@
 
 use std::borrow::Cow;
 
-use ranged::Span;
 use derive_more::{
    Deref,
    DerefMut,
 };
+use ranged::Span;
 use smallvec::{
    SmallVec,
    smallvec,

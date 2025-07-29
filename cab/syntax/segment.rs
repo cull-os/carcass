@@ -11,15 +11,15 @@ use std::{
    ops,
 };
 
-use ranged::{
-   IntoSize as _,
-   IntoSpan as _,
-   Span,
-};
 use cab_util::{
    Lazy,
    force_ref,
    reffed,
+};
+use ranged::{
+   IntoSize as _,
+   IntoSpan as _,
+   Span,
 };
 use smallvec::SmallVec;
 use ust::{

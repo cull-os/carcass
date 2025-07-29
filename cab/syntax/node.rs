@@ -7,10 +7,6 @@ use std::{
    ptr,
 };
 
-use ranged::{
-   IntoSpan as _,
-   Span,
-};
 use cab_util::{
    force,
    lazy,
@@ -21,6 +17,10 @@ use cab_util::{
 use derive_more::Deref;
 use dup::Dupe;
 use paste::paste;
+use ranged::{
+   IntoSpan as _,
+   Span,
+};
 use ust::report::Report;
 
 use crate::{

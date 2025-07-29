@@ -4,11 +4,6 @@ use std::{
    sync::Arc,
 };
 
-use ranged::{
-   IntoSize as _,
-   Size,
-   Span,
-};
 use cab_util::into;
 use cyn::{
    Result,
@@ -20,6 +15,11 @@ use enumset::EnumSet;
 use peekmore::{
    PeekMore as _,
    PeekMoreIterator as PeekMore,
+};
+use ranged::{
+   IntoSize as _,
+   Size,
+   Span,
 };
 use ust::{
    Display,

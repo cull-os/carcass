@@ -3,10 +3,6 @@ use std::{
    sync::Arc,
 };
 
-use ranged::{
-   IntoSpan as _,
-   Span,
-};
 use cab_syntax::{
    Segment,
    Segmented as _,
@@ -19,6 +15,10 @@ use cyn::{
    bail,
 };
 use dup::Dupe as _;
+use ranged::{
+   IntoSpan as _,
+   Span,
+};
 use rpds::ListSync as List;
 use smallvec::SmallVec;
 use ust::{
