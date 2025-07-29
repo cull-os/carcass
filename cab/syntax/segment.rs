@@ -490,7 +490,7 @@ pub trait Segmented: ops::Deref<Target = red::Node> {
 
                      is_from_line_start: !(segment_is_first && line_is_first)
                         && !(previous_segment_span.is_some() && line_is_first),
-                     is_to_line_end:     !line_is_last,
+                     is_to_line_end:     line_is_first || !line_is_last,
 
                      is_first: segment_is_first && line_is_first,
                      is_last:  segment_is_last && line_is_last,
