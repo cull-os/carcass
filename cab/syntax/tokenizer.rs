@@ -219,9 +219,9 @@ impl<'a> Tokenizer<'a> {
       }
    }
 
-   fn consume_scientific_base10(&mut self) -> Kind {
+   fn consume_scientific_base10(&mut self) -> Option<Kind> {
       if !(self.try_consume_character('e') || self.try_consume_character('E')) {
-         return TOKEN_FLOAT;
+         return None;
       }
 
       let _ = self.try_consume_character('+') || self.try_consume_character('-');
@@ -229,16 +229,18 @@ impl<'a> Tokenizer<'a> {
       let exponent_len = self.consume_while(|c| c.is_ascii_digit() || c == '_');
       let exponent = self.consumed_since(self.offset - exponent_len);
 
-      if exponent.is_empty() || exponent.bytes().all(|c| c == b'_') {
-         TOKEN_ERROR_FLOAT_NO_EXPONENT
-      } else {
-         TOKEN_FLOAT
-      }
+      Some(
+         if exponent.is_empty() || exponent.bytes().all(|c| c == b'_') {
+            TOKEN_ERROR_FLOAT_NO_EXPONENT
+         } else {
+            TOKEN_FLOAT
+         },
+      )
    }
 
-   fn consume_scientific_base16(&mut self) -> Kind {
+   fn consume_scientific_base16(&mut self) -> Option<Kind> {
       if !(self.try_consume_character('p') || self.try_consume_character('P')) {
-         return TOKEN_FLOAT;
+         return None;
       }
 
       let _ = self.try_consume_character('+') || self.try_consume_character('-');
@@ -246,11 +248,13 @@ impl<'a> Tokenizer<'a> {
       let exponent_len = self.consume_while(|c| c.is_ascii_hexdigit() || c == '_');
       let exponent = self.consumed_since(self.offset - exponent_len);
 
-      if exponent.is_empty() || exponent.bytes().all(|c| c == b'_') {
-         TOKEN_ERROR_FLOAT_NO_EXPONENT
-      } else {
-         TOKEN_FLOAT
-      }
+      Some(
+         if exponent.is_empty() || exponent.bytes().all(|c| c == b'_') {
+            TOKEN_ERROR_FLOAT_NO_EXPONENT
+         } else {
+            TOKEN_FLOAT
+         },
+      )
    }
 
    fn consume_kind(&mut self) -> Option<Kind> {
@@ -423,10 +427,10 @@ impl<'a> Tokenizer<'a> {
             #[expect(clippy::type_complexity)]
             let (is_valid_digit, consume_scientific): (
                fn(char) -> bool,
-               fn(&mut Self) -> Kind,
+               fn(&mut Self) -> Option<Kind>,
             ) = match self.consume_character() {
-               Some('b' | 'B') => (|c| matches!(c, '0' | '1' | '_'), |_| TOKEN_FLOAT),
-               Some('o' | 'O') => (|c| matches!(c, '0'..='7' | '_'), |_| TOKEN_FLOAT),
+               Some('b' | 'B') => (|c| matches!(c, '0' | '1' | '_'), |_| None),
+               Some('o' | 'O') => (|c| matches!(c, '0'..='7' | '_'), |_| None),
                Some('x' | 'X') => {
                   (
                      |c| c.is_ascii_hexdigit() || c == '_',
@@ -438,18 +442,22 @@ impl<'a> Tokenizer<'a> {
 
             let digits_len = self.consume_while(is_valid_digit);
             let digits = self.consumed_since(self.offset - digits_len);
-            let error_token = (digits.is_empty() || digits.bytes().all(|c| c == b'_'))
+            let error_kind = (digits.is_empty() || digits.bytes().all(|c| c == b'_'))
                .then_some(TOKEN_ERROR_NUMBER_NO_DIGIT);
 
-            if self.peek_character() == Some('.')
+            let default_kind = if self.peek_character() == Some('.')
                && self.peek_character_nth(1).is_some_and(is_valid_digit)
             {
                self.consume_character();
                self.consume_while(is_valid_digit);
-               error_token.unwrap_or(consume_scientific(self))
+               TOKEN_FLOAT
             } else {
-               error_token.unwrap_or(TOKEN_INTEGER)
-            }
+               TOKEN_INTEGER
+            };
+
+            error_kind
+               .or(consume_scientific(self))
+               .unwrap_or(default_kind)
          },
 
          initial_digit if initial_digit.is_ascii_digit() => {
@@ -457,15 +465,17 @@ impl<'a> Tokenizer<'a> {
 
             self.consume_while(is_valid_digit);
 
-            if self.peek_character() == Some('.')
+            let default_kind = if self.peek_character() == Some('.')
                && self.peek_character_nth(1).is_some_and(is_valid_digit)
             {
                self.consume_character();
                self.consume_while(is_valid_digit);
-               self.consume_scientific_base10()
+               TOKEN_FLOAT
             } else {
                TOKEN_INTEGER
-            }
+            };
+
+            self.consume_scientific_base10().unwrap_or(default_kind)
          },
 
          initial_letter if is_valid_initial_plain_identifier_character(initial_letter) => {
