@@ -117,7 +117,7 @@ use_debug                         = "allow"
 wildcard_enum_match_arm           = "allow"
 
 [workspace.dependencies]
-cstree = { branch = "syntax-text-rfind-char", features = [
+cstree = { features = [
   "derive",
   "lasso_compat",
   "multi_threaded_interning",
