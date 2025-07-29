@@ -219,7 +219,7 @@ impl<'a> Tokenizer<'a> {
       }
    }
 
-   fn consume_scientific(&mut self) -> Kind {
+   fn consume_scientific_base10(&mut self) -> Kind {
       if !(self.try_consume_character('e') || self.try_consume_character('E')) {
          return TOKEN_FLOAT;
       }
@@ -227,6 +227,23 @@ impl<'a> Tokenizer<'a> {
       let _ = self.try_consume_character('+') || self.try_consume_character('-');
 
       let exponent_len = self.consume_while(|c| c.is_ascii_digit() || c == '_');
+      let exponent = self.consumed_since(self.offset - exponent_len);
+
+      if exponent.is_empty() || exponent.bytes().all(|c| c == b'_') {
+         TOKEN_ERROR_FLOAT_NO_EXPONENT
+      } else {
+         TOKEN_FLOAT
+      }
+   }
+
+   fn consume_scientific_base16(&mut self) -> Kind {
+      if !(self.try_consume_character('p') || self.try_consume_character('P')) {
+         return TOKEN_FLOAT;
+      }
+
+      let _ = self.try_consume_character('+') || self.try_consume_character('-');
+
+      let exponent_len = self.consume_while(|c| c.is_ascii_hexdigit() || c == '_');
       let exponent = self.consumed_since(self.offset - exponent_len);
 
       if exponent.is_empty() || exponent.bytes().all(|c| c == b'_') {
@@ -403,10 +420,19 @@ impl<'a> Tokenizer<'a> {
          },
 
          '0' if let Some('b' | 'B' | 'o' | 'O' | 'x' | 'X') = self.peek_character() => {
-            let is_valid_digit = match self.consume_character() {
-               Some('b' | 'B') => |c: char| matches!(c, '0' | '1' | '_'),
-               Some('o' | 'O') => |c: char| matches!(c, '0'..='7' | '_'),
-               Some('x' | 'X') => |c: char| c.is_ascii_hexdigit() || c == '_',
+            #[expect(clippy::type_complexity)]
+            let (is_valid_digit, consume_scientific): (
+               fn(char) -> bool,
+               fn(&mut Self) -> Kind,
+            ) = match self.consume_character() {
+               Some('b' | 'B') => (|c| matches!(c, '0' | '1' | '_'), |_| TOKEN_FLOAT),
+               Some('o' | 'O') => (|c| matches!(c, '0'..='7' | '_'), |_| TOKEN_FLOAT),
+               Some('x' | 'X') => {
+                  (
+                     |c| c.is_ascii_hexdigit() || c == '_',
+                     |this| this.consume_scientific_base16(),
+                  )
+               },
                _ => unreachable!(),
             };
 
@@ -420,7 +446,7 @@ impl<'a> Tokenizer<'a> {
             {
                self.consume_character();
                self.consume_while(is_valid_digit);
-               error_token.unwrap_or(self.consume_scientific())
+               error_token.unwrap_or(consume_scientific(self))
             } else {
                error_token.unwrap_or(TOKEN_INTEGER)
             }
@@ -436,7 +462,7 @@ impl<'a> Tokenizer<'a> {
             {
                self.consume_character();
                self.consume_while(is_valid_digit);
-               self.consume_scientific()
+               self.consume_scientific_base10()
             } else {
                TOKEN_INTEGER
             }
