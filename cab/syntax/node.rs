@@ -662,24 +662,43 @@ node! {
 impl InfixOperation {
    #[must_use]
    pub fn left(&self) -> Option<ExpressionRef<'_>> {
+      let operator_token = self.operator_token();
+
       self
          .children_with_tokens()
          .take_while(|element| {
+            let Some(operator_token) = operator_token else {
+               // When there is no operator token, take it all.
+               return true;
+            };
+
             // Take part before token.
-            element.into_token().is_none()
+            element
+               .into_token()
+               .is_none_or(|token| token != operator_token)
          })
          .find_map(|element| <ExpressionRef<'_>>::try_from(element.into_node()?).ok())
    }
 
    #[must_use]
    pub fn right(&self) -> Option<ExpressionRef<'_>> {
+      let operator_token = self.operator_token();
+
       self
          .children_with_tokens()
          .skip_while(|element| {
+            let Some(operator_token) = operator_token else {
+               // When there is no operator token, don't skip.
+               return false;
+            };
+
             // Skip all until a token, aka the operator.
-            element.into_token().is_none()
+            element
+               .into_token()
+               .is_none_or(|token| token != operator_token)
          })
-         .find_map(|element| <ExpressionRef<'_>>::try_from(element.into_node()?).ok())
+         .filter_map(|element| <ExpressionRef<'_>>::try_from(element.into_node()?).ok())
+         .last()
    }
 
    /// Returns the operator token of this operation.
