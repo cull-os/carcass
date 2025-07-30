@@ -844,6 +844,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "cst"
+version = "0.0.1"
+dependencies = [
+ "ranged",
+]
+
+[[package]]
 name = "cstree"
 version = "0.12.2"
 source = "git+https://github.com/RGBCube/cstree#a102fdf1d4d0b9b24bc03d037005fb317e347f08"

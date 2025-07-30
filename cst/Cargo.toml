@@ -1,0 +1,21 @@
+[package]
+name        = "cst"
+description = "Lossless syntax trees"
+license     = "MPL-2.0"
+categories  = [ "parsing", "data-structures" ]
+keywords    = [ "parser", "parsing", "cst", "concrete", "syntax" ]
+repository  = "https://github.com/cull-os/carcass/tree/master/cst"
+version     = "0.0.1"
+publish     = true
+
+authors.workspace = true
+edition.workspace = true
+
+[lib]
+path = "mod.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+ranged.path = "../ranged"
