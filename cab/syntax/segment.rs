@@ -310,12 +310,22 @@ impl<'a> IntoIterator for Segments<'a> {
 
                   buffer.push_str(&unescaped);
 
-                  if escaped_newline {
-                     assert!(
-                        is_to_line_end,
-                        "cannot ecape newline without the line stretching to the line end"
-                     );
-                  } else if is_to_line_end {
+                  // Not asserting `escaped_newline -> is_to_line_end`,
+                  // because we still process invalid syntax and
+                  // yield valid segments.
+                  //
+                  // For example, in this code:
+                  //
+                  //   "\
+                  //
+                  // That part with only a \ will `escaped_newline`, but
+                  // it won't be a `is_to_line_end` because the way
+                  // we decide that is just `!line_is_last`, which is false
+                  // as that "line" is the last as there is no closing delimiter.
+                  //
+                  // That's fine for actually valid syntax trees though.
+
+                  if is_to_line_end && !escaped_newline {
                      buffer.push('\n');
                   }
 
@@ -537,7 +547,7 @@ pub trait Segmented: ops::Deref<Target = red::Node> {
 
                      is_from_line_start: !(segment_is_first && line_is_first)
                         && !(previous_segment_span_last_line.is_some() && line_is_first),
-                     is_to_line_end:     line_is_first || !line_is_last,
+                     is_to_line_end:     !line_is_last,
 
                      is_first: segment_is_first && line_is_first,
                      is_last:  segment_is_last && line_is_last,
