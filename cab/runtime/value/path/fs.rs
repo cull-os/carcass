@@ -23,6 +23,7 @@ use super::{
    Root,
    Subpath,
 };
+use crate::value;
 
 fn to_pathbuf(subpath: &Subpath) -> Result<PathBuf> {
    Ok(if cfg!(target_os = "windows") {
@@ -103,7 +104,7 @@ impl Root for Fs {
             )
          })?;
 
-         contents.push(subpath.push_front(Arc::from(name)));
+         contents.push(subpath.push_front(value::SString::from(name)));
       }
 
       contents.sort_unstable();

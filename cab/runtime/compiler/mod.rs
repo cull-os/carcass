@@ -8,7 +8,10 @@ use cab_syntax::{
    Segmented as _,
    node,
 };
-use cab_util::unwrap;
+use cab_util::{
+   into,
+   unwrap,
+};
 use cyn::{
    Result,
    ResultExt as _,
@@ -156,7 +159,9 @@ impl<'a> Emitter<'a> {
 
 #[bon::bon]
 impl<'a> Emitter<'a> {
-   fn emit_push(&mut self, span: Span, value: Value) {
+   fn emit_push(&mut self, span: Span, value: impl Into<Value>) {
+      into!(value);
+
       let index = self.value(value);
 
       self.push_operation(span, Operation::Push);
@@ -250,7 +255,7 @@ impl<'a> Emitter<'a> {
          self.emit_scope(item.span(), |this| this.emit(item));
       }
 
-      self.emit_push(list.span(), Value::List(List::new_sync()));
+      self.emit_push(list.span(), List::new_sync());
 
       for span in spans {
          self.push_operation(list.span(), Operation::Construct);
@@ -270,7 +275,7 @@ impl<'a> Emitter<'a> {
          },
 
          None => {
-            self.emit_push(attributes.span(), Value::from(value::Attributes::new()));
+            self.emit_push(attributes.span(), value::Attributes::new());
          },
       }
    }
@@ -415,9 +420,7 @@ impl<'a> Emitter<'a> {
                            this.push_operation(operation.span(), Operation::Pop);
                            this.emit_push(
                               left.span(),
-                              Value::Error(Arc::new(Value::from(value::string::new!(
-                                 "parameters were not equal, TODO make error value better",
-                              )))),
+                              Value::error(value::string::new!("parameters were not equal")),
                            );
 
                            let over_body = {
@@ -513,13 +516,13 @@ impl<'a> Emitter<'a> {
                Segment::Content { span, ref content } => {
                   this.emit_push(
                      span,
-                     Value::from(value::Path::rootless(
+                     value::Path::rootless(
                         content
                            .split(value::path::SEPARATOR)
                            .filter(|part| !part.is_empty())
-                           .map(Arc::from)
+                           .map(value::SString::from)
                            .collect(),
-                     )),
+                     ),
                   );
                },
 
@@ -647,7 +650,7 @@ impl<'a> Emitter<'a> {
             for segment in &segments {
                match *segment {
                   Segment::Content { span, ref content } => {
-                     this.emit_push(span, Value::from(value::SString::from(&**content)));
+                     this.emit_push(span, value::SString::from(&**content));
                   },
 
                   Segment::Interpolation(interpolation) => {
@@ -727,13 +730,13 @@ impl<'a> Emitter<'a> {
          node::ExpressionRef::SString(string) => self.emit_string(string),
 
          node::ExpressionRef::Char(char) => {
-            self.emit_push(char.span(), Value::Char(char.value()));
+            self.emit_push(char.span(), char.value());
          },
          node::ExpressionRef::Integer(integer) => {
-            self.emit_push(integer.span(), Value::Integer(Arc::new(integer.value())));
+            self.emit_push(integer.span(), Arc::new(integer.value()));
          },
          node::ExpressionRef::Float(float) => {
-            self.emit_push(float.span(), Value::Float(float.value()));
+            self.emit_push(float.span(), float.value());
          },
 
          node::ExpressionRef::If(if_) => self.emit_if(if_),

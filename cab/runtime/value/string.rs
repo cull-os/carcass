@@ -2,7 +2,7 @@ use std::ops;
 
 use dup::Dupe;
 
-#[derive(Clone, Dupe)]
+#[derive(Clone, Dupe, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[expect(clippy::module_name_repetitions)]
 pub struct SString(#[doc(hidden)] pub arcstr::Substr);
 

@@ -24,6 +24,7 @@ use ust::{
 };
 
 use super::Value;
+use crate::value;
 
 mod blob;
 pub use blob::blob;
@@ -36,7 +37,7 @@ pub use standard::standard;
 
 pub const SEPARATOR: char = '/';
 
-pub type Part = Arc<str>;
+pub type Part = value::SString;
 
 pub type Subpath = List<Part>;
 

@@ -5,6 +5,7 @@ use cab_syntax::{
    escape_string,
    is_valid_plain_identifier,
 };
+use cab_util::into;
 use derive_more::From;
 use dup::Dupe;
 use rpds::ListSync as List;
@@ -63,6 +64,17 @@ pub enum Value {
    Lambda(Arc<Code>),
 }
 
+pub const STYLE_ESCAPED: style::Style = style::Color::Magenta.fg().bold();
+pub const STYLE_PUNCTUATION: style::Style = style::Color::Yellow.fg();
+pub const STYLE_BIND: style::Style = style::Color::BrightWhite.fg();
+pub const STYLE_BIND_AT: style::Style = STYLE_BIND.bold();
+pub const STYLE_REFERENCE: style::Style = style::Style::new();
+pub const STYLE_STRING: style::Style = style::Color::Green.fg();
+pub const STYLE_CHAR: style::Style = style::Color::Green.fg();
+pub const STYLE_INTEGER: style::Style = style::Color::Cyan.fg().bold();
+pub const STYLE_FLOAT: style::Style = style::Color::Cyan.fg().bold();
+pub const STYLE_THUNK: style::Style = style::Color::BrightBlack.fg().bold();
+
 impl tag::DisplayTags for Value {
    fn display_tags<'a>(&'a self, tags: &mut tag::Tags<'a>) {
       use tag::{
@@ -79,8 +91,6 @@ impl tag::DisplayTags for Value {
          },
       };
 
-      const ESCAPED_STYLE: style::Style = style::Color::Magenta.fg().bold();
-
       #[bon::builder]
       fn display_tags_escaped<'a>(
          #[builder(start_fn)] tags: &mut tag::Tags<'a>,
@@ -90,7 +100,7 @@ impl tag::DisplayTags for Value {
       ) {
          for part in escape_string(s)
             .normal_style(normal)
-            .escaped_style(ESCAPED_STYLE)
+            .escaped_style(STYLE_ESCAPED)
             .maybe_delimiter(delimiter)
             .call()
          {
@@ -123,7 +133,7 @@ impl tag::DisplayTags for Value {
 
          Value::List(ref list) => {
             tags.write_with(Group(40), |tags| {
-               tags.write("[".yellow());
+               tags.write("[".style(STYLE_PUNCTUATION));
 
                if !list.is_empty() {
                   tags.write_if(Space, Flat);
@@ -136,7 +146,7 @@ impl tag::DisplayTags for Value {
                      item.display_tags(tags);
 
                      tags.write_if(
-                        ",".yellow(),
+                        ",".style(STYLE_PUNCTUATION),
                         if items.peek().is_some() {
                            Always
                         } else {
@@ -148,7 +158,7 @@ impl tag::DisplayTags for Value {
                   }
                });
 
-               tags.write("]".yellow());
+               tags.write("]".style(STYLE_PUNCTUATION));
             });
          },
 
@@ -156,25 +166,25 @@ impl tag::DisplayTags for Value {
          Value::Path(ref path) => path.display_tags(tags),
 
          Value::Bind(ref identifier) => {
-            tags.write("@".blue().bold());
+            tags.write("@".style(STYLE_BIND_AT));
 
             if is_valid_plain_identifier(identifier) {
-               display_tags_escaped(tags, identifier, style::Color::Blue.fg()).call();
+               display_tags_escaped(tags, identifier, STYLE_BIND).call();
             } else {
-               tags.write("`".blue());
-               display_tags_escaped(tags, identifier, style::Color::Blue.fg())
+               tags.write("`".style(STYLE_BIND));
+               display_tags_escaped(tags, identifier, STYLE_BIND)
                   .delimiter(('`', "\\`"))
                   .call();
-               tags.write("`".blue());
+               tags.write("`".style(STYLE_BIND));
             }
          },
 
          Value::Reference(ref identifier) => {
             if is_valid_plain_identifier(identifier) {
-               display_tags_escaped(tags, identifier, style::Style::default()).call();
+               display_tags_escaped(tags, identifier, STYLE_REFERENCE).call();
             } else {
                tags.write("`");
-               display_tags_escaped(tags, identifier, style::Style::default())
+               display_tags_escaped(tags, identifier, STYLE_REFERENCE)
                   .delimiter(('`', "\\`"))
                   .call();
                tags.write("`");
@@ -182,29 +192,41 @@ impl tag::DisplayTags for Value {
          },
 
          Value::String(ref string) => {
-            tags.write("\"".green());
-            display_tags_escaped(tags, string, style::Color::Green.fg())
+            tags.write("\"".style(STYLE_STRING));
+            display_tags_escaped(tags, string, STYLE_STRING)
                .delimiter(('"', "\\\""))
                .call();
-            tags.write("\"".green());
+            tags.write("\"".style(STYLE_STRING));
          },
 
          Value::Char(char) => {
-            tags.write("'".green());
+            tags.write("'".style(STYLE_CHAR));
             match escape(char).delimiter(('\'', "\\'")).call() {
-               Some(escaped) => tags.write(escaped.style(ESCAPED_STYLE)),
-               None => tags.write(char.to_string().green()),
+               Some(escaped) => tags.write(escaped.style(STYLE_ESCAPED)),
+               None => tags.write(char.to_string().style(STYLE_CHAR)),
             }
-            tags.write("'".green());
+            tags.write("'".style(STYLE_CHAR));
          },
 
-         Value::Integer(ref integer) => tags.write(integer.to_string().cyan().bold()),
+         Value::Integer(ref integer) => tags.write(integer.to_string().style(STYLE_INTEGER)),
 
-         Value::Float(float) => tags.write(float.to_string().cyan().bold()),
+         Value::Float(float) => tags.write(float.to_string().style(STYLE_FLOAT)),
 
          Value::Thunk(_) | Value::Thunkprint(_) | Value::Lambda(_) => {
-            tags.write("_".bright_black().bold());
+            tags.write("_".style(STYLE_THUNK));
          },
       }
+   }
+}
+
+impl Value {
+   #[must_use]
+   pub fn error(inner: impl Into<Self>) -> Self {
+      into!(inner);
+
+      // TODO: Definitely won't stay like this for long.
+      Self::Error(Arc::new(Self::from(
+         Attributes::new().insert(string::new!("__error__"), inner),
+      )))
    }
 }
