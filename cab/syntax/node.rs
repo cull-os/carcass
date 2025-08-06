@@ -291,9 +291,11 @@ impl<'a> ExpressionRef<'a> {
          Self::Identifier(identifier) => identifier.validate(to),
          Self::SString(string) => string.validate(to),
          Self::Char(char) => char.validate(to),
+         Self::Integer(integer) => integer.validate(to),
+         Self::Float(float) => float.validate(to),
          Self::If(if_else) => if_else.validate(to),
 
-         Self::Error(_) | Self::Integer(_) | Self::Float(_) => {},
+         Self::Error(_) => {},
       }
    }
 
@@ -1082,7 +1084,15 @@ impl Integer {
 
    #[must_use]
    pub fn value(&self) -> num::BigInt {
-      self.token_integer().value()
+      self.token_integer().value().expect("integer must be valid")
+   }
+
+   pub fn validate(&self, to: &mut Vec<Report>) {
+      if self.token_integer().value().is_err() {
+         to.push(
+            Report::error("invalid integer").primary(self.span(), "why do you even need this?"),
+         );
+      }
    }
 }
 
@@ -1099,7 +1109,13 @@ impl Float {
 
    #[must_use]
    pub fn value(&self) -> f64 {
-      self.token_float().value()
+      self.token_float().value().expect("float must be valid")
+   }
+
+   pub fn validate(&self, to: &mut Vec<Report>) {
+      if self.token_float().value().is_err() {
+         to.push(Report::error("invalid float").primary(self.span(), "usecase?"));
+      }
    }
 }
 

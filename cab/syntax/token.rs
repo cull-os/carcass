@@ -7,15 +7,16 @@ use std::{
 };
 
 use derive_more::Deref;
-use num::Num as _;
+use num::{
+   Num as _,
+   bigint as num_bigint,
+   traits as num_traits,
+};
 
 use crate::{
    Kind::*,
    red,
 };
-
-const EXPECT_INTEGER_VALID: &str = "integer token must be valid";
-const EXPECT_FLOAT_VALID: &str = "float token must be valid";
 
 macro_rules! token {
    (
@@ -144,18 +145,17 @@ token! {
 impl Integer {
    /// Returns the value of this integer, after resolving binary,
    /// octadecimal and hexadecimal notation if it exists.
-   #[must_use]
    #[rustfmt::skip]
-   pub fn value(&self) -> num::BigInt {
+   pub fn value(&self) -> Result<num::BigInt, num_bigint::ParseBigIntError> {
       let text = self.text();
 
       match text.as_bytes().get(1).copied() {
-         Some(b'b' | b'B') => num::BigInt::from_str_radix(text.get(2..).expect(EXPECT_INTEGER_VALID), 2),
-         Some(b'o' | b'O') => num::BigInt::from_str_radix(text.get(2..).expect(EXPECT_INTEGER_VALID), 8),
-         Some(b'x' | b'X') => num::BigInt::from_str_radix(text.get(2..).expect(EXPECT_INTEGER_VALID), 16),
+         // Remove leading `_` because that makes num_bigint's parser see the literal as `_BEEF` when we have `0x_BEEF`.
+         Some(b'b' | b'B') => num::BigInt::from_str_radix(text["0b".len()..].trim_start_matches('_'), 2),
+         Some(b'o' | b'O') => num::BigInt::from_str_radix(text["0o".len()..].trim_start_matches('_'), 8),
+         Some(b'x' | b'X') => num::BigInt::from_str_radix(text["0x".len()..].trim_start_matches('_'), 16),
          _ => num::BigInt::from_str_radix(text, 10),
       }
-      .expect(EXPECT_INTEGER_VALID)
    }
 }
 
@@ -169,16 +169,16 @@ token! {
 
 impl Float {
    /// Returns the value of the float by parsing the underlying slice.
-   #[must_use]
-   pub fn value(&self) -> f64 {
+   pub fn value(&self) -> Result<f64, num_traits::ParseFloatError> {
       let text = self.text();
 
       match text.as_bytes().get(1).copied() {
-         Some(b'b' | b'B') => f64::from_str_radix(text.get(2..).expect(EXPECT_FLOAT_VALID), 2),
-         Some(b'o' | b'O') => f64::from_str_radix(text.get(2..).expect(EXPECT_FLOAT_VALID), 8),
-         Some(b'x' | b'X') => f64::from_str_radix(text.get(2..).expect(EXPECT_FLOAT_VALID), 16),
+         // Remove leading `_` because that makes num_bigint's parser see the literal as `_BEEF`
+         // when we have `0x_BE.EF`.
+         Some(b'b' | b'B') => f64::from_str_radix(text["0b".len()..].trim_start_matches('_'), 2),
+         Some(b'o' | b'O') => f64::from_str_radix(text["0o".len()..].trim_start_matches('_'), 8),
+         Some(b'x' | b'X') => f64::from_str_radix(text["0x".len()..].trim_start_matches('_'), 16),
          _ => f64::from_str_radix(text, 10),
       }
-      .expect(EXPECT_FLOAT_VALID)
    }
 }
