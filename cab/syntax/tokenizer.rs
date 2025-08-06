@@ -391,7 +391,6 @@ impl<'a> Tokenizer<'a> {
          '[' => TOKEN_BRACKET_LEFT,
          ']' => TOKEN_BRACKET_RIGHT,
 
-         '.' => TOKEN_PERIOD,
          '/' if self.try_consume_character('/') => TOKEN_SLASH_SLASH,
          '{' => TOKEN_CURLYBRACE_LEFT,
          '}' => TOKEN_CURLYBRACE_RIGHT,
@@ -460,6 +459,14 @@ impl<'a> Tokenizer<'a> {
                .unwrap_or(default_kind)
          },
 
+         '.' if let is_valid_digit = (|c: char| c.is_ascii_digit() || c == '_')
+            && self.peek_character().is_some_and(is_valid_digit) =>
+         {
+            self.consume_while(is_valid_digit);
+
+            self.consume_scientific_base10().unwrap_or(TOKEN_FLOAT)
+         },
+
          initial_digit if initial_digit.is_ascii_digit() => {
             let is_valid_digit = |c: char| c.is_ascii_digit() || c == '_';
 
@@ -477,6 +484,9 @@ impl<'a> Tokenizer<'a> {
 
             self.consume_scientific_base10().unwrap_or(default_kind)
          },
+
+         // After the `.123` literal parsing.
+         '.' => TOKEN_PERIOD,
 
          initial_letter if is_valid_initial_plain_identifier_character(initial_letter) => {
             const KEYWORDS: phf::Map<&'static str, Kind> = phf::phf_map! {
