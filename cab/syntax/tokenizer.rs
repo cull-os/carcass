@@ -441,14 +441,20 @@ impl<'a> Tokenizer<'a> {
 
             let digits_len = self.consume_while(is_valid_digit);
             let digits = self.consumed_since(self.offset - digits_len);
-            let error_kind = (digits.is_empty() || digits.bytes().all(|c| c == b'_'))
+            let mut error_kind = (digits.is_empty() || digits.bytes().all(|c| c == b'_'))
                .then_some(TOKEN_ERROR_NUMBER_NO_DIGIT);
 
             let default_kind = if self.peek_character() == Some('.')
                && self.peek_character_nth(1).is_some_and(is_valid_digit)
             {
                self.consume_character();
-               self.consume_while(is_valid_digit);
+
+               error_kind = error_kind.and({
+                  let digits_len = self.consume_while(is_valid_digit);
+                  let digits = self.consumed_since(self.offset - digits_len);
+                  digits.is_empty().then_some(TOKEN_ERROR_NUMBER_NO_DIGIT)
+               });
+
                TOKEN_FLOAT
             } else {
                TOKEN_INTEGER
