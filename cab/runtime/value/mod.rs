@@ -20,7 +20,7 @@ use ust::{
 
 use crate::Code;
 
-mod attributes;
+pub mod attributes;
 pub use attributes::Attributes;
 
 pub mod path;
@@ -225,8 +225,8 @@ impl Value {
       into!(inner);
 
       // TODO: Definitely won't stay like this for long.
-      Self::Error(Arc::new(Self::from(
-         Attributes::new().insert(string::new!("__error__"), inner),
-      )))
+      Self::Error(Arc::new(Self::from(attributes::new! {
+         "__error__": inner,
+      })))
    }
 }

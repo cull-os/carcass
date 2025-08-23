@@ -13,7 +13,29 @@ use super::Value;
 use crate::value;
 
 #[derive(Clone, Dupe)]
-pub struct Attributes(HashTrieMap<value::SString, Value, FxBuildHasher>);
+pub struct Attributes(#[doc(hidden)] pub HashTrieMap<value::SString, Value, FxBuildHasher>);
+
+#[doc(hidden)]
+pub mod private {
+   pub use rpds::HashTrieMapSync as HashTrieMap;
+   pub use rustc_hash::FxBuildHasher;
+}
+
+#[macro_export]
+#[doc(hidden)]
+#[expect(clippy::module_name_repetitions)]
+macro_rules! __attributes_new {
+   ($($key:literal: $value:expr),* $(,)?) => {
+      $crate::value::Attributes(
+         $crate::value::attributes::private::HashTrieMap::new_with_hasher_and_ptr_kind(
+            $crate::value::attributes::private::FxBuildHasher
+         )
+      )
+         $(.insert($crate::value::string::new!($key), $value))*
+   }
+}
+
+pub use crate::__attributes_new as new;
 
 impl tag::DisplayTags for Attributes {
    fn display_tags<'a>(&'a self, tags: &mut tag::Tags<'a>) {
@@ -78,11 +100,6 @@ impl tag::DisplayTags for Attributes {
 }
 
 impl Attributes {
-   #[must_use]
-   pub fn new() -> Self {
-      Self(HashTrieMap::new_with_hasher_and_ptr_kind(FxBuildHasher))
-   }
-
    #[must_use]
    pub fn insert(&self, key: value::SString, value: Value) -> Self {
       Self(self.0.insert(key, value))

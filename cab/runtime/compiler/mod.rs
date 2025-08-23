@@ -275,7 +275,7 @@ impl<'a> Emitter<'a> {
          },
 
          None => {
-            self.emit_push(attributes.span(), value::Attributes::new());
+            self.emit_push(attributes.span(), value::attributes::new! {});
          },
       }
    }
