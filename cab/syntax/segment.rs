@@ -31,6 +31,7 @@ use ust::{
 };
 
 use crate::{
+   Kind,
    node,
    red,
    token,
@@ -595,5 +596,26 @@ pub trait Segmented: ops::Deref<Target = red::Node> {
       let mut segments = self.segments().into_iter().peekable();
 
       segments.next().is_some_and(|segment| segment.is_content()) && segments.peek().is_none()
+   }
+
+   fn validate_closing(&self, to: &mut Vec<Report>, end: Kind, type_: &str) {
+      if self
+         .children_with_tokens()
+         .last()
+         .is_some_and(|token| token.kind() == end)
+      {
+         return;
+      }
+
+      let start = self
+         .children_with_tokens()
+         .next()
+         .expect("delimited must have tokens");
+
+      to.push(
+         Report::error(format!("unclosed {type_}"))
+            .secondary(start.span(), format!("{type_} starts here"))
+            .primary(Span::empty(self.span().end), format!("expected {end} here")),
+      );
    }
 }

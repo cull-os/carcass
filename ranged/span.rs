@@ -191,18 +191,21 @@ impl From<ops::Range<usize>> for Span {
 }
 
 #[cfg(feature = "cstree")]
-impl From<Span> for cstree::text::TextRange {
-   fn from(this: Span) -> Self {
-      cstree::text::TextRange::new(this.start.into(), this.end.into())
-   }
-}
+mod cstree_span {
+   use super::Span;
 
-#[cfg(feature = "cstree")]
-impl From<cstree::text::TextRange> for Span {
-   fn from(that: cstree::text::TextRange) -> Self {
-      Self {
-         start: that.start().into(),
-         end:   that.end().into(),
+   impl From<Span> for cstree::text::TextRange {
+      fn from(this: Span) -> Self {
+         cstree::text::TextRange::new(this.start.into(), this.end.into())
+      }
+   }
+
+   impl From<cstree::text::TextRange> for Span {
+      fn from(that: cstree::text::TextRange) -> Self {
+         Self {
+            start: that.start().into(),
+            end:   that.end().into(),
+         }
       }
    }
 }
@@ -214,28 +217,42 @@ pub trait IntoSpan {
 }
 
 #[cfg(feature = "cstree")]
-impl<S: cstree::Syntax> IntoSpan for cstree::syntax::SyntaxToken<S> {
-   fn span(&self) -> Span {
-      self.text_range().into()
-   }
-}
-#[cfg(feature = "cstree")]
-impl<S: cstree::Syntax> IntoSpan for cstree::syntax::ResolvedToken<S> {
-   fn span(&self) -> Span {
-      self.text_range().into()
-   }
-}
+mod cstree_intospan {
+   use super::{
+      IntoSpan,
+      Span,
+   };
 
-#[cfg(feature = "cstree")]
-impl<S: cstree::Syntax> IntoSpan for cstree::syntax::SyntaxNode<S> {
-   fn span(&self) -> Span {
-      self.text_range().into()
+   impl<S: cstree::Syntax> IntoSpan for cstree::syntax::SyntaxToken<S> {
+      fn span(&self) -> Span {
+         self.text_range().into()
+      }
    }
-}
 
-#[cfg(feature = "cstree")]
-impl<S: cstree::Syntax> IntoSpan for cstree::syntax::ResolvedNode<S> {
-   fn span(&self) -> Span {
-      self.text_range().into()
+   impl<S: cstree::Syntax> IntoSpan for cstree::syntax::ResolvedToken<S> {
+      fn span(&self) -> Span {
+         self.text_range().into()
+      }
+   }
+
+   impl<S: cstree::Syntax> IntoSpan for cstree::syntax::SyntaxNode<S> {
+      fn span(&self) -> Span {
+         self.text_range().into()
+      }
+   }
+
+   impl<S: cstree::Syntax> IntoSpan for cstree::syntax::ResolvedNode<S> {
+      fn span(&self) -> Span {
+         self.text_range().into()
+      }
+   }
+
+   impl<N: IntoSpan, T: IntoSpan> IntoSpan for cstree::util::NodeOrToken<&N, &T> {
+      fn span(&self) -> Span {
+         match *self {
+            cstree::util::NodeOrToken::Node(node) => node.span(),
+            cstree::util::NodeOrToken::Token(token) => token.span(),
+         }
+      }
    }
 }

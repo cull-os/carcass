@@ -845,6 +845,9 @@ impl Segmented for Path {}
 
 impl Path {
    pub fn validate(&self, to: &mut Vec<Report>) {
+      // No `validate_closing` here because paths are always closed.
+      // It has no visible closing delimiter.
+
       let mut report = lazy!(Report::error("invalid path"));
 
       let segments = self.segments();
@@ -914,7 +917,13 @@ impl Segmented for IdentifierQuoted {}
 
 impl IdentifierQuoted {
    pub fn validate(&self, to: &mut Vec<Report>) {
-      let mut report = lazy!(Report::error("invalid identifier"));
+      let to_len = to.len();
+      self.validate_closing(to, TOKEN_QUOTED_IDENTIFIER_END, "quoted identifier");
+      if to_len != to.len() {
+         return;
+      }
+
+      let mut report = lazy!(Report::error("invalid quoted identifier"));
 
       let segments = self.segments();
       segments.validate(to, &mut report);
@@ -1002,6 +1011,12 @@ impl Segmented for SString {}
 
 impl SString {
    pub fn validate(&self, to: &mut Vec<Report>) {
+      let to_len = to.len();
+      self.validate_closing(to, TOKEN_STRING_END, "string");
+      if to_len != to.len() {
+         return;
+      }
+
       let mut report = lazy!(Report::error("invalid string"));
 
       let segments = self.segments();
@@ -1034,6 +1049,12 @@ impl Char {
    }
 
    pub fn validate(&self, to: &mut Vec<Report>) {
+      let to_len = to.len();
+      self.validate_closing(to, TOKEN_CHAR_END, "char");
+      if to_len != to.len() {
+         return;
+      }
+
       let mut report = lazy!(Report::error("invalid char"));
 
       let segments = self.segments();

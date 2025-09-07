@@ -443,19 +443,8 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
                   break;
                },
 
-               Some(_) => {
-                  // Sometimes recoverably parsing interpolation leaves us unwanted tokens. It
-                  // is not worth it trying to node it correctly without a big rewrite, so
-                  // just consume them.
-                  this.next_direct();
-               },
-
-               None => {
-                  this
-                     .reports
-                     .push(unexpected(Span::empty(this.offset)).expected(TOKEN_CONTENT | end));
-                  break;
-               },
+               // Break here and validate later. We know `"foo` is a string.
+               Some(_) | None => break,
             }
          }
       });
