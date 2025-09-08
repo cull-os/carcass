@@ -63,10 +63,6 @@ pub fn write(writer: &mut dyn Write, styled: &impl Display) -> fmt::Result {
 }
 
 pub trait Write: fmt::Write {
-   fn finish(&mut self) -> fmt::Result {
-      Ok(())
-   }
-
    fn width(&self) -> usize {
       0
    }

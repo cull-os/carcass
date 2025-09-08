@@ -286,7 +286,6 @@ impl process::Termination for Termination {
          Err(chain) => {
             let writer = &mut terminal::stderr();
             let _ = chain.display_styled(writer);
-            let _ = writer.finish();
             process::ExitCode::FAILURE
          },
       }

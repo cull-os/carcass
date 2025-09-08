@@ -153,8 +153,5 @@ async fn main() -> cyn::Termination {
       Command::Ping => todo!(),
    }
 
-   out.finish()?;
-   err.finish()?;
-
    cyn::Termination::success()
 }

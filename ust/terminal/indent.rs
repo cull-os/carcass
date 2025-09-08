@@ -31,10 +31,6 @@ pub struct Writer<'a> {
 }
 
 impl Write for Writer<'_> {
-   fn finish(&mut self) -> fmt::Result {
-      self.inner.finish()
-   }
-
    fn width(&self) -> usize {
       self.inner.width()
          + if self.place == Place::Start {

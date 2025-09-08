@@ -138,9 +138,6 @@ async fn main() -> cyn::Termination {
       },
    }
 
-   out.finish()?;
-   err.finish()?;
-
    cyn::Termination::success()
 }
 

@@ -1039,12 +1039,14 @@ struct Writer<W: fmt::Write> {
    width_max: usize,
 }
 
-impl<W: fmt::Write> Write for Writer<W> {
-   fn finish(&mut self) -> fmt::Result {
+impl<W: fmt::Write> Drop for Writer<W> {
+   fn drop(&mut self) {
       self.set_style(style::Style::default());
-      self.apply_style()
+      let _ = self.apply_style();
    }
+}
 
+impl<W: fmt::Write> Write for Writer<W> {
    fn width(&self) -> usize {
       self.width
    }

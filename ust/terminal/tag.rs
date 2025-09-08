@@ -180,10 +180,6 @@ impl Display for Tags<'_> {
       }
 
       impl Write for Renderer<'_> {
-         fn finish(&mut self) -> fmt::Result {
-            self.inner.finish()
-         }
-
          fn width(&self) -> usize {
             self.inner.width()
          }

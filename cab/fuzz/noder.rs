@@ -93,7 +93,5 @@ fuzz_target!(|source: &str| -> Corpus {
       Corpus::Keep
    };
 
-   ust::Write::finish(out).unwrap();
-
    result
 });
