@@ -21,7 +21,6 @@ use runtime::{
 use ust::{
    COLORS,
    Display as _,
-   Write as _,
    report,
    style::StyledExt as _,
    terminal,

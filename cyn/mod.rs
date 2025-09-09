@@ -15,7 +15,6 @@ use std::{
 use dup::Dupe;
 use ust::{
    Display,
-   Write as _,
    style::StyledExt as _,
    terminal::{
       self,

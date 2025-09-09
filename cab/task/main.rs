@@ -13,7 +13,6 @@ use cyn::{
    ResultExt as _,
 };
 use ust::{
-   Write as _,
    style::StyledExt as _,
    terminal,
    write,

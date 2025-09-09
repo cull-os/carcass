@@ -589,7 +589,8 @@ mod tests {
          (TOKEN_SPACE, " "),
          (TOKEN_FLOAT, "0x123.0e"), // e is a valid hexadecimal digit.
          (TOKEN_SPACE, " "),
-         (TOKEN_ERROR_FLOAT_NO_EXPONENT, "0o777.0e")
+         (TOKEN_FLOAT, "0o777.0"),
+         (TOKEN_IDENTIFIER, "e"),
       );
    }
 
