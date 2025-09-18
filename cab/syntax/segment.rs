@@ -397,11 +397,11 @@ impl Segments<'_> {
          }
       }
 
-      if indents.len() > 1 {
+      let [indent] = *indents else {
          return Err(indents);
-      }
+      };
 
-      Ok((indents.first().copied(), indent_width.unwrap_or(0)))
+      Ok((Some(indent), indent_width.unwrap_or(0)))
    }
 
    pub fn validate(&self, to: &mut Vec<Report>, report: &mut Lazy!(Report)) {
