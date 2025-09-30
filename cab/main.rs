@@ -8,10 +8,6 @@ use cab::{
    syntax,
 };
 use clap::Parser as _;
-use cyn::{
-   self,
-   ResultExt as _,
-};
 use dup::Dupe as _;
 use rpds::ListSync as List;
 use runtime::{
@@ -27,46 +23,30 @@ use ust::{
    write,
 };
 
-const FAIL_STDOUT: &str = "failed to write to stdout";
-const FAIL_STDERR: &str = "failed to write to stderr";
-
 #[derive(clap::Parser)]
 #[command(version, about)]
 struct Cli {
-   #[command(subcommand)]
-   command: Command,
+   // Print the result of every `Language.tokenize` call.
+   #[arg(long, default_value = "false")]
+   dump_token: DumpToken,
+
+   // Print the result of every `Language.parse` call.
+   #[arg(long, default_value = "false")]
+   dump_syntax: bool,
+
+   // Print the result of every `Language.compile` call.
+   #[arg(long, default_value = "false")]
+   dump_code: bool,
+
+   // The expression to `evaluate`.
+   expression: Option<String>,
 }
 
-#[derive(clap::Subcommand, Debug, Clone)]
-enum Command {
-   /// Compile an expression.
-   Compile {
-      #[clap(default_value = "-")]
-      source: String,
-   },
-
-   /// Various commands related to debugging.
-   Dump {
-      #[command(subcommand)]
-      command: Dump,
-
-      /// The expression to dump. If set to '-', stdin is read.
-      #[clap(default_value = "-", global = true)]
-      source: String,
-   },
-}
-
-#[derive(clap::Subcommand, Debug, Clone, Copy)]
-enum Dump {
-   /// Dump the provided file's tokens.
-   Token {
-      /// If specified, the output will be colored instead of typed.
-      #[arg(long)]
-      color: bool,
-   },
-
-   /// Dump the provided file's syntax.
-   Syntax,
+#[derive(clap::ValueEnum, Debug, Clone, Copy)]
+enum DumpToken {
+   False,
+   True,
+   Color,
 }
 
 #[tokio::main]
@@ -76,65 +56,59 @@ async fn main() -> cyn::Termination {
    let out = &mut terminal::stdout();
    let err = &mut terminal::stderr();
 
-   let (Command::Compile { ref source } | Command::Dump { ref source, .. }) = cli.command;
-
-   let path: Arc<dyn value::path::Root> = if source == "-" {
-      Arc::new(value::path::standard())
-   } else {
-      Arc::new(value::path::blob(Value::from(value::SString::from(
-         &**source,
-      ))))
+   let Some(expression) = cli.expression else {
+      unimplemented!("repl not implemented yet");
    };
+   let path: Arc<dyn value::path::Root> = Arc::new(value::path::blob(Value::from(
+      value::SString::from(&*expression),
+   )));
+
    let path = value::Path::new(path, List::new_sync());
 
    let source = path.read().await?.to_vec();
    let source = String::from_utf8(source).expect("source was created from UTF-8 string");
    let source = report::PositionStr::new(&source);
 
-   match cli.command {
-      Command::Compile { .. } => {
-         let parse_oracle = syntax::ParseOracle::new();
-         let expression = parse_oracle
-            .parse(syntax::tokenize(&source))
-            .extractlnln(err, &path, &source)?;
+   let parse_oracle = syntax::ParseOracle::new();
+   let parse = parse_oracle.parse(syntax::tokenize(&source).inspect(|&(kind, slice)| {
+      match cli.dump_token {
+         DumpToken::False => {},
+         DumpToken::True => {
+            writeln!(out, "{kind:?} {slice:?}").expect("TODO move this inside the runtime");
+         },
+         DumpToken::Color => {
+            let style = COLORS[kind as usize];
 
-         let compile_oracle = runtime::CompileOracle::new();
-         let code = compile_oracle
-            .compile(expression.as_ref())
-            .path(path.dupe())
-            .extractlnln(err, &path, &source)?;
+            write(out, &slice.style(style)).expect("TODO move inside the runtime");
+         },
+      }
+   }));
 
-         code.display_styled(out).chain_err(FAIL_STDOUT)?;
+   match cli.dump_token {
+      DumpToken::False => {},
+      DumpToken::True | DumpToken::Color => {
+         writeln!(out).expect("TODO move inside the runtime");
       },
+   }
 
-      Command::Dump { command, .. } => {
-         match command {
-            Dump::Token { color } => {
-               for (kind, slice) in syntax::tokenize(&source) {
-                  if color {
-                     let style = COLORS[kind as usize];
+   if cli.dump_syntax {
+      // The Display of this already has a newline. So use write! instead.
+      write!(out, "{node:#?}", node = &parse.node).expect("TODO move inside the runtime");
+   }
 
-                     write(out, &slice.style(style))
-                  } else {
-                     writeln!(out, "{kind:?} {slice:?}")
-                  }
-                  .chain_err(FAIL_STDOUT)?;
-               }
-            },
+   let expression = parse.extractlnln(err, &path, &source)?;
 
-            Dump::Syntax => {
-               let parse_oracle = syntax::ParseOracle::new();
-               let parse = parse_oracle.parse(syntax::tokenize(&source));
+   let compile_oracle = runtime::CompileOracle::new();
+   let code = compile_oracle
+      .compile(expression.as_ref())
+      .path(path.dupe())
+      .extractlnln(err, &path, &source)?;
 
-               if let Err(error) = parse.dupe().extractlnln(err, &path, &source) {
-                  error.display_styled(err).chain_err(FAIL_STDERR)?;
-                  writeln!(err).chain_err(FAIL_STDERR)?;
-               }
-
-               write!(out, "{node:#?}", node = &parse.node).chain_err(FAIL_STDOUT)?;
-            },
-         }
-      },
+   if cli.dump_code {
+      code
+         .display_styled(out)
+         .expect("TODO move inside the runtime");
+      writeln!(out).expect("TODO move inside the runtime");
    }
 
    cyn::Termination::success()
