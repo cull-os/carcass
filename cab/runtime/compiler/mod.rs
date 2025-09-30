@@ -86,13 +86,15 @@ impl Compile {
    }
 }
 
-pub struct CompileOracle;
+pub struct CompileOracle {
+   _reserved: (),
+}
 
 #[bon::bon]
 impl CompileOracle {
    #[must_use]
    pub fn new() -> Self {
-      Self
+      Self { _reserved: () }
    }
 
    #[expect(clippy::unused_self)]
