@@ -5,9 +5,10 @@ use derive_more::{
    Deref,
    DerefMut,
 };
+use dup::Dupe;
 
 /// Byte len of a source code element.
-#[derive(Deref, DerefMut, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Deref, DerefMut, Debug, Clone, Dupe, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Size(u32);
 
 impl Size {

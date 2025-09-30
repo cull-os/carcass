@@ -22,6 +22,7 @@ cstree = [ "dep:cstree" ]
 
 [dependencies]
 cab-util.path = "../cab/util"
+dup.path      = "../dup"
 
 cstree = { optional = true, workspace = true }
 

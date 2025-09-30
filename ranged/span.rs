@@ -5,11 +5,12 @@ use std::{
 };
 
 use cab_util::into;
+use dup::Dupe;
 
 use crate::Size;
 
 /// The span of a source code element.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Dupe, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Span {
    /// The start of the span.
    pub start: Size,
