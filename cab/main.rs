@@ -85,11 +85,8 @@ async fn main() -> cyn::Termination {
       }
    }));
 
-   match cli.dump_token {
-      DumpToken::False => {},
-      DumpToken::True | DumpToken::Color => {
-         writeln!(out).expect("TODO move inside the runtime");
-      },
+   if let DumpToken::True | DumpToken::Color = cli.dump_token {
+      writeln!(out).expect("TODO move inside the runtime");
    }
 
    if cli.dump_syntax {
