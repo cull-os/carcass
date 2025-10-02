@@ -43,7 +43,7 @@ macro_rules! node {
       struct $name:ident;
    ) => {
       $(#[$attribute])*
-      #[derive(Deref, Debug, Dupe, Clone, PartialEq, Eq, Hash)]
+      #[derive(Deref, Debug, Clone, Dupe, PartialEq, Eq, Hash)]
       #[repr(transparent)]
       pub struct $name(red::Node);
 

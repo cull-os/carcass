@@ -134,8 +134,7 @@ impl LocalPosition<'_, '_> {
             ref mut scopes,
          } => {
             for scope in scopes.iter_mut().rev() {
-               #[expect(clippy::pattern_type_mismatch)]
-               for (local_name, indices) in &scope.locals_by_name {
+               for &(ref local_name, ref indices) in &scope.locals_by_name {
                   if !local_name.maybe_eq(name) {
                      continue;
                   }
@@ -213,8 +212,7 @@ impl<'a> Scope<'a> {
       name: &LocalName<'a>,
    ) -> LocalPosition<'this, 'a> {
       for (scope_index, scope) in scopes.iter().enumerate().rev() {
-         #[expect(clippy::pattern_type_mismatch)]
-         for (local_name, indices) in &scope.locals_by_name {
+         for &(ref local_name, ref indices) in &scope.locals_by_name {
             match () {
                () if local_name.eq(name) => {
                   return LocalPosition::Known {

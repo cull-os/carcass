@@ -57,7 +57,7 @@ async fn main() -> cyn::Termination {
    let err = &mut terminal::stderr();
 
    let Some(expression) = cli.expression else {
-      unimplemented!("repl not implemented yet");
+      unimplemented!("repl");
    };
    let path: Arc<dyn value::path::Root> = Arc::new(value::path::blob(Value::from(
       value::SString::from(&*expression),

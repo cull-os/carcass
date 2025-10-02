@@ -65,3 +65,41 @@ pub enum Argument {
    ValueIndex(ValueIndex),
    ByteIndex(ByteIndex),
 }
+
+impl Argument {
+   #[must_use]
+   pub fn as_u16(&self) -> Option<u16> {
+      if let &Self::U16(u16) = self {
+         Some(u16)
+      } else {
+         None
+      }
+   }
+
+   #[must_use]
+   pub fn as_u64(&self) -> Option<u64> {
+      if let &Self::U64(u64) = self {
+         Some(u64)
+      } else {
+         None
+      }
+   }
+
+   #[must_use]
+   pub fn as_value_index(&self) -> Option<ValueIndex> {
+      if let &Self::ValueIndex(index) = self {
+         Some(index)
+      } else {
+         None
+      }
+   }
+
+   #[must_use]
+   pub fn as_byte_index(&self) -> Option<ByteIndex> {
+      if let &Self::ByteIndex(index) = self {
+         Some(index)
+      } else {
+         None
+      }
+   }
+}

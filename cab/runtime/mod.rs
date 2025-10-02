@@ -22,6 +22,9 @@ pub use compiler::{
    CompileOracle,
 };
 
+mod state;
+pub use state::State;
+
 mod operation;
 pub use operation::{
    Argument,

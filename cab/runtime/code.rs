@@ -261,6 +261,24 @@ pub enum CodeItem {
    Argument(Argument),
 }
 
+impl CodeItem {
+   pub fn as_operation(&self) -> Option<&Operation> {
+      if let &Self::Operation(ref operation) = self {
+         Some(operation)
+      } else {
+         None
+      }
+   }
+
+   pub fn as_argument(&self) -> Option<&Argument> {
+      if let &Self::Argument(ref argument) = self {
+         Some(argument)
+      } else {
+         None
+      }
+   }
+}
+
 impl Code {
    pub fn value(&mut self, value: Value) -> ValueIndex {
       let index = ValueIndex(self.values.len());
@@ -268,7 +286,7 @@ impl Code {
       index
    }
 
-   fn iter(&self) -> impl Iterator<Item = (ByteIndex, CodeItem)> {
+   pub fn iter(&self) -> impl Iterator<Item = (ByteIndex, CodeItem)> {
       gen move {
          let mut index = ByteIndex(0);
 
