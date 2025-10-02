@@ -108,9 +108,11 @@ impl tag::DisplayTags for Path {
    }
 }
 
+#[bon::bon]
 impl Path {
    #[must_use]
-   pub fn new(root: Arc<dyn Root>, subpath: Subpath) -> Self {
+   #[builder(start_fn(name = "new"), finish_fn(name = "subpath"))]
+   pub fn _new(#[builder(finish_fn)] subpath: Subpath, root: Arc<dyn Root>) -> Self {
       Self {
          root: Some(root),
          subpath,

@@ -32,7 +32,10 @@ fuzz_target!(|source: &str| -> Corpus {
    let parse_oracle = syntax::ParseOracle::new();
    let parse = parse_oracle.parse(syntax::tokenize(source));
 
-   let path = value::Path::new(Arc::new(value::path::standard()), List::new_sync());
+   let path = value::Path::new()
+      .root(Arc::new(value::path::standard()))
+      .subpath(List::new_sync());
+
    let source = report::PositionStr::new(source);
 
    let out = &mut terminal::stdout();

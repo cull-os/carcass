@@ -59,11 +59,12 @@ async fn main() -> cyn::Termination {
    let Some(expression) = cli.expression else {
       unimplemented!("repl");
    };
-   let path: Arc<dyn value::path::Root> = Arc::new(value::path::blob(Value::from(
-      value::SString::from(&*expression),
-   )));
 
-   let path = value::Path::new(path, List::new_sync());
+   let path = value::Path::new()
+      .root(Arc::new(value::path::blob(Value::from(
+         value::SString::from(&*expression),
+      ))))
+      .subpath(List::new_sync());
 
    let source = path.read().await?.to_vec();
    let source = String::from_utf8(source).expect("source was created from UTF-8 string");
