@@ -26,19 +26,19 @@ use ust::{
 #[derive(clap::Parser)]
 #[command(version, about)]
 struct Cli {
-   // Print the result of every `Language.tokenize` call.
+   /// Print the result of every `Language.tokenize` call.
    #[arg(long, default_value = "false")]
    dump_token: DumpToken,
 
-   // Print the result of every `Language.parse` call.
+   /// Print the result of every `Language.parse` call.
    #[arg(long, default_value = "false")]
    dump_syntax: bool,
 
-   // Print the result of every `Language.compile` call.
+   /// Print the result of every `Language.compile` call.
    #[arg(long, default_value = "false")]
    dump_code: bool,
 
-   // The expression to `evaluate`.
+   /// The expression to `evaluate`.
    expression: Option<String>,
 }
 
