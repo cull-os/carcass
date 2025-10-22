@@ -15,15 +15,22 @@ use crate::{
    Code,
    Location,
    Operation,
+   Scopes,
    State,
    Value,
    value,
 };
 
+const EXPECT_SCOPE: &str = "must have at least once scope";
+
 thread_local! {
    static BLACK_HOLE: ThunkInner = ThunkInner::SuspendedNative(Arc::new(||
       Value::error(value::string::new!("infinite recursion"))
    ));
+
+   static NOT_BOOLEAN: Value = Value::error(value::string::new!("TODO better assert boolean error"));
+
+   static NOT_LAMBDA: Value = Value::error(value::string::new!("TODO better assert lambda error"));
 }
 
 #[derive(Clone, Dupe)]
@@ -33,7 +40,7 @@ enum ThunkInner {
    Suspended {
       location: Location,
       code:     Arc<Code>,
-      locals:   value::Attributes,
+      scopes:   Scopes,
    },
 
    Evaluated(Value),
@@ -51,15 +58,15 @@ impl Thunk {
    }
 
    #[must_use]
-   pub fn suspended(location: Location, code: Arc<Code>) -> Self {
+   pub fn suspended(location: Location, code: Arc<Code>, scopes: Scopes) -> Self {
       Self(Arc::new(RwLock::new(ThunkInner::Suspended {
          location,
          code,
-         locals: value::attributes::new! {},
+         scopes,
       })))
    }
 
-   pub async fn evaluate(&mut self, _state: &mut State) {
+   pub async fn evaluate(&self, state: &mut State) {
       let this = mem::replace(&mut *self.0.write().await, BLACK_HOLE.with(Dupe::dupe));
 
       let value = match this {
@@ -68,21 +75,19 @@ impl Thunk {
          ThunkInner::SuspendedNative(native) => native(),
 
          ThunkInner::Suspended { code, .. } => {
-            let mut stack = Vec::<Value>::new();
-            let mut scope = value::attributes::new! {};
-
             let items = &mut code.iter().peekable();
 
-            while let Some((_index, item)) = items.next() {
-               let operation = *item
-                  .as_operation()
-                  .expect("next code item must be an operation");
+            while let Some((index, item)) = items.next() {
+               let stack = &mut state.stack;
+               let scopes = &mut state.scopes;
+
+               let operation = *item.as_operation().expect("next item must be an operation");
 
                match operation {
                   Operation::Push => {
                      let value_index = items
                         .next()
-                        .expect("push must not be the last byte")
+                        .expect("push must not be the last item")
                         .1
                         .as_argument()
                         .expect("push must have an argument")
@@ -96,7 +101,7 @@ impl Thunk {
                   Operation::Pop => {
                      stack
                         .pop()
-                        .expect("pop operation must be called on non-empty stack");
+                        .expect("pop operation must not be called on empty stack");
                   },
                   Operation::Swap => {
                      assert!(
@@ -107,49 +112,142 @@ impl Thunk {
                      let end = stack.len();
                      stack.swap(end, end - 1);
                   },
-                  Operation::Jump => todo!(),
-                  Operation::JumpIf => todo!(),
-                  Operation::Force => todo!(),
-                  Operation::ScopeStart => todo!(),
-                  Operation::ScopeEnd => todo!(),
-                  Operation::ScopePush => todo!(),
+                  Operation::Jump => {
+                     let target_index = items
+                        .next()
+                        .expect("jump must not be the last item")
+                        .1
+                        .as_argument()
+                        .expect("jump must have an argument")
+                        .as_byte_index()
+                        .expect("jump argument must be a byte index");
+
+                     let mut current_index = index;
+
+                     // TODO: Off by one?
+                     while current_index < target_index {
+                        current_index = items.next().expect("jump must not jump out of bounds").0;
+                     }
+                  },
+                  Operation::JumpIf => {
+                     let target_index = items
+                        .next()
+                        .expect("jump-if must not be the last item")
+                        .1
+                        .as_argument()
+                        .expect("jump-if must have an argument")
+                        .as_byte_index()
+                        .expect("jump-if argument must be a byte index");
+
+                     let mut current_index = index;
+
+                     let value = stack
+                        .last_mut()
+                        .expect("jump-if must be called on stack with at least one item");
+
+                     let &mut Value::Boolean(value) = value else {
+                        *value = NOT_BOOLEAN.with(Dupe::dupe);
+                        continue;
+                     };
+
+                     if value {
+                        // TODO: Off by one?
+                        while current_index < target_index {
+                           current_index =
+                              items.next().expect("jump must not jump out of bounds").0;
+                        }
+                     }
+                  },
+                  Operation::Force => {
+                     let value = stack
+                        .last()
+                        .expect("force must not be called on an empty stack");
+
+                     let &Value::Thunk(ref thunk) = value else {
+                        unreachable!("force must be called on a thunk")
+                     };
+
+                     Box::pin(thunk.dupe().evaluate(state)).await;
+                  },
+                  Operation::ScopeStart => {
+                     *scopes = scopes.push_front(value::attributes::new! {});
+                  },
+                  Operation::ScopeEnd => {
+                     scopes
+                        .drop_first()
+                        .expect("scope-end must not be called with no scopes");
+                  },
+                  Operation::ScopePush => {
+                     stack.push(Value::from(scopes.last().expect(EXPECT_SCOPE).dupe()));
+                  },
                   Operation::ScopeSwap => {
                      let value = stack
                         .last_mut()
-                        .expect("scope-swap must not be called on a nonempty stack");
+                        .expect("scope-swap must not be called on a empty stack");
 
                      let &mut Value::Attributes(ref mut value) = value else {
                         unreachable!("scope-swap must be called on an attributes");
                      };
 
+                     let mut scope = scopes.first().expect(EXPECT_SCOPE).dupe();
                      mem::swap(&mut scope, value);
+
+                     *scopes = scopes.drop_first().expect(EXPECT_SCOPE).push_front(scope);
                   },
                   Operation::Interpolate => todo!(),
                   Operation::Resolve => {
                      let reference = stack
                         .last_mut()
-                        .expect("resolve must be called on an on-empty stack");
+                        .expect("resolve must not be called on an empty stack");
 
                      let &mut Value::Reference(ref identifier) = reference else {
                         unreachable!("resolve must be called on an identifier");
                      };
 
-                     let value = scope.get(identifier).duped().unwrap_or_else(|| {
-                        Value::error(value::SString::from(&*format!(
-                           "undefined value: '{identifier}'",
-                           identifier = &**identifier,
-                        )))
-                     });
+                     let value = scopes
+                        .iter()
+                        .find_map(|scope| scope.get(identifier))
+                        .duped()
+                        .unwrap_or_else(|| {
+                           Value::error(value::SString::from(&*format!(
+                              "undefined value: '{identifier}'",
+                              identifier = &**identifier,
+                           )))
+                        });
 
                      *reference = value;
                   },
-                  Operation::AssertBoolean => todo!(),
+                  Operation::AssertBoolean => {
+                     let value = stack
+                        .last_mut()
+                        .expect("assert-boolean must not be called on an empty stack");
+
+                     let &mut Value::Boolean(_) = value else {
+                        *value = NOT_BOOLEAN.with(Dupe::dupe);
+                        continue;
+                     };
+                  },
                   Operation::Swwallation => todo!(),
                   Operation::Negation => todo!(),
                   Operation::Not => todo!(),
                   Operation::Concat => todo!(),
                   Operation::Construct => todo!(),
-                  Operation::Call => todo!(),
+                  Operation::Call => {
+                     let _argument = stack.pop().expect("call must not be called on empty stack");
+
+                     let code = stack.pop().expect("call must not be called on empty stack");
+                     #[expect(unused_variables)]
+                     let Value::Lambda(code) = code else {
+                        stack.push(NOT_LAMBDA.with(Dupe::dupe));
+                        continue;
+                     };
+
+                     #[expect(clippy::diverging_sub_expression, unreachable_code)]
+                     let _lambda =
+                        Self::suspended(todo!("idk how to get a Location"), code, scopes.dupe());
+
+                     // TODO
+                  },
                   Operation::Update => todo!(),
                   Operation::LessOrEqual => todo!(),
                   Operation::Less => todo!(),
@@ -166,7 +264,11 @@ impl Thunk {
                }
             }
 
-            todo!("foo");
+            let &[ref result] = &*state.stack else {
+               unreachable!("stack must have exactly one item left");
+            };
+
+            result.dupe()
          },
       };
 

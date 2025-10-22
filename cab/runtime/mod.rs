@@ -23,7 +23,10 @@ pub use compiler::{
 };
 
 mod state;
-pub use state::State;
+pub use state::{
+   Scopes,
+   State,
+};
 
 mod operation;
 pub use operation::{
