@@ -60,7 +60,12 @@ impl Thunk {
    }
 
    #[must_use]
-   pub fn suspended(location: Location, code: Arc<Code>, scopes: Scopes) -> Self {
+   #[builder(finish_fn(name = "location"))]
+   pub fn suspended(
+      #[builder(start_fn)] code: Arc<Code>,
+      #[builder(start_fn)] scopes: Scopes,
+      #[builder(finish_fn)] location: Location,
+   ) -> Self {
       Self(Arc::new(RwLock::new(ThunkInner::Suspended {
          location,
          argument: None,
@@ -194,9 +199,16 @@ impl Thunk {
                         .pop()
                         .expect("force must not be called on an empty stack");
 
-                     let Value::Thunk(thunk) = value else {
-                        stack.push(value);
-                        continue;
+                     let thunk = match value {
+                        Value::Thunk(thunk) => thunk,
+                        Value::Suspend(thunk_code) => {
+                           Self::suspended(thunk_code, scopes.dupe())
+                              .location(code.read_operation(index).0)
+                        },
+                        other => {
+                           stack.push(other);
+                           continue;
+                        },
                      };
 
                      Box::pin(thunk.force(state)).await;

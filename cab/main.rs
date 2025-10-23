@@ -113,10 +113,11 @@ async fn main() -> cyn::Termination {
    }
 
    let thunk = value::Thunk::suspended(
-      (path, Span::at(0_u32, source.len())),
       Arc::new(code),
-      List::new_sync(),
-   );
+      List::new_sync()
+         .push_front(value::attributes::new! { "foo": Value::from(value::string::new!("AAAA")) }),
+   )
+   .location((path, Span::at(0_u32, source.len())));
 
    thunk
       .force(&mut runtime::State {
