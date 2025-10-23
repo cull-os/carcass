@@ -8,7 +8,9 @@ use cab::{
    syntax,
 };
 use clap::Parser as _;
+use cyn::ResultExt;
 use dup::Dupe as _;
+use ranged::Span;
 use rpds::ListSync as List;
 use runtime::{
    Value,
@@ -66,6 +68,7 @@ async fn main() -> cyn::Termination {
       ))))
       .subpath(List::new_sync());
 
+   // TODO: position_cache in Path.
    let source = path.read().await?.to_vec();
    let source = String::from_utf8(source).expect("source was created from UTF-8 string");
    let source = report::PositionStr::new(&source);
@@ -108,6 +111,28 @@ async fn main() -> cyn::Termination {
          .expect("TODO move inside the runtime");
       writeln!(out).expect("TODO move inside the runtime");
    }
+
+   let thunk = value::Thunk::suspended(
+      (path, Span::at(0_u32, source.len())),
+      Arc::new(code),
+      List::new_sync(),
+   );
+
+   thunk
+      .force(&mut runtime::State {
+         parse_oracle,
+         compile_oracle,
+      })
+      .await;
+
+   let value = thunk
+      .get()
+      .await
+      .expect("thunk must have value after forcing");
+
+   value
+      .display_styled(out)
+      .chain_err("failed to display value")?;
 
    cyn::Termination::success()
 }

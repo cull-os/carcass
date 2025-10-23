@@ -85,7 +85,15 @@ impl Thunk {
       })))
    }
 
-   pub async fn evaluate(&self, state: &mut State) {
+   pub async fn get(&self) -> Option<Value> {
+      if let ThunkInner::Evaluated(ref value) = *self.0.read().await {
+         Some(value.dupe())
+      } else {
+         None
+      }
+   }
+
+   pub async fn force(&self, state: &mut State) {
       let this = mem::replace(&mut *self.0.write().await, BLACK_HOLE.with(Dupe::dupe));
 
       let value = match this {
@@ -190,7 +198,7 @@ impl Thunk {
                         unreachable!("force must be called on a thunk")
                      };
 
-                     Box::pin(thunk.dupe().evaluate(state)).await;
+                     Box::pin(thunk.dupe().force(state)).await;
                   },
                   Operation::ScopeStart => {
                      scopes = scopes.push_front(value::attributes::new! {});

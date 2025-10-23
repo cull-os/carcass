@@ -9,6 +9,6 @@ use crate::{
 pub type Scopes = List<value::Attributes>;
 
 pub struct State {
-   _parse_oracle:    ParseOracle,
-   _compile_oraclce: CompileOracle,
+   pub parse_oracle:   ParseOracle,
+   pub compile_oracle: CompileOracle,
 }
