@@ -317,7 +317,7 @@ impl<'a> Emitter<'a> {
                   this.emit_force(left);
                   this.push_operation(operation.span(), Operation::Pop);
 
-                  this.emit(right);
+                  this.emit_force(right);
                   return;
                },
 
