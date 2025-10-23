@@ -191,14 +191,22 @@ impl Thunk {
                   },
                   Operation::Force => {
                      let value = stack
-                        .last()
+                        .pop()
                         .expect("force must not be called on an empty stack");
 
-                     let &Value::Thunk(ref thunk) = value else {
-                        unreachable!("force must be called on a thunk")
+                     let Value::Thunk(thunk) = value else {
+                        stack.push(value);
+                        continue;
                      };
 
-                     Box::pin(thunk.dupe().force(state)).await;
+                     Box::pin(thunk.force(state)).await;
+
+                     stack.push(
+                        thunk
+                           .get()
+                           .await
+                           .expect("thunk must contain value after forcing"),
+                     );
                   },
                   Operation::ScopeStart => {
                      scopes = scopes.push_front(value::attributes::new! {});

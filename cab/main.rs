@@ -8,7 +8,7 @@ use cab::{
    syntax,
 };
 use clap::Parser as _;
-use cyn::ResultExt;
+use cyn::ResultExt as _;
 use dup::Dupe as _;
 use ranged::Span;
 use rpds::ListSync as List;
