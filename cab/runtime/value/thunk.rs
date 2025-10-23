@@ -40,6 +40,7 @@ enum ThunkInner {
    Suspended {
       location: Location,
       code:     Arc<Code>,
+      argument: Option<Value>,
       scopes:   Scopes,
    },
 
@@ -49,6 +50,7 @@ enum ThunkInner {
 #[derive(Clone, Dupe)]
 pub struct Thunk(Arc<RwLock<ThunkInner>>);
 
+#[bon::bon]
 impl Thunk {
    #[must_use]
    pub fn suspended_native(native: impl Fn() -> Value + Send + Sync + 'static) -> Self {
@@ -61,6 +63,23 @@ impl Thunk {
    pub fn suspended(location: Location, code: Arc<Code>, scopes: Scopes) -> Self {
       Self(Arc::new(RwLock::new(ThunkInner::Suspended {
          location,
+         argument: None,
+         code,
+         scopes,
+      })))
+   }
+
+   #[must_use]
+   #[builder(finish_fn(name = "argument"))]
+   pub fn lambda(
+      #[builder(start_fn)] location: Location,
+      #[builder(start_fn)] code: Arc<Code>,
+      #[builder(start_fn)] scopes: Scopes,
+      #[builder(finish_fn)] argument: Value,
+   ) -> Self {
+      Self(Arc::new(RwLock::new(ThunkInner::Suspended {
+         location,
+         argument: Some(argument),
          code,
          scopes,
       })))
@@ -74,13 +93,16 @@ impl Thunk {
 
          ThunkInner::SuspendedNative(native) => native(),
 
-         ThunkInner::Suspended { code, .. } => {
+         ThunkInner::Suspended {
+            location,
+            code,
+            argument,
+            mut scopes,
+         } => {
+            let mut stack = argument.into_iter().collect::<Vec<_>>();
             let items = &mut code.iter().peekable();
 
             while let Some((index, item)) = items.next() {
-               let stack = &mut state.stack;
-               let scopes = &mut state.scopes;
-
                let operation = *item.as_operation().expect("next item must be an operation");
 
                match operation {
@@ -170,7 +192,7 @@ impl Thunk {
                      Box::pin(thunk.dupe().evaluate(state)).await;
                   },
                   Operation::ScopeStart => {
-                     *scopes = scopes.push_front(value::attributes::new! {});
+                     scopes = scopes.push_front(value::attributes::new! {});
                   },
                   Operation::ScopeEnd => {
                      scopes
@@ -192,7 +214,7 @@ impl Thunk {
                      let mut scope = scopes.first().expect(EXPECT_SCOPE).dupe();
                      mem::swap(&mut scope, value);
 
-                     *scopes = scopes.drop_first().expect(EXPECT_SCOPE).push_front(scope);
+                     scopes = scopes.drop_first().expect(EXPECT_SCOPE).push_front(scope);
                   },
                   Operation::Interpolate => todo!(),
                   Operation::Resolve => {
@@ -233,20 +255,18 @@ impl Thunk {
                   Operation::Concat => todo!(),
                   Operation::Construct => todo!(),
                   Operation::Call => {
-                     let _argument = stack.pop().expect("call must not be called on empty stack");
+                     let argument = stack.pop().expect("call must not be called on empty stack");
 
                      let code = stack.pop().expect("call must not be called on empty stack");
-                     #[expect(unused_variables)]
                      let Value::Lambda(code) = code else {
                         stack.push(NOT_LAMBDA.with(Dupe::dupe));
                         continue;
                      };
 
-                     #[expect(clippy::diverging_sub_expression, unreachable_code)]
-                     let _lambda =
-                        Self::suspended(todo!("idk how to get a Location"), code, scopes.dupe());
+                     let thunk =
+                        Self::lambda(location.dupe(), code, scopes.dupe()).argument(argument);
 
-                     // TODO
+                     stack.push(Value::from(thunk));
                   },
                   Operation::Update => todo!(),
                   Operation::LessOrEqual => todo!(),
@@ -264,7 +284,7 @@ impl Thunk {
                }
             }
 
-            let &[ref result] = &*state.stack else {
+            let &[ref result] = &*stack else {
                unreachable!("stack must have exactly one item left");
             };
 
