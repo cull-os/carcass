@@ -25,7 +25,7 @@ const EXPECT_SCOPE: &str = "must have at least once scope";
 
 thread_local! {
    static BLACK_HOLE: ThunkInner = ThunkInner::SuspendedNative(Arc::new(||
-      Value::error(value::string::new!("infinite recursion"))
+      Value::error(value::string::new!("TODO better infinite recursion error"))
    ));
 
    static NOT_BOOLEAN: Value = Value::error(value::string::new!("TODO better assert boolean error"));
@@ -232,7 +232,7 @@ impl Thunk {
                         .duped()
                         .unwrap_or_else(|| {
                            Value::error(value::SString::from(&*format!(
-                              "undefined value: '{identifier}'",
+                              "TODO better undefined value message: '{identifier}'",
                               identifier = &**identifier,
                            )))
                         });

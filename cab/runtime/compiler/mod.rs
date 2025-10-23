@@ -422,7 +422,9 @@ impl<'a> Emitter<'a> {
                            this.push_operation(operation.span(), Operation::Pop);
                            this.emit_push(
                               left.span(),
-                              Value::error(value::string::new!("parameters were not equal")),
+                              Value::error(value::string::new!(
+                                 "TODO better parameters were not equal error"
+                              )),
                            );
 
                            let over_body = {
