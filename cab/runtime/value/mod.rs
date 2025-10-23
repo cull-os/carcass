@@ -58,7 +58,7 @@ pub enum Value {
    Thunk(Thunk), // Unused for now.
 
    #[from(ignore)]
-   Thunkprint(Arc<Code>),
+   Suspend(Arc<Code>),
 
    #[from(ignore)]
    Lambda(Arc<Code>),
@@ -212,7 +212,7 @@ impl tag::DisplayTags for Value {
 
          Value::Float(float) => tags.write(float.to_string().style(STYLE_FLOAT)),
 
-         Value::Thunk(_) | Value::Thunkprint(_) | Value::Lambda(_) => {
+         Value::Thunk(_) | Value::Suspend(_) | Value::Lambda(_) => {
             tags.write("_".style(STYLE_THUNK));
          },
       }

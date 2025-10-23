@@ -84,11 +84,11 @@ impl Display for Code {
       const STYLE_JUMP_ADDRESS: style::Style = style::Color::BrightYellow.fg().bold().underline();
 
       enum CodeType {
-         Thunk,
+         Suspend,
          Lambda,
       }
 
-      let mut codes = VecDeque::from([(0_usize, CodeType::Thunk, self)]);
+      let mut codes = VecDeque::from([(0_usize, CodeType::Suspend, self)]);
 
       while let Some((code_index, code_type, code)) = codes.pop_back() {
          let highlighted = RefCell::new(Vec::<ByteIndex>::new());
@@ -146,7 +146,7 @@ impl Display for Code {
             })?;
 
             match code_type {
-               CodeType::Thunk => write(writer, &"(thunk)".cyan().bold())?,
+               CodeType::Suspend => write(writer, &"(suspend)".cyan().bold())?,
                CodeType::Lambda => write(writer, &"(lambda)".magenta().bold())?,
             }
          }
@@ -202,11 +202,11 @@ impl Display for Code {
                         })?;
 
                         match code[value_index] {
-                           ref value @ (Value::Thunkprint(ref code) | Value::Lambda(ref code)) => {
+                           ref value @ (Value::Suspend(ref code) | Value::Lambda(ref code)) => {
                               codes.push_front((
                                  value_index_unique,
                                  match *value {
-                                    Value::Thunkprint(_) => CodeType::Thunk,
+                                    Value::Suspend(_) => CodeType::Suspend,
                                     Value::Lambda(_) => CodeType::Lambda,
                                     _ => unreachable!(),
                                  },

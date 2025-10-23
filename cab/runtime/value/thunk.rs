@@ -70,12 +70,12 @@ impl Thunk {
    }
 
    #[must_use]
-   #[builder(finish_fn(name = "argument"))]
+   #[builder(finish_fn(name = "location"))]
    pub fn lambda(
-      #[builder(start_fn)] location: Location,
       #[builder(start_fn)] code: Arc<Code>,
       #[builder(start_fn)] scopes: Scopes,
-      #[builder(finish_fn)] argument: Value,
+      #[builder(finish_fn)] location: Location,
+      argument: Value,
    ) -> Self {
       Self(Arc::new(RwLock::new(ThunkInner::Suspended {
          location,
@@ -93,8 +93,9 @@ impl Thunk {
 
          ThunkInner::SuspendedNative(native) => native(),
 
+         #[expect(clippy::unneeded_field_pattern)]
          ThunkInner::Suspended {
-            location,
+            location: _,
             code,
             argument,
             mut scopes,
@@ -257,14 +258,15 @@ impl Thunk {
                   Operation::Call => {
                      let argument = stack.pop().expect("call must not be called on empty stack");
 
-                     let code = stack.pop().expect("call must not be called on empty stack");
-                     let Value::Lambda(code) = code else {
+                     let lambda_code = stack.pop().expect("call must not be called on empty stack");
+                     let Value::Lambda(lambda_code) = lambda_code else {
                         stack.push(NOT_LAMBDA.with(Dupe::dupe));
                         continue;
                      };
 
-                     let thunk =
-                        Self::lambda(location.dupe(), code, scopes.dupe()).argument(argument);
+                     let thunk = Self::lambda(lambda_code, scopes.dupe())
+                        .argument(argument)
+                        .location(code.read_operation(index).0);
 
                      stack.push(Value::from(thunk));
                   },

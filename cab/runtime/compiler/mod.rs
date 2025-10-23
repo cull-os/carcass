@@ -216,7 +216,7 @@ impl<'a> Emitter<'a> {
          if is_lambda {
             Value::Lambda(Arc::new(code))
          } else {
-            Value::Thunkprint(Arc::new(code))
+            Value::Suspend(Arc::new(code))
          },
       );
    }
