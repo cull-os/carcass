@@ -86,6 +86,7 @@ impl tag::DisplayTags for Attributes {
                   },
                );
                tags.write_if(Space, Flat);
+               tags.write_if(Newline(1), Broken);
             }
          });
 

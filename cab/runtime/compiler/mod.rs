@@ -22,7 +22,6 @@ use ranged::{
    IntoSpan as _,
    Span,
 };
-use rpds::ListSync as List;
 use smallvec::SmallVec;
 use ust::{
    Display,
@@ -270,8 +269,15 @@ impl<'a> Emitter<'a> {
          Some(expression) => {
             self.emit_thunk(attributes.span()).with(|this| {
                this.emit_scope(attributes.span(), |this| {
-                  this.emit(expression);
+                  this.emit_force(expression);
+                  let to_end = {
+                     this.push_operation(expression.span(), Operation::JumpIfError);
+                     this.push_u16(u16::default())
+                  };
                   this.push_operation(expression.span(), Operation::ScopePush);
+                  this.push_operation(expression.span(), Operation::Swap);
+                  this.push_operation(expression.span(), Operation::Pop);
+                  this.point_here(to_end);
                });
             });
          },
@@ -290,7 +296,7 @@ impl<'a> Emitter<'a> {
          .is_lambda(right.is_none())
          .with(|this| {
             if let Some(right) = right {
-               this.emit(right);
+               this.emit_force(right);
             }
 
             this.push_operation(operation.span(), match operation.operator() {
@@ -426,7 +432,7 @@ impl<'a> Emitter<'a> {
                            // @foo => bar, `@foo` is the right parameter of the equality
                            // comparision, and the left parameter is the
                            // argument.
-                           this.emit(left);
+                           this.emit_force(left);
                            this.push_operation(left.span(), Operation::Equal);
 
                            let to_body = {
@@ -449,7 +455,7 @@ impl<'a> Emitter<'a> {
 
                            this.point_here(to_body);
                            this.push_operation(operation.span(), Operation::Pop);
-                           this.emit(right);
+                           this.emit_force(right);
 
                            this.point_here(over_body);
                         });
