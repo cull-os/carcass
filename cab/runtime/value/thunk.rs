@@ -147,8 +147,8 @@ impl Thunk {
                         "swap must be called on stack of length 2 or higher",
                      );
 
-                     let end = stack.len();
-                     stack.swap(end - 1, end - 2);
+                     let last_index = stack.len() - 1;
+                     stack.swap(last_index, last_index - 1);
                   },
                   operation @ (Operation::Jump | Operation::JumpIf | Operation::JumpIfError) => {
                      let target_index = items
@@ -160,9 +160,8 @@ impl Thunk {
                         .as_byte_index()
                         .expect("jump argument must be a byte index");
 
-                     let mut current_index = index;
-
                      match operation {
+                        Operation::Jump => {},
                         Operation::JumpIf => {
                            let value = stack.last_mut().expect(
                               "jump-if and jump-if-error must be called on stack with at least \
@@ -184,16 +183,18 @@ impl Thunk {
                                one item",
                            );
 
-                           let &mut Value::Error(_) = value else {
+                           if !value.is_error() {
                               continue;
-                           };
+                           }
                         },
-                        _ => {},
+                        _ => unreachable!(),
                      }
 
-                     // TODO: Off by one?
-                     while *current_index + 1 < *target_index {
-                        current_index = items.next().expect("jump must not jump out of bounds").0;
+                     while items
+                        .peek()
+                        .is_some_and(|&(next_index, _)| next_index != target_index)
+                     {
+                        items.next().expect("jump must not jump out of bounds");
                      }
                   },
                   Operation::Force => {
@@ -318,7 +319,10 @@ impl Thunk {
             }
 
             let &[ref result] = &*stack else {
-               unreachable!("stack must have exactly one item left");
+               unreachable!(
+                  "stack must have exactly one item left, has {len}",
+                  len = stack.len(),
+               );
             };
 
             result.dupe()

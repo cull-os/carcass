@@ -229,4 +229,9 @@ impl Value {
          "__error__": inner,
       })))
    }
+
+   #[must_use]
+   pub fn is_error(&self) -> bool {
+      matches!(self, &Self::Error(_))
+   }
 }

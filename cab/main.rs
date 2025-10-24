@@ -114,8 +114,11 @@ async fn main() -> cyn::Termination {
 
    let thunk = value::Thunk::suspended(
       Arc::new(code),
-      List::new_sync()
-         .push_front(value::attributes::new! { "foo": Value::from(value::string::new!("AAAA")) }),
+      List::new_sync().push_front(value::attributes::new! {
+         "foo": Value::from(value::string::new!("AAAA")),
+         "true": Value::Boolean(true),
+         "false": Value::Boolean(false),
+      }),
    )
    .location((path, Span::at(0_u32, source.len())));
 

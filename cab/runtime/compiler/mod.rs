@@ -317,7 +317,7 @@ impl<'a> Emitter<'a> {
                   this.emit_force(left);
                   let to_end = {
                      this.push_operation(operation.span(), Operation::JumpIfError);
-                     this.push_u16(0)
+                     this.push_u16(u16::default())
                   };
                   this.push_operation(operation.span(), Operation::Pop);
 
@@ -344,7 +344,7 @@ impl<'a> Emitter<'a> {
                   this.emit_force(left);
                   let to_swap_pop = {
                      this.push_operation(operation.span(), Operation::JumpIfError);
-                     this.push_u16(0)
+                     this.push_u16(u16::default())
                   };
 
                   // <right>
@@ -355,7 +355,7 @@ impl<'a> Emitter<'a> {
                   // <old-scope-or-error>
                   let to_swap_pop_ = {
                      this.push_operation(operation.span(), Operation::JumpIfError);
-                     this.push_u16(0)
+                     this.push_u16(u16::default())
                   };
 
                   // <right>
@@ -374,8 +374,6 @@ impl<'a> Emitter<'a> {
 
                   // <right-forced>
                   // <old-scope>
-                  //
-                  // or
                   this.push_operation(operation.span(), Operation::Pop);
                   return;
                },
@@ -692,6 +690,10 @@ impl<'a> Emitter<'a> {
    fn emit_if(&mut self, if_: &'a node::If) {
       self.emit_thunk(if_.span()).with(|this| {
          this.emit_force(if_.condition());
+         let to_end = {
+            this.push_operation(if_.span(), Operation::JumpIfError);
+            this.push_u16(u16::default())
+         };
          let to_consequence = {
             this.push_operation(if_.span(), Operation::JumpIf);
             this.push_u16(u16::default())
@@ -713,6 +715,7 @@ impl<'a> Emitter<'a> {
          });
 
          this.point_here(over_consequence);
+         this.point_here(to_end);
       });
    }
 
