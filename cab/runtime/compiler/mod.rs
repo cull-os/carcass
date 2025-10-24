@@ -698,10 +698,14 @@ impl<'a> Emitter<'a> {
             this.push_operation(if_.span(), Operation::JumpIf);
             this.push_u16(u16::default())
          };
+         let to_end_ = {
+            this.push_operation(if_.span(), Operation::JumpIfError);
+            this.push_u16(u16::default())
+         };
 
          this.push_operation(if_.span(), Operation::Pop);
          this.emit_scope(if_.alternative().span(), |this| {
-            this.emit(if_.alternative());
+            this.emit_force(if_.alternative());
          });
          let over_consequence = {
             this.push_operation(if_.span(), Operation::Jump);
@@ -711,11 +715,12 @@ impl<'a> Emitter<'a> {
          this.point_here(to_consequence);
          this.push_operation(if_.span(), Operation::Pop);
          this.emit_scope(if_.consequence().span(), |this| {
-            this.emit(if_.consequence());
+            this.emit_force(if_.consequence());
          });
 
          this.point_here(over_consequence);
          this.point_here(to_end);
+         this.point_here(to_end_);
       });
    }
 
