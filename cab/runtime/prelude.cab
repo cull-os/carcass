@@ -1,0 +1,49 @@
+@Any = (@_),
+
+@None = None,
+
+@List =
+  @Type => [] | (Type : List Type)
+| {
+  @NonEmpty = @Type => Type : List Type,
+
+  @head = document "Gets the first item (head) of the list." <|
+    @x : Any => x,
+
+  @last = document "Gets the last item of the list." <|
+  (
+    @x : [] => x,
+  | @x : @xs => last xs,
+  ),
+
+  @tail = document "Gets the tail of the list. A tail is everything except the head." <|
+    Any : @xs => xs,
+
+  @hasPrefix = document "Returns whether a String (second parameter) has the first parameter as a prefix." <|
+  (
+    []       => List Any => True
+  | List Any => []       => False
+  | @p : @ps & List (TypeOf p) =>
+    @x : @xs & List (TypeOf x) =>
+      p == x && List.hasPrefix ps xs
+  ),
+
+  @hasSuffix = document "Returns whether the given String (second parameter) has the first parameter as a suffix." <|
+    @suffix => @xs => List.hasPrefix (reverse suffix) (reverse xs),
+
+  @join = document "Merge list contents with the given item as a separator." @with => @xs & List Any =>
+    List.reduce (@acc => @next => acc ++ [ with ] ++ next) [],
+},
+
+@String =
+  __builtins.String
+| {
+  @hasPrefix = @prefix & String => List.hasPrefix prefix;
+
+  @hasSuffix = @suffix & String => List.hasSuffix suffix;
+
+  @join = @with & String => @xs & List String => List.join with xs;
+},
+
+@warn = @message & String => __builtins.warn message,
+@throw = @error => __builtins.throw error,
