@@ -191,11 +191,9 @@ impl Thunk {
                      }
 
                      while items
-                        .peek()
-                        .is_some_and(|&(next_index, _)| next_index != target_index)
-                     {
-                        items.next().expect("jump must not jump out of bounds");
-                     }
+                        .next_if(|&(next_index, _)| next_index != target_index)
+                        .is_some()
+                     {}
                   },
                   Operation::Force => {
                      let value = stack
