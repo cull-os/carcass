@@ -337,7 +337,7 @@ impl<'a> Emitter<'a> {
 
                   this.scopes.extend(scopes);
 
-                  this.emit(left);
+                  this.emit_force(left);
 
                   // <right>
                   // <left>

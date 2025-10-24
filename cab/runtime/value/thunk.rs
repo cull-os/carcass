@@ -31,6 +31,8 @@ thread_local! {
    static NOT_BOOLEAN: Value = Value::error(value::string::new!("TODO better assert boolean error"));
 
    static NOT_LAMBDA: Value = Value::error(value::string::new!("TODO better assert lambda error"));
+
+   static NOT_ATTRIBUTES: Value = Value::error(value::string::new!("TODO better assert attributes error"));
 }
 
 #[derive(Clone, Dupe)]
@@ -146,7 +148,7 @@ impl Thunk {
                      );
 
                      let end = stack.len();
-                     stack.swap(end, end - 1);
+                     stack.swap(end - 1, end - 2);
                   },
                   Operation::Jump => {
                      let target_index = items
@@ -237,7 +239,8 @@ impl Thunk {
                         .expect("scope-swap must not be called on a empty stack");
 
                      let &mut Value::Attributes(ref mut value) = value else {
-                        unreachable!("scope-swap must be called on an attributes");
+                        *value = NOT_ATTRIBUTES.with(Dupe::dupe);
+                        continue;
                      };
 
                      let mut scope = scopes.first().expect(EXPECT_SCOPE).dupe();
