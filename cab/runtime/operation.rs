@@ -13,6 +13,7 @@ pub enum Operation {
 
    Jump,
    JumpIf,
+   JumpIfError,
 
    Force,
 

@@ -150,7 +150,7 @@ impl Thunk {
                      let end = stack.len();
                      stack.swap(end - 1, end - 2);
                   },
-                  Operation::Jump => {
+                  operation @ (Operation::Jump | Operation::JumpIf | Operation::JumpIfError) => {
                      let target_index = items
                         .next()
                         .expect("jump must not be the last item")
@@ -162,38 +162,38 @@ impl Thunk {
 
                      let mut current_index = index;
 
-                     // TODO: Off by one?
-                     while current_index < target_index {
-                        current_index = items.next().expect("jump must not jump out of bounds").0;
+                     match operation {
+                        Operation::JumpIf => {
+                           let value = stack.last_mut().expect(
+                              "jump-if and jump-if-error must be called on stack with at least \
+                               one item",
+                           );
+
+                           let &mut Value::Boolean(value) = value else {
+                              *value = NOT_BOOLEAN.with(Dupe::dupe);
+                              continue;
+                           };
+
+                           if !value {
+                              continue;
+                           }
+                        },
+                        Operation::JumpIfError => {
+                           let value = stack.last_mut().expect(
+                              "jump-if and jump-if-error must be called on stack with at least \
+                               one item",
+                           );
+
+                           let &mut Value::Error(_) = value else {
+                              continue;
+                           };
+                        },
+                        _ => {},
                      }
-                  },
-                  Operation::JumpIf => {
-                     let target_index = items
-                        .next()
-                        .expect("jump-if must not be the last item")
-                        .1
-                        .as_argument()
-                        .expect("jump-if must have an argument")
-                        .as_byte_index()
-                        .expect("jump-if argument must be a byte index");
 
-                     let mut current_index = index;
-
-                     let value = stack
-                        .last_mut()
-                        .expect("jump-if must be called on stack with at least one item");
-
-                     let &mut Value::Boolean(value) = value else {
-                        *value = NOT_BOOLEAN.with(Dupe::dupe);
-                        continue;
-                     };
-
-                     if value {
-                        // TODO: Off by one?
-                        while current_index < target_index {
-                           current_index =
-                              items.next().expect("jump must not jump out of bounds").0;
-                        }
+                     // TODO: Off by one?
+                     while *current_index + 1 < *target_index {
+                        current_index = items.next().expect("jump must not jump out of bounds").0;
                      }
                   },
                   Operation::Force => {

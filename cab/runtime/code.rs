@@ -310,7 +310,7 @@ impl Code {
                   *index += size;
                },
 
-               Operation::Jump | Operation::JumpIf => {
+               Operation::Jump | Operation::JumpIf | Operation::JumpIfError => {
                   let (value, size) = self.read_u16(index);
 
                   yield (

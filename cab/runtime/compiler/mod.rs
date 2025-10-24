@@ -315,9 +315,15 @@ impl<'a> Emitter<'a> {
             match operation.operator() {
                node::InfixOperator::Sequence => {
                   this.emit_force(left);
+                  let to_end = {
+                     this.push_operation(operation.span(), Operation::JumpIfError);
+                     this.push_u16(0)
+                  };
                   this.push_operation(operation.span(), Operation::Pop);
 
                   this.emit_force(right);
+
+                  this.point_here(to_end);
                   return;
                },
 
@@ -328,20 +334,29 @@ impl<'a> Emitter<'a> {
 
                node::InfixOperator::Select => {
                   let scopes = this.scopes.split_off(1);
-
                   this.emit_scope(right.span(), |this| {
                      this.scope().push(Span::dummy(), LocalName::wildcard());
 
                      this.emit(right);
                   });
-
                   this.scopes.extend(scopes);
 
                   this.emit_force(left);
+                  let to_swap_pop = {
+                     this.push_operation(operation.span(), Operation::JumpIfError);
+                     this.push_u16(0)
+                  };
 
                   // <right>
                   // <left>
                   this.push_operation(operation.span(), Operation::ScopeSwap);
+
+                  // <right>
+                  // <old-scope-or-error>
+                  let to_swap_pop_ = {
+                     this.push_operation(operation.span(), Operation::JumpIfError);
+                     this.push_u16(0)
+                  };
 
                   // <right>
                   // <old-scope>
@@ -353,13 +368,15 @@ impl<'a> Emitter<'a> {
 
                   // <old-scope>
                   // <right-forced>
+                  this.point_here(to_swap_pop);
+                  this.point_here(to_swap_pop_);
                   this.push_operation(operation.span(), Operation::Swap);
 
                   // <right-forced>
                   // <old-scope>
+                  //
+                  // or
                   this.push_operation(operation.span(), Operation::Pop);
-
-                  // <right-forced>
                   return;
                },
 
