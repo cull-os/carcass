@@ -240,22 +240,16 @@ impl<'a> Emitter<'a> {
    }
 
    fn emit_list(&mut self, list: &'a node::List) {
-      let items = list.items().collect::<SmallVec<_, 8>>();
-      let spans = items
-         .iter()
-         .map(|item| item.span())
-         .collect::<SmallVec<_, 8>>();
-
-      for item in items {
+      for item in list.items() {
          self.emit_thunk_start();
-         self.emit_scope(item.span(), |this| this.emit(item));
+         self.emit(item);
       }
 
       self.emit_push(list.span(), Value::Nil);
 
-      for span in spans {
+      for item in list.items() {
          self.push_operation(list.span(), Operation::Construct);
-         self.emit_thunk_end(span).is_lambda(false);
+         self.emit_thunk_end(item.span()).is_lambda(false);
       }
    }
 
