@@ -196,31 +196,30 @@ impl Thunk {
                      {}
                   },
                   Operation::Force => {
-                     let value = stack
+                     let mut value = stack
                         .pop()
                         .expect("force must not be called on an empty stack");
 
-                     let thunk = match value {
-                        Value::Thunk(thunk) => thunk,
-                        Value::Suspend(thunk_code) => {
-                           Self::suspended(thunk_code)
-                              .scopes(scopes.dupe())
-                              .location(code.read_operation(index).0)
-                        },
-                        other => {
-                           stack.push(other);
-                           continue;
-                        },
-                     };
+                     loop {
+                        let thunk = match value {
+                           Value::Thunk(thunk) => thunk,
+                           Value::Suspend(thunk_code) => {
+                              Self::suspended(thunk_code)
+                                 .scopes(scopes.dupe())
+                                 .location(code.read_operation(index).0)
+                           },
+                           _ => break,
+                        };
 
-                     Box::pin(thunk.force(state)).await;
+                        Box::pin(thunk.force(state)).await;
 
-                     stack.push(
-                        thunk
+                        value = thunk
                            .get()
                            .await
-                           .expect("thunk must contain value after forcing"),
-                     );
+                           .expect("thunk must contain value after forcing");
+                     }
+
+                     stack.push(value);
                   },
                   Operation::ScopeStart => {
                      scopes = scopes.push_front(value::attributes::new! {});
