@@ -232,7 +232,7 @@ impl Thunk {
                         .expect("scope-end must not be called with no scopes");
                   },
                   Operation::ScopePush => {
-                     stack.push(Value::from(scopes.last().expect(EXPECT_SCOPE).dupe()));
+                     stack.push(Value::from(scopes.first().expect(EXPECT_SCOPE).dupe()));
                   },
                   Operation::ScopeSwap => {
                      let value = stack
