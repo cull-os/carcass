@@ -126,7 +126,7 @@ impl CompileOracle {
 struct Emitter<'a> {
    codes: Vec<Code>,
 
-   scopes:  Vec<Scope<'a>>,
+   _scopes: Vec<Scope<'a>>,
    reports: Vec<Report>,
 }
 
@@ -149,7 +149,7 @@ impl Emitter<'_> {
       Emitter {
          codes: vec![Code::new(path)],
 
-         scopes:  vec![Scope::global()],
+         _scopes: vec![Scope::global()],
          reports: Vec::new(),
       }
    }
@@ -171,7 +171,7 @@ impl<'a> Emitter<'a> {
    }
 
    fn emit_scope(&mut self, span: Span, with: impl FnOnce(&mut Self)) {
-      self.scopes.push(Scope::new());
+      // self.scopes.push(Scope::new());
 
       self.push_operation(span, Operation::ScopeStart);
 
@@ -334,13 +334,13 @@ impl<'a> Emitter<'a> {
                },
 
                node::InfixOperator::Select => {
-                  let scopes = this.scopes.split_off(1);
+                  // let scopes = this.scopes.split_off(1);
                   this.emit_scope(right.span(), |this| {
                      // this.scope().push(Span::dummy(), LocalName::wildcard());
 
                      this.emit(right);
                   });
-                  this.scopes.extend(scopes);
+                  // this.scopes.extend(scopes);
 
                   this.emit_force(left);
                   let to_swap_pop = {
