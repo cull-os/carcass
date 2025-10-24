@@ -65,8 +65,8 @@ impl Thunk {
    #[builder(finish_fn(name = "location"))]
    pub fn suspended(
       #[builder(start_fn)] code: Arc<Code>,
-      #[builder(start_fn)] scopes: Scopes,
       #[builder(finish_fn)] location: Location,
+      scopes: Scopes,
    ) -> Self {
       Self(Arc::new(RwLock::new(ThunkInner::Suspended {
          location,
@@ -80,8 +80,8 @@ impl Thunk {
    #[builder(finish_fn(name = "location"))]
    pub fn lambda(
       #[builder(start_fn)] code: Arc<Code>,
-      #[builder(start_fn)] scopes: Scopes,
       #[builder(finish_fn)] location: Location,
+      scopes: Scopes,
       argument: Value,
    ) -> Self {
       Self(Arc::new(RwLock::new(ThunkInner::Suspended {
@@ -205,7 +205,8 @@ impl Thunk {
                      let thunk = match value {
                         Value::Thunk(thunk) => thunk,
                         Value::Suspend(thunk_code) => {
-                           Self::suspended(thunk_code, scopes.dupe())
+                           Self::suspended(thunk_code)
+                              .scopes(scopes.dupe())
                               .location(code.read_operation(index).0)
                         },
                         other => {
@@ -305,7 +306,8 @@ impl Thunk {
                         continue;
                      };
 
-                     let thunk = Self::lambda(lambda_code, scopes.dupe())
+                     let thunk = Self::lambda(lambda_code)
+                        .scopes(scopes.dupe())
                         .argument(argument)
                         .location(code.read_operation(index).0);
 

@@ -112,18 +112,16 @@ async fn main() -> cyn::Termination {
       writeln!(out).expect("TODO move inside the runtime");
    }
 
-   let thunk = value::Thunk::suspended(
-      Arc::new(code),
-      List::new_sync().push_front(value::attributes::new! {
+   let thunk = value::Thunk::suspended(Arc::new(code))
+      .scopes(List::new_sync().push_front(value::attributes::new! {
          "foo": Value::from(value::string::new!("AAAA")),
          "bar": Value::from(value::attributes::new! {
             "baz": Value::Boolean(false),
          }),
          "true": Value::Boolean(true),
          "false": Value::Boolean(false),
-      }),
-   )
-   .location((path, Span::at(0_u32, source.len())));
+      }))
+      .location((path, Span::at(0_u32, source.len())));
 
    thunk
       .force(&mut runtime::State {
