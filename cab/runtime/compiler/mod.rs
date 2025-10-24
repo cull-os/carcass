@@ -257,7 +257,7 @@ impl<'a> Emitter<'a> {
          self.emit_scope(item.span(), |this| this.emit(item));
       }
 
-      self.emit_push(list.span(), List::new_sync());
+      self.emit_push(list.span(), Value::Nil);
 
       for span in spans {
          self.push_operation(list.span(), Operation::Construct);

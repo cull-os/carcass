@@ -8,9 +8,7 @@ use cab_syntax::{
 use cab_util::into;
 use derive_more::From;
 use dup::Dupe;
-use rpds::ListSync as List;
 use ust::{
-   INDENT_WIDTH,
    style::{
       self,
       StyledExt as _,
@@ -39,7 +37,9 @@ pub enum Value {
 
    Boolean(bool),
 
-   List(List<Value>),
+   Nil,
+   Cons(Arc<(Value, Value)>),
+
    Attributes(Attributes),
 
    Path(Path),
@@ -79,13 +79,13 @@ impl tag::DisplayTags for Value {
    fn display_tags<'a>(&'a self, tags: &mut tag::Tags<'a>) {
       use tag::{
          Condition::{
-            Always,
+            // Always,
             Broken,
             Flat,
          },
          Tag::{
             Group,
-            Indent,
+            // Indent,
             Newline,
             Space,
          },
@@ -131,34 +131,20 @@ impl tag::DisplayTags for Value {
          Value::Boolean(true) => tags.write("true".magenta().bold()),
          Value::Boolean(false) => tags.write("false".magenta().bold()),
 
-         Value::List(ref list) => {
+         Value::Nil => tags.write("[]".style(STYLE_PUNCTUATION)),
+         Value::Cons(ref cons) => {
+            let &(ref head, ref tail) = &**cons;
+
             tags.write_with(Group(40), |tags| {
-               tags.write("[".style(STYLE_PUNCTUATION));
+               head.display_tags(tags);
 
-               if !list.is_empty() {
-                  tags.write_if(Space, Flat);
-                  tags.write_if(Newline(1), Broken);
-               }
+               tags.write_if(Space, Flat);
+               tags.write_if(Newline(1), Broken);
 
-               tags.write_if_with(Indent(INDENT_WIDTH), Broken, |tags| {
-                  let mut items = list.iter().peekable();
-                  while let Some(item) = items.next() {
-                     item.display_tags(tags);
+               tags.write(":".style(STYLE_PUNCTUATION));
+               tags.write(Space);
 
-                     tags.write_if(
-                        ",".style(STYLE_PUNCTUATION),
-                        if items.peek().is_some() {
-                           Always
-                        } else {
-                           Broken
-                        },
-                     );
-                     tags.write_if(Space, Flat);
-                     tags.write_if(Newline(1), Broken);
-                  }
-               });
-
-               tags.write("]".style(STYLE_PUNCTUATION));
+               tail.display_tags(tags);
             });
          },
 

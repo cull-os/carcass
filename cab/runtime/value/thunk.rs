@@ -286,7 +286,16 @@ impl Thunk {
                   Operation::Negation => todo!(),
                   Operation::Not => todo!(),
                   Operation::Concat => todo!(),
-                  Operation::Construct => todo!(),
+                  Operation::Construct => {
+                     let tail = stack
+                        .pop()
+                        .expect("construct must be called on a stack with 2 items or more");
+                     let head = stack
+                        .pop()
+                        .expect("construct must be called on a stack with 2 items or more");
+
+                     stack.push(Value::from(Arc::new((head, tail))));
+                  },
                   Operation::Call => {
                      let argument = stack.pop().expect("call must not be called on empty stack");
 

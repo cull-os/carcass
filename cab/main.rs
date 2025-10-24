@@ -116,6 +116,9 @@ async fn main() -> cyn::Termination {
       Arc::new(code),
       List::new_sync().push_front(value::attributes::new! {
          "foo": Value::from(value::string::new!("AAAA")),
+         "bar": Value::from(value::attributes::new! {
+            "baz": Value::Boolean(false),
+         }),
          "true": Value::Boolean(true),
          "false": Value::Boolean(false),
       }),
