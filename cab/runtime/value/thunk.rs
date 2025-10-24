@@ -142,13 +142,11 @@ impl Thunk {
                         .expect("pop operation must not be called on empty stack");
                   },
                   Operation::Swap => {
-                     assert!(
-                        stack.len() >= 2,
-                        "swap must be called on stack of length 2 or higher",
-                     );
+                     let &mut [.., ref mut x, ref mut y] = &mut *stack else {
+                        unreachable!("swap must be called on stack of length 2 or higher");
+                     };
 
-                     let last_index = stack.len() - 1;
-                     stack.swap(last_index, last_index - 1);
+                     mem::swap(x, y);
                   },
                   operation @ (Operation::Jump | Operation::JumpIf | Operation::JumpIfError) => {
                      let target_index = items
