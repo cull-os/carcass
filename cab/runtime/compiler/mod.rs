@@ -46,7 +46,8 @@ use scope::{
 };
 
 const EXPECT_CODE: &str = "emitter must have at least one code at all times";
-const EXPECT_SCOPE: &str = "emitter must have at least one scope at all times";
+// const EXPECT_SCOPE: &str = "emitter must have at least one scope at all
+// times";
 const EXPECT_VALID: &str = "syntax must be valid";
 const EXPECT_HANDLED: &str = "case was handled";
 
@@ -123,9 +124,9 @@ impl CompileOracle {
 }
 
 struct Emitter<'a> {
-   codes:  Vec<Code>,
-   scopes: Vec<Scope<'a>>,
+   codes: Vec<Code>,
 
+   scopes:  Vec<Scope<'a>>,
    reports: Vec<Report>,
 }
 
@@ -143,19 +144,19 @@ impl ops::DerefMut for Emitter<'_> {
    }
 }
 
-impl<'a> Emitter<'a> {
+impl Emitter<'_> {
    fn new(path: value::Path) -> Self {
       Emitter {
-         codes:  vec![Code::new(path)],
-         scopes: vec![Scope::global()],
+         codes: vec![Code::new(path)],
 
+         scopes:  vec![Scope::global()],
          reports: Vec::new(),
       }
    }
 
-   fn scope(&mut self) -> &mut Scope<'a> {
-      self.scopes.last_mut().expect(EXPECT_SCOPE)
-   }
+   // fn scope(&mut self) -> &mut Scope<'a> {
+   //    self.scopes.last_mut().expect(EXPECT_SCOPE)
+   // }
 }
 
 #[bon::bon]
@@ -170,19 +171,13 @@ impl<'a> Emitter<'a> {
    }
 
    fn emit_scope(&mut self, span: Span, with: impl FnOnce(&mut Self)) {
-      let parent_empty = self.scope().is_empty();
-
       self.scopes.push(Scope::new());
 
-      if parent_empty {
-         with(self);
-      } else {
-         self.push_operation(span, Operation::ScopeStart);
+      self.push_operation(span, Operation::ScopeStart);
 
-         with(self);
+      with(self);
 
-         self.push_operation(span, Operation::ScopeEnd);
-      }
+      self.push_operation(span, Operation::ScopeEnd);
 
       // for local in self.scopes.pop().expect("scope was just pushed").finish()
       // {    self.reports.push(
@@ -341,7 +336,7 @@ impl<'a> Emitter<'a> {
                node::InfixOperator::Select => {
                   let scopes = this.scopes.split_off(1);
                   this.emit_scope(right.span(), |this| {
-                     this.scope().push(Span::dummy(), LocalName::wildcard());
+                     // this.scope().push(Span::dummy(), LocalName::wildcard());
 
                      this.emit(right);
                   });
@@ -580,7 +575,7 @@ impl<'a> Emitter<'a> {
          !identifier.value().is_trivial();
 
       self.emit_thunk(span).if_(needs_thunk).with(|this| {
-         let name = match identifier.value() {
+         let __name = match identifier.value() {
             node::IdentifierValueRef::Plain(plain) => {
                if is_bind {
                   this.emit_push(span, Value::Bind(value::SString::from(plain.text())));
@@ -640,10 +635,10 @@ impl<'a> Emitter<'a> {
             },
          };
 
-         if is_bind {
-            this.scope().push(span, name);
-            // return;
-         }
+         // if is_bind {
+         //    this.scope().push(span, name);
+         //    return;
+         // }
 
          // TODO: Scope logic is wrong. Don't locate it all immediately, do it
          // in scopes. match Scope::locate(&mut this.scopes, &name) {
