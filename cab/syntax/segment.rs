@@ -41,10 +41,14 @@ use crate::{
 pub fn unescape(c: char) -> Option<char> {
    Some(match c {
       ' ' => ' ',
-      '0' => '\0',
-      't' => '\t',
-      'n' => '\n',
-      'r' => '\r',
+      '0' => '\x00', // Null.
+      'a' => '\x07', // Bell.
+      'b' => '\x08', // Backspace.
+      't' => '\x09', // Horizontal tab.
+      'n' => '\x0A', // New line.
+      'v' => '\x0B', // Vertical tab.
+      'f' => '\x0C', // Form feed.
+      'r' => '\x0D', // Carriage return.
       '=' => '=',
       '`' => '`',
       '"' => '\"',
@@ -95,10 +99,17 @@ pub fn escape(
    delimiter: Option<(char, &'static str)>,
 ) -> Option<&'static str> {
    Some(match c {
-      '\0' => "\\0",
-      '\t' => "\\t",
-      '\n' => "\\n",
-      '\r' => "\\r",
+      // Turn one line of the `unescape` match to an `escape` match in Helix.
+      // Copy this to your @ register using "@y. Execute using Q.
+      // gst,<S-S><space>=<gt><space><ret><A-)>,t,<right><left><left>mr'"i\\<esc>gs
+      '\x00' => "\\0", // Null.
+      '\x07' => "\\a", // Bell.
+      '\x08' => "\\b", // Backspace.
+      '\x09' => "\\t", // Horizontal tab.
+      '\x0A' => "\\n", // New line.
+      '\x0B' => "\\v", // Vertical tab.
+      '\x0C' => "\\f", // Form feed.
+      '\x0D' => "\\r", // Carriage return.
 
       c if let Some((delimiter, delimiter_escaped)) = delimiter
          && c == delimiter =>
