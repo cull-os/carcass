@@ -1,7 +1,5 @@
 @Any = (@_),
 
-@None = None,
-
 @List =
   @Type => [] | (Type : List Type)
 | {
@@ -12,8 +10,8 @@
 
   @last = document "Gets the last item of the list." <|
   (
-    @x : [] => x,
-  | @x : @xs => last xs,
+    @x  : [] => x,
+  | Any : @xs => last xs,
   ),
 
   @tail = document "Gets the tail of the list. A tail is everything except the head." <|
