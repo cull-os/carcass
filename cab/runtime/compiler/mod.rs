@@ -302,7 +302,12 @@ impl<'a> Emitter<'a> {
 
       self
          .emit_thunk(operation.span())
-         .is_lambda(left.is_none() || right.is_none())
+         .is_lambda(
+            // Lambda if any operand is missing.
+            (left.is_none() || right.is_none())
+            // Or if it is actually a lambda.
+            || operation.operator() == node::InfixOperator::Lambda,
+         )
          .with(|this| {
             // TODO: Actually handle this.
             unwrap!(left, right);
@@ -413,42 +418,36 @@ impl<'a> Emitter<'a> {
                },
 
                node::InfixOperator::Lambda => {
-                  this
-                     .emit_thunk(operation.span())
-                     .is_lambda(true)
-                     .with(|this| {
-                        this.emit_scope(operation.span(), |this| {
-                           // @foo => bar, `@foo` is the right parameter of the equality
-                           // comparision, and the left parameter is the
-                           // argument.
-                           this.emit_force(left);
-                           this.push_operation(left.span(), Operation::Equal);
+                  this.emit_scope(operation.span(), |this| {
+                     // @foo => bar, `@foo` is the right parameter of the equality
+                     // comparision, and the left parameter is the argument.
+                     this.emit_force(left);
+                     this.push_operation(left.span(), Operation::Equal);
 
-                           let to_body = {
-                              this.push_operation(left.span(), Operation::JumpIf);
-                              this.push_u16(u16::default())
-                           };
+                     let to_body = {
+                        this.push_operation(left.span(), Operation::JumpIf);
+                        this.push_u16(u16::default())
+                     };
 
-                           this.push_operation(operation.span(), Operation::Pop);
-                           this.emit_push(
-                              left.span(),
-                              Value::error(value::string::new!(
-                                 "TODO better parameters were not equal error"
-                              )),
-                           );
+                     this.push_operation(operation.span(), Operation::Pop);
+                     this.emit_push(
+                        left.span(),
+                        Value::error(value::string::new!(
+                           "TODO better parameters were not equal error"
+                        )),
+                     );
 
-                           let over_body = {
-                              this.push_operation(operation.span(), Operation::Jump);
-                              this.push_u16(u16::default())
-                           };
+                     let over_body = {
+                        this.push_operation(operation.span(), Operation::Jump);
+                        this.push_u16(u16::default())
+                     };
 
-                           this.point_here(to_body);
-                           this.push_operation(operation.span(), Operation::Pop);
-                           this.emit_force(right);
+                     this.point_here(to_body);
+                     this.push_operation(operation.span(), Operation::Pop);
+                     this.emit_force(right);
 
-                           this.point_here(over_body);
-                        });
-                     });
+                     this.point_here(over_body);
+                  });
                   return;
                },
 
