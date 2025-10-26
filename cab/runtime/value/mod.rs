@@ -187,7 +187,7 @@ impl tag::DisplayTags for Value {
 
          Value::Char(char) => {
             tags.write("'".style(STYLE_CHAR));
-            match escape(char).delimiter(('\'', "\\'")).call() {
+            match escape(char).is_first(true).delimiter(('\'', "\\'")).call() {
                Some(escaped) => tags.write(escaped.style(STYLE_ESCAPED)),
                None => tags.write(char.to_string().style(STYLE_CHAR)),
             }

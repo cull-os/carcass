@@ -97,6 +97,7 @@ pub fn unescape_string(s: &str) -> Result<(String, bool), SmallVec<Span, 4>> {
 pub fn escape(
    #[builder(start_fn)] c: char,
    delimiter: Option<(char, &'static str)>,
+   is_first: bool,
 ) -> Option<&'static str> {
    Some(match c {
       // Turn one line of the `unescape` match to an `escape` match in Helix.
@@ -116,6 +117,10 @@ pub fn escape(
       {
          delimiter_escaped
       },
+
+      // "=" is not a valid string, but "\=" is.
+      // However, "\==" is also valid and we don't want to over-escape.
+      '=' if is_first => "\\=",
 
       _ => return None,
    })
@@ -142,7 +147,11 @@ fn escape_string_impl<'a>(
       let mut literal_start_offset = 0;
 
       for (offset, c) in s.char_indices() {
-         let Some(escaped_) = escape(c).maybe_delimiter(delimiter).call() else {
+         let Some(escaped_) = escape(c)
+            .is_first(offset == 0)
+            .maybe_delimiter(delimiter)
+            .call()
+         else {
             continue;
          };
 
@@ -438,7 +447,7 @@ impl Segments<'_> {
                indents = indents
                   .into_iter()
                   .map(|c| {
-                     match escape(c).delimiter(('\'', "\\'")).call() {
+                     match escape(c).is_first(true).delimiter(('\'', "\\'")).call() {
                         Some(escaped) => escaped.to_owned(),
                         None => format!("'{c}'"),
                      }
