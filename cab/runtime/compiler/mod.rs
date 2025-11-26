@@ -49,7 +49,6 @@ const EXPECT_CODE: &str = "emitter must have at least one code at all times";
 // const EXPECT_SCOPE: &str = "emitter must have at least one scope at all
 // times";
 const EXPECT_VALID: &str = "syntax must be valid";
-const EXPECT_HANDLED: &str = "case was handled";
 
 pub struct Compile {
    pub code:    Code,
@@ -277,6 +276,65 @@ impl<'a> Emitter<'a> {
       }
    }
 
+   #[builder(finish_fn(name = "right"))]
+   fn emit_select_static(
+      &mut self,
+      #[builder(start_fn)] span: Span,
+      #[builder(finish_fn)] right: &str,
+      #[builder(name = "left")] emit_left: impl FnOnce(&mut Emitter<'a>),
+   ) {
+      self.emit_select(span).left(emit_left).right(|this| {
+         this.emit_thunk(span).with(|this| {
+            this.emit_push(span, Value::Reference(value::SString::from(right)));
+         });
+      });
+   }
+
+   #[builder(finish_fn(name = "right"))]
+   fn emit_select(
+      &mut self,
+      #[builder(start_fn)] span: Span,
+      #[builder(finish_fn)] emit_right: impl FnOnce(&mut Emitter<'a>),
+      #[builder(name = "left")] emit_left: impl FnOnce(&mut Emitter<'a>),
+   ) {
+      emit_right(self);
+
+      emit_left(self);
+      let to_swap_pop = {
+         self.push_operation(span, Operation::JumpIfError);
+         self.push_u16(u16::default())
+      };
+
+      // <right>
+      // <left>
+      self.push_operation(span, Operation::ScopeSwap);
+
+      // <right>
+      // <old-scope-or-error>
+      let to_swap_pop_ = {
+         self.push_operation(span, Operation::JumpIfError);
+         self.push_u16(u16::default())
+      };
+
+      // <right>
+      // <old-scope>
+      self.push_operation(span, Operation::Swap);
+
+      // <old-scope>
+      // <right>
+      self.push_operation(span, Operation::Force);
+
+      // <old-scope>
+      // <right-forced>
+      self.point_here(to_swap_pop);
+      self.point_here(to_swap_pop_);
+      self.push_operation(span, Operation::Swap);
+
+      // <right-forced>
+      // <old-scope>
+      self.push_operation(span, Operation::Pop);
+   }
+
    fn emit_prefix_operation(&mut self, operation: &'a node::PrefixOperation) {
       let right = operation.right();
 
@@ -284,64 +342,22 @@ impl<'a> Emitter<'a> {
          .emit_thunk(operation.span())
          .is_lambda(right.is_none())
          .with(|this| {
-            if let Some(right) = right {
-               this.emit_force(right);
-            }
+            unwrap!(right);
 
-            this.push_operation(operation.span(), match operation.operator() {
-               node::PrefixOperator::Swwallation => Operation::Swwallation,
-               node::PrefixOperator::Negation => Operation::Negation,
-               node::PrefixOperator::Not => Operation::Not,
-            });
+            this
+               .emit_select_static(operation.span())
+               .left(|this| {
+                  this.emit_force(right);
+               })
+               .right(match operation.operator() {
+                  node::PrefixOperator::Swwallation => "+",
+                  node::PrefixOperator::Negation => "-",
+                  node::PrefixOperator::Not => "!",
+               });
          });
    }
 
    fn emit_infix_operation(&mut self, operation: &'a node::InfixOperation) {
-      #[bon::builder(finish_fn(name = "right"))]
-      fn emit_select<'a>(
-         #[builder(start_fn)] this: &mut Emitter<'a>,
-         #[builder(start_fn)] operation: &'a node::InfixOperation,
-         #[builder(finish_fn)] emit_right: impl FnOnce(&mut Emitter<'a>),
-         #[builder(name = "left")] emit_left: impl FnOnce(&mut Emitter<'a>),
-      ) {
-         emit_right(this);
-
-         emit_left(this);
-         let to_swap_pop = {
-            this.push_operation(operation.span(), Operation::JumpIfError);
-            this.push_u16(u16::default())
-         };
-
-         // <right>
-         // <left>
-         this.push_operation(operation.span(), Operation::ScopeSwap);
-
-         // <right>
-         // <old-scope-or-error>
-         let to_swap_pop_ = {
-            this.push_operation(operation.span(), Operation::JumpIfError);
-            this.push_u16(u16::default())
-         };
-
-         // <right>
-         // <old-scope>
-         this.push_operation(operation.span(), Operation::Swap);
-
-         // <old-scope>
-         // <right>
-         this.push_operation(operation.span(), Operation::Force);
-
-         // <old-scope>
-         // <right-forced>
-         this.point_here(to_swap_pop);
-         this.point_here(to_swap_pop_);
-         this.push_operation(operation.span(), Operation::Swap);
-
-         // <right-forced>
-         // <old-scope>
-         this.push_operation(operation.span(), Operation::Pop);
-      }
-
       let left = operation.left();
       let right = operation.right();
 
@@ -369,23 +385,39 @@ impl<'a> Emitter<'a> {
                   this.emit_force(right);
 
                   this.point_here(to_end);
-                  return;
                },
 
-               node::InfixOperator::ImplicitApply | node::InfixOperator::Apply => {
-                  this.emit(left);
-                  this.emit(right);
+               operator @ (node::InfixOperator::ImplicitApply
+               | node::InfixOperator::Apply
+               | node::InfixOperator::Pipe) => {
+                  match operator {
+                     node::InfixOperator::ImplicitApply | node::InfixOperator::Apply => {
+                        this.emit(left);
+                        this.emit(right);
+                     },
+
+                     node::InfixOperator::Pipe => {
+                        this.emit(right);
+                        this.emit(left);
+                     },
+
+                     _ => unreachable!(),
+                  }
+
+                  this.push_operation(operation.span(), Operation::Call);
                },
-               node::InfixOperator::Pipe => {
-                  this.emit(right);
+
+               node::InfixOperator::Construct => {
                   this.emit(left);
+                  this.emit(right);
+
+                  this.push_operation(operation.span(), Operation::Construct);
                },
 
                node::InfixOperator::Select => {
-                  emit_select(this, operation)
-                     .left(|this| {
-                        this.emit_force(left);
-                     })
+                  this
+                     .emit_select(operation.span())
+                     .left(|this| this.emit_force(left))
                      .right(|this| {
                         // let scopes = this.scopes.split_off(1);
                         this.emit_scope(right.span(), |this| {
@@ -395,7 +427,28 @@ impl<'a> Emitter<'a> {
                         });
                         // this.scopes.extend(scopes);
                      });
-                  return;
+               },
+
+               operator @ (node::InfixOperator::Equal | node::InfixOperator::NotEqual) => {
+                  let emit_equal = |this: &mut Emitter<'a>| {
+                     this.emit(left);
+                     this.emit(right);
+
+                     this.push_operation(operation.span(), Operation::Equal);
+                  };
+
+                  match operator {
+                     node::InfixOperator::Equal => emit_equal(this),
+
+                     node::InfixOperator::NotEqual => {
+                        this
+                           .emit_select_static(operation.span())
+                           .left(emit_equal)
+                           .right("!");
+                     },
+
+                     _ => unreachable!(),
+                  }
                },
 
                node::InfixOperator::And => {
@@ -415,13 +468,22 @@ impl<'a> Emitter<'a> {
                   this.push_operation(operation.span(), Operation::AssertBoolean);
 
                   this.point_here(over_right);
-                  return;
                },
 
                operator @ (node::InfixOperator::Or | node::InfixOperator::Implication) => {
-                  this.emit_force(left);
-                  if operator == node::InfixOperator::Implication {
-                     this.push_operation(operation.span(), Operation::Not);
+                  match operator {
+                     node::InfixOperator::Or => {
+                        this.emit_force(left);
+                     },
+
+                     node::InfixOperator::Implication => {
+                        this
+                           .emit_select_static(operation.span())
+                           .left(|this| this.emit_force(left))
+                           .right("!");
+                     },
+
+                     _ => unreachable!(),
                   }
 
                   let to_end = {
@@ -434,7 +496,20 @@ impl<'a> Emitter<'a> {
                   this.push_operation(operation.span(), Operation::AssertBoolean);
 
                   this.point_here(to_end);
-                  return;
+               },
+
+               node::InfixOperator::Same | node::InfixOperator::All => {
+                  this.emit(left);
+                  this.emit(right);
+
+                  this.push_operation(operation.span(), Operation::All);
+               },
+
+               node::InfixOperator::Any => {
+                  this.emit(left);
+                  this.emit(right);
+
+                  this.push_operation(operation.span(), Operation::Any);
                },
 
                node::InfixOperator::Lambda => {
@@ -468,57 +543,38 @@ impl<'a> Emitter<'a> {
 
                      this.point_here(over_body);
                   });
-                  return;
                },
 
-               _ => {
-                  this.emit(left);
-                  this.emit(right);
+               operator @ (node::InfixOperator::Concat
+               | node::InfixOperator::Update
+               | node::InfixOperator::LessOrEqual
+               | node::InfixOperator::Less
+               | node::InfixOperator::MoreOrEqual
+               | node::InfixOperator::More
+               | node::InfixOperator::Addition
+               | node::InfixOperator::Subtraction
+               | node::InfixOperator::Multiplication
+               | node::InfixOperator::Power
+               | node::InfixOperator::Division) => {
+                  this
+                     .emit_select_static(operation.span())
+                     .left(|this| this.emit_force(left))
+                     .right(match operator {
+                        node::InfixOperator::Concat => "++",
+                        node::InfixOperator::Update => "//",
+                        node::InfixOperator::LessOrEqual => "<=",
+                        node::InfixOperator::Less => "<",
+                        node::InfixOperator::MoreOrEqual => ">=",
+                        node::InfixOperator::More => ">",
+                        node::InfixOperator::Addition => "+",
+                        node::InfixOperator::Subtraction => "-",
+                        node::InfixOperator::Multiplication => "*",
+                        node::InfixOperator::Power => "^",
+                        node::InfixOperator::Division => "/",
+                        _ => unreachable!(),
+                     });
                },
             }
-
-            let operation_ = match operation.operator() {
-               node::InfixOperator::Sequence => unreachable!("{EXPECT_HANDLED}"),
-
-               node::InfixOperator::ImplicitApply
-               | node::InfixOperator::Apply
-               | node::InfixOperator::Pipe => Operation::Call,
-
-               node::InfixOperator::Concat => Operation::Concat,
-               node::InfixOperator::Construct => Operation::Construct,
-
-               node::InfixOperator::Select => unreachable!("{EXPECT_HANDLED}"),
-               node::InfixOperator::Update => Operation::Update,
-
-               node::InfixOperator::LessOrEqual => Operation::LessOrEqual,
-               node::InfixOperator::Less => Operation::Less,
-               node::InfixOperator::MoreOrEqual => Operation::MoreOrEqual,
-               node::InfixOperator::More => Operation::More,
-
-               node::InfixOperator::Equal => Operation::Equal,
-               node::InfixOperator::NotEqual => {
-                  this.push_operation(operation.span(), Operation::Equal);
-                  this.push_operation(operation.span(), Operation::Not);
-                  return;
-               },
-
-               node::InfixOperator::And
-               | node::InfixOperator::Or
-               | node::InfixOperator::Implication => unreachable!("{EXPECT_HANDLED}"),
-
-               node::InfixOperator::Same | node::InfixOperator::All => Operation::All,
-               node::InfixOperator::Any => Operation::Any,
-
-               node::InfixOperator::Addition => Operation::Addition,
-               node::InfixOperator::Subtraction => Operation::Subtraction,
-               node::InfixOperator::Multiplication => Operation::Multiplication,
-               node::InfixOperator::Power => Operation::Power,
-               node::InfixOperator::Division => Operation::Division,
-
-               node::InfixOperator::Lambda => unreachable!("{EXPECT_HANDLED}"),
-            };
-
-            this.push_operation(operation.span(), operation_);
          });
    }
 

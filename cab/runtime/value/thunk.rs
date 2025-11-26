@@ -278,10 +278,6 @@ impl Thunk {
                         continue;
                      };
                   },
-                  Operation::Swwallation => todo!(),
-                  Operation::Negation => todo!(),
-                  Operation::Not => todo!(),
-                  Operation::Concat => todo!(),
                   Operation::Construct => {
                      let tail = stack
                         .pop()
@@ -308,19 +304,9 @@ impl Thunk {
 
                      stack.push(Value::from(thunk));
                   },
-                  Operation::Update => todo!(),
-                  Operation::LessOrEqual => todo!(),
-                  Operation::Less => todo!(),
-                  Operation::MoreOrEqual => todo!(),
-                  Operation::More => todo!(),
                   Operation::Equal => todo!(),
                   Operation::All => todo!(),
                   Operation::Any => todo!(),
-                  Operation::Addition => todo!(),
-                  Operation::Subtraction => todo!(),
-                  Operation::Multiplication => todo!(),
-                  Operation::Power => todo!(),
-                  Operation::Division => todo!(),
                }
             }
 

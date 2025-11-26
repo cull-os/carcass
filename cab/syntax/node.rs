@@ -515,6 +515,13 @@ impl PrefixOperation {
    pub fn validate(&self, to: &mut Vec<Report>) {
       if let Some(right) = self.right() {
          right.validate(to);
+      } else {
+         // TODO: Temporary.
+         to.push(
+            Report::error("curried prefix functions aren't supported yet")
+               .primary(self.span(), "unsupported")
+               .tip("create a lambda instead"),
+         );
       }
    }
 }

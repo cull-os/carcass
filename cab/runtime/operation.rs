@@ -28,35 +28,14 @@ pub enum Operation {
 
    AssertBoolean,
 
-   // PREFIX
-   Swwallation,
-   Negation,
-
-   Not,
-
-   // INFIX
-   Concat,
    Construct,
 
    Call,
-
-   Update,
-
-   LessOrEqual,
-   Less,
-   MoreOrEqual,
-   More,
 
    Equal,
 
    All,
    Any,
-
-   Addition,
-   Subtraction,
-   Multiplication,
-   Power,
-   Division,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
