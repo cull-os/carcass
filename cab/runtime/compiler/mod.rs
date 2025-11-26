@@ -297,6 +297,51 @@ impl<'a> Emitter<'a> {
    }
 
    fn emit_infix_operation(&mut self, operation: &'a node::InfixOperation) {
+      #[bon::builder(finish_fn(name = "right"))]
+      fn emit_select<'a>(
+         #[builder(start_fn)] this: &mut Emitter<'a>,
+         #[builder(start_fn)] operation: &'a node::InfixOperation,
+         #[builder(finish_fn)] emit_right: impl FnOnce(&mut Emitter<'a>),
+         #[builder(name = "left")] emit_left: impl FnOnce(&mut Emitter<'a>),
+      ) {
+         emit_right(this);
+
+         emit_left(this);
+         let to_swap_pop = {
+            this.push_operation(operation.span(), Operation::JumpIfError);
+            this.push_u16(u16::default())
+         };
+
+         // <right>
+         // <left>
+         this.push_operation(operation.span(), Operation::ScopeSwap);
+
+         // <right>
+         // <old-scope-or-error>
+         let to_swap_pop_ = {
+            this.push_operation(operation.span(), Operation::JumpIfError);
+            this.push_u16(u16::default())
+         };
+
+         // <right>
+         // <old-scope>
+         this.push_operation(operation.span(), Operation::Swap);
+
+         // <old-scope>
+         // <right>
+         this.push_operation(operation.span(), Operation::Force);
+
+         // <old-scope>
+         // <right-forced>
+         this.point_here(to_swap_pop);
+         this.point_here(to_swap_pop_);
+         this.push_operation(operation.span(), Operation::Swap);
+
+         // <right-forced>
+         // <old-scope>
+         this.push_operation(operation.span(), Operation::Pop);
+      }
+
       let left = operation.left();
       let right = operation.right();
 
@@ -333,48 +378,19 @@ impl<'a> Emitter<'a> {
                },
 
                node::InfixOperator::Select => {
-                  // let scopes = this.scopes.split_off(1);
-                  this.emit_scope(right.span(), |this| {
-                     // this.scope().push(Span::dummy(), LocalName::wildcard());
+                  emit_select(this, operation)
+                     .left(|this| {
+                        this.emit_force(left);
+                     })
+                     .right(|this| {
+                        // let scopes = this.scopes.split_off(1);
+                        this.emit_scope(right.span(), |this| {
+                           // this.scope().push(Span::dummy(), LocalName::wildcard());
 
-                     this.emit(right);
-                  });
-                  // this.scopes.extend(scopes);
-
-                  this.emit_force(left);
-                  let to_swap_pop = {
-                     this.push_operation(operation.span(), Operation::JumpIfError);
-                     this.push_u16(u16::default())
-                  };
-
-                  // <right>
-                  // <left>
-                  this.push_operation(operation.span(), Operation::ScopeSwap);
-
-                  // <right>
-                  // <old-scope-or-error>
-                  let to_swap_pop_ = {
-                     this.push_operation(operation.span(), Operation::JumpIfError);
-                     this.push_u16(u16::default())
-                  };
-
-                  // <right>
-                  // <old-scope>
-                  this.push_operation(operation.span(), Operation::Swap);
-
-                  // <old-scope>
-                  // <right>
-                  this.push_operation(operation.span(), Operation::Force);
-
-                  // <old-scope>
-                  // <right-forced>
-                  this.point_here(to_swap_pop);
-                  this.point_here(to_swap_pop_);
-                  this.push_operation(operation.span(), Operation::Swap);
-
-                  // <right-forced>
-                  // <old-scope>
-                  this.push_operation(operation.span(), Operation::Pop);
+                           this.emit(right);
+                        });
+                        // this.scopes.extend(scopes);
+                     });
                   return;
                },
 
