@@ -372,6 +372,10 @@ impl<'a> Emitter<'a> {
                   return;
                },
 
+               node::InfixOperator::ImplicitApply | node::InfixOperator::Apply => {
+                  this.emit(left);
+                  this.emit(right);
+               },
                node::InfixOperator::Pipe => {
                   this.emit(right);
                   this.emit(left);
