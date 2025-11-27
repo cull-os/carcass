@@ -477,10 +477,13 @@ impl<'a> Emitter<'a> {
                      },
 
                      node::InfixOperator::Implication => {
-                        this
-                           .emit_select_static(operation.span())
-                           .left(|this| this.emit_force(left))
-                           .right("!");
+                        this.emit_thunk(operation.span()).with(|this| {
+                           this
+                              .emit_select_static(operation.span())
+                              .left(|this| this.emit_force(left))
+                              .right("!");
+                        });
+                        this.push_operation(operation.span(), Operation::Force);
                      },
 
                      _ => unreachable!(),
