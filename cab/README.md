@@ -1,3 +1,3 @@
 # Cab
 
-A reproducible contextful-expression language.
+A dynamic, cacheable language.
