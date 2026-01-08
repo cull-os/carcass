@@ -232,12 +232,12 @@ impl Value {
    #[must_use]
    pub fn equals(left: &Value, right: &Value) -> (bool, Attributes) {
       match (left, right) {
-         (&Self::Bind(ref left), &Self::Bind(ref right)) => {
+         (left @ &Self::Bind(ref left_identifier), right @ &Self::Bind(ref right_identifier)) => {
             (
                true,
                attributes::new! {}
-                  .insert(left.dupe(), Value::from(right.dupe()))
-                  .insert(right.dupe(), Value::from(left.dupe())),
+                  .insert(left_identifier.dupe(), right.dupe())
+                  .insert(right_identifier.dupe(), left.dupe()),
             )
          },
          (&Self::Bind(ref identifier), value) | (value, &Self::Bind(ref identifier)) => {
