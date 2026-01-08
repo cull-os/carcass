@@ -112,6 +112,19 @@ impl Attributes {
    }
 
    #[must_use]
+   pub fn merge(&self, with: &Self) -> Self {
+      // TODO: Is there a better way? This looks stupid.
+      Self(
+         with
+            .0
+            .into_iter()
+            .fold(self.0.dupe(), |attributes, (key, value)| {
+               attributes.insert(key.dupe(), value.dupe())
+            }),
+      )
+   }
+
+   #[must_use]
    pub fn get(&self, key: &value::SString) -> Option<&Value> {
       self.0.get(key)
    }
