@@ -100,7 +100,7 @@ impl Thunk {
       }
    }
 
-   pub async fn force(&self, state: &mut State) {
+   pub async fn force(&self, state: &State) {
       let this = mem::replace(&mut *self.0.write().await, BLACK_HOLE.with(Dupe::dupe));
 
       let value = match this {

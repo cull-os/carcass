@@ -128,7 +128,7 @@ async fn main() -> cyn::Termination {
       .location((path, Span::at(0_u32, source.len())));
 
    thunk
-      .force(&mut runtime::State {
+      .force(&runtime::State {
          parse_oracle,
          compile_oracle,
       })
