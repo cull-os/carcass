@@ -55,7 +55,7 @@ pub enum Value {
    Integer(Arc<num::BigInt>),
    Float(f64),
 
-   Thunk(Thunk), // Unused for now.
+   Thunk(Thunk),
 
    #[from(ignore)]
    Suspend(Arc<Code>),
