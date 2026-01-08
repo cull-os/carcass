@@ -128,4 +128,9 @@ impl Attributes {
    pub fn get(&self, key: &value::SString) -> Option<&Value> {
       self.0.get(key)
    }
+
+   #[must_use]
+   pub fn equals(_left: &Self, _right: &Self) -> (bool, Attributes) {
+      todo!()
+   }
 }

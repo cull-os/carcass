@@ -328,9 +328,9 @@ impl Thunk {
                         .expect("equal must be called on a stack with 2 items or more");
 
                      // TODO: Not sure about the design here.
-                     let (equal, binds) = Value::equal(&left, &right);
+                     let (equal, binds) = Value::equals(&left, &right);
 
-                     stack.push(equal);
+                     stack.push(Value::from(equal));
                      scopes = scopes
                         .drop_first()
                         .expect("equal must be called with a scope")

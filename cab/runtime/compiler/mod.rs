@@ -835,7 +835,10 @@ impl<'a> Emitter<'a> {
             self.emit_push(char.span(), char.value());
          },
          node::ExpressionRef::Integer(integer) => {
-            self.emit_push(integer.span(), Arc::new(integer.value()));
+            self.emit_push(
+               integer.span(),
+               Value::from(value::Integer::from(integer.value())),
+            );
          },
          node::ExpressionRef::Float(float) => {
             self.emit_push(float.span(), float.value());

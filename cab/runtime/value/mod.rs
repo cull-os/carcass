@@ -21,6 +21,9 @@ use crate::Code;
 pub mod attributes;
 pub use attributes::Attributes;
 
+pub mod integer;
+pub use integer::Integer;
+
 pub mod path;
 pub use path::Path;
 
@@ -52,7 +55,7 @@ pub enum Value {
    String(SString),
 
    Char(char),
-   Integer(Arc<num::BigInt>),
+   Integer(Integer),
    Float(f64),
 
    Thunk(Thunk),
@@ -71,7 +74,6 @@ pub const STYLE_BIND_AT: style::Style = STYLE_BIND.bold();
 pub const STYLE_REFERENCE: style::Style = style::Style::new();
 pub const STYLE_STRING: style::Style = style::Color::Green.fg();
 pub const STYLE_CHAR: style::Style = style::Color::Green.fg();
-pub const STYLE_INTEGER: style::Style = style::Color::Cyan.fg().bold();
 pub const STYLE_FLOAT: style::Style = style::Color::Cyan.fg().bold();
 pub const STYLE_THUNK: style::Style = style::Color::BrightBlack.fg().bold();
 
@@ -194,7 +196,7 @@ impl tag::DisplayTags for Value {
             tags.write("'".style(STYLE_CHAR));
          },
 
-         Value::Integer(ref integer) => tags.write(integer.to_string().style(STYLE_INTEGER)),
+         Value::Integer(ref integer) => integer.display_tags(tags),
 
          Value::Float(float) => tags.write(float.to_string().style(STYLE_FLOAT)),
 
@@ -202,6 +204,12 @@ impl tag::DisplayTags for Value {
             tags.write("_".style(STYLE_THUNK));
          },
       }
+   }
+}
+
+impl From<&Value> for Attributes {
+   fn from(_value: &Value) -> Self {
+      todo!()
    }
 }
 
@@ -222,11 +230,28 @@ impl Value {
    }
 
    #[must_use]
-   pub fn equal(left: &Value, right: &Value) -> (Value, Attributes) {
-      todo!();
-      (
-         Value::from(true),
-         attributes::new! { "foo": Value::from(6.7) },
-      )
+   pub fn equals(left: &Value, right: &Value) -> (bool, Attributes) {
+      match (left, right) {
+         (&Self::Bind(ref left), &Self::Bind(ref right)) => {
+            (
+               true,
+               attributes::new! {}
+                  .insert(left.dupe(), Value::from(right.dupe()))
+                  .insert(right.dupe(), Value::from(left.dupe())),
+            )
+         },
+         (&Self::Bind(ref identifier), value) | (value, &Self::Bind(ref identifier)) => {
+            (
+               true,
+               attributes::new! {}.insert(identifier.dupe(), value.dupe()),
+            )
+         },
+         (left, right) => {
+            Attributes::equals(
+               &Into::<Attributes>::into(left),
+               &Into::<Attributes>::into(right),
+            )
+         },
+      }
    }
 }
