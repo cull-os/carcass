@@ -26,23 +26,19 @@ verify() {
   hash="$1";
   file="$2";
 
-  [ $(sed "s/$hash/HASH-PLACEHOLDER/g" "$file" | sha256sum | head --bytes 16) = "$hash" ] && echo SUCCESS || echo FAIL;
+  [ $(sed "s/$hash/HASH-PLACEHOLDER/g" "$file" | sha256sum | head --bytes 16) = "$hash" ] && echo true || echo false;
 }
 ```
 
 Or this Nushell script:
 
 ```nu
-def verify [ hash: string, file: path ]: nothing -> nothing {
+def verify [ hash: string, file: path ]: nothing -> bool {
   open $file
   | str replace --all $hash "HASH-PLACEHOLDER"
   | hash sha256
   | str substring 0..<16
-  | print (if $in == $hash {
-    "SUCCESS"
-  } else {
-    "FAIL"
-  })
+  | $in == $hash
 }
 ```
 
