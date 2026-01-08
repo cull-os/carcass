@@ -313,6 +313,7 @@ impl Thunk {
                      };
 
                      let thunk = Self::lambda(lambda_code)
+                        // FIXME: Get the scope from a value on the stack created using ScopePush.
                         .scopes(scopes.dupe())
                         .argument(argument)
                         .location(code.read_operation(index).0);
