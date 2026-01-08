@@ -46,7 +46,10 @@ enum ThunkInner {
       scopes:   Scopes,
    },
 
-   Evaluated(Value),
+   Evaluated {
+      scopagate: Option<Scopes>,
+      value:     Value,
+   },
 }
 
 #[derive(Clone, Dupe)]
@@ -92,9 +95,13 @@ impl Thunk {
       })))
    }
 
-   pub async fn get(&self) -> Option<Value> {
-      if let ThunkInner::Evaluated(ref value) = *self.0.read().await {
-         Some(value.dupe())
+   pub async fn get(&self) -> Option<(Option<Scopes>, Value)> {
+      if let ThunkInner::Evaluated {
+         ref scopagate,
+         ref value,
+      } = *self.0.read().await
+      {
+         Some((scopagate.dupe(), value.dupe()))
       } else {
          None
       }
@@ -103,10 +110,15 @@ impl Thunk {
    pub async fn force(&self, state: &State) {
       let this = mem::replace(&mut *self.0.write().await, BLACK_HOLE.with(Dupe::dupe));
 
-      let value = match this {
-         ThunkInner::Evaluated(value) => value.dupe(),
+      *self.0.write().await = match this {
+         evaluated @ ThunkInner::Evaluated { .. } => evaluated.dupe(),
 
-         ThunkInner::SuspendedNative(native) => native(),
+         ThunkInner::SuspendedNative(native) => {
+            ThunkInner::Evaluated {
+               scopagate: None,
+               value:     native(),
+            }
+         },
 
          #[expect(clippy::unneeded_field_pattern)]
          ThunkInner::Suspended {
@@ -211,10 +223,13 @@ impl Thunk {
 
                         Box::pin(thunk.force(state)).await;
 
-                        value = thunk
+                        let (scope_new, value_new) = thunk
                            .get()
                            .await
                            .expect("thunk must contain value after forcing");
+
+                        value = value_new;
+                        scopes = scope_new.unwrap_or(scopes);
                      }
 
                      stack.push(value);
@@ -223,7 +238,7 @@ impl Thunk {
                      scopes = scopes.push_front(value::attributes::new! {});
                   },
                   Operation::ScopeEnd => {
-                     scopes
+                     scopes = scopes
                         .drop_first()
                         .expect("scope-end must not be called with no scopes");
                   },
@@ -304,23 +319,43 @@ impl Thunk {
 
                      stack.push(Value::from(thunk));
                   },
-                  Operation::Equal => todo!(),
+                  Operation::Equal => {
+                     let right = stack
+                        .pop()
+                        .expect("equal must be called on a stack with 2 items or more");
+                     let left = stack
+                        .pop()
+                        .expect("equal must be called on a stack with 2 items or more");
+
+                     // TODO: Not sure about the design here.
+                     let (equal, binds) = Value::equal(&left, &right);
+
+                     stack.push(equal);
+                     scopes = scopes
+                        .drop_first()
+                        .expect("equal must be called with a scope")
+                        .push_front(
+                           scopes
+                              .first()
+                              .expect("equal must be called with a scope")
+                              .merge(&binds),
+                        );
+                  },
                   Operation::All => todo!(),
                   Operation::Any => todo!(),
                }
             }
 
-            let &[ref result] = &*stack else {
-               unreachable!(
-                  "stack must have exactly one item left, has {len}",
-                  len = stack.len(),
-               );
+            let len = stack.len();
+            let Ok([value]) = <[_; 1]>::try_from(stack) else {
+               unreachable!("stack must have exactly one item left, has {len}");
             };
 
-            result.dupe()
+            ThunkInner::Evaluated {
+               scopagate: Some(scopes),
+               value,
+            }
          },
       };
-
-      *self.0.write().await = ThunkInner::Evaluated(value);
    }
 }

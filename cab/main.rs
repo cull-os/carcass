@@ -134,7 +134,7 @@ async fn main() -> cyn::Termination {
       })
       .await;
 
-   let value = thunk
+   let (_, value) = thunk
       .get()
       .await
       .expect("thunk must have value after forcing");

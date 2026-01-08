@@ -220,4 +220,13 @@ impl Value {
    pub fn is_error(&self) -> bool {
       matches!(self, &Self::Error(_))
    }
+
+   #[must_use]
+   pub fn equal(left: &Value, right: &Value) -> (Value, Attributes) {
+      todo!();
+      (
+         Value::from(true),
+         attributes::new! { "foo": Value::from(6.7) },
+      )
+   }
 }
