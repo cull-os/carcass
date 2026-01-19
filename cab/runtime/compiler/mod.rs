@@ -286,6 +286,7 @@ impl<'a> Emitter<'a> {
       self.emit_select(span).left(emit_left).right(|this| {
          this.emit_thunk(span).with(|this| {
             this.emit_push(span, Value::Reference(value::SString::from(right)));
+            this.push_operation(span, Operation::Resolve);
          });
       });
    }
@@ -559,23 +560,28 @@ impl<'a> Emitter<'a> {
                | node::InfixOperator::Multiplication
                | node::InfixOperator::Power
                | node::InfixOperator::Division) => {
-                  this
-                     .emit_select_static(operation.span())
-                     .left(|this| this.emit_force(left))
-                     .right(match operator {
-                        node::InfixOperator::Concat => "++",
-                        node::InfixOperator::Update => "//",
-                        node::InfixOperator::LessOrEqual => "<=",
-                        node::InfixOperator::Less => "<",
-                        node::InfixOperator::MoreOrEqual => ">=",
-                        node::InfixOperator::More => ">",
-                        node::InfixOperator::Addition => "+",
-                        node::InfixOperator::Subtraction => "-",
-                        node::InfixOperator::Multiplication => "*",
-                        node::InfixOperator::Power => "^",
-                        node::InfixOperator::Division => "/",
-                        _ => unreachable!(),
-                     });
+                  this.emit_thunk(operation.span()).with(|this| {
+                     this
+                        .emit_select_static(operation.span())
+                        .left(|this| this.emit_force(left))
+                        .right(match operator {
+                           node::InfixOperator::Concat => "++",
+                           node::InfixOperator::Update => "//",
+                           node::InfixOperator::LessOrEqual => "<=",
+                           node::InfixOperator::Less => "<",
+                           node::InfixOperator::MoreOrEqual => ">=",
+                           node::InfixOperator::More => ">",
+                           node::InfixOperator::Addition => "+",
+                           node::InfixOperator::Subtraction => "-",
+                           node::InfixOperator::Multiplication => "*",
+                           node::InfixOperator::Power => "^",
+                           node::InfixOperator::Division => "/",
+                           _ => unreachable!(),
+                        });
+                  });
+
+                  this.emit(right);
+                  this.push_operation(operation.span(), Operation::Call);
                },
             }
          });
