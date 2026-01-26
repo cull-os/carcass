@@ -21,6 +21,9 @@ use crate::Code;
 pub mod attributes;
 pub use attributes::Attributes;
 
+pub mod cons;
+pub use cons::Cons;
+
 pub mod integer;
 pub use integer::Integer;
 
@@ -45,7 +48,7 @@ pub enum Value {
    Boolean(bool),
 
    Nil,
-   Cons(Arc<(Value, Value)>),
+   Cons(Arc<Cons>),
 
    Attributes(Attributes),
 
@@ -139,7 +142,7 @@ impl tag::DisplayTags for Value {
 
          Value::Nil => tags.write("[]".style(STYLE_PUNCTUATION)),
          Value::Cons(ref cons) => {
-            let &(ref head, ref tail) = &**cons;
+            let &Cons(ref head, ref tail) = &**cons;
 
             tags.write_with(Group(40), |tags| {
                head.display_tags(tags);
