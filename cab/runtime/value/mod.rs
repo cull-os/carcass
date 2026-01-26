@@ -27,6 +27,9 @@ pub use integer::Integer;
 pub mod path;
 pub use path::Path;
 
+pub mod location;
+pub use location::Location;
+
 pub mod string;
 pub use string::SString;
 
@@ -37,6 +40,7 @@ pub use thunk::Thunk;
 #[derive(Clone, Dupe, From)]
 pub enum Value {
    Error(Arc<Value>),
+   Location(Location),
 
    Boolean(bool),
 

@@ -13,7 +13,6 @@ use tokio::sync::RwLock;
 
 use crate::{
    Code,
-   Location,
    Operation,
    Scopes,
    State,
@@ -40,7 +39,7 @@ enum ThunkInner {
    SuspendedNative(Arc<dyn Fn() -> Value + Send + Sync>),
 
    Suspended {
-      location: Location,
+      location: value::Location,
       code:     Arc<Code>,
       argument: Option<Value>,
       scopes:   Scopes,
@@ -68,7 +67,7 @@ impl Thunk {
    #[builder(finish_fn(name = "location"))]
    pub fn suspended(
       #[builder(start_fn)] code: Arc<Code>,
-      #[builder(finish_fn)] location: Location,
+      #[builder(finish_fn)] location: value::Location,
       scopes: Scopes,
    ) -> Self {
       Self(Arc::new(RwLock::new(ThunkInner::Suspended {
@@ -83,7 +82,7 @@ impl Thunk {
    #[builder(finish_fn(name = "location"))]
    pub fn lambda(
       #[builder(start_fn)] code: Arc<Code>,
-      #[builder(finish_fn)] location: Location,
+      #[builder(finish_fn)] location: value::Location,
       scopes: Scopes,
       argument: Value,
    ) -> Self {

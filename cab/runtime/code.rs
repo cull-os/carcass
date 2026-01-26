@@ -40,7 +40,6 @@ use ust::{
 
 use crate::{
    Argument,
-   Location,
    Operation,
    Value,
    value,
@@ -435,13 +434,13 @@ impl Code {
    }
 
    #[must_use]
-   pub fn read_operation(&self, index: ByteIndex) -> (Location, Operation, usize) {
+   pub fn read_operation(&self, index: ByteIndex) -> (value::Location, Operation, usize) {
       let position = self.spans.partition_point(|&(index2, _)| index >= index2);
 
       let (_, span) = self.spans[position.saturating_sub(1)];
 
       (
-         (self.path.dupe(), span),
+         value::Location::new(self.path.dupe(), span),
          Operation::try_from(self.bytes[*index]).expect("byte index must be valid"),
          ENCODED_OPERATION_LEN,
       )

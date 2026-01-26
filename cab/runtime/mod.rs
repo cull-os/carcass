@@ -7,8 +7,6 @@
    str_from_raw_parts
 )]
 
-use ranged::Span;
-
 mod code;
 pub use code::{
    ByteIndex,
@@ -36,5 +34,3 @@ pub use operation::{
 
 pub mod value;
 pub use value::Value;
-
-pub type Location = (value::Path, Span);
