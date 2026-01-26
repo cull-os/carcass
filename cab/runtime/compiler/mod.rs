@@ -284,9 +284,15 @@ impl<'a> Emitter<'a> {
       #[builder(name = "left")] emit_left: impl FnOnce(&mut Emitter<'a>),
    ) {
       self.emit_select(span).left(emit_left).right(|this| {
-         this.emit_thunk(span).with(|this| {
-            this.emit_push(span, Value::Reference(value::SString::from(right)));
-            this.push_operation(span, Operation::Resolve);
+         // This scope is here because we want the bytecode to be an exact match for:
+         //   a + b
+         // and:
+         //   a.`+` b
+         this.emit_scope(span, |this| {
+            this.emit_thunk(span).with(|this| {
+               this.emit_push(span, Value::Reference(value::SString::from(right)));
+               this.push_operation(span, Operation::Resolve);
+            });
          });
       });
    }
