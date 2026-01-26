@@ -234,6 +234,16 @@ impl Value {
    #[must_use]
    pub fn is_error(&self) -> bool {
       matches!(self, &Self::Error(_))
+
+   #[must_use]
+   pub fn typed<T: Dupe>(self) -> Typed<T>
+   where
+      Self: TryInto<T>,
+   {
+      Typed {
+         value:  self,
+         _typed: marker::PhantomData,
+      }
    }
 
    #[must_use]
@@ -260,5 +270,39 @@ impl Value {
             )
          },
       }
+   }
+}
+
+#[derive(Clone, Dupe)]
+#[repr(transparent)]
+pub struct Typed<T: Dupe>
+where
+   Value: TryInto<T>,
+{
+   value:  Value,
+   _typed: marker::PhantomData<T>,
+}
+
+impl<T: Dupe> From<Value> for Typed<T>
+where
+   Value: TryInto<T>,
+{
+   fn from(value: Value) -> Self {
+      Self {
+         value,
+         _typed: marker::PhantomData,
+      }
+   }
+}
+
+impl<T: Dupe> Typed<T>
+where
+   Value: TryInto<T>,
+{
+   pub fn must(self) -> Result<T, Value> {
+      self
+         .value
+         .try_into()
+         .map_err(|_| Value::error(string::new!("TODO better expected type error")))
    }
 }
