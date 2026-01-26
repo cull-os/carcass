@@ -41,7 +41,7 @@ struct Cli {
    dump_code: bool,
 
    /// The expression to `evaluate`.
-   expression: Option<String>,
+   expression: Vec<String>,
 }
 
 #[derive(clap::ValueEnum, Debug, Clone, Copy)]
@@ -58,8 +58,9 @@ async fn main() -> cyn::Termination {
    let out = &mut terminal::stdout();
    let err = &mut terminal::stderr();
 
-   let Some(expression) = cli.expression else {
-      unimplemented!("repl");
+   let expression = match &*cli.expression {
+      &[] => unimplemented!("repl"),
+      parts => parts.join(" "),
    };
 
    let path = value::Path::new()
