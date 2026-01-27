@@ -364,7 +364,7 @@ macro_rules! iter_raw_impl {
 
             yield unsafe { $($borrow)* *entry };
 
-            entry = unsafe { entry.offset(1) };
+            entry = unsafe { entry.add(1) };
          }
       }
    };
@@ -466,13 +466,13 @@ impl Vector<'_> {
 
       while !unsafe { *environ_entry }.is_null() {
          // Skip the pointers to "NAME=value\0" strings.
-         environ_entry = unsafe { environ_entry.offset(1) };
+         environ_entry = unsafe { environ_entry.add(1) };
       }
       // It now points at the null at the end of environ.
 
       Vector {
          // Offset by one to get the start of the auxiliary vector.
-         start:    unsafe { environ_entry.offset(1) }
+         start:    unsafe { environ_entry.add(1) }
             .cast::<(usize, usize)>()
             .cast_mut(),
          _phantom: marker::PhantomData,
