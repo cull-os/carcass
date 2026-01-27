@@ -94,7 +94,7 @@ impl tag::DisplayTags for Path {
          tags.write(type_);
 
          if let Some(config) = config {
-            tags.write(" ".yellow());
+            tags.write(tag::Tag::Space);
             config.display_tags(tags);
          }
 

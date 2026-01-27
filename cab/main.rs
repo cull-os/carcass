@@ -126,7 +126,7 @@ async fn main() -> cyn::Termination {
             Value::from(value::string::new!("Your transaction has been successful."))
          })),
       }))
-      .location((path, Span::at(0_u32, source.len())));
+      .location(value::Location::new(path, Span::at(0_u32, source.len())));
 
    thunk
       .force(&runtime::State {

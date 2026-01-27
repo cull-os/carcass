@@ -62,7 +62,7 @@ impl Compile {
       location: &impl Display,
       source: &report::PositionStr<'_>,
    ) -> Result<Code> {
-      let mut fail = 0;
+      let mut fail: usize = 0;
 
       for report in self.reports {
          if let report::Severity::Error | report::Severity::Bug = report.severity {
@@ -246,7 +246,7 @@ impl<'a> Emitter<'a> {
          self.emit(item);
       }
 
-      self.emit_push(list.span(), Value::Nil);
+      self.emit_push(list.span(), Value::from(value::Nil));
 
       for item in list.items() {
          self.push_operation(list.span(), Operation::Construct);
@@ -539,9 +539,9 @@ impl<'a> Emitter<'a> {
                      this.push_operation(operation.span(), Operation::Pop);
                      this.emit_push(
                         left.span(),
-                        Value::error(value::string::new!(
+                        Value::from(Arc::new(value::Error::new(value::string::new!(
                            "TODO better parameters were not equal error"
-                        )),
+                        )))),
                      );
 
                      let over_body = {

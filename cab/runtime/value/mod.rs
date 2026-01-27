@@ -1,12 +1,17 @@
-use std::sync::Arc;
+use std::{
+   marker,
+   sync::Arc,
+};
 
 use cab_syntax::{
    escape,
    escape_string,
    is_valid_plain_identifier,
 };
-use cab_util::into;
-use derive_more::From;
+use derive_more::{
+   From,
+   TryInto,
+};
 use dup::Dupe;
 use ust::{
    style::{
@@ -22,7 +27,13 @@ pub mod attributes;
 pub use attributes::Attributes;
 
 pub mod cons;
-pub use cons::Cons;
+pub use cons::{
+   Cons,
+   Nil,
+};
+
+pub mod error;
+pub use error::Error;
 
 pub mod integer;
 pub use integer::Integer;
@@ -40,15 +51,15 @@ mod thunk;
 pub use thunk::Thunk;
 
 #[warn(variant_size_differences)]
-#[derive(Clone, Dupe, From)]
+#[derive(Clone, Dupe, From, TryInto)]
 pub enum Value {
-   Error(Arc<Value>),
+   Error(Arc<Error>),
    Location(Location),
 
    Boolean(bool),
 
-   Nil,
    Cons(Arc<Cons>),
+   Nil(Nil),
 
    Attributes(Attributes),
 
@@ -86,20 +97,6 @@ pub const STYLE_THUNK: style::Style = style::Color::BrightBlack.fg().bold();
 
 impl tag::DisplayTags for Value {
    fn display_tags<'a>(&'a self, tags: &mut tag::Tags<'a>) {
-      use tag::{
-         Condition::{
-            // Always,
-            Broken,
-            Flat,
-         },
-         Tag::{
-            Group,
-            // Indent,
-            Newline,
-            Space,
-         },
-      };
-
       #[bon::builder]
       fn display_tags_escaped<'a>(
          #[builder(start_fn)] tags: &mut tag::Tags<'a>,
@@ -118,44 +115,14 @@ impl tag::DisplayTags for Value {
       }
 
       match *self {
-         Value::Error(ref value) => {
-            tags.write("throw ".red().bold());
-
-            // No need to add special logic,
-            // only `Error` can generate tags that can
-            // cause parse errors when nested right now.
-            //
-            // Maybe in the future.
-            if let Value::Error(_) = **value {
-               tags.write("(".yellow());
-            }
-
-            value.display_tags(tags);
-
-            if let Value::Error(_) = **value {
-               tags.write(")".yellow());
-            }
-         },
+         Value::Error(ref error) => error.display_tags(tags),
+         Value::Location(ref location) => location.display_tags(tags),
 
          Value::Boolean(true) => tags.write("true".magenta().bold()),
          Value::Boolean(false) => tags.write("false".magenta().bold()),
 
-         Value::Nil => tags.write("[]".style(STYLE_PUNCTUATION)),
-         Value::Cons(ref cons) => {
-            let &Cons(ref head, ref tail) = &**cons;
-
-            tags.write_with(Group(40), |tags| {
-               head.display_tags(tags);
-
-               tags.write_if(Space, Flat);
-               tags.write_if(Newline(1), Broken);
-
-               tags.write(":".style(STYLE_PUNCTUATION));
-               tags.write(Space);
-
-               tail.display_tags(tags);
-            });
-         },
+         Value::Nil(Nil) => tags.write("[]".style(STYLE_PUNCTUATION)),
+         Value::Cons(ref cons) => cons.display_tags(tags),
 
          Value::Attributes(ref attributes) => attributes.display_tags(tags),
          Value::Path(ref path) => path.display_tags(tags),
@@ -222,20 +189,6 @@ impl From<&Value> for Attributes {
 
 impl Value {
    #[must_use]
-   pub fn error(inner: impl Into<Self>) -> Self {
-      into!(inner);
-
-      // TODO: Definitely won't stay like this for long.
-      Self::Error(Arc::new(Self::from(attributes::new! {
-         "__error__": inner,
-      })))
-   }
-
-   #[must_use]
-   pub fn is_error(&self) -> bool {
-      matches!(self, &Self::Error(_))
-
-   #[must_use]
    pub fn typed<T: Dupe>(self) -> Typed<T>
    where
       Self: TryInto<T>,
@@ -300,9 +253,10 @@ where
    Value: TryInto<T>,
 {
    pub fn must(self) -> Result<T, Value> {
-      self
-         .value
-         .try_into()
-         .map_err(|_| Value::error(string::new!("TODO better expected type error")))
+      self.value.try_into().map_err(|_| {
+         Value::from(Arc::new(Error::new(string::new!(
+            "TODO better expected type error"
+         ))))
+      })
    }
 }

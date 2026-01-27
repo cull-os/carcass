@@ -24,14 +24,14 @@ const EXPECT_SCOPE: &str = "must have at least once scope";
 
 thread_local! {
    static BLACK_HOLE: ThunkInner = ThunkInner::SuspendedNative(Arc::new(||
-      Value::error(value::string::new!("TODO better infinite recursion error"))
+      Value::from(Arc::new(value::Error::new(value::string::new!("TODO better infinite recursion error"))))
    ));
 
-   static NOT_BOOLEAN: Value = Value::error(value::string::new!("TODO better assert boolean error"));
+   static NOT_BOOLEAN: Value = Value::from(Arc::new(value::Error::new(value::string::new!("TODO better assert boolean error"))));
 
-   static NOT_LAMBDA: Value = Value::error(value::string::new!("TODO better assert lambda error"));
+   static NOT_LAMBDA: Value = Value::from(Arc::new(value::Error::new(value::string::new!("TODO better assert lambda error"))));
 
-   static NOT_ATTRIBUTES: Value = Value::error(value::string::new!("TODO better assert attributes error"));
+   static NOT_ATTRIBUTES: Value = Value::from(Arc::new(value::Error::new(value::string::new!("TODO better assert attributes error"))));
 }
 
 #[derive(Clone, Dupe)]
@@ -119,9 +119,8 @@ impl Thunk {
             }
          },
 
-         #[expect(clippy::unneeded_field_pattern)]
          ThunkInner::Suspended {
-            location: _,
+            location,
             code,
             argument,
             mut scopes,
@@ -192,9 +191,11 @@ impl Thunk {
                                one item",
                            );
 
-                           if !value.is_error() {
+                           let &mut Value::Error(ref error) = value else {
                               continue;
-                           }
+                           };
+
+                           *value = Value::from(Arc::new(error.trace(location.dupe())));
                         },
                         _ => unreachable!(),
                      }
@@ -274,10 +275,12 @@ impl Thunk {
                         .find_map(|scope| scope.get(identifier))
                         .duped()
                         .unwrap_or_else(|| {
-                           Value::error(value::SString::from(&*format!(
-                              "TODO better undefined value message: '{identifier}'",
-                              identifier = &**identifier,
-                           )))
+                           Value::from(Arc::new(value::Error::new(value::SString::from(
+                              &*format!(
+                                 "TODO better undefined value message: '{identifier}'",
+                                 identifier = &**identifier,
+                              ),
+                           ))))
                         });
 
                      *reference = value;
@@ -300,7 +303,7 @@ impl Thunk {
                         .pop()
                         .expect("construct must be called on a stack with 2 items or more");
 
-                     stack.push(Value::from(Arc::new((head, tail))));
+                     stack.push(Value::from(Arc::new(value::Cons(head, tail))));
                   },
                   Operation::Call => {
                      let argument = stack.pop().expect("call must not be called on empty stack");

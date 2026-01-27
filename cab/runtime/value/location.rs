@@ -1,5 +1,9 @@
 use dup::Dupe;
 use ranged::Span;
+use ust::{
+   style::StyledExt as _,
+   terminal::tag,
+};
 
 use crate::value;
 
@@ -9,7 +13,24 @@ pub struct Location {
    pub span: Span,
 }
 
+impl tag::DisplayTags for Location {
+   fn display_tags<'a>(&'a self, tags: &mut tag::Tags<'a>) {
+      self.path.display_tags(tags);
+      tags.write(":");
+      tags.write(
+         self
+            .span
+            .start
+            .to_string()
+            .style(ust::STYLE_HEADER_POSITION),
+      );
+      tags.write(":");
+      tags.write(self.span.end.to_string().style(ust::STYLE_HEADER_POSITION));
+   }
+}
+
 impl Location {
+   #[must_use]
    pub fn new(path: value::Path, span: Span) -> Self {
       Self { path, span }
    }

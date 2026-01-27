@@ -43,3 +43,11 @@ impl From<Integer> for value::Attributes {
       attributes
    }
 }
+
+impl TryFrom<value::Attributes> for Integer {
+   type Error = ();
+
+   fn try_from(_attributes: value::Attributes) -> Result<Self, Self::Error> {
+      todo!()
+   }
+}
