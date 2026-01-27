@@ -463,7 +463,7 @@ impl<'a> Emitter<'a> {
                node::InfixOperator::And => {
                   this.emit_force(left);
                   let to_right = {
-                     this.push_operation(operation.span(), Operation::JumpIf);
+                     this.push_operation(left.span(), Operation::JumpIf);
                      this.push_u16(u16::default())
                   };
                   let over_right = {
@@ -474,7 +474,7 @@ impl<'a> Emitter<'a> {
                   this.point_here(to_right);
                   this.push_operation(operation.span(), Operation::Pop);
                   this.emit_force(right);
-                  this.push_operation(operation.span(), Operation::AssertBoolean);
+                  this.push_operation(right.span(), Operation::AssertBoolean);
 
                   this.point_here(over_right);
                },

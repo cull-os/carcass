@@ -18,7 +18,10 @@ pub struct Error {
 
 impl tag::DisplayTags for Error {
    fn display_tags<'a>(&'a self, tags: &mut tag::Tags<'a>) {
-      use tag::Tag::Space;
+      use tag::Tag::{
+         Newline,
+         Space,
+      };
 
       let mut head = self.at.dupe();
 
@@ -38,11 +41,12 @@ impl tag::DisplayTags for Error {
             continue;
          };
 
-         tags.write("while:".red());
+         tags.write("while:".red().bold());
          tags.write(Space);
          tags.write("evaluating");
          tags.write(Space);
          location.display_tags_owned(tags);
+         tags.write(Newline(1));
       };
 
       if TryInto::<value::Nil>::try_into(tail.dupe()).is_err() {

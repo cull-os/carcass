@@ -27,11 +27,11 @@ thread_local! {
       Value::from(Arc::new(value::Error::new(value::string::new!("TODO better infinite recursion error"))))
    ));
 
-   static NOT_BOOLEAN: Value = Value::from(Arc::new(value::Error::new(value::string::new!("TODO better assert boolean error"))));
+   static NOT_BOOLEAN: value::Error = value::Error::new(value::string::new!("TODO better assert boolean error"));
 
-   static NOT_LAMBDA: Value = Value::from(Arc::new(value::Error::new(value::string::new!("TODO better assert lambda error"))));
+   static NOT_LAMBDA: value::Error = value::Error::new(value::string::new!("TODO better assert lambda error"));
 
-   static NOT_ATTRIBUTES: Value = Value::from(Arc::new(value::Error::new(value::string::new!("TODO better assert attributes error"))));
+   static NOT_ATTRIBUTES: value::Error = value::Error::new(value::string::new!("TODO better assert attributes error"));
 }
 
 #[derive(Clone, Dupe)]
@@ -120,7 +120,7 @@ impl Thunk {
          },
 
          ThunkInner::Suspended {
-            location,
+            location: _location,
             code,
             argument,
             mut scopes,
@@ -177,7 +177,11 @@ impl Thunk {
                            );
 
                            let &mut Value::Boolean(value) = value else {
-                              *value = NOT_BOOLEAN.with(Dupe::dupe);
+                              *value = Value::from(Arc::from(
+                                 NOT_BOOLEAN
+                                    .with(Dupe::dupe)
+                                    .append_trace(code.read_operation(index).0),
+                              ));
                               continue;
                            };
 
@@ -195,7 +199,9 @@ impl Thunk {
                               continue;
                            };
 
-                           *value = Value::from(Arc::new(error.append_trace(location.dupe())));
+                           *value = Value::from(Arc::new(
+                              error.append_trace(code.read_operation(index).0),
+                           ));
                         },
                         _ => unreachable!(),
                      }
@@ -251,7 +257,11 @@ impl Thunk {
                         .expect("scope-swap must not be called on a empty stack");
 
                      let &mut Value::Attributes(ref mut value) = value else {
-                        *value = NOT_ATTRIBUTES.with(Dupe::dupe);
+                        *value = Value::from(Arc::from(
+                           NOT_ATTRIBUTES
+                              .with(Dupe::dupe)
+                              .append_trace(code.read_operation(index).0),
+                        ));
                         continue;
                      };
 
@@ -275,12 +285,13 @@ impl Thunk {
                         .find_map(|scope| scope.get(identifier))
                         .duped()
                         .unwrap_or_else(|| {
-                           Value::from(Arc::new(value::Error::new(value::SString::from(
-                              &*format!(
+                           Value::from(Arc::new(
+                              value::Error::new(value::SString::from(&*format!(
                                  "TODO better undefined value message: '{identifier}'",
                                  identifier = &**identifier,
-                              ),
-                           ))))
+                              )))
+                              .append_trace(code.read_operation(index).0),
+                           ))
                         });
 
                      *reference = value;
@@ -291,7 +302,11 @@ impl Thunk {
                         .expect("assert-boolean must not be called on an empty stack");
 
                      let &mut Value::Boolean(_) = value else {
-                        *value = NOT_BOOLEAN.with(Dupe::dupe);
+                        *value = Value::from(Arc::from(
+                           NOT_BOOLEAN
+                              .with(Dupe::dupe)
+                              .append_trace(code.read_operation(index).0),
+                        ));
                         continue;
                      };
                   },
@@ -310,7 +325,11 @@ impl Thunk {
 
                      let lambda_code = stack.pop().expect("call must not be called on empty stack");
                      let Value::Lambda(lambda_code) = lambda_code else {
-                        stack.push(NOT_LAMBDA.with(Dupe::dupe));
+                        stack.push(Value::from(Arc::from(
+                           NOT_LAMBDA
+                              .with(Dupe::dupe)
+                              .append_trace(code.read_operation(index).0),
+                        )));
                         continue;
                      };
 
