@@ -1,6 +1,6 @@
 avoid-breaking-exported-api = false
 
-allowed-idents-below-min-chars = [ "x", "y", "z", "r", "g", "b", "c", "s" ]
+allowed-idents-below-min-chars = [ "x", "y", "z", "r", "g", "b", "c", "s", "n" ]
 
 absolute-paths-allowed-crates = [ "cstree" ]
 allowed-wildcard-imports      = [ "super", "Kind" ]

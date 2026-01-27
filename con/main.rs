@@ -30,7 +30,7 @@ struct Cli {
 
 #[derive(clap::Subcommand, Debug, Clone)]
 enum Command {
-   /// Configuration related commands,
+   /// Configuration related commands.
    Config {
       #[command(subcommand)]
       command: Config,

@@ -202,7 +202,7 @@ pub enum VectorKey {
    #[doc(alias = "AT_IGNOREPPC")]
    IgnorePowerPC                            = 22,
    /// A boolean indicating whether `exec` was setuid or something
-   /// similar to it
+   /// similar to it.
    ///
    /// Referred to as `AT_SECURE` in libc.
    #[display("AT_SECURE")]
@@ -394,7 +394,7 @@ impl Vector<'_> {
 
             yield (key, value);
 
-            entry = unsafe { entry.offset(1) };
+            entry = unsafe { entry.add(1) };
          }
       }
    }

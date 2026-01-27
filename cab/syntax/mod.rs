@@ -7,7 +7,6 @@
    impl_trait_in_assoc_type,
    iter_intersperse,
    lazy_cell_into_inner,
-   lazy_get,
    trait_alias
 )]
 

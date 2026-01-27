@@ -97,7 +97,6 @@ impl<'a> Tokenizer<'a> {
       &self.source[self.offset..]
    }
 
-   #[expect(clippy::min_ident_chars)]
    fn peek_character_nth(&self, n: usize) -> Option<char> {
       self.remaining().chars().nth(n)
    }
@@ -257,6 +256,10 @@ impl<'a> Tokenizer<'a> {
       )
    }
 
+   #[expect(
+      clippy::cognitive_complexity,
+      reason = "it's not complex, it's just a single match expression"
+   )]
    fn consume_kind(&mut self) -> Option<Kind> {
       let start = self.offset;
 
@@ -550,9 +553,13 @@ impl<'a> Tokenizer<'a> {
 
 #[cfg(test)]
 mod tests {
-   use std::assert_matches::assert_matches;
-
    use super::*;
+
+   macro_rules! assert_matches {
+      ($expression:expr, $pattern:pat) => {
+         assert!(matches!($expression, $pattern))
+      };
+   }
 
    macro_rules! assert_token_matches {
       ($string:literal, $($pattern:pat),* $(,)?) => {{
@@ -560,7 +567,7 @@ mod tests {
 
          $(assert_matches!(tokens.next(), Some($pattern));)*
 
-         assert_matches!(tokens.next(), None);
+         assert!(tokens.next().is_none());
       }};
    }
 

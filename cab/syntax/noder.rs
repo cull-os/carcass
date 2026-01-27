@@ -244,7 +244,6 @@ impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
       self.tokens.peek().map(|&(kind, _)| kind)
    }
 
-   #[expect(clippy::min_ident_chars)]
    fn peek_nth(&mut self, n: usize) -> Option<Kind> {
       let mut peek_index: usize = 0;
       let mut index: usize = 0;

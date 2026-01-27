@@ -23,7 +23,6 @@ pub mod private {
 
 #[macro_export]
 #[doc(hidden)]
-#[expect(clippy::module_name_repetitions)]
 macro_rules! __attributes_new {
    ($($key:literal: $value:expr),* $(,)?) => {
       $crate::value::Attributes(

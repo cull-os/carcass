@@ -46,7 +46,7 @@
     imports = let
       localModules = lib.filesystem.listFilesRecursive ./.
         |> lib.filter (pathAbsolute: let
-            pathBase = builtins.baseNameOf     pathAbsolute;
+            pathBase = baseNameOf              pathAbsolute;
             pathStem = lib.removeSuffix ".nix" pathBase;
           in pathStem != pathBase
           && lib.hasPrefix "__" pathStem

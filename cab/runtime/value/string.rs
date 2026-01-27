@@ -13,7 +13,6 @@ pub mod private {
 
 #[macro_export]
 #[doc(hidden)]
-#[expect(clippy::module_name_repetitions)]
 macro_rules! __string_new {
    ($s:literal $(,)?) => {
       $crate::value::SString($crate::value::string::private::literal_substr!($s))

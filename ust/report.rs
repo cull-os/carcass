@@ -336,6 +336,7 @@ mod tests {
    use super::*;
 
    #[test]
+   #[expect(clippy::cognitive_complexity)]
    fn position() {
       let mut source;
 

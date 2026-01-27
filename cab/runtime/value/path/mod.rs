@@ -22,7 +22,7 @@ use ust::{
    style::StyledExt as _,
    terminal::tag::{
       self,
-      DisplayTags,
+      DisplayTags as _,
    },
 };
 
