@@ -34,9 +34,15 @@ impl tag::DisplayTags for Error {
             tags.write(Space);
             tags.write("self traceback list item not location:");
             tags.write(Space);
-            item.display_tags(tags);
+            item.display_tags_owned(tags);
             continue;
          };
+
+         tags.write("while:".red());
+         tags.write(Space);
+         tags.write("evaluating");
+         tags.write(Space);
+         location.display_tags_owned(tags);
       };
 
       if TryInto::<value::Nil>::try_into(tail.dupe()).is_err() {
@@ -44,7 +50,7 @@ impl tag::DisplayTags for Error {
          tags.write(Space);
          tags.write("self traceback list not terminated with nil:");
          tags.write(Space);
-         tail.display_tags(tags);
+         tail.display_tags_owned(tags);
       }
 
       tags.write("throw ".red().bold());
@@ -63,7 +69,7 @@ impl Error {
    }
 
    #[must_use]
-   pub fn trace(&self, at: value::Location) -> Self {
+   pub fn append_trace(&self, at: value::Location) -> Self {
       Self {
          at:    Value::from(Arc::new(value::Cons(Value::from(at), self.at.dupe()))),
          value: self.value.dupe(),

@@ -20,7 +20,10 @@ use dup::{
 use rpds::ListSync as List;
 use ust::{
    style::StyledExt as _,
-   terminal::tag,
+   terminal::tag::{
+      self,
+      DisplayTags,
+   },
 };
 
 use super::Value;
@@ -161,7 +164,7 @@ impl Path {
          .get_or_init(async {
             let root = self.root.dupe().ok_or_tag(&|tags: &mut tag::Tags| {
                tags.write("tried to list rootless path ");
-               tags.extend(self);
+               self.display_tags_owned(tags);
             })?;
 
             root
@@ -169,7 +172,7 @@ impl Path {
                .await
                .tag_err(&|tags: &mut tag::Tags| {
                   tags.write("failed to read ");
-                  tags.extend(self);
+                  self.display_tags_owned(tags);
                })
          })
          .await
@@ -186,7 +189,7 @@ impl Path {
          .get_or_init(async {
             let root = self.root.dupe().ok_or_tag(&|tags: &mut tag::Tags| {
                tags.write("tried to read rootless path ");
-               tags.extend(self);
+               self.display_tags_owned(tags);
             })?;
 
             root
@@ -194,7 +197,7 @@ impl Path {
                .await
                .tag_err(&|tags: &mut tag::Tags| {
                   tags.write("failed to read ");
-                  tags.extend(self);
+                  self.display_tags_owned(tags);
                })
          })
          .await
@@ -204,7 +207,7 @@ impl Path {
    pub async fn write(&self, content: Bytes) -> Result<()> {
       let root = self.root.dupe().ok_or_tag(&|tags: &mut tag::Tags| {
          tags.write("tried to write to rootless path ");
-         tags.extend(self);
+         self.display_tags_owned(tags);
       })?;
 
       root
@@ -212,7 +215,7 @@ impl Path {
          .await
          .tag_err(&|tags: &mut tag::Tags| {
             tags.write("failed to write to ");
-            tags.extend(self);
+            self.display_tags_owned(tags);
          })
    }
 }

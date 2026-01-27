@@ -309,6 +309,13 @@ impl Display for Tags<'_> {
 
 pub trait DisplayTags {
    fn display_tags<'a>(&'a self, tags: &mut Tags<'a>);
+
+   fn display_tags_owned(&self, tags: &mut Tags<'_>)
+   where
+      Self: Sized,
+   {
+      tags.extend(Tags::from(self).into_owned());
+   }
 }
 
 impl<F: Fn(&mut Tags<'_>)> DisplayTags for F {
@@ -319,7 +326,7 @@ impl<F: Fn(&mut Tags<'_>)> DisplayTags for F {
 
 impl<D: DisplayTags> Display for D {
    fn display_styled(&self, writer: &mut dyn Write) -> fmt::Result {
-      let tags: Tags<'_> = self.into();
+      let tags = Tags::from(self);
       tags.display_styled(writer)
    }
 }
@@ -349,9 +356,8 @@ impl<'a> Tags<'a> {
       )
    }
 
-   pub fn extend(&mut self, display: &impl DisplayTags) {
-      let tags: Tags<'_> = display.into();
-      self.0.extend(tags.into_owned().0);
+   pub fn extend(&mut self, tags: Tags<'a>) {
+      self.0.extend(tags.0);
    }
 
    pub fn write(&mut self, tag: impl Into<Tag<'a>>) {

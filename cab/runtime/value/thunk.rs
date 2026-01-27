@@ -195,7 +195,7 @@ impl Thunk {
                               continue;
                            };
 
-                           *value = Value::from(Arc::new(error.trace(location.dupe())));
+                           *value = Value::from(Arc::new(error.append_trace(location.dupe())));
                         },
                         _ => unreachable!(),
                      }
