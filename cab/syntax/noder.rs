@@ -61,10 +61,12 @@ impl Parse {
       location: &impl Display,
       source: &report::PositionStr<'_>,
    ) -> Result<node::Expression> {
-      let mut fail = 0;
+      let mut fail: usize = 0;
 
       for report in &*self.reports {
-         fail += usize::from(report.severity >= report::Severity::Error);
+         if let report::Severity::Error | report::Severity::Bug = report.severity {
+            fail += 1;
+         }
 
          writer
             .write_report(report, location, source)
