@@ -24,14 +24,14 @@ const EXPECT_SCOPE: &str = "must have at least once scope";
 
 thread_local! {
    static BLACK_HOLE: ThunkInner = ThunkInner::SuspendedNative(Arc::new(||
-      Value::from(Arc::new(value::Error::new(value::string::new!("TODO better infinite recursion error"))))
+      Value::from(Arc::new(value::Error::new(value::string::new!("infinite recursion encountered"))))
    ));
 
-   static NOT_BOOLEAN: value::Error = value::Error::new(value::string::new!("TODO better assert boolean error"));
+   static NOT_BOOLEAN: value::Error = value::Error::new(value::string::new!("expected boolean, got something else"));
 
-   static NOT_LAMBDA: value::Error = value::Error::new(value::string::new!("TODO better assert lambda error"));
+   static NOT_LAMBDA: value::Error = value::Error::new(value::string::new!("expected lambda, got something else"));
 
-   static NOT_ATTRIBUTES: value::Error = value::Error::new(value::string::new!("TODO better assert attributes error"));
+   static NOT_ATTRIBUTES: value::Error = value::Error::new(value::string::new!("expected attributes, got something else"));
 }
 
 #[derive(Clone, Dupe)]
@@ -287,7 +287,7 @@ impl Thunk {
                         .unwrap_or_else(|| {
                            Value::from(Arc::new(
                               value::Error::new(value::SString::from(&*format!(
-                                 "TODO better undefined value message: '{identifier}'",
+                                 "undefined value: '{identifier}'",
                                  identifier = &**identifier,
                               )))
                               .append_trace(code.read_operation(index).0),
