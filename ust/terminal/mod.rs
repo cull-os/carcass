@@ -325,7 +325,7 @@ struct Line {
 fn resolve_style<'a>(
    content: &'a str,
    styles: &'a [LineStyle],
-   severity: report::Severity,
+   severity: &'a report::Severity,
 ) -> impl Iterator<Item = style::Styled<&'a str>> + 'a {
    gen move {
       let mut content_offset = Size::new(0_u32);
@@ -401,7 +401,7 @@ fn write_report(
    source: &report::PositionStr<'_>,
 ) -> fmt::Result {
    let report::Report {
-      severity,
+      ref severity,
       ref title,
       ref labels,
       ref points,
@@ -603,10 +603,11 @@ fn write_report(
       indent!(
          writer,
          header = match severity {
-            report::Severity::Note => "note:",
-            report::Severity::Warn => "warn:",
-            report::Severity::Error => "error:",
-            report::Severity::Bug => "bug:",
+            &report::Severity::Custom { ref label, .. } => &**label,
+            &report::Severity::Note => "note:",
+            &report::Severity::Warn => "warn:",
+            &report::Severity::Error => "error:",
+            &report::Severity::Bug => "bug:",
          }
          .style(severity.style_in()),
       );

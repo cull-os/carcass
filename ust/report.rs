@@ -94,30 +94,34 @@ impl LabelSeverity {
    /// Returns the applicable style of this label severity in the given report
    /// severity.
    #[must_use]
-   pub fn style_in(self, report_severity: Severity) -> Style {
+   pub fn style_in(self, report_severity: &Severity) -> Style {
       use LabelSeverity::{
          Primary,
          Secondary,
       };
       use Severity::{
          Bug,
+         Custom,
          Error,
          Note,
          Warn,
       };
 
       let color = match (report_severity, self) {
-         (Note, Secondary) => Color::Blue,
-         (Note, Primary) => Color::Magenta,
+         (&Custom { ref secondary, .. }, Secondary) => *secondary,
+         (&Custom { ref primary, .. }, Primary) => *primary,
 
-         (Warn, Secondary) => Color::Blue,
-         (Warn, Primary) => Color::Yellow,
+         (&Note, Primary) => Color::Magenta,
+         (&Note, Secondary) => Color::Blue,
 
-         (Error, Secondary) => Color::Yellow,
-         (Error, Primary) => Color::Red,
+         (&Warn, Primary) => Color::Yellow,
+         (&Warn, Secondary) => Color::Blue,
 
-         (Bug, Secondary) => Color::Yellow,
-         (Bug, Primary) => Color::Red,
+         (&Error, Primary) => Color::Red,
+         (&Error, Secondary) => Color::Yellow,
+
+         (&Bug, Primary) => Color::Red,
+         (&Bug, Secondary) => Color::Yellow,
       };
 
       if self == Primary {
@@ -217,8 +221,13 @@ impl Point {
 }
 
 /// The severity of a report.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Severity {
+   Custom {
+      label:     Cow<'static, str>,
+      primary:   Color,
+      secondary: Color,
+   },
    Note,
    Warn,
    Error,
@@ -227,7 +236,7 @@ pub enum Severity {
 
 impl Severity {
    #[must_use]
-   pub fn style_in(self) -> Style {
+   pub fn style_in(&self) -> Style {
       LabelSeverity::Primary.style_in(self)
    }
 }
