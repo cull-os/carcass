@@ -283,9 +283,9 @@ impl<'a> Emitter<'a> {
       &mut self,
       #[builder(start_fn)] span: Span,
       #[builder(finish_fn)] right: &str,
-      #[builder(name = "left")] emit_left: impl FnOnce(&mut Emitter<'a>),
+      #[builder(name = "left")] left: (Span, impl FnOnce(&mut Emitter<'a>)),
    ) {
-      self.emit_select(span).left(emit_left).right(|this| {
+      self.emit_select(span).left(left).right((span, |this| {
          // This scope is here because we want the bytecode to be an exact match for:
          //   a + b
          // and:
@@ -296,27 +296,30 @@ impl<'a> Emitter<'a> {
                this.push_operation(span, Operation::Resolve);
             });
          });
-      });
+      }));
    }
 
    #[builder(finish_fn(name = "right"))]
    fn emit_select(
       &mut self,
       #[builder(start_fn)] span: Span,
-      #[builder(finish_fn)] emit_right: impl FnOnce(&mut Emitter<'a>),
-      #[builder(name = "left")] emit_left: impl FnOnce(&mut Emitter<'a>),
+      #[builder(finish_fn)] right: (Span, impl FnOnce(&mut Emitter<'a>)),
+      #[builder(name = "left")] left: (Span, impl FnOnce(&mut Emitter<'a>)),
    ) {
+      let (right_span, emit_right) = right;
+      let (left_span, emit_left) = left;
+
       emit_right(self);
 
       emit_left(self);
       let to_swap_pop = {
-         self.push_operation(span, Operation::JumpIfError);
+         self.push_operation(left_span, Operation::JumpIfError);
          self.push_u16(u16::default())
       };
 
       // <right>
       // <left>
-      self.push_operation(span, Operation::ScopeSwap);
+      self.push_operation(left_span, Operation::ScopeSwap);
 
       // <right>
       // <old-scope-or-error>
@@ -331,7 +334,7 @@ impl<'a> Emitter<'a> {
 
       // <old-scope>
       // <right>
-      self.push_operation(span, Operation::Force);
+      self.push_operation(right_span, Operation::Force);
 
       // <old-scope>
       // <right-forced>
@@ -355,9 +358,9 @@ impl<'a> Emitter<'a> {
 
             this
                .emit_select_static(operation.span())
-               .left(|this| {
+               .left((right.span(), |this| {
                   this.emit_force(right);
-               })
+               }))
                .right(match operation.operator() {
                   node::PrefixOperator::Swwallation => "+",
                   node::PrefixOperator::Negation => "-",
@@ -426,8 +429,8 @@ impl<'a> Emitter<'a> {
                node::InfixOperator::Select => {
                   this
                      .emit_select(operation.span())
-                     .left(|this| this.emit_force(left))
-                     .right(|this| {
+                     .left((left.span(), |this| this.emit_force(left)))
+                     .right((right.span(), |this| {
                         // let scopes = this.scopes.split_off(1);
                         this.emit_scope(right.span(), |this| {
                            // this.scope().push(Span::dummy(), LocalName::wildcard());
@@ -435,7 +438,7 @@ impl<'a> Emitter<'a> {
                            this.emit(right);
                         });
                         // this.scopes.extend(scopes);
-                     });
+                     }));
                },
 
                operator @ (node::InfixOperator::Equal | node::InfixOperator::NotEqual) => {
@@ -452,7 +455,7 @@ impl<'a> Emitter<'a> {
                      node::InfixOperator::NotEqual => {
                         this
                            .emit_select_static(operation.span())
-                           .left(emit_equal)
+                           .left((left.span(), emit_equal))
                            .right("!");
                      },
 
@@ -489,7 +492,7 @@ impl<'a> Emitter<'a> {
                         this.emit_thunk(operation.span()).with(|this| {
                            this
                               .emit_select_static(operation.span())
-                              .left(|this| this.emit_force(left))
+                              .left((left.span(), |this| this.emit_force(left)))
                               .right("!");
                         });
                         this.push_operation(operation.span(), Operation::Force);
@@ -571,7 +574,7 @@ impl<'a> Emitter<'a> {
                   this.emit_thunk(operation.span()).with(|this| {
                      this
                         .emit_select_static(operation.span())
-                        .left(|this| this.emit_force(left))
+                        .left((left.span(), |this| this.emit_force(left)))
                         .right(match operator {
                            node::InfixOperator::Concat => "++",
                            node::InfixOperator::Update => "//",
