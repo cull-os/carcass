@@ -22,21 +22,13 @@ use crate::{
 
 const EXPECT_SCOPE: &str = "must have at least once scope";
 
-thread_local! {
-   static BLACK_HOLE: ThunkInner = ThunkInner::SuspendedNative(Arc::new(||
-      Value::from(Arc::new(value::Error::new(value::string::new!("infinite recursion encountered"))))
-   ));
-
-   static NOT_BOOLEAN: value::Error = value::Error::new(value::string::new!("expected boolean, got something else"));
-
-   static NOT_LAMBDA: value::Error = value::Error::new(value::string::new!("expected lambda, got something else"));
-
-   static NOT_ATTRIBUTES: value::Error = value::Error::new(value::string::new!("expected attributes, got something else"));
-}
-
 #[derive(Clone, Dupe)]
 enum ThunkInner {
-   SuspendedNative(Arc<dyn Fn() -> Value + Send + Sync>),
+   SuspendedNative {
+      location: value::Location,
+      code:     Arc<dyn Fn() -> Value + Send + Sync>,
+      argument: Option<Value>,
+   },
 
    Suspended {
       location: value::Location,
@@ -51,16 +43,43 @@ enum ThunkInner {
    },
 }
 
+impl ThunkInner {
+   thread_local! {
+      static NOT_BOOLEAN: value::Error = value::Error::new(value::string::new!("expected boolean, got something else"));
+
+      static NOT_LAMBDA: value::Error = value::Error::new(value::string::new!("expected lambda, got something else"));
+
+      static NOT_ATTRIBUTES: value::Error = value::Error::new(value::string::new!("expected attributes, got something else"));
+   }
+
+   fn black_hole(location: value::Location) -> Self {
+      ThunkInner::SuspendedNative {
+         location,
+         code: Arc::new(|| {
+            Value::from(Arc::new(value::Error::new(value::string::new!(
+               "infinite recursion encountered"
+            ))))
+         }),
+         argument: None,
+      }
+   }
+}
+
 #[derive(Clone, Dupe)]
 pub struct Thunk(Arc<RwLock<ThunkInner>>);
 
 #[bon::bon]
 impl Thunk {
    #[must_use]
-   pub fn suspended_native(native: impl Fn() -> Value + Send + Sync + 'static) -> Self {
-      Self(Arc::new(RwLock::new(ThunkInner::SuspendedNative(
-         Arc::new(native),
-      ))))
+   pub fn suspended_native(
+      location: value::Location,
+      code: impl Fn() -> Value + Send + Sync + 'static,
+   ) -> Self {
+      Self(Arc::new(RwLock::new(ThunkInner::SuspendedNative {
+         location,
+         code: Arc::new(code),
+         argument: None,
+      })))
    }
 
    #[must_use]
@@ -72,26 +91,26 @@ impl Thunk {
    ) -> Self {
       Self(Arc::new(RwLock::new(ThunkInner::Suspended {
          location,
-         argument: None,
          code,
+         argument: None,
          scopes,
       })))
    }
 
-   #[must_use]
-   #[builder(finish_fn(name = "location"))]
-   pub fn lambda(
-      #[builder(start_fn)] code: Arc<Code>,
-      #[builder(finish_fn)] location: value::Location,
-      scopes: Scopes,
-      argument: Value,
-   ) -> Self {
-      Self(Arc::new(RwLock::new(ThunkInner::Suspended {
-         location,
-         argument: Some(argument),
-         code,
-         scopes,
-      })))
+   pub async fn argument(&self, arg: Value) -> Self {
+      let mut inner = self.0.read().await.dupe();
+
+      match inner {
+         ThunkInner::SuspendedNative {
+            ref mut argument, ..
+         } => *argument = Some(arg),
+         ThunkInner::Suspended {
+            ref mut argument, ..
+         } => *argument = Some(arg),
+         ThunkInner::Evaluated { .. } => panic!("cannot add argument to evaluated thunk"),
+      }
+
+      Thunk(Arc::new(RwLock::new(inner)))
    }
 
    pub async fn get(&self) -> Option<(Option<Scopes>, Value)> {
@@ -107,27 +126,38 @@ impl Thunk {
    }
 
    pub async fn force(&self, state: &State) {
-      let this = mem::replace(&mut *self.0.write().await, BLACK_HOLE.with(Dupe::dupe));
+      let this = mem::replace(&mut *self.0.write().await, ThunkInner::Evaluated {
+         scopagate: None,
+         value:     Value::Nil(value::Nil),
+      });
 
-      *self.0.write().await = match this {
+      let new = match this {
          evaluated @ ThunkInner::Evaluated { .. } => evaluated.dupe(),
 
-         ThunkInner::SuspendedNative(native) => {
+         ThunkInner::SuspendedNative {
+            location,
+            code,
+            argument: _argument,
+         } => {
+            *self.0.write().await = ThunkInner::black_hole(location);
+
             ThunkInner::Evaluated {
                scopagate: None,
-               value:     native(),
+               value:     code(),
             }
          },
 
          ThunkInner::Suspended {
-            location: _location,
+            location,
             code,
             argument,
             mut scopes,
          } => {
-            let mut stack = argument.into_iter().collect::<Vec<_>>();
-            let items = &mut code.iter().peekable();
+            *self.0.write().await = ThunkInner::black_hole(location.dupe());
 
+            let mut stack = argument.into_iter().collect::<Vec<_>>();
+
+            let items = &mut code.iter().peekable();
             while let Some((index, item)) = items.next() {
                let operation = *item.as_operation().expect("next item must be an operation");
 
@@ -142,9 +172,17 @@ impl Thunk {
                         .as_value_index()
                         .expect("push argument must be a value index");
 
-                     let value = &code[value_index];
+                     stack.push(match &code[value_index] {
+                        &Value::Code { ref code, .. } => {
+                           Value::from(
+                              Thunk::suspended(code.dupe())
+                                 .scopes(scopes.dupe())
+                                 .location(code.read_operation(index).0),
+                           )
+                        },
 
-                     stack.push(value.dupe());
+                        other => other.dupe(),
+                     });
                   },
                   Operation::Pop => {
                      stack
@@ -178,7 +216,7 @@ impl Thunk {
 
                            let &mut Value::Boolean(value) = value else {
                               *value = Value::from(Arc::from(
-                                 NOT_BOOLEAN
+                                 ThunkInner::NOT_BOOLEAN
                                     .with(Dupe::dupe)
                                     .append_trace(code.read_operation(index).0),
                               ));
@@ -216,17 +254,7 @@ impl Thunk {
                         .pop()
                         .expect("force must not be called on an empty stack");
 
-                     loop {
-                        let thunk = match value {
-                           Value::Thunk(thunk) => thunk,
-                           Value::Suspend(thunk_code) => {
-                              Self::suspended(thunk_code)
-                                 .scopes(scopes.dupe())
-                                 .location(code.read_operation(index).0)
-                           },
-                           _ => break,
-                        };
-
+                     while let Value::Thunk(thunk) = value {
                         Box::pin(thunk.force(state)).await;
 
                         let (scope_new, value_new) = thunk
@@ -258,7 +286,7 @@ impl Thunk {
 
                      let &mut Value::Attributes(ref mut value) = value else {
                         *value = Value::from(Arc::from(
-                           NOT_ATTRIBUTES
+                           ThunkInner::NOT_ATTRIBUTES
                               .with(Dupe::dupe)
                               .append_trace(code.read_operation(index).0),
                         ));
@@ -303,7 +331,7 @@ impl Thunk {
 
                      let &mut Value::Boolean(_) = value else {
                         *value = Value::from(Arc::from(
-                           NOT_BOOLEAN
+                           ThunkInner::NOT_BOOLEAN
                               .with(Dupe::dupe)
                               .append_trace(code.read_operation(index).0),
                         ));
@@ -323,21 +351,18 @@ impl Thunk {
                   Operation::Call => {
                      let argument = stack.pop().expect("call must not be called on empty stack");
 
-                     let lambda_code = stack.pop().expect("call must not be called on empty stack");
-                     let Value::Lambda(lambda_code) = lambda_code else {
+                     let Value::Thunk(thunk) =
+                        stack.pop().expect("call must not be called on empty stack")
+                     else {
                         stack.push(Value::from(Arc::from(
-                           NOT_LAMBDA
+                           ThunkInner::NOT_LAMBDA
                               .with(Dupe::dupe)
                               .append_trace(code.read_operation(index).0),
                         )));
                         continue;
                      };
 
-                     let thunk = Self::lambda(lambda_code)
-                        // FIXME: Get the scope from a value on the stack created using ScopePush.
-                        .scopes(scopes.dupe())
-                        .argument(argument)
-                        .location(code.read_operation(index).0);
+                     let thunk = thunk.argument(argument).await;
 
                      stack.push(Value::from(thunk));
                   },
@@ -379,5 +404,7 @@ impl Thunk {
             }
          },
       };
+
+      *self.0.write().await = new;
    }
 }

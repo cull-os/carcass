@@ -121,10 +121,10 @@ async fn main() -> cyn::Termination {
          }),
          "true": Value::Boolean(true),
          "false": Value::Boolean(false),
-         "fee": Value::from(value::Thunk::suspended_native(|| {
-            eprintln!("[BACKGROUND PROCESS] Selling personal data to mastercard...");
-            Value::from(value::string::new!("Your transaction has been successful."))
-         })),
+         // "fee": Value::from(value::Thunk::suspended_native(|| {
+         //    eprintln!("[BACKGROUND PROCESS] Selling personal data to mastercard...");
+         //    Value::from(value::string::new!("Your transaction has been successful."))
+         // })),
       }))
       .location(value::Location::new(path, Span::at(0_u32, source.len())));
 

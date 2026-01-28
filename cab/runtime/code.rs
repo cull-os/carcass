@@ -201,13 +201,16 @@ impl Display for Code {
                         })?;
 
                         match code[value_index] {
-                           ref value @ (Value::Suspend(ref code) | Value::Lambda(ref code)) => {
+                           Value::Code {
+                              is_lambda,
+                              ref code,
+                           } => {
                               codes.push_front((
                                  value_index_unique,
-                                 match *value {
-                                    Value::Suspend(_) => CodeType::Suspend,
-                                    Value::Lambda(_) => CodeType::Lambda,
-                                    _ => unreachable!(),
+                                 if is_lambda {
+                                    CodeType::Lambda
+                                 } else {
+                                    CodeType::Suspend
                                  },
                                  code,
                               ));
@@ -434,6 +437,7 @@ impl Code {
    }
 
    #[must_use]
+   #[track_caller]
    pub fn read_operation(&self, index: ByteIndex) -> (value::Location, Operation, usize) {
       let position = self.spans.partition_point(|&(index2, _)| index >= index2);
 

@@ -12,7 +12,7 @@ use crate::value;
 
 #[derive(Clone, Dupe)]
 pub struct Error {
-   pub at:    Value,
+   pub trace: Value,
    pub value: Value,
 }
 
@@ -23,7 +23,7 @@ impl tag::DisplayTags for Error {
          Space,
       };
 
-      let mut head = self.at.dupe();
+      let mut head = self.trace.dupe();
 
       let tail = loop {
          let Ok(cons) = TryInto::<Arc<value::Cons>>::try_into(head.dupe()) else {
@@ -67,15 +67,18 @@ impl Error {
       into!(value);
 
       Self {
-         at: Value::from(value::Nil),
+         trace: Value::from(value::Nil),
          value,
       }
    }
 
    #[must_use]
-   pub fn append_trace(&self, at: value::Location) -> Self {
+   pub fn append_trace(&self, location: value::Location) -> Self {
       Self {
-         at:    Value::from(Arc::new(value::Cons(Value::from(at), self.at.dupe()))),
+         trace: Value::from(Arc::new(value::Cons(
+            Value::from(location),
+            self.trace.dupe(),
+         ))),
          value: self.value.dupe(),
       }
    }

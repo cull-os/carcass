@@ -79,10 +79,10 @@ pub enum Value {
    Thunk(Thunk),
 
    #[from(ignore)]
-   Suspend(Arc<Code>),
-
-   #[from(ignore)]
-   Lambda(Arc<Code>),
+   Code {
+      is_lambda: bool,
+      code:      Arc<Code>,
+   },
 }
 
 pub const STYLE_ESCAPED: style::Style = style::Color::Magenta.fg().bold();
@@ -174,7 +174,7 @@ impl tag::DisplayTags for Value {
 
          Value::Float(float) => tags.write(float.to_string().style(STYLE_FLOAT)),
 
-         Value::Thunk(_) | Value::Suspend(_) | Value::Lambda(_) => {
+         Value::Thunk(_) | Value::Code { .. } => {
             tags.write("_".style(STYLE_THUNK));
          },
       }

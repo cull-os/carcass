@@ -206,14 +206,10 @@ impl<'a> Emitter<'a> {
    ) {
       let code = self.codes.pop().expect(EXPECT_CODE);
 
-      self.emit_push(
-         span,
-         if is_lambda {
-            Value::Lambda(Arc::new(code))
-         } else {
-            Value::Suspend(Arc::new(code))
-         },
-      );
+      self.emit_push(span, Value::Code {
+         is_lambda,
+         code: Arc::new(code),
+      });
    }
 
    #[builder(finish_fn(name = "with"))]
@@ -283,7 +279,7 @@ impl<'a> Emitter<'a> {
       &mut self,
       #[builder(start_fn)] span: Span,
       #[builder(finish_fn)] right: &str,
-      #[builder(name = "left")] left: (Span, impl FnOnce(&mut Emitter<'a>)),
+      left: (Span, impl FnOnce(&mut Emitter<'a>)),
    ) {
       self.emit_select(span).left(left).right((span, |this| {
          // This scope is here because we want the bytecode to be an exact match for:
@@ -304,47 +300,44 @@ impl<'a> Emitter<'a> {
       &mut self,
       #[builder(start_fn)] span: Span,
       #[builder(finish_fn)] right: (Span, impl FnOnce(&mut Emitter<'a>)),
-      #[builder(name = "left")] left: (Span, impl FnOnce(&mut Emitter<'a>)),
+      left: (Span, impl FnOnce(&mut Emitter<'a>)),
    ) {
       let (right_span, emit_right) = right;
       let (left_span, emit_left) = left;
 
-      emit_right(self);
-
       emit_left(self);
-      let to_swap_pop = {
+      let to_end = {
          self.push_operation(left_span, Operation::JumpIfError);
          self.push_u16(u16::default())
       };
 
-      // <right>
       // <left>
       self.push_operation(left_span, Operation::ScopeSwap);
 
-      // <right>
       // <old-scope-or-error>
-      let to_swap_pop_ = {
+      let to_end_ = {
          self.push_operation(span, Operation::JumpIfError);
          self.push_u16(u16::default())
       };
 
-      // <right>
       // <old-scope>
-      self.push_operation(span, Operation::Swap);
-
-      // <old-scope>
-      // <right>
+      emit_right(self);
       self.push_operation(right_span, Operation::Force);
 
       // <old-scope>
       // <right-forced>
-      self.point_here(to_swap_pop);
-      self.point_here(to_swap_pop_);
       self.push_operation(span, Operation::Swap);
 
       // <right-forced>
       // <old-scope>
+      self.push_operation(span, Operation::ScopeSwap);
+
+      // <right-forced>
+      // <left>
       self.push_operation(span, Operation::Pop);
+
+      self.point_here(to_end_);
+      self.point_here(to_end);
    }
 
    fn emit_prefix_operation(&mut self, operation: &'a node::PrefixOperation) {
