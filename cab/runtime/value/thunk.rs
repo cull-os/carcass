@@ -25,16 +25,18 @@ const EXPECT_SCOPE: &str = "must have at least once scope";
 #[derive(Clone, Dupe)]
 enum ThunkInner {
    SuspendedNative {
-      location: value::Location,
-      code:     Arc<dyn Fn() -> Value + Send + Sync>,
-      argument: Option<Value>,
+      location:  value::Location,
+      code:      Arc<dyn Fn() -> Value + Send + Sync>,
+      is_lambda: bool,
+      argument:  Option<Value>,
    },
 
    Suspended {
-      location: value::Location,
-      code:     Arc<Code>,
-      argument: Option<Value>,
-      scopes:   Scopes,
+      location:  value::Location,
+      code:      Arc<Code>,
+      is_lambda: bool,
+      argument:  Option<Value>,
+      scopes:    Scopes,
    },
 
    Evaluated {
@@ -60,6 +62,7 @@ impl ThunkInner {
                "infinite recursion encountered"
             ))))
          }),
+         is_lambda: false,
          argument: None,
       }
    }
@@ -72,12 +75,14 @@ pub struct Thunk(Arc<RwLock<ThunkInner>>);
 impl Thunk {
    #[must_use]
    pub fn suspended_native(
-      location: value::Location,
       code: impl Fn() -> Value + Send + Sync + 'static,
+      location: value::Location,
+      is_lambda: bool,
    ) -> Self {
       Self(Arc::new(RwLock::new(ThunkInner::SuspendedNative {
          location,
          code: Arc::new(code),
+         is_lambda,
          argument: None,
       })))
    }
@@ -87,11 +92,13 @@ impl Thunk {
    pub fn suspended(
       #[builder(start_fn)] code: Arc<Code>,
       #[builder(finish_fn)] location: value::Location,
+      is_lambda: bool,
       scopes: Scopes,
    ) -> Self {
       Self(Arc::new(RwLock::new(ThunkInner::Suspended {
          location,
          code,
+         is_lambda,
          argument: None,
          scopes,
       })))
@@ -128,6 +135,7 @@ impl Thunk {
    pub async fn force(&self, state: &State) {
       let this = mem::replace(&mut *self.0.write().await, ThunkInner::Evaluated {
          scopagate: None,
+         // FIXME
          value:     Value::Nil(value::Nil),
       });
 
@@ -137,6 +145,7 @@ impl Thunk {
          ThunkInner::SuspendedNative {
             location,
             code,
+            is_lambda: _is_lambda,
             argument: _argument,
          } => {
             *self.0.write().await = ThunkInner::black_hole(location);
@@ -150,9 +159,14 @@ impl Thunk {
          ThunkInner::Suspended {
             location,
             code,
+            is_lambda,
             argument,
             mut scopes,
          } => {
+            if is_lambda && argument.is_none() {
+               return; // FIXME: Makes forced lambdas be nil. Also god damn, this code sucks ass.
+            }
+
             *self.0.write().await = ThunkInner::black_hole(location.dupe());
 
             let mut stack = argument.into_iter().collect::<Vec<_>>();
@@ -173,10 +187,14 @@ impl Thunk {
                         .expect("push argument must be a value index");
 
                      stack.push(match &code[value_index] {
-                        &Value::Code { ref code, .. } => {
+                        &Value::Code {
+                           ref code,
+                           is_lambda,
+                        } => {
                            Value::from(
                               Thunk::suspended(code.dupe())
                                  .scopes(scopes.dupe())
+                                 .is_lambda(is_lambda)
                                  // FIXME: .location(code.read_operation(index).0),
                                  .location(location.dupe()),
                            )
