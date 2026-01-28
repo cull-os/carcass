@@ -177,7 +177,8 @@ impl Thunk {
                            Value::from(
                               Thunk::suspended(code.dupe())
                                  .scopes(scopes.dupe())
-                                 .location(code.read_operation(index).0),
+                                 // FIXME: .location(code.read_operation(index).0),
+                                 .location(location.dupe()),
                            )
                         },
 
