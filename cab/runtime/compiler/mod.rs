@@ -240,7 +240,7 @@ impl<'a> Emitter<'a> {
          self.emit(item);
       }
 
-      self.emit_push(list.span(), Value::from(value::Nil));
+      self.emit_push(list.span(), value::Nil);
 
       for item in list.items() {
          self.push_operation(list.span(), Operation::Construct);
@@ -533,12 +533,7 @@ impl<'a> Emitter<'a> {
                      this.push_operation(operation.span(), Operation::Pop);
                      this.emit_push(
                         left.span(),
-                        Value::from(
-                           value::Error::new(value::string::new!(
-                              "TODO better parameters were not equal error"
-                           ))
-                           .arc(),
-                        ),
+                        value::Error::new(value::string::new!("parameters were not equal")).arc(),
                      );
 
                      let over_body = {
@@ -846,10 +841,7 @@ impl<'a> Emitter<'a> {
             self.emit_push(char.span(), char.value());
          },
          node::ExpressionRef::Integer(integer) => {
-            self.emit_push(
-               integer.span(),
-               Value::from(value::Integer::from(integer.value())),
-            );
+            self.emit_push(integer.span(), value::Integer::from(integer.value()));
          },
          node::ExpressionRef::Float(float) => {
             self.emit_push(float.span(), float.value());
