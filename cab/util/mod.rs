@@ -3,6 +3,8 @@
 mod lazy;
 mod reffed;
 
+pub mod suffix;
+
 #[doc(hidden)]
 pub mod private {
    pub use paste::paste;
