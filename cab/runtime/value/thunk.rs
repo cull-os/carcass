@@ -190,15 +190,14 @@ impl Thunk {
 
                      stack.push(match &code[value_index] {
                         &Value::Code {
-                           ref code,
+                           code: ref thunk_code,
                            is_lambda,
                         } => {
                            Value::from(
-                              Thunk::suspended(code.dupe())
+                              Thunk::suspended(thunk_code.dupe())
                                  .scopes(scopes.dupe())
                                  .is_lambda(is_lambda)
-                                 // FIXME: .location(code.read_operation(index).0),
-                                 .location(location.dupe()),
+                                 .location(code.read_operation(index).0),
                            )
                         },
 
