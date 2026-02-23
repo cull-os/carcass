@@ -196,18 +196,22 @@ impl<'a> Emitter<'a> {
       self.codes.push(Code::new(path));
    }
 
-   #[builder(finish_fn(name = "is_lambda"))]
-   fn emit_thunk_end(
+   #[builder(finish_fn(name = "needs_argument"))]
+   fn emit_thunkable_end(
       &mut self,
       #[builder(start_fn)] span: Span,
-      #[builder(finish_fn)] is_lambda: bool,
+      #[builder(finish_fn)] needs_argument: bool,
    ) {
       let code = self.codes.pop().expect(EXPECT_CODE);
 
-      self.emit_push(span, Value::Code {
-         is_lambda,
-         code: code.arc(),
-      });
+      self.emit_push(
+         span,
+         if needs_argument {
+            Value::NeedsArgumentToThunk(code.arc())
+         } else {
+            Value::Thunkable(code.arc())
+         },
+      );
    }
 
    #[builder(finish_fn(name = "with"))]
@@ -216,7 +220,7 @@ impl<'a> Emitter<'a> {
       #[builder(start_fn)] span: Span,
       #[builder(finish_fn)] with: impl FnOnce(&mut Self),
       #[builder(default = true)] if_: bool,
-      #[builder(default = false)] is_lambda: bool,
+      #[builder(default = false)] needs_argument: bool,
    ) {
       if !if_ {
          with(self);
@@ -225,7 +229,7 @@ impl<'a> Emitter<'a> {
 
       self.emit_thunk_start();
       with(self);
-      self.emit_thunk_end(span).is_lambda(is_lambda);
+      self.emit_thunkable_end(span).needs_argument(needs_argument);
    }
 
    fn emit_parenthesis(&mut self, parenthesis: &'a node::Parenthesis) {
@@ -244,7 +248,7 @@ impl<'a> Emitter<'a> {
 
       for item in list.items() {
          self.push_operation(list.span(), Operation::Construct);
-         self.emit_thunk_end(item.span()).is_lambda(false);
+         self.emit_thunkable_end(item.span()).needs_argument(false);
       }
    }
 
@@ -343,7 +347,7 @@ impl<'a> Emitter<'a> {
 
       self
          .emit_thunk(operation.span())
-         .is_lambda(right.is_none())
+         .needs_argument(right.is_none())
          .with(|this| {
             unwrap!(right);
 
@@ -366,8 +370,8 @@ impl<'a> Emitter<'a> {
 
       self
          .emit_thunk(operation.span())
-         .is_lambda(
-            // Lambda if any operand is missing.
+         .needs_argument(
+            // If any operand is missing.
             (left.is_none() || right.is_none())
             // Or if it is actually a lambda.
             || operation.operator() == node::InfixOperator::Lambda,
@@ -593,7 +597,7 @@ impl<'a> Emitter<'a> {
 
       self
          .emit_thunk(operation.span())
-         .is_lambda(left.is_none())
+         .needs_argument(left.is_none())
          .with(|this| {
             if let Some(left) = left {
                this.emit(left);

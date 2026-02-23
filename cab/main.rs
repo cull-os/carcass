@@ -109,7 +109,7 @@ async fn main() -> cyn::Termination {
       writeln!(out).expect("TODO move inside the runtime");
    }
 
-   let thunk = value::Thunk::suspended(code.arc())
+   let thunk = value::Thunk::forceable(code.arc())
       .scopes(List::new_sync().push_front(value::attributes::new! {
          "foo": Value::from(value::string::new!("AAAA")),
          "bar": Value::from(value::attributes::new! {
@@ -117,12 +117,11 @@ async fn main() -> cyn::Termination {
          }),
          "true": Value::Boolean(true),
          "false": Value::Boolean(false),
-         // "fee": Value::from(value::Thunk::suspended_native(|| {
+         // "fee": Value::from(value::Thunk::forceable_native(|| {
          //    eprintln!("[BACKGROUND PROCESS] Selling personal data to mastercard...");
          //    Value::from(value::string::new!("Your transaction has been successful."))
          // })),
       }))
-      .is_lambda(false)
       .location(value::Location::new(path, Span::at(0_u32, source.len())));
 
    thunk

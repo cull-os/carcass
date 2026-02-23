@@ -83,11 +83,11 @@ impl Display for Code {
       const STYLE_JUMP_ADDRESS: style::Style = style::Color::BrightYellow.fg().bold().underline();
 
       enum CodeType {
-         Suspend,
-         Lambda,
+         NeedsArgument,
+         Thunkable,
       }
 
-      let mut codes = VecDeque::from([(0_usize, CodeType::Suspend, self)]);
+      let mut codes = VecDeque::from([(0_usize, CodeType::NeedsArgument, self)]);
 
       while let Some((code_index, code_type, code)) = codes.pop_back() {
          let highlighted = RefCell::new(Vec::<ByteIndex>::new());
@@ -145,8 +145,8 @@ impl Display for Code {
             })?;
 
             match code_type {
-               CodeType::Suspend => write(writer, &"(suspend)".cyan().bold())?,
-               CodeType::Lambda => write(writer, &"(lambda)".magenta().bold())?,
+               CodeType::NeedsArgument => write(writer, &"(thunkable)".cyan().bold())?,
+               CodeType::Thunkable => write(writer, &"(needs-argument)".magenta().bold())?,
             }
          }
 
@@ -201,16 +201,14 @@ impl Display for Code {
                         })?;
 
                         match code[value_index] {
-                           Value::Code {
-                              is_lambda,
-                              ref code,
-                           } => {
+                           ref value @ (Value::NeedsArgumentToThunk(ref code)
+                           | Value::Thunkable(ref code)) => {
                               codes.push_front((
                                  value_index_unique,
-                                 if is_lambda {
-                                    CodeType::Lambda
-                                 } else {
-                                    CodeType::Suspend
+                                 match value {
+                                    &Value::NeedsArgumentToThunk(_) => CodeType::Thunkable,
+                                    &Value::Thunkable(_) => CodeType::NeedsArgument,
+                                    _ => unreachable!(),
                                  },
                                  code,
                               ));

@@ -5,7 +5,10 @@ use std::{
    sync::Arc,
 };
 
-use cab_util::suffix::Arc as _;
+use cab_util::{
+   collect_vec,
+   suffix::Arc as _,
+};
 use dup::{
    Dupe,
    OptionDupedExt as _,
@@ -25,19 +28,28 @@ const EXPECT_SCOPE: &str = "must have at least once scope";
 
 #[derive(Clone, Dupe)]
 enum ThunkInner {
-   SuspendedNative {
-      location:  value::Location,
-      code:      Arc<dyn Fn() -> Value + Send + Sync>,
-      is_lambda: bool,
-      argument:  Option<Value>,
+   NeedsArgumentNative {
+      location: value::Location,
+      code:     Arc<dyn Fn() -> Value + Send + Sync>,
    },
 
-   Suspended {
-      location:  value::Location,
-      code:      Arc<Code>,
-      is_lambda: bool,
-      argument:  Option<Value>,
-      scopes:    Scopes,
+   NeedsArgument {
+      location: value::Location,
+      code:     Arc<Code>,
+      scopes:   Scopes,
+   },
+
+   ForceableNative {
+      location: value::Location,
+      code:     Arc<dyn Fn() -> Value + Send + Sync>,
+      stack:    Option<Value>,
+   },
+
+   Forceable {
+      location: value::Location,
+      code:     Arc<Code>,
+      stack:    Option<Value>,
+      scopes:   Scopes,
    },
 
    Evaluated {
@@ -58,7 +70,7 @@ impl ThunkInner {
    }
 
    fn black_hole(location: value::Location) -> Self {
-      ThunkInner::SuspendedNative {
+      ThunkInner::ForceableNative {
          location,
          code: (|| {
             Value::from(
@@ -66,8 +78,7 @@ impl ThunkInner {
             )
          })
          .arc(),
-         is_lambda: false,
-         argument: None,
+         stack: None,
       }
    }
 }
@@ -78,17 +89,15 @@ pub struct Thunk(Arc<RwLock<ThunkInner>>);
 #[bon::bon]
 impl Thunk {
    #[must_use]
-   pub fn suspended_native(
-      code: impl Fn() -> Value + Send + Sync + 'static,
-      location: value::Location,
-      is_lambda: bool,
+   #[builder(finish_fn(name = "location"))]
+   pub fn needs_argument_native(
+      #[builder(start_fn)] code: impl Fn() -> Value + Send + Sync + 'static,
+      #[builder(finish_fn)] location: value::Location,
    ) -> Self {
       Self(
-         RwLock::new(ThunkInner::SuspendedNative {
+         RwLock::new(ThunkInner::NeedsArgumentNative {
             location,
             code: code.arc(),
-            is_lambda,
-            argument: None,
          })
          .arc(),
       )
@@ -96,38 +105,76 @@ impl Thunk {
 
    #[must_use]
    #[builder(finish_fn(name = "location"))]
-   pub fn suspended(
+   pub fn needs_argument(
       #[builder(start_fn)] code: Arc<Code>,
       #[builder(finish_fn)] location: value::Location,
-      is_lambda: bool,
       scopes: Scopes,
    ) -> Self {
       Self(
-         RwLock::new(ThunkInner::Suspended {
+         RwLock::new(ThunkInner::NeedsArgument {
             location,
             code,
-            is_lambda,
-            argument: None,
             scopes,
          })
          .arc(),
       )
    }
 
-   pub async fn argument(&self, arg: Value) -> Self {
-      let mut inner = self.0.read().await.dupe();
+   #[must_use]
+   #[builder(finish_fn(name = "location"))]
+   pub fn forceable_native(
+      #[builder(start_fn)] code: impl Fn() -> Value + Send + Sync + 'static,
+      #[builder(finish_fn)] location: value::Location,
+   ) -> Self {
+      Self(
+         RwLock::new(ThunkInner::ForceableNative {
+            location,
+            code: code.arc(),
+            stack: None,
+         })
+         .arc(),
+      )
+   }
 
-      match inner {
-         ThunkInner::SuspendedNative {
-            ref mut argument, ..
-         } => *argument = Some(arg),
-         ThunkInner::Suspended {
-            ref mut argument, ..
-         } => *argument = Some(arg),
-         ThunkInner::Evaluated { .. } => panic!("cannot add argument to evaluated thunk"),
-      }
+   #[must_use]
+   #[builder(finish_fn(name = "location"))]
+   pub fn forceable(
+      #[builder(start_fn)] code: Arc<Code>,
+      #[builder(finish_fn)] location: value::Location,
+      scopes: Scopes,
+   ) -> Self {
+      Self(
+         RwLock::new(ThunkInner::Forceable {
+            location,
+            code,
+            stack: None,
+            scopes,
+         })
+         .arc(),
+      )
+   }
 
-      Thunk(RwLock::new(inner).arc())
+   pub async fn argument(&self, argument: Value) -> Option<Self> {
+      let inner = self.0.read().await.dupe();
+
+      let ThunkInner::NeedsArgument {
+         location,
+         code,
+         scopes,
+      } = inner
+      else {
+         return None;
+      };
+
+      Some(Thunk(
+         RwLock::new(ThunkInner::Forceable {
+            location,
+            code,
+            stack: Some(argument),
+            scopes,
+         })
+         .arc(),
+      ))
    }
 
    pub async fn get(&self) -> Option<(Option<Scopes>, Value)> {
@@ -151,11 +198,15 @@ impl Thunk {
       let new = match this {
          evaluated @ ThunkInner::Evaluated { .. } => evaluated.dupe(),
 
-         ThunkInner::SuspendedNative {
+         ThunkInner::NeedsArgumentNative { .. } | ThunkInner::NeedsArgument { .. } => {
+            unreachable!("thunk must be forceable");
+         },
+
+         ThunkInner::ForceableNative {
             location,
             code,
-            is_lambda: _is_lambda,
-            argument: _argument,
+            // TODO
+            stack: _argument,
          } => {
             *self.0.write().await = ThunkInner::black_hole(location);
 
@@ -165,20 +216,15 @@ impl Thunk {
             }
          },
 
-         ThunkInner::Suspended {
+         ThunkInner::Forceable {
             location,
             code,
-            is_lambda,
-            argument,
+            stack,
             mut scopes,
          } => {
-            if is_lambda && argument.is_none() {
-               return; // FIXME: Makes forced lambdas be nil. Also god damn, this code sucks ass.
-            }
-
             *self.0.write().await = ThunkInner::black_hole(location.dupe());
 
-            let mut stack = argument.into_iter().collect::<Vec<_>>();
+            collect_vec!(mut stack);
 
             let items = &mut code.iter().peekable();
             while let Some((index, item)) = items.next() {
@@ -196,14 +242,17 @@ impl Thunk {
                         .expect("push argument must be a value index");
 
                      stack.push(match &code[value_index] {
-                        &Value::Code {
-                           code: ref thunk_code,
-                           is_lambda,
-                        } => {
+                        &Value::NeedsArgumentToThunk(ref thunk_code) => {
                            Value::from(
-                              Thunk::suspended(thunk_code.dupe())
+                              Thunk::needs_argument(thunk_code.dupe())
                                  .scopes(scopes.dupe())
-                                 .is_lambda(is_lambda)
+                                 .location(code.read_operation(index).0),
+                           )
+                        },
+                        &Value::Thunkable(ref thunk_code) => {
+                           Value::from(
+                              Thunk::forceable(thunk_code.dupe())
+                                 .scopes(scopes.dupe())
                                  .location(code.read_operation(index).0),
                            )
                         },
@@ -393,7 +442,15 @@ impl Thunk {
                         continue;
                      };
 
-                     let thunk = thunk.argument(argument).await;
+                     let Some(thunk) = thunk.argument(argument).await else {
+                        stack.push(Value::from(
+                           ThunkInner::NOT_LAMBDA
+                              .with(Dupe::dupe)
+                              .append_trace(code.read_operation(index).0)
+                              .arc(),
+                        ));
+                        continue;
+                     };
 
                      stack.push(Value::from(thunk));
                   },
