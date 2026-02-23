@@ -5,6 +5,7 @@ use std::{
    sync::Arc,
 };
 
+use cab_util::suffix::Arc as _;
 use dup::{
    Dupe,
    OptionDupedExt as _,
@@ -47,11 +48,13 @@ enum ThunkInner {
 
 impl ThunkInner {
    thread_local! {
-      static NOT_BOOLEAN: value::Error = value::Error::new(value::string::new!("expected boolean, got something else"));
+      static NOT_BOOLEAN: Arc<value::Error> = value::Error::new(value::string::new!("expected boolean, got something else")).arc();
 
-      static NOT_LAMBDA: value::Error = value::Error::new(value::string::new!("expected lambda, got something else"));
+      static NOT_LAMBDA: Arc<value::Error> = value::Error::new(value::string::new!("expected lambda, got something else")).arc();
 
-      static NOT_ATTRIBUTES: value::Error = value::Error::new(value::string::new!("expected attributes, got something else"));
+      static NOT_ATTRIBUTES: Arc<value::Error> = value::Error::new(value::string::new!("expected attributes, got something else")).arc();
+
+      static INFINITE_RECURSION: Arc<value::Error> = value::Error::new(value::string::new!("infinite recursion encountered")).arc();
    }
 
    fn black_hole(location: value::Location) -> Self {
@@ -135,8 +138,7 @@ impl Thunk {
    pub async fn force(&self, state: &State) {
       let this = mem::replace(&mut *self.0.write().await, ThunkInner::Evaluated {
          scopagate: None,
-         // FIXME
-         value:     Value::Nil(value::Nil),
+         value:     Value::from(ThunkInner::INFINITE_RECURSION.with(Dupe::dupe)),
       });
 
       let new = match this {
