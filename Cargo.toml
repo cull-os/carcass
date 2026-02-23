@@ -163,7 +163,7 @@ syn                  = "2.0.104"
 terminal_size        = "0.4.1"
 thiserror            = "2.0.12"
 tokio                = { features = [ "full" ], version = "1.37.0" }
-toml                 = "0.9.2"
+toml                 = "1.0.3"
 tracing              = "0.1.41"
 tracing-subscriber   = { features = [ "env-filter" ], version = "0.3.19" }
 tun                  = { features = [ "async" ], version = "0.8.3" }
