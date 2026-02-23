@@ -1,7 +1,4 @@
-use std::{
-   ops,
-   sync::Arc,
-};
+use std::ops;
 
 use cab_syntax::{
    Segment,
@@ -10,6 +7,7 @@ use cab_syntax::{
 };
 use cab_util::{
    into,
+   suffix::Arc as _,
    unwrap,
 };
 use cyn::{
@@ -208,7 +206,7 @@ impl<'a> Emitter<'a> {
 
       self.emit_push(span, Value::Code {
          is_lambda,
-         code: Arc::new(code),
+         code: code.arc(),
       });
    }
 
@@ -535,9 +533,12 @@ impl<'a> Emitter<'a> {
                      this.push_operation(operation.span(), Operation::Pop);
                      this.emit_push(
                         left.span(),
-                        Value::from(Arc::new(value::Error::new(value::string::new!(
-                           "TODO better parameters were not equal error"
-                        )))),
+                        Value::from(
+                           value::Error::new(value::string::new!(
+                              "TODO better parameters were not equal error"
+                           ))
+                           .arc(),
+                        ),
                      );
 
                      let over_body = {

@@ -21,6 +21,7 @@ workspace = true
 [dependencies]
 cab-runtime.path = "./runtime"
 cab-syntax.path  = "./syntax"
+cab-util.path    = "./util"
 
 cyn.path    = "../cyn"
 dup.path    = "../dup"

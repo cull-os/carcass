@@ -1,11 +1,9 @@
-use std::{
-   fmt::Write as _,
-   sync::Arc,
-};
+use std::fmt::Write as _;
 
 use cab::{
    runtime,
    syntax,
+   util::suffix::Arc as _,
 };
 use clap::Parser as _;
 use cyn::ResultExt as _;
@@ -64,9 +62,7 @@ async fn main() -> cyn::Termination {
    };
 
    let path = value::Path::new()
-      .root(Arc::new(value::path::blob(Value::from(
-         value::SString::from(&*expression),
-      ))))
+      .root(value::path::blob(Value::from(value::SString::from(&*expression))).arc())
       .subpath(List::new_sync());
 
    // TODO: position_cache in Path.
@@ -113,7 +109,7 @@ async fn main() -> cyn::Termination {
       writeln!(out).expect("TODO move inside the runtime");
    }
 
-   let thunk = value::Thunk::suspended(Arc::new(code))
+   let thunk = value::Thunk::suspended(code.arc())
       .scopes(List::new_sync().push_front(value::attributes::new! {
          "foo": Value::from(value::string::new!("AAAA")),
          "bar": Value::from(value::attributes::new! {

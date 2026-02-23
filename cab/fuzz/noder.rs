@@ -9,12 +9,12 @@ use std::{
       Hash as _,
       Hasher as _,
    },
-   sync::Arc,
 };
 
 use cab::{
    runtime::value,
    syntax,
+   util::suffix::Arc as _,
 };
 use libfuzzer_sys::{
    Corpus,
@@ -33,7 +33,7 @@ fuzz_target!(|source: &str| -> Corpus {
    let parse = parse_oracle.parse(syntax::tokenize(source));
 
    let path = value::Path::new()
-      .root(Arc::new(value::path::standard()))
+      .root(value::path::standard().arc())
       .subpath(List::new_sync());
 
    let source = report::PositionStr::new(source);

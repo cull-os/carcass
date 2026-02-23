@@ -6,6 +6,7 @@ use std::{
 use async_once_cell::OnceCell;
 use async_trait::async_trait;
 use bytes::Bytes;
+use cab_util::suffix::Arc as _;
 use cyn::{
    OptionExt as _,
    Result,
@@ -120,8 +121,8 @@ impl Path {
          root: Some(root),
          subpath,
 
-         read_cache: Arc::new(DashMap::new()),
-         list_cache: Arc::new(DashMap::new()),
+         read_cache: DashMap::new().arc(),
+         list_cache: DashMap::new().arc(),
       }
    }
 
@@ -131,8 +132,8 @@ impl Path {
          root: None,
          subpath,
 
-         read_cache: Arc::new(DashMap::new()),
-         list_cache: Arc::new(DashMap::new()),
+         read_cache: DashMap::new().arc(),
+         list_cache: DashMap::new().arc(),
       }
    }
 }

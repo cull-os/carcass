@@ -70,12 +70,14 @@ pub trait TokenRef<'a> =
 mod green {
    use std::sync::Arc;
 
+   use cab_util::suffix::Arc as _;
+
    use super::*;
 
    pub type Interner = Arc<cstree::interning::MultiThreadedTokenInterner>;
 
    pub fn interner() -> Interner {
-      Arc::new(cstree::interning::new_threaded_interner())
+      cstree::interning::new_threaded_interner().arc()
    }
 
    pub type Checkpoint = cstree::build::Checkpoint;

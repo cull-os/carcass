@@ -8,6 +8,7 @@ use cab_syntax::{
    escape_string,
    is_valid_plain_identifier,
 };
+use cab_util::suffix::Arc as _;
 use derive_more::{
    From,
    TryInto,
@@ -254,9 +255,7 @@ where
 {
    pub fn must(self) -> Result<T, Value> {
       self.value.try_into().map_err(|_| {
-         Value::from(Arc::new(Error::new(string::new!(
-            "TODO better expected type error"
-         ))))
+         Value::from(Error::new(string::new!("TODO better expected type error")).arc())
       })
    }
 }

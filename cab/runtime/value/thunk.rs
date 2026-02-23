@@ -60,11 +60,12 @@ impl ThunkInner {
    fn black_hole(location: value::Location) -> Self {
       ThunkInner::SuspendedNative {
          location,
-         code: Arc::new(|| {
-            Value::from(Arc::new(value::Error::new(value::string::new!(
-               "infinite recursion encountered"
-            ))))
-         }),
+         code: (|| {
+            Value::from(
+               value::Error::new(value::string::new!("infinite recursion encountered")).arc(),
+            )
+         })
+         .arc(),
          is_lambda: false,
          argument: None,
       }
@@ -82,12 +83,15 @@ impl Thunk {
       location: value::Location,
       is_lambda: bool,
    ) -> Self {
-      Self(Arc::new(RwLock::new(ThunkInner::SuspendedNative {
-         location,
-         code: Arc::new(code),
-         is_lambda,
-         argument: None,
-      })))
+      Self(
+         RwLock::new(ThunkInner::SuspendedNative {
+            location,
+            code: code.arc(),
+            is_lambda,
+            argument: None,
+         })
+         .arc(),
+      )
    }
 
    #[must_use]
@@ -98,13 +102,16 @@ impl Thunk {
       is_lambda: bool,
       scopes: Scopes,
    ) -> Self {
-      Self(Arc::new(RwLock::new(ThunkInner::Suspended {
-         location,
-         code,
-         is_lambda,
-         argument: None,
-         scopes,
-      })))
+      Self(
+         RwLock::new(ThunkInner::Suspended {
+            location,
+            code,
+            is_lambda,
+            argument: None,
+            scopes,
+         })
+         .arc(),
+      )
    }
 
    pub async fn argument(&self, arg: Value) -> Self {
@@ -120,7 +127,7 @@ impl Thunk {
          ThunkInner::Evaluated { .. } => panic!("cannot add argument to evaluated thunk"),
       }
 
-      Thunk(Arc::new(RwLock::new(inner)))
+      Thunk(RwLock::new(inner).arc())
    }
 
    pub async fn get(&self) -> Option<(Option<Scopes>, Value)> {
@@ -235,11 +242,12 @@ impl Thunk {
                            );
 
                            let &mut Value::Boolean(value) = value else {
-                              *value = Value::from(Arc::from(
+                              *value = Value::from(
                                  ThunkInner::NOT_BOOLEAN
                                     .with(Dupe::dupe)
-                                    .append_trace(code.read_operation(index).0),
-                              ));
+                                    .append_trace(code.read_operation(index).0)
+                                    .arc(),
+                              );
                               continue;
                            };
 
@@ -257,9 +265,8 @@ impl Thunk {
                               continue;
                            };
 
-                           *value = Value::from(Arc::new(
-                              error.append_trace(code.read_operation(index).0),
-                           ));
+                           *value =
+                              Value::from(error.append_trace(code.read_operation(index).0).arc());
                         },
                         _ => unreachable!(),
                      }
@@ -305,11 +312,12 @@ impl Thunk {
                         .expect("scope-swap must not be called on a empty stack");
 
                      let &mut Value::Attributes(ref mut value) = value else {
-                        *value = Value::from(Arc::from(
+                        *value = Value::from(
                            ThunkInner::NOT_ATTRIBUTES
                               .with(Dupe::dupe)
-                              .append_trace(code.read_operation(index).0),
-                        ));
+                              .append_trace(code.read_operation(index).0)
+                              .arc(),
+                        );
                         continue;
                      };
 
@@ -333,13 +341,14 @@ impl Thunk {
                         .find_map(|scope| scope.get(identifier))
                         .duped()
                         .unwrap_or_else(|| {
-                           Value::from(Arc::new(
+                           Value::from(
                               value::Error::new(value::SString::from(&*format!(
                                  "undefined value: '{identifier}'",
                                  identifier = &**identifier,
                               )))
-                              .append_trace(code.read_operation(index).0),
-                           ))
+                              .append_trace(code.read_operation(index).0)
+                              .arc(),
+                           )
                         });
 
                      *reference = value;
@@ -350,11 +359,12 @@ impl Thunk {
                         .expect("assert-boolean must not be called on an empty stack");
 
                      let &mut Value::Boolean(_) = value else {
-                        *value = Value::from(Arc::from(
+                        *value = Value::from(
                            ThunkInner::NOT_BOOLEAN
                               .with(Dupe::dupe)
-                              .append_trace(code.read_operation(index).0),
-                        ));
+                              .append_trace(code.read_operation(index).0)
+                              .arc(),
+                        );
                         continue;
                      };
                   },
@@ -366,7 +376,7 @@ impl Thunk {
                         .pop()
                         .expect("construct must be called on a stack with 2 items or more");
 
-                     stack.push(Value::from(Arc::new(value::Cons(head, tail))));
+                     stack.push(Value::from(value::Cons(head, tail).arc()));
                   },
                   Operation::Call => {
                      let argument = stack.pop().expect("call must not be called on empty stack");
@@ -374,11 +384,12 @@ impl Thunk {
                      let Value::Thunk(thunk) =
                         stack.pop().expect("call must not be called on empty stack")
                      else {
-                        stack.push(Value::from(Arc::from(
+                        stack.push(Value::from(
                            ThunkInner::NOT_LAMBDA
                               .with(Dupe::dupe)
-                              .append_trace(code.read_operation(index).0),
-                        )));
+                              .append_trace(code.read_operation(index).0)
+                              .arc(),
+                        ));
                         continue;
                      };
 

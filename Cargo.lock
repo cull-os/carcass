@@ -463,6 +463,7 @@ version = "0.0.1"
 dependencies = [
  "cab-runtime",
  "cab-syntax",
+ "cab-util",
  "clap",
  "cyn",
  "dup",

@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use cab_util::suffix::Arc as _;
 use dup::Dupe;
 use ust::{
    style::StyledExt as _,
@@ -22,7 +23,7 @@ impl tag::DisplayTags for Integer {
 
 impl From<num::BigInt> for Integer {
    fn from(integer: num::BigInt) -> Self {
-      Self(Arc::new(integer))
+      Self(integer.arc())
    }
 }
 

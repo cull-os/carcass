@@ -1,6 +1,9 @@
 use std::sync::Arc;
 
-use cab_util::into;
+use cab_util::{
+   into,
+   suffix::Arc as _,
+};
 use dup::Dupe;
 use ust::{
    style::StyledExt as _,
@@ -75,10 +78,7 @@ impl Error {
    #[must_use]
    pub fn append_trace(&self, location: value::Location) -> Self {
       Self {
-         trace: Value::from(Arc::new(value::Cons(
-            Value::from(location),
-            self.trace.dupe(),
-         ))),
+         trace: Value::from(value::Cons(Value::from(location), self.trace.dupe()).arc()),
          value: self.value.dupe(),
       }
    }
