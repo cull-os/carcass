@@ -15,7 +15,7 @@ pub struct Location {
 
 impl tag::DisplayTags for Location {
    fn display_tags<'a>(&'a self, tags: &mut tag::Tags<'a>) {
-      // FIXME: No. Use a report formatter or something, because this is not row-col.
+      // TODO: No. Use a report formatter or something, because this is not row-col.
       self.path.display_tags(tags);
       tags.write(":");
       tags.write(
