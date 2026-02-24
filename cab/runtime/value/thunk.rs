@@ -437,29 +437,20 @@ impl Thunk {
                   Operation::Call => {
                      let argument = stack.pop().expect("call must not be called on empty stack");
 
-                     let Value::Thunk(thunk) =
-                        stack.pop().expect("call must not be called on empty stack")
-                     else {
-                        stack.push(Value::from(
-                           ThunkInner::NOT_LAMBDA
-                              .with(Dupe::dupe)
-                              .append_trace(code.read_operation(index).0)
-                              .arc(),
-                        ));
-                        continue;
-                     };
+                     match stack.pop().expect("call must not be called on empty stack") {
+                        Value::Thunk(thunk) if let Some(thunk) = thunk.argument(argument).await => {
+                           stack.push(Value::from(thunk));
+                        },
 
-                     let Some(thunk) = thunk.argument(argument).await else {
-                        stack.push(Value::from(
-                           ThunkInner::NOT_LAMBDA
-                              .with(Dupe::dupe)
-                              .append_trace(code.read_operation(index).0)
-                              .arc(),
-                        ));
-                        continue;
-                     };
-
-                     stack.push(Value::from(thunk));
+                        _ => {
+                           stack.push(Value::from(
+                              ThunkInner::NOT_LAMBDA
+                                 .with(Dupe::dupe)
+                                 .append_trace(code.read_operation(index).0)
+                                 .arc(),
+                           ));
+                        },
+                     }
                   },
                   Operation::Equal => {
                      let right = stack
@@ -469,19 +460,13 @@ impl Thunk {
                         .pop()
                         .expect("equal must be called on a stack with 2 items or more");
 
-                     // TODO: Not sure about the design here.
-                     let (equal, binds) = Value::equals(&left, &right);
+                     let (equal, scope_new) = Value::equals(&left, &right);
 
                      stack.push(Value::from(equal));
                      scopes = scopes
                         .drop_first()
-                        .expect("equal must be called with a scope")
-                        .push_front(
-                           scopes
-                              .first()
-                              .expect("equal must be called with a scope")
-                              .merge(&binds),
-                        );
+                        .expect(EXPECT_SCOPE)
+                        .push_front(scopes.first().expect(EXPECT_SCOPE).merge(&scope_new));
                   },
                   Operation::All => todo!(),
                   Operation::Any => todo!(),
