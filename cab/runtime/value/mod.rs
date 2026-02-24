@@ -174,7 +174,7 @@ impl tag::DisplayTags for Value {
 
          Value::Float(float) => tags.write(float.to_string().style(STYLE_FLOAT)),
 
-         Value::Thunk(_) | Value::NeedsArgumentToThunk { .. } | Value::Thunkable(_) => {
+         Value::Thunk(_) | Value::NeedsArgumentToThunk(..) | Value::Thunkable(_) => {
             tags.write("_".style(STYLE_THUNK));
          },
       }

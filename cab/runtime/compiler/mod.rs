@@ -399,12 +399,12 @@ impl<'a> Emitter<'a> {
                | node::InfixOperator::Pipe) => {
                   match operator {
                      node::InfixOperator::ImplicitApply | node::InfixOperator::Apply => {
-                        this.emit(left);
+                        this.emit_force(left);
                         this.emit(right);
                      },
 
                      node::InfixOperator::Pipe => {
-                        this.emit(right);
+                        this.emit_force(right);
                         this.emit(left);
                      },
 

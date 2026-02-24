@@ -177,16 +177,25 @@ impl Thunk {
       ))
    }
 
-   pub async fn get(&self) -> Option<(Option<Scopes>, Value)> {
+   pub async fn get(&self) -> (Option<Scopes>, Value) {
       if let ThunkInner::Evaluated {
          ref scopagate,
          ref value,
       } = *self.0.read().await
       {
-         Some((scopagate.dupe(), value.dupe()))
+         (scopagate.dupe(), value.dupe())
       } else {
-         None
+         (None, Value::from(self.dupe()))
       }
+   }
+
+   pub async fn is_whnf(&self) -> bool {
+      matches!(
+         *self.0.read().await,
+         ThunkInner::Evaluated { .. }
+            | ThunkInner::NeedsArgumentNative { .. }
+            | ThunkInner::NeedsArgument { .. }
+      )
    }
 
    pub async fn force(&self, state: &State) {
@@ -196,11 +205,10 @@ impl Thunk {
       });
 
       let new = match this {
-         evaluated @ ThunkInner::Evaluated { .. } => evaluated.dupe(),
-
-         ThunkInner::NeedsArgumentNative { .. } | ThunkInner::NeedsArgument { .. } => {
-            unreachable!("thunk must be forceable");
-         },
+         // WHNF? Only real typemasterbaiters will get this.
+         whnf @ (ThunkInner::Evaluated { .. }
+         | ThunkInner::NeedsArgumentNative { .. }
+         | ThunkInner::NeedsArgument { .. }) => whnf.dupe(),
 
          ThunkInner::ForceableNative {
             location,
@@ -330,13 +338,12 @@ impl Thunk {
                         .pop()
                         .expect("force must not be called on an empty stack");
 
-                     while let Value::Thunk(thunk) = value {
+                     while let Value::Thunk(ref thunk) = value
+                        && !thunk.is_whnf().await
+                     {
                         Box::pin(thunk.force(state)).await;
 
-                        let (scope_new, value_new) = thunk
-                           .get()
-                           .await
-                           .expect("thunk must contain value after forcing");
+                        let (scope_new, value_new) = thunk.get().await;
 
                         value = value_new;
                         scopes = scope_new.unwrap_or(scopes);
