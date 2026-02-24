@@ -469,7 +469,9 @@ impl<'a> Tokenizer<'a> {
          },
 
          '.' if let is_valid_digit = (|c: char| c.is_ascii_digit() || c == '_')
-            && self.peek_character().is_some_and(is_valid_digit) =>
+            && self
+               .peek_character()
+               .is_some_and(|c| is_valid_digit(c) && c != '_') =>
          {
             self.consume_while(is_valid_digit);
 
