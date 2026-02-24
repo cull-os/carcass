@@ -44,8 +44,6 @@ use scope::{
 };
 
 const EXPECT_CODE: &str = "emitter must have at least one code at all times";
-// const EXPECT_SCOPE: &str = "emitter must have at least one scope at all
-// times";
 const EXPECT_VALID: &str = "syntax must be valid";
 
 pub struct Compile {

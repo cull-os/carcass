@@ -21,13 +21,15 @@ pub use compiler::{
    CompileOracle,
 };
 
-mod state;
-pub use state::{
+mod scope;
+pub use scope::{
    Scope,
    ScopeId,
    Scopes,
-   State,
 };
+
+mod state;
+pub use state::State;
 
 mod operation;
 pub use operation::{

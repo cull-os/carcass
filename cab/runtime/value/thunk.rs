@@ -18,6 +18,7 @@ use tokio::sync::RwLock;
 use crate::{
    Code,
    Operation,
+   Scope,
    ScopeId,
    Scopes,
    State,
@@ -35,10 +36,10 @@ enum ThunkInner {
    },
 
    NeedsArgument {
-      location: value::Location,
-      code:     Arc<Code>,
-      scopes:   Scopes,
-      attached: ScopeId,
+      location:    value::Location,
+      code:        Arc<Code>,
+      scopes:      Scopes,
+      attached_id: ScopeId,
    },
 
    ForceableNative {
@@ -48,11 +49,11 @@ enum ThunkInner {
    },
 
    Forceable {
-      location: value::Location,
-      code:     Arc<Code>,
-      stack:    Option<Value>,
-      scopes:   Scopes,
-      attached: ScopeId,
+      location:    value::Location,
+      code:        Arc<Code>,
+      stack:       Option<Value>,
+      scopes:      Scopes,
+      attached_id: ScopeId,
    },
 
    Evaluated {
@@ -113,14 +114,14 @@ impl Thunk {
       #[builder(finish_fn)] location: value::Location,
       scopes: Scopes,
    ) -> Self {
-      let attached = scopes.first().expect(EXPECT_SCOPE).0;
+      let attached_id = scopes.tip().expect(EXPECT_SCOPE).id();
 
       Self(
          RwLock::new(ThunkInner::NeedsArgument {
             location,
             code,
             scopes,
-            attached,
+            attached_id,
          })
          .arc(),
       )
@@ -149,7 +150,7 @@ impl Thunk {
       #[builder(finish_fn)] location: value::Location,
       scopes: Scopes,
    ) -> Self {
-      let attached = scopes.first().expect(EXPECT_SCOPE).0;
+      let attached_id = scopes.tip().expect(EXPECT_SCOPE).id();
 
       Self(
          RwLock::new(ThunkInner::Forceable {
@@ -157,7 +158,7 @@ impl Thunk {
             code,
             stack: None,
             scopes,
-            attached,
+            attached_id,
          })
          .arc(),
       )
@@ -170,7 +171,7 @@ impl Thunk {
          location,
          code,
          scopes,
-         attached,
+         attached_id,
       } = inner
       else {
          return None;
@@ -182,7 +183,7 @@ impl Thunk {
             code,
             stack: Some(argument),
             scopes,
-            attached,
+            attached_id,
          })
          .arc(),
       ))
@@ -240,7 +241,7 @@ impl Thunk {
             code,
             stack,
             mut scopes,
-            attached,
+            attached_id,
          } => {
             *self.0.write().await = ThunkInner::black_hole(location.dupe());
 
@@ -359,15 +360,9 @@ impl Thunk {
                         let (scopagate, value_new) = thunk.get().await;
 
                         if let Some((scope_id, scopes_new)) = scopagate
-                           && scope_id == scopes.first().expect(EXPECT_SCOPE).0
+                           && scope_id == scopes.tip().expect(EXPECT_SCOPE).id()
                         {
-                           let scope_current = scopes.first().expect(EXPECT_SCOPE).dupe();
-                           let scope_new = scopes_new.first().expect(EXPECT_SCOPE);
-
-                           scopes = scopes
-                              .drop_first()
-                              .expect(EXPECT_SCOPE)
-                              .push_front((scope_current.0, scope_current.1.merge(&scope_new.1)));
+                           scopes = scopes.merge_tip_from(&scopes_new);
                         }
 
                         let should_break = matches!(value_new, Value::Thunk(ref thunk_new) if Arc::ptr_eq(&thunk.0, &thunk_new.0));
@@ -381,15 +376,17 @@ impl Thunk {
                      stack.push(value);
                   },
                   Operation::ScopeStart => {
-                     scopes = scopes.push_front(value::attributes::new! {}.scope());
+                     scopes = scopes.push(Scope::from(&value::attributes::new! {}));
                   },
                   Operation::ScopeEnd => {
                      scopes = scopes
-                        .drop_first()
+                        .pop()
                         .expect("scope-end must not be called with no scopes");
                   },
                   Operation::ScopePush => {
-                     stack.push(Value::from(scopes.first().expect(EXPECT_SCOPE).1.dupe()));
+                     stack.push(Value::from(
+                        scopes.tip().expect(EXPECT_SCOPE).attributes().dupe(),
+                     ));
                   },
                   Operation::ScopeSwap => {
                      let value = stack
@@ -406,10 +403,14 @@ impl Thunk {
                         continue;
                      };
 
-                     let mut scope = scopes.first().expect(EXPECT_SCOPE).dupe();
-                     mem::swap(&mut scope.1, value);
+                     let mut scope = scopes.tip().expect(EXPECT_SCOPE).attributes().dupe();
+                     mem::swap(&mut scope, value);
+                     let used_attributes = scope;
 
-                     scopes = scopes.drop_first().expect(EXPECT_SCOPE).push_front(scope);
+                     scopes = scopes
+                        .pop()
+                        .expect(EXPECT_SCOPE)
+                        .push(Scope::from(&used_attributes));
                   },
                   Operation::Interpolate => todo!(),
                   Operation::Resolve => {
@@ -421,20 +422,16 @@ impl Thunk {
                         unreachable!("resolve must be called on an identifier");
                      };
 
-                     let value = scopes
-                        .iter()
-                        .find_map(|&(_, ref scope)| scope.get(identifier))
-                        .duped()
-                        .unwrap_or_else(|| {
-                           Value::from(
-                              value::Error::new(value::SString::from(&*format!(
-                                 "undefined value: '{identifier}'",
-                                 identifier = &**identifier,
-                              )))
-                              .append_trace(code.read_operation(index).0)
-                              .arc(),
-                           )
-                        });
+                     let value = scopes.get(identifier).duped().unwrap_or_else(|| {
+                        Value::from(
+                           value::Error::new(value::SString::from(&*format!(
+                              "undefined value: '{identifier}'",
+                              identifier = &**identifier,
+                           )))
+                           .append_trace(code.read_operation(index).0)
+                           .arc(),
+                        )
+                     });
 
                      *reference = value;
                   },
@@ -493,10 +490,10 @@ impl Thunk {
 
                      stack.push(Value::from(equal));
 
-                     scopes = scopes.drop_first().expect(EXPECT_SCOPE).push_front((
-                        scopes.first().expect(EXPECT_SCOPE).0,
-                        scopes.first().expect(EXPECT_SCOPE).1.merge(&scope_new),
-                     ));
+                     scopes = scopes
+                        .pop()
+                        .expect(EXPECT_SCOPE)
+                        .push(scopes.tip().expect(EXPECT_SCOPE).merge(&scope_new));
                   },
                   Operation::All => todo!(),
                   Operation::Any => todo!(),
@@ -509,7 +506,7 @@ impl Thunk {
             };
 
             ThunkInner::Evaluated {
-               scopagate: Some((attached, scopes)),
+               scopagate: Some((attached_id, scopes)),
                value,
             }
          },
