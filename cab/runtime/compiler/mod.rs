@@ -400,11 +400,26 @@ impl<'a> Emitter<'a> {
                   match operator {
                      node::InfixOperator::ImplicitApply | node::InfixOperator::Apply => {
                         this.emit_force(left);
-                        this.emit(right);
                      },
 
                      node::InfixOperator::Pipe => {
                         this.emit_force(right);
+                     },
+
+                     _ => unreachable!(),
+                  }
+
+                  let to_end = {
+                     this.push_operation(operation.span(), Operation::JumpIfError);
+                     this.push_u16(u16::default())
+                  };
+
+                  match operator {
+                     node::InfixOperator::ImplicitApply | node::InfixOperator::Apply => {
+                        this.emit(right);
+                     },
+
+                     node::InfixOperator::Pipe => {
                         this.emit(left);
                      },
 
@@ -412,6 +427,7 @@ impl<'a> Emitter<'a> {
                   }
 
                   this.push_operation(operation.span(), Operation::Call);
+                  this.point_here(to_end);
                },
 
                node::InfixOperator::Construct => {
