@@ -32,7 +32,7 @@ const EXPECT_SCOPE: &str = "must have at least once scope";
 enum ThunkInner {
    NeedsArgumentNative {
       location: value::Location,
-      code:     Arc<dyn Fn() -> Value + Send + Sync>,
+      code:     Arc<dyn Fn(Option<Value>) -> Value + Send + Sync>,
    },
 
    NeedsArgument {
@@ -44,7 +44,7 @@ enum ThunkInner {
 
    ForceableNative {
       location: value::Location,
-      code:     Arc<dyn Fn() -> Value + Send + Sync>,
+      code:     Arc<dyn Fn(Option<Value>) -> Value + Send + Sync>,
       stack:    Option<Value>,
    },
 
@@ -76,7 +76,7 @@ impl ThunkInner {
    fn black_hole(location: value::Location) -> Self {
       ThunkInner::ForceableNative {
          location,
-         code: (|| {
+         code: (|_| {
             Value::from(
                value::Error::new(value::string::new!("infinite recursion encountered")).arc(),
             )
@@ -95,13 +95,18 @@ impl Thunk {
    #[must_use]
    #[builder(finish_fn(name = "location"))]
    pub fn needs_argument_native(
-      #[builder(start_fn)] code: impl Fn() -> Value + Send + Sync + 'static,
+      #[builder(start_fn)] code: impl Fn(Value) -> Value + Send + Sync + 'static,
       #[builder(finish_fn)] location: value::Location,
    ) -> Self {
       Self(
          RwLock::new(ThunkInner::NeedsArgumentNative {
             location,
-            code: code.arc(),
+            code: (move |argument: Option<Value>| {
+               code(argument.expect(
+                  "NeedsArgumentNative must be passed in argument when turned into ForceableNative",
+               ))
+            })
+            .arc(),
          })
          .arc(),
       )
@@ -136,7 +141,7 @@ impl Thunk {
       Self(
          RwLock::new(ThunkInner::ForceableNative {
             location,
-            code: code.arc(),
+            code: (move |_| code()).arc(),
             stack: None,
          })
          .arc(),
@@ -225,14 +230,13 @@ impl Thunk {
          ThunkInner::ForceableNative {
             location,
             code,
-            // TODO
-            stack: _argument,
+            stack: argument,
          } => {
             *self.0.write().await = ThunkInner::black_hole(location);
 
             ThunkInner::Evaluated {
                scopagate: None,
-               value:     code(),
+               value:     code(argument),
             }
          },
 

@@ -1,0 +1,5 @@
+@Unit = { @__unit__ = Unit };
+
+@None = { @__none__ = None };
+@Some = @value => { @__some__ = value };
+@Option = @value => None | Some value
