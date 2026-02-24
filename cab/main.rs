@@ -110,18 +110,23 @@ async fn main() -> cyn::Termination {
    }
 
    let thunk = value::Thunk::forceable(code.arc())
-      .scopes(List::new_sync().push_front(value::attributes::new! {
-         "foo": Value::from(value::string::new!("AAAA")),
-         "bar": Value::from(value::attributes::new! {
-            "baz": Value::Boolean(false),
-         }),
-         "true": Value::Boolean(true),
-         "false": Value::Boolean(false),
-         // "fee": Value::from(value::Thunk::forceable_native(|| {
-         //    eprintln!("[BACKGROUND PROCESS] Selling personal data to mastercard...");
-         //    Value::from(value::string::new!("Your transaction has been successful."))
-         // })),
-      }))
+      .scopes(
+         List::new_sync().push_front(
+            value::attributes::new! {
+               "foo": Value::from(value::string::new!("AAAA")),
+               "bar": Value::from(value::attributes::new! {
+                  "baz": Value::Boolean(false),
+               }),
+               "true": Value::Boolean(true),
+               "false": Value::Boolean(false),
+               // "fee": Value::from(value::Thunk::forceable_native(|| {
+               //    eprintln!("[BACKGROUND PROCESS] Selling personal data to mastercard...");
+               //    Value::from(value::string::new!("Your transaction has been successful."))
+               // })),
+            }
+            .scope(),
+         ),
+      )
       .location(value::Location::new(path, Span::at(0_u32, source.len())));
 
    thunk

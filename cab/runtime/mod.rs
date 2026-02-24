@@ -23,6 +23,8 @@ pub use compiler::{
 
 mod state;
 pub use state::{
+   Scope,
+   ScopeId,
    Scopes,
    State,
 };

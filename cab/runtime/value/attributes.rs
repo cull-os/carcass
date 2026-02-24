@@ -1,5 +1,7 @@
 #![allow(dead_code)]
 
+use std::sync::atomic;
+
 use dup::Dupe;
 use rpds::HashTrieMapSync as HashTrieMap;
 use rustc_hash::FxBuildHasher;
@@ -10,7 +12,10 @@ use ust::{
 };
 
 use super::Value;
-use crate::value;
+use crate::{
+   Scope,
+   value,
+};
 
 #[derive(Clone, Dupe)]
 pub struct Attributes(#[doc(hidden)] pub HashTrieMap<value::SString, Value, FxBuildHasher>);
@@ -100,6 +105,13 @@ impl tag::DisplayTags for Attributes {
 }
 
 impl Attributes {
+   #[must_use]
+   pub fn scope(self) -> Scope {
+      static SCOPE_ID_NEXT: atomic::AtomicU64 = atomic::AtomicU64::new(0);
+
+      (SCOPE_ID_NEXT.fetch_add(1, atomic::Ordering::Relaxed), self)
+   }
+
    #[must_use]
    pub fn insert(&self, key: value::SString, value: Value) -> Self {
       Self(self.0.insert(key, value))

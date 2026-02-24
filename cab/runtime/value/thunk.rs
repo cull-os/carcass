@@ -18,6 +18,7 @@ use tokio::sync::RwLock;
 use crate::{
    Code,
    Operation,
+   ScopeId,
    Scopes,
    State,
    Value,
@@ -37,6 +38,7 @@ enum ThunkInner {
       location: value::Location,
       code:     Arc<Code>,
       scopes:   Scopes,
+      attached: ScopeId,
    },
 
    ForceableNative {
@@ -50,10 +52,11 @@ enum ThunkInner {
       code:     Arc<Code>,
       stack:    Option<Value>,
       scopes:   Scopes,
+      attached: ScopeId,
    },
 
    Evaluated {
-      scopagate: Option<Scopes>,
+      scopagate: Option<(ScopeId, Scopes)>,
       value:     Value,
    },
 }
@@ -110,11 +113,14 @@ impl Thunk {
       #[builder(finish_fn)] location: value::Location,
       scopes: Scopes,
    ) -> Self {
+      let attached = scopes.first().expect(EXPECT_SCOPE).0;
+
       Self(
          RwLock::new(ThunkInner::NeedsArgument {
             location,
             code,
             scopes,
+            attached,
          })
          .arc(),
       )
@@ -143,12 +149,15 @@ impl Thunk {
       #[builder(finish_fn)] location: value::Location,
       scopes: Scopes,
    ) -> Self {
+      let attached = scopes.first().expect(EXPECT_SCOPE).0;
+
       Self(
          RwLock::new(ThunkInner::Forceable {
             location,
             code,
             stack: None,
             scopes,
+            attached,
          })
          .arc(),
       )
@@ -161,6 +170,7 @@ impl Thunk {
          location,
          code,
          scopes,
+         attached,
       } = inner
       else {
          return None;
@@ -172,12 +182,13 @@ impl Thunk {
             code,
             stack: Some(argument),
             scopes,
+            attached,
          })
          .arc(),
       ))
    }
 
-   pub async fn get(&self) -> (Option<Scopes>, Value) {
+   pub async fn get(&self) -> (Option<(ScopeId, Scopes)>, Value) {
       if let ThunkInner::Evaluated {
          ref scopagate,
          ref value,
@@ -229,6 +240,7 @@ impl Thunk {
             code,
             stack,
             mut scopes,
+            attached,
          } => {
             *self.0.write().await = ThunkInner::black_hole(location.dupe());
 
@@ -338,21 +350,38 @@ impl Thunk {
                         .pop()
                         .expect("force must not be called on an empty stack");
 
-                     while let Value::Thunk(ref thunk) = value
-                        && !thunk.is_whnf().await
-                     {
-                        Box::pin(thunk.force(state)).await;
+                     while let Value::Thunk(ref thunk) = value {
+                        if !thunk.is_whnf().await {
+                           Box::pin(thunk.force(state)).await;
+                           continue;
+                        }
 
-                        let (scope_new, value_new) = thunk.get().await;
+                        let (scopagate, value_new) = thunk.get().await;
 
+                        if let Some((scope_id, scopes_new)) = scopagate
+                           && scope_id == scopes.first().expect(EXPECT_SCOPE).0
+                        {
+                           let scope_current = scopes.first().expect(EXPECT_SCOPE).dupe();
+                           let scope_new = scopes_new.first().expect(EXPECT_SCOPE);
+
+                           scopes = scopes
+                              .drop_first()
+                              .expect(EXPECT_SCOPE)
+                              .push_front((scope_current.0, scope_current.1.merge(&scope_new.1)));
+                        }
+
+                        let should_break = matches!(value_new, Value::Thunk(ref thunk_new) if Arc::ptr_eq(&thunk.0, &thunk_new.0));
                         value = value_new;
-                        scopes = scope_new.unwrap_or(scopes);
+
+                        if should_break {
+                           break;
+                        }
                      }
 
                      stack.push(value);
                   },
                   Operation::ScopeStart => {
-                     scopes = scopes.push_front(value::attributes::new! {});
+                     scopes = scopes.push_front(value::attributes::new! {}.scope());
                   },
                   Operation::ScopeEnd => {
                      scopes = scopes
@@ -360,7 +389,7 @@ impl Thunk {
                         .expect("scope-end must not be called with no scopes");
                   },
                   Operation::ScopePush => {
-                     stack.push(Value::from(scopes.first().expect(EXPECT_SCOPE).dupe()));
+                     stack.push(Value::from(scopes.first().expect(EXPECT_SCOPE).1.dupe()));
                   },
                   Operation::ScopeSwap => {
                      let value = stack
@@ -378,7 +407,7 @@ impl Thunk {
                      };
 
                      let mut scope = scopes.first().expect(EXPECT_SCOPE).dupe();
-                     mem::swap(&mut scope, value);
+                     mem::swap(&mut scope.1, value);
 
                      scopes = scopes.drop_first().expect(EXPECT_SCOPE).push_front(scope);
                   },
@@ -394,7 +423,7 @@ impl Thunk {
 
                      let value = scopes
                         .iter()
-                        .find_map(|scope| scope.get(identifier))
+                        .find_map(|&(_, ref scope)| scope.get(identifier))
                         .duped()
                         .unwrap_or_else(|| {
                            Value::from(
@@ -463,10 +492,11 @@ impl Thunk {
                      let (equal, scope_new) = Value::equals(&left, &right);
 
                      stack.push(Value::from(equal));
-                     scopes = scopes
-                        .drop_first()
-                        .expect(EXPECT_SCOPE)
-                        .push_front(scopes.first().expect(EXPECT_SCOPE).merge(&scope_new));
+
+                     scopes = scopes.drop_first().expect(EXPECT_SCOPE).push_front((
+                        scopes.first().expect(EXPECT_SCOPE).0,
+                        scopes.first().expect(EXPECT_SCOPE).1.merge(&scope_new),
+                     ));
                   },
                   Operation::All => todo!(),
                   Operation::Any => todo!(),
@@ -479,7 +509,7 @@ impl Thunk {
             };
 
             ThunkInner::Evaluated {
-               scopagate: Some(scopes),
+               scopagate: Some((attached, scopes)),
                value,
             }
          },

@@ -6,7 +6,9 @@ use crate::{
    value,
 };
 
-pub type Scopes = List<value::Attributes>;
+pub type ScopeId = u64;
+pub type Scope = (ScopeId, value::Attributes);
+pub type Scopes = List<Scope>;
 
 pub struct State {
    pub parse_oracle:   ParseOracle,
