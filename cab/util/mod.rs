@@ -10,86 +10,50 @@ pub mod private {
    pub use paste::paste;
 }
 
-/// A macro to make mass redeclarations of a collection of identifiers using a
-/// single method more concise.
+/// Rebind an identifier with concise call-chain syntax.
 ///
 /// # Example
 ///
 /// ```rs
-/// // This:
-/// call!(foo; bar, qux);
-///
-/// // Gets turned into this:
-/// let bar = bar.foo();
-/// let qux = qux.foo();
+/// call!(mut foo.bar.baz());
+/// // let mut foo = foo.bar.baz();
 /// ```
 #[macro_export]
 macro_rules! call {
-   ($method:ident; $($identifier:ident),*) => {
-      $(let $identifier = $identifier.$method();)*
-   }
+   (mut $identifier:ident $($call:tt)+ $(,)?) => {
+      let mut $identifier = $identifier $($call)+;
+   };
+
+   ($identifier:ident $($call:tt)+ $(,)?) => {
+      let $identifier = $identifier $($call)+;
+   };
 }
 
-/// [`call!`], but the identifier is mutable.
-#[macro_export]
-macro_rules! call_mut {
-   ($method:ident; $($identifier:ident),*) => {
-      $(let mut $identifier = $identifier.$method();)*
-   }
+macro_rules! call_alias {
+   ([$d:tt] $name:ident => $($call:tt)+) => {
+      #[doc = concat!("Alias for `call!` with `", stringify!($($call)+), "` as the suffix, with multiple identifier support.")]
+      #[macro_export]
+      macro_rules! $name {
+         ($d(mut $d identifier:ident),* $d(,)?) => {
+            $d(let mut $d identifier = $d identifier $($call)+;)*
+         };
+
+         ($d($d identifier:ident),* $d(,)?) => {
+            $d(let $d identifier = $d identifier $($call)+;)*
+         };
+      }
+   };
+
+   ($($call:tt)+) => {
+      call_alias!([$] $($call)+);
+   };
 }
 
-/// [`call!`] but with the method set to `as_`.
-#[macro_export]
-macro_rules! as_ {
-   ($($t:tt),*) => {
-      $crate::call!(as_; $($t),*);
-   }
-}
-
-/// [`call!`] but with the method set to `as_ref`.
-#[macro_export]
-macro_rules! as_ref {
-   ($($t:tt),*) => {
-      $crate::call!(as_ref; $($t),*);
-   }
-}
-
-/// [`call_mut!`] but with the method set to `borrow_mut`.
-#[macro_export]
-macro_rules! borrow_mut {
-   ($($t:tt),*) => {
-      $crate::call_mut!(borrow_mut; $($t),*);
-   }
-}
-
-/// [`call!`] but with the method set to `clone`.
-#[macro_export]
-macro_rules! clone {
-   ($($t:tt),*) => {
-      $crate::call!(clone; $($t),*);
-   }
-}
-
-/// [`call!`] but with the method set to `into`.
-#[macro_export]
-macro_rules! into {
-   ($($t:tt),*) => {
-      $crate::call!(into; $($t),*);
-   }
-}
-
-/// [`call_mut!`] but with the method set to `into_iter`.
-#[macro_export]
-macro_rules! into_iter {
-   ($($t:tt),*) => {
-      $crate::call_mut!(into_iter; $($t),*);
-   }
-}
-
-/// [`call!`] but with the method set to `unwrap`.
-#[macro_export]
-macro_rules! unwrap {
-   ($($t:tt),*) => {
-      $crate::call!(unwrap; $($t),*);
-   }
-}
+call_alias!(collect_vec => .into_iter().collect::<Vec<_>>());
+call_alias!(as_ => .as_());
+call_alias!(as_ref => .as_ref());
+call_alias!(borrow_mut => .borrow_mut());
+call_alias!(clone => .clone());
+call_alias!(into => .into());
+call_alias!(into_iter => .into_iter());
+call_alias!(unwrap => .unwrap());
