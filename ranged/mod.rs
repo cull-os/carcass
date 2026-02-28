@@ -10,4 +10,5 @@ mod span;
 pub use span::{
    IntoSpan,
    Span,
+   Spanned,
 };

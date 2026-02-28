@@ -8,7 +8,7 @@ use derive_more::{
 use dup::Dupe;
 
 /// Byte len of a source code element.
-#[derive(Deref, DerefMut, Debug, Clone, Dupe, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Deref, DerefMut, Debug, Clone, Dupe, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Size(u32);
 
 impl Size {
@@ -108,25 +108,25 @@ pub trait IntoSize {
 
 impl IntoSize for u8 {
    fn size(&self) -> Size {
-      1_u32.into()
+      Size::from(1_u32)
    }
 }
 
 impl IntoSize for char {
    fn size(&self) -> Size {
-      self.len_utf8().into()
+      Size::from(self.len_utf8())
    }
 }
 
 impl IntoSize for str {
    fn size(&self) -> Size {
-      self.len().into()
+      Size::from(self.len())
    }
 }
 
 impl IntoSize for String {
    fn size(&self) -> Size {
-      self.len().into()
+      Size::from(self.len())
    }
 }
 
@@ -135,6 +135,6 @@ impl<I: cstree::interning::Resolver + ?Sized, S: cstree::Syntax> IntoSize
    for cstree::text::SyntaxText<'_, '_, I, S>
 {
    fn size(&self) -> Size {
-      self.len().into()
+      Size::from(self.len())
    }
 }

@@ -10,7 +10,7 @@ use dup::Dupe;
 use crate::Size;
 
 /// The span of a source code element.
-#[derive(Debug, Clone, Dupe, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Dupe, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Span {
    /// The start of the span.
    pub start: Size,
@@ -49,14 +49,14 @@ impl Span {
    pub fn std(start: impl Into<Size>, end: impl Into<Size>) -> ops::Range<usize> {
       into!(start, end);
 
-      Self { start, end }.into()
+      ops::Range::from(Self { start, end })
    }
 
    /// Turns this span into a [`ops::Range<usize>`].
    #[inline]
    #[must_use]
    pub fn into_std(self) -> ops::Range<usize> {
-      self.into()
+      ops::Range::from(self)
    }
 
    /// Creates a span that starts at the given [`Size`] and is of the given
@@ -170,44 +170,90 @@ impl From<Span> for ops::Range<u32> {
 impl From<ops::Range<u32>> for Span {
    fn from(that: ops::Range<u32>) -> Self {
       Self {
-         start: that.start.into(),
-         end:   that.end.into(),
+         start: Size::from(that.start),
+         end:   Size::from(that.end),
       }
    }
 }
 
 impl From<Span> for ops::Range<usize> {
    fn from(this: Span) -> Self {
-      this.start.into()..this.end.into()
+      usize::from(this.start)..usize::from(this.end)
    }
 }
 
 impl From<ops::Range<usize>> for Span {
    fn from(that: ops::Range<usize>) -> Self {
       Self {
-         start: that.start.into(),
-         end:   that.end.into(),
+         start: Size::from(that.start),
+         end:   Size::from(that.end),
       }
    }
 }
 
 #[cfg(feature = "cstree")]
 mod cstree_span {
-   use super::Span;
+   use super::{
+      Size,
+      Span,
+   };
 
    impl From<Span> for cstree::text::TextRange {
       fn from(this: Span) -> Self {
-         cstree::text::TextRange::new(this.start.into(), this.end.into())
+         cstree::text::TextRange::new(
+            cstree::text::TextSize::from(this.start),
+            cstree::text::TextSize::from(this.end),
+         )
       }
    }
 
    impl From<cstree::text::TextRange> for Span {
       fn from(that: cstree::text::TextRange) -> Self {
          Self {
-            start: that.start().into(),
-            end:   that.end().into(),
+            start: Size::from(that.start()),
+            end:   Size::from(that.end()),
          }
       }
+   }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Spanned<T> {
+   pub span:  Span,
+   pub value: T,
+}
+
+impl<T> Spanned<T> {
+   pub fn new(span: Span, value: T) -> Self {
+      Self { span, value }
+   }
+
+   pub fn map<U>(self, function: impl FnOnce(T) -> U) -> Spanned<U> {
+      Spanned {
+         span:  self.span,
+         value: function(self.value),
+      }
+   }
+
+   pub fn as_ref(&self) -> Spanned<&T> {
+      Spanned {
+         span:  self.span,
+         value: &self.value,
+      }
+   }
+}
+
+impl<T> ops::Deref for Spanned<T> {
+   type Target = T;
+
+   fn deref(&self) -> &Self::Target {
+      &self.value
+   }
+}
+
+impl<T> ops::DerefMut for Spanned<T> {
+   fn deref_mut(&mut self) -> &mut Self::Target {
+      &mut self.value
    }
 }
 
@@ -215,6 +261,12 @@ mod cstree_span {
 /// spans.
 pub trait IntoSpan {
    fn span(&self) -> Span;
+}
+
+impl<T> IntoSpan for Spanned<T> {
+   fn span(&self) -> Span {
+      self.span
+   }
 }
 
 #[cfg(feature = "cstree")]
@@ -226,25 +278,25 @@ mod cstree_intospan {
 
    impl<S: cstree::Syntax> IntoSpan for cstree::syntax::SyntaxToken<S> {
       fn span(&self) -> Span {
-         self.text_range().into()
+         Span::from(self.text_range())
       }
    }
 
    impl<S: cstree::Syntax> IntoSpan for cstree::syntax::ResolvedToken<S> {
       fn span(&self) -> Span {
-         self.text_range().into()
+         Span::from(self.text_range())
       }
    }
 
    impl<S: cstree::Syntax> IntoSpan for cstree::syntax::SyntaxNode<S> {
       fn span(&self) -> Span {
-         self.text_range().into()
+         Span::from(self.text_range())
       }
    }
 
    impl<S: cstree::Syntax> IntoSpan for cstree::syntax::ResolvedNode<S> {
       fn span(&self) -> Span {
-         self.text_range().into()
+         Span::from(self.text_range())
       }
    }
 
