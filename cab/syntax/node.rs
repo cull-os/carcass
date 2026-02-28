@@ -534,8 +534,8 @@ pub enum InfixOperator {
    Same,
    Sequence,
 
-   ImplicitApply,
-   Apply,
+   ImplicitCall,
+   Call,
    Pipe,
 
    Concat,
@@ -576,8 +576,8 @@ impl TryFrom<Kind> for InfixOperator {
          TOKEN_COMMA => Self::Same,
          TOKEN_SEMICOLON => Self::Sequence,
 
-         kind if kind.is_argument() => Self::ImplicitApply,
-         TOKEN_LESS_PIPE => Self::Apply,
+         kind if kind.is_argument() => Self::ImplicitCall,
+         TOKEN_LESS_PIPE => Self::Call,
          TOKEN_PIPE_MORE => Self::Pipe,
 
          TOKEN_PLUS_PLUS => Self::Concat,
@@ -620,7 +620,7 @@ impl InfixOperator {
    pub fn binding_power(self) -> (u16, u16) {
       match self {
             Self::Select => (185, 180),
-            Self::ImplicitApply => (170, 175),
+            Self::ImplicitCall => (170, 175),
 
             Self::Concat => (160, 165),
 
@@ -643,7 +643,7 @@ impl InfixOperator {
             Self::Implication => (65, 60),
 
             Self::Pipe => (50, 55),
-            Self::Apply => (55, 50),
+            Self::Call => (55, 50),
 
             Self::Lambda => (45, 40),
 
@@ -658,7 +658,7 @@ impl InfixOperator {
    /// that the operator doesn't actually "exist".
    #[must_use]
    pub fn is_token_owning(self) -> bool {
-      self != Self::ImplicitApply
+      self != Self::ImplicitCall
    }
 }
 
@@ -724,7 +724,7 @@ impl InfixOperation {
          .children_with_tokens()
          .filter_map(red::ElementRef::into_token)
          .find_map(|token| InfixOperator::try_from(token.kind()).ok())
-         .unwrap_or(InfixOperator::ImplicitApply)
+         .unwrap_or(InfixOperator::ImplicitCall)
    }
 
    pub fn validate(&self, to: &mut Vec<Report>) {
@@ -745,18 +745,18 @@ impl InfixOperation {
       }
 
       let operator = self.operator();
-      let (InfixOperator::Apply | InfixOperator::Pipe) = operator else {
+      let (InfixOperator::Call | InfixOperator::Pipe) = operator else {
          return;
       };
 
       for expression in expressions.iter().flatten() {
          if let &ExpressionRef::InfixOperation(operation) = expression
-            && let child_operator @ (InfixOperator::Apply | InfixOperator::Pipe) =
+            && let child_operator @ (InfixOperator::Call | InfixOperator::Pipe) =
                operation.operator()
             && child_operator != operator
          {
             to.push(
-               Report::error("application and pipe operators do not associate")
+               Report::error("call and pipe operators do not associate")
                   .secondary(self.span(), "this")
                   .primary(operation.span(), "does not associate with this"),
             );
