@@ -11,4 +11,5 @@ pub use span::{
    IntoSpan,
    Span,
    Spanned,
+   SpannedExt,
 };

@@ -249,6 +249,17 @@ impl<T> Spanned<T> {
    }
 }
 
+pub trait SpannedExt {
+   fn spanned(self, span: Span) -> Spanned<Self>
+   where
+      Self: Sized,
+   {
+      Spanned::new(span, self)
+   }
+}
+
+impl<T> SpannedExt for T {}
+
 /// A trait to extract [`Span`] from types that relate to source code and have
 /// spans.
 pub trait IntoSpan {
