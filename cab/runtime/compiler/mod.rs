@@ -6,6 +6,7 @@ use cab_syntax::{
    node,
 };
 use cab_util::{
+   as_ref,
    into,
    suffix::Arc as _,
    unwrap,
@@ -167,6 +168,13 @@ impl<'a> Emitter<'a> {
       self.push_u64(*index as _);
    }
 
+   fn emit_resolve(&mut self, span: Span, identifier: impl AsRef<str>) {
+      as_ref!(identifier);
+
+      self.emit_push(span, Value::Reference(value::SString::from(identifier)));
+      self.push_operation(span, Operation::Resolve);
+   }
+
    fn emit_scope(&mut self, span: Span, with: impl FnOnce(&mut Self)) {
       // self.scopes.push(Scope::new());
 
@@ -288,8 +296,7 @@ impl<'a> Emitter<'a> {
          //   a.`+` b
          this.emit_scope(span, |this| {
             this.emit_thunk(span).with(|this| {
-               this.emit_push(span, Value::Reference(value::SString::from(right)));
-               this.push_operation(span, Operation::Resolve);
+               this.emit_resolve(span, right);
             });
          });
       }));
@@ -676,8 +683,7 @@ impl<'a> Emitter<'a> {
                if is_bind {
                   this.emit_push(span, Value::Bind(value::SString::from(plain.text())));
                } else {
-                  this.emit_push(span, Value::Reference(value::SString::from(plain.text())));
-                  this.push_operation(span, Operation::Resolve);
+                  this.emit_resolve(span, plain.text());
                }
 
                LocalName::plain(plain.text())
