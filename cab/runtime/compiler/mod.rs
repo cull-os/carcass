@@ -1,9 +1,8 @@
 use std::ops;
 
 use cab_syntax::{
-   Segment,
-   Segmented as _,
    node,
+   node::Segmented as _,
 };
 use cab_util::{
    as_ref,
@@ -399,11 +398,11 @@ impl<'a> Emitter<'a> {
                   this.point_here(to_end);
                },
 
-               operator @ (node::InfixOperator::ImplicitApply
-               | node::InfixOperator::Apply
+               operator @ (node::InfixOperator::ImplicitCall
+               | node::InfixOperator::Call
                | node::InfixOperator::Pipe) => {
                   match operator {
-                     node::InfixOperator::ImplicitApply | node::InfixOperator::Apply => {
+                     node::InfixOperator::ImplicitCall | node::InfixOperator::Call => {
                         this.emit_force(left);
                      },
 
@@ -420,7 +419,7 @@ impl<'a> Emitter<'a> {
                   };
 
                   match operator {
-                     node::InfixOperator::ImplicitApply | node::InfixOperator::Apply => {
+                     node::InfixOperator::ImplicitCall | node::InfixOperator::Call => {
                         this.emit(right);
                      },
 
@@ -636,7 +635,7 @@ impl<'a> Emitter<'a> {
 
          for segment in &segments {
             match *segment {
-               Segment::Content { span, ref content } => {
+               node::Segment::Content { span, ref content } => {
                   this.emit_push(
                      span,
                      value::Path::rootless(
@@ -649,7 +648,7 @@ impl<'a> Emitter<'a> {
                   );
                },
 
-               Segment::Interpolation(interpolation) => {
+               node::Segment::Interpolation(interpolation) => {
                   this.emit_scope(interpolation.span(), |this| {
                      this.emit_force(interpolation.expression());
                   });
@@ -694,7 +693,7 @@ impl<'a> Emitter<'a> {
 
                for segment in &segments {
                   match *segment {
-                     Segment::Content { span, ref content } => {
+                     node::Segment::Content { span, ref content } => {
                         this.emit_push(
                            span,
                            if is_bind {
@@ -705,7 +704,7 @@ impl<'a> Emitter<'a> {
                         );
                      },
 
-                     Segment::Interpolation(interpolation) => {
+                     node::Segment::Interpolation(interpolation) => {
                         this.emit_scope(interpolation.span(), |this| {
                            this.emit_force(interpolation.expression());
                         });
@@ -727,9 +726,9 @@ impl<'a> Emitter<'a> {
                      .into_iter()
                      .filter_map(|segment| {
                         match segment {
-                           Segment::Content { content, .. } => Some(content),
+                           node::Segment::Content { content, .. } => Some(content),
 
-                           Segment::Interpolation(_) => None,
+                           node::Segment::Interpolation(_) => None,
                         }
                      })
                      .collect(),
@@ -771,11 +770,11 @@ impl<'a> Emitter<'a> {
 
             for segment in &segments {
                match *segment {
-                  Segment::Content { span, ref content } => {
+                  node::Segment::Content { span, ref content } => {
                      this.emit_push(span, value::SString::from(&**content));
                   },
 
-                  Segment::Interpolation(interpolation) => {
+                  node::Segment::Interpolation(interpolation) => {
                      this.emit_scope(interpolation.span(), |this| {
                         this.emit_force(interpolation.expression());
                      });

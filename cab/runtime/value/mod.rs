@@ -3,11 +3,7 @@ use std::{
    sync::Arc,
 };
 
-use cab_syntax::{
-   escape,
-   escape_string,
-   is_valid_plain_identifier,
-};
+use cab_syntax::token;
 use cab_util::suffix::Arc as _;
 use derive_more::{
    From,
@@ -104,7 +100,7 @@ impl tag::DisplayTags for Value {
          #[builder(start_fn)] normal: style::Style,
          delimiter: Option<(char, &'static str)>,
       ) {
-         for part in escape_string(s)
+         for part in token::escape_string(s)
             .normal_style(normal)
             .escaped_style(STYLE_ESCAPED)
             .maybe_delimiter(delimiter)
@@ -130,7 +126,7 @@ impl tag::DisplayTags for Value {
          Value::Bind(ref identifier) => {
             tags.write("@".style(STYLE_BIND_AT));
 
-            if is_valid_plain_identifier(identifier) {
+            if token::is_valid_plain_identifier(identifier) {
                display_tags_escaped(tags, identifier, STYLE_BIND).call();
             } else {
                tags.write("`".style(STYLE_BIND));
@@ -142,7 +138,7 @@ impl tag::DisplayTags for Value {
          },
 
          Value::Reference(ref identifier) => {
-            if is_valid_plain_identifier(identifier) {
+            if token::is_valid_plain_identifier(identifier) {
                display_tags_escaped(tags, identifier, STYLE_REFERENCE).call();
             } else {
                tags.write("`");
@@ -163,7 +159,11 @@ impl tag::DisplayTags for Value {
 
          Value::Char(char) => {
             tags.write("'".style(STYLE_CHAR));
-            match escape(char).is_first(true).delimiter(('\'', "\\'")).call() {
+            match token::escape(char)
+               .is_first(true)
+               .delimiter(('\'', "\\'"))
+               .call()
+            {
                Some(escaped) => tags.write(escaped.style(STYLE_ESCAPED)),
                None => tags.write(char.to_string().style(STYLE_CHAR)),
             }

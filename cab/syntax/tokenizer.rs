@@ -1,38 +1,16 @@
 use smallvec::SmallVec;
 
-use crate::Kind::{
-   self,
-   *,
+use crate::{
+   Kind::{
+      self,
+      *,
+   },
+   token,
 };
 
 /// Returns an iterator of tokens that reference the given string.
 pub fn tokenize(source: &str) -> impl Iterator<Item = (Kind, &str)> {
    Tokenizer::new(source)
-}
-
-/// Returns whether this identifier can be represented without quotes.
-pub fn is_valid_plain_identifier(s: &str) -> bool {
-   let mut chars = s.chars();
-
-   chars
-      .by_ref()
-      .next()
-      .is_some_and(is_valid_initial_plain_identifier_character)
-      && chars.all(is_valid_plain_identifier_character)
-}
-
-fn is_valid_initial_plain_identifier_character(c: char) -> bool {
-   let invalid = c.is_ascii_digit() || c == '-' || c == '\'';
-
-   !invalid && is_valid_plain_identifier_character(c)
-}
-
-fn is_valid_plain_identifier_character(c: char) -> bool {
-   c.is_alphanumeric() || matches!(c, '_' | '-' | '\'')
-}
-
-fn is_valid_path_character(c: char) -> bool {
-   c.is_alphanumeric() || matches!(c, '.' | '/' | '_' | '-' | '\\' | '(' | ')')
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -204,7 +182,7 @@ impl<'a> Tokenizer<'a> {
       loop {
          if self
             .peek_character()
-            .is_none_or(|c| !is_valid_path_character(c))
+            .is_none_or(|c| !token::is_valid_path_character(c))
          {
             self.context_pop(Context::Path);
             self.context_push(Context::PathEnd);
@@ -420,7 +398,7 @@ impl<'a> Tokenizer<'a> {
          '^' => TOKEN_CARET,
          '/' if self
             .peek_character()
-            .is_none_or(|c| !is_valid_path_character(c)) =>
+            .is_none_or(|c| !token::is_valid_path_character(c)) =>
          {
             TOKEN_SLASH
          },
@@ -499,14 +477,14 @@ impl<'a> Tokenizer<'a> {
          // After the `.123` literal parsing.
          '.' => TOKEN_PERIOD,
 
-         initial_letter if is_valid_initial_plain_identifier_character(initial_letter) => {
+         initial_letter if token::is_valid_initial_plain_identifier_character(initial_letter) => {
             const KEYWORDS: phf::Map<&'static str, Kind> = phf::phf_map! {
                 "if" => TOKEN_KEYWORD_IF,
                 "then" => TOKEN_KEYWORD_THEN,
                 "else" => TOKEN_KEYWORD_ELSE,
             };
 
-            self.consume_while(is_valid_plain_identifier_character);
+            self.consume_while(token::is_valid_plain_identifier_character);
 
             KEYWORDS
                .get(self.consumed_since(start))
@@ -522,7 +500,11 @@ impl<'a> Tokenizer<'a> {
             TOKEN_PATH_START
          },
          // /bar/baz.txt
-         start @ '/' if self.peek_character().is_some_and(is_valid_path_character) => {
+         start @ '/'
+            if self
+               .peek_character()
+               .is_some_and(token::is_valid_path_character) =>
+         {
             self.offset -= start.len_utf8();
             self.context_push(Context::Path);
 

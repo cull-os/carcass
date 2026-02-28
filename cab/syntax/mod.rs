@@ -24,23 +24,10 @@ pub use noder::{
    ParseOracle,
 };
 
-mod segment;
-pub use segment::{
-   Segment,
-   Segmented,
-   Segments,
-   escape,
-   escape_string,
-   unescape,
-   unescape_string,
-};
 
 pub mod token;
 mod tokenizer;
-pub use tokenizer::{
-   is_valid_plain_identifier,
-   tokenize,
-};
+pub use tokenizer::tokenize;
 
 #[expect(dead_code)]
 mod red {
