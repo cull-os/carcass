@@ -36,7 +36,7 @@ impl From<Integer> for value::Attributes {
       let mut attributes =
          value::attributes::new! { "__zero__": Value::from(value::attributes::new! {}) };
 
-      while number != 0_u32.into() {
+      while number != num::BigInt::from(0_u32) {
          attributes = value::attributes::new! { "__succ__": Value::from(attributes) };
          number -= 1_u32;
       }
