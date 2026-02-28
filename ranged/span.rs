@@ -223,10 +223,10 @@ mod cstree_span {
 
 #[derive(Deref, DerefMut, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Spanned<T> {
-   span:  Span,
+   span:      Span,
    #[deref]
    #[deref_mut]
-   value: T,
+   pub value: T,
 }
 
 impl<T> Spanned<T> {
