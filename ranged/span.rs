@@ -5,6 +5,10 @@ use std::{
 };
 
 use cab_util::into;
+use derive_more::{
+   Deref,
+   DerefMut,
+};
 use dup::Dupe;
 
 use crate::Size;
@@ -217,10 +221,12 @@ mod cstree_span {
    }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Deref, DerefMut, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Spanned<T> {
-   pub span:  Span,
-   pub value: T,
+   span:  Span,
+   #[deref]
+   #[deref_mut]
+   value: T,
 }
 
 impl<T> Spanned<T> {
@@ -240,20 +246,6 @@ impl<T> Spanned<T> {
          span:  self.span,
          value: &self.value,
       }
-   }
-}
-
-impl<T> ops::Deref for Spanned<T> {
-   type Target = T;
-
-   fn deref(&self) -> &Self::Target {
-      &self.value
-   }
-}
-
-impl<T> ops::DerefMut for Spanned<T> {
-   fn deref_mut(&mut self) -> &mut Self::Target {
-      &mut self.value
    }
 }
 

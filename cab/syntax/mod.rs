@@ -12,6 +12,7 @@
 
 use std::ops;
 
+use derive_more::Display;
 use enumset::{
    EnumSet,
    enum_set,
@@ -78,15 +79,7 @@ mod green {
 
 /// The syntax kind.
 #[derive(
-   derive_more::Display,
-   Debug,
-   Clone,
-   Copy,
-   PartialEq,
-   Eq,
-   Hash,
-   enumset::EnumSetType,
-   cstree::Syntax,
+   Display, Debug, Clone, Copy, PartialEq, Eq, Hash, enumset::EnumSetType, cstree::Syntax,
 )]
 #[repr(u32)]
 #[enumset(no_super_impls)]
