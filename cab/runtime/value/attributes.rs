@@ -71,7 +71,7 @@ impl tag::DisplayTags for Attributes {
             let mut entries = entries.into_iter().peekable();
             while let Some((name, value)) = entries.next() {
                tags.write("@".style(value::STYLE_BIND_AT));
-               tags.write((**name).style(value::STYLE_BIND));
+               tags.write((***name).style(value::STYLE_BIND));
                tags.write(Space);
                tags.write("=".style(value::STYLE_PUNCTUATION));
                tags.write(Space);

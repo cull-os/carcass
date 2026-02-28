@@ -107,7 +107,7 @@ impl tag::DisplayTags for Path {
 
       for part in &self.subpath {
          tags.write(const_str::concat!(SEPARATOR).yellow());
-         tags.write((**part).yellow());
+         tags.write((***part).yellow());
       }
    }
 }

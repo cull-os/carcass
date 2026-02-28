@@ -1,8 +1,7 @@
-use std::ops;
-
+use derive_more::Deref;
 use dup::Dupe;
 
-#[derive(Clone, Dupe, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Deref, Clone, Dupe, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[expect(clippy::module_name_repetitions)]
 pub struct SString(#[doc(hidden)] pub arcstr::Substr);
 
@@ -24,13 +23,5 @@ pub use crate::__string_new as new;
 impl From<&str> for SString {
    fn from(s: &str) -> Self {
       Self(arcstr::Substr::from(s))
-   }
-}
-
-impl ops::Deref for SString {
-   type Target = str;
-
-   fn deref(&self) -> &Self::Target {
-      &self.0
    }
 }

@@ -60,11 +60,11 @@ fn to_pathbuf(subpath: &Subpath) -> Result<PathBuf> {
       let drive = drive.to_ascii_uppercase();
 
       iter::once(&*format!("{drive}:\\"))
-         .chain(parts.map(|arc| &**arc))
+         .chain(parts.map(|arc| &***arc))
          .collect::<PathBuf>()
    } else {
       iter::once("/")
-         .chain(subpath.iter().map(|arc| &**arc))
+         .chain(subpath.iter().map(|arc| &***arc))
          .collect::<PathBuf>()
    })
 }
