@@ -101,7 +101,10 @@ impl ParseOracle {
    }
 
    pub fn parse<'a>(&self, tokens: impl Iterator<Item = (Kind, &'a str)>) -> Parse {
-      let mut noder = Noder::with_interner_and_tokens(self.cache.interner().dupe(), tokens);
+      let mut noder = Noder::builder()
+         .interner(self.cache.interner().dupe())
+         .tokens(tokens)
+         .build();
 
       noder.node(NODE_PARSE_ROOT).with(|this| {
          this.node_expression(EnumSet::empty());
@@ -205,7 +208,8 @@ struct Noder<'a, I: Iterator<Item = (Kind, &'a str)>> {
 
 #[bon::bon]
 impl<'a, I: Iterator<Item = (Kind, &'a str)>> Noder<'a, I> {
-   fn with_interner_and_tokens(interner: green::Interner, tokens: I) -> Self {
+   #[builder]
+   fn new(interner: green::Interner, tokens: I) -> Self {
       Self {
          builder: green::NodeBuilder::from_interner(interner),
 
