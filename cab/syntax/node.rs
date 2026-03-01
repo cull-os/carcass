@@ -7,25 +7,16 @@ use std::{
    ptr,
 };
 
-use cab_util::{
-   force,
-   lazy,
-   read,
-   ready,
-   reffed,
-};
+use cab_util::reffed;
 use derive_more::Deref;
 use dup::Dupe;
 use paste::paste;
-use ranged::{
-   IntoSpan as _,
-   Span,
-};
 pub use segment::{
    Segment,
    Segmented,
+   Segments,
+   Straight,
 };
-use ust::report::Report;
 
 use crate::{
    Kind::{
@@ -277,28 +268,6 @@ node! {
 }
 
 impl<'a> ExpressionRef<'a> {
-   #[stacksafe::stacksafe]
-   pub fn validate(self, to: &mut Vec<Report>) {
-      match self {
-         Self::Parenthesis(parenthesis) => parenthesis.validate(to),
-         Self::List(list) => list.validate(to),
-         Self::Attributes(attributes) => attributes.validate(to),
-         Self::PrefixOperation(operation) => operation.validate(to),
-         Self::InfixOperation(operation) => operation.validate(to),
-         Self::SuffixOperation(operation) => operation.validate(to),
-         Self::Path(path) => path.validate(to),
-         Self::Bind(bind) => bind.validate(to),
-         Self::Identifier(identifier) => identifier.validate(to),
-         Self::SString(string) => string.validate(to),
-         Self::Char(char) => char.validate(to),
-         Self::Integer(integer) => integer.validate(to),
-         Self::Float(float) => float.validate(to),
-         Self::If(if_else) => if_else.validate(to),
-
-         Self::Error(_) => {},
-      }
-   }
-
    /// Iterates over all subexpressions delimited with the same operator.
    pub fn same_items(self) -> impl Iterator<Item = ExpressionRef<'a>> {
       gen move {
@@ -346,31 +315,6 @@ impl Parenthesis {
    get_node! { expression -> Option<ExpressionRef<'_>> }
 
    get_token! { token_parenthesis_right -> Option<TOKEN_PARENTHESIS_RIGHT> }
-
-   pub fn validate(&self, to: &mut Vec<Report>) {
-      match self.expression() {
-         Some(expression) => {
-            expression.validate(to);
-         },
-
-         None => {
-            to.push(
-               Report::error("parenthesis without inner expression").primary(
-                  Span::empty(self.token_parenthesis_left().span().end),
-                  "expected an expression here",
-               ),
-            );
-         },
-      }
-
-      if self.token_parenthesis_right().is_none() {
-         to.push(
-            Report::error("unclosed parenthesis")
-               .primary(Span::empty(self.span().end), "expected ')' here")
-               .secondary(self.token_parenthesis_left().span(), "unclosed '(' here"),
-         );
-      }
-   }
 }
 
 // LIST
@@ -395,29 +339,6 @@ impl List {
          .into_iter()
          .flat_map(ExpressionRef::same_items)
    }
-
-   pub fn validate(&self, to: &mut Vec<Report>) {
-      if let Some(ExpressionRef::InfixOperation(operation)) = self.expression()
-         && operation.operator() == InfixOperator::Sequence
-      {
-         to.push(
-            Report::error("inner expression of list cannot be sequence")
-               .primary(operation.span(), "consider parenthesizing this"),
-         );
-      }
-
-      for item in self.items() {
-         item.validate(to);
-      }
-
-      if self.token_bracket_right().is_none() {
-         to.push(
-            Report::error("unclosed list")
-               .primary(Span::empty(self.span().end), "expected ']' here")
-               .secondary(self.token_bracket_left().span(), "unclosed '[' here"),
-         );
-      }
-   }
 }
 
 // ATTRIBUTES
@@ -434,18 +355,6 @@ impl Attributes {
    get_node! { expression -> Option<ExpressionRef<'_>> }
 
    get_token! { token_curlybrace_right -> Option<TOKEN_CURLYBRACE_RIGHT> }
-
-   pub fn validate(&self, to: &mut Vec<Report>) {
-      // TODO: Warn for non-binding children.
-
-      if self.token_curlybrace_right().is_none() {
-         to.push(
-            Report::error("unclosed attributes")
-               .primary(Span::empty(self.span().end), "expected '}' here")
-               .secondary(self.token_curlybrace_left().span(), "unclosed '{' here"),
-         );
-      }
-   }
 }
 
 // PREFIX OPERATION
@@ -510,19 +419,6 @@ impl PrefixOperation {
          .filter_map(red::ElementRef::into_token)
          .find_map(|token| PrefixOperator::try_from(token.kind()).ok())
          .unwrap()
-   }
-
-   pub fn validate(&self, to: &mut Vec<Report>) {
-      if let Some(right) = self.right() {
-         right.validate(to);
-      } else {
-         // TODO: Temporary.
-         to.push(
-            Report::error("curried prefix functions aren't supported yet")
-               .primary(self.span(), "unsupported")
-               .tip("create a lambda instead"),
-         );
-      }
    }
 }
 
@@ -726,43 +622,6 @@ impl InfixOperation {
          .find_map(|token| InfixOperator::try_from(token.kind()).ok())
          .unwrap_or(InfixOperator::ImplicitCall)
    }
-
-   pub fn validate(&self, to: &mut Vec<Report>) {
-      let expressions = [self.left(), self.right()];
-
-      // TODO: Temporary.
-      if expressions.iter().any(Option::is_none) {
-         to.push(
-            Report::error("curried infix functions aren't supported yet")
-               .primary(self.span(), "unsupported")
-               .tip("create a lambda instead"),
-         );
-         return;
-      }
-
-      for expression in expressions.iter().flatten() {
-         expression.validate(to);
-      }
-
-      let operator = self.operator();
-      let (InfixOperator::Call | InfixOperator::Pipe) = operator else {
-         return;
-      };
-
-      for expression in expressions.iter().flatten() {
-         if let &ExpressionRef::InfixOperation(operation) = expression
-            && let child_operator @ (InfixOperator::Call | InfixOperator::Pipe) =
-               operation.operator()
-            && child_operator != operator
-         {
-            to.push(
-               Report::error("call and pipe operators do not associate")
-                  .secondary(self.span(), "this")
-                  .primary(operation.span(), "does not associate with this"),
-            );
-         }
-      }
-   }
 }
 
 // SUFFIX OPERATION
@@ -816,12 +675,6 @@ impl SuffixOperation {
          .find_map(|token| SuffixOperator::try_from(token.kind()).ok())
          .unwrap()
    }
-
-   pub fn validate(&self, to: &mut Vec<Report>) {
-      if let Some(left) = self.left() {
-         left.validate(to);
-      }
-   }
 }
 
 // INTERPOLATION
@@ -850,28 +703,7 @@ node! {
 
 impl Segmented for Path {}
 
-impl Path {
-   pub fn validate(&self, to: &mut Vec<Report>) {
-      // No `validate_closing` here because paths are always closed.
-      // It has no visible closing delimiter.
-
-      let mut report = lazy!(Report::error("invalid path"));
-
-      let segments = self.segments();
-      segments.validate(to, &mut report);
-
-      // Only assert if the report wasn't initialized, because
-      // /etc/ssl\<newline-here> actually gets parsed as a
-      // multiline segment. And when that happens report is ready.
-      if !ready!(report) {
-         assert!(!segments.is_multiline);
-      }
-
-      if let Some(report) = read!(report) {
-         to.push(report);
-      }
-   }
-}
+impl Path {}
 
 // BIND
 
@@ -894,22 +726,6 @@ impl Bind {
 
       identifier
    }
-
-   pub fn validate(&self, to: &mut Vec<Report>) {
-      let identifier = self.expression();
-
-      if let ExpressionRef::Identifier(identifier) = identifier {
-         identifier.validate(to);
-      } else if identifier.kind() != NODE_ERROR {
-         to.push(Report::error("invalid bind").primary(
-            identifier.span(),
-            format!(
-               "expected an identifier, not {kind}",
-               kind = identifier.kind()
-            ),
-         ));
-      }
-   }
 }
 
 // IDENTIFIER
@@ -921,30 +737,6 @@ node! {
 }
 
 impl Segmented for IdentifierQuoted {}
-
-impl IdentifierQuoted {
-   pub fn validate(&self, to: &mut Vec<Report>) {
-      let to_len = to.len();
-      self.validate_closing(to, TOKEN_QUOTED_IDENTIFIER_END, "quoted identifier");
-      if to_len != to.len() {
-         return;
-      }
-
-      let mut report = lazy!(Report::error("invalid quoted identifier"));
-
-      let segments = self.segments();
-      segments.validate(to, &mut report);
-
-      if segments.is_multiline {
-         force!(report).push_primary(self.span(), "here");
-         force!(report).push_tip("quoted identifiers cannot contain newlines");
-      }
-
-      if let Some(report) = read!(report) {
-         to.push(report);
-      }
-   }
-}
 
 reffed! {
    /// An identifier value.
@@ -998,12 +790,6 @@ impl Identifier {
 
       unreachable!("identifier node must contain an identifier token or quoted identifier")
    }
-
-   pub fn validate(&self, to: &mut Vec<Report>) {
-      if let IdentifierValueRef::Quoted(quoted) = self.value() {
-         quoted.validate(to);
-      }
-   }
 }
 
 // STRING
@@ -1015,25 +801,6 @@ node! {
 }
 
 impl Segmented for SString {}
-
-impl SString {
-   pub fn validate(&self, to: &mut Vec<Report>) {
-      let to_len = to.len();
-      self.validate_closing(to, TOKEN_STRING_END, "string");
-      if to_len != to.len() {
-         return;
-      }
-
-      let mut report = lazy!(Report::error("invalid string"));
-
-      let segments = self.segments();
-      segments.validate(to, &mut report);
-
-      if let Some(report) = read!(report) {
-         to.push(report);
-      }
-   }
-}
 
 // CHAR
 
@@ -1054,49 +821,6 @@ impl Char {
 
       content.chars().next().unwrap()
    }
-
-   pub fn validate(&self, to: &mut Vec<Report>) {
-      let to_len = to.len();
-      self.validate_closing(to, TOKEN_CHAR_END, "char");
-      if to_len != to.len() {
-         return;
-      }
-
-      let mut report = lazy!(Report::error("invalid char"));
-
-      let segments = self.segments();
-      segments.validate(to, &mut report);
-
-      if segments.is_multiline {
-         force!(report).push_primary(self.span(), "chars cannot cannot contain newlines");
-      }
-
-      if !ready!(report) {
-         let mut got: usize = 0;
-         for segment in segments {
-            match segment {
-               Segment::Content { content, .. } => {
-                  got += content.chars().count();
-               },
-
-               Segment::Interpolation(interpolation) => {
-                  force!(report)
-                     .push_primary(interpolation.span(), "chars cannot contain interpolation");
-               },
-            }
-         }
-
-         match got {
-            0 => force!(report).push_primary(self.span(), "empty char"),
-            1 => {},
-            _ => force!(report).push_primary(self.span(), "too long"),
-         }
-      }
-
-      if let Some(report) = read!(report) {
-         to.push(report);
-      }
-   }
 }
 
 // INTEGER
@@ -1114,14 +838,6 @@ impl Integer {
    pub fn value(&self) -> num::BigInt {
       self.token_integer().value().expect("integer must be valid")
    }
-
-   pub fn validate(&self, to: &mut Vec<Report>) {
-      if self.token_integer().value().is_err() {
-         to.push(
-            Report::error("invalid integer").primary(self.span(), "why do you even need this?"),
-         );
-      }
-   }
 }
 
 // FLOAT
@@ -1138,12 +854,6 @@ impl Float {
    #[must_use]
    pub fn value(&self) -> f64 {
       self.token_float().value().expect("float must be valid")
-   }
-
-   pub fn validate(&self, to: &mut Vec<Report>) {
-      if self.token_float().value().is_err() {
-         to.push(Report::error("invalid float").primary(self.span(), "usecase?"));
-      }
    }
 }
 
@@ -1167,12 +877,6 @@ impl If {
    get_token! { token_else -> Option<TOKEN_KEYWORD_ELSE> }
 
    get_node! { alternative -> 2 @ ExpressionRef<'_> }
-
-   pub fn validate(&self, to: &mut Vec<Report>) {
-      self.condition().validate(to);
-      self.consequence().validate(to);
-      self.alternative().validate(to);
-   }
 }
 
 mod segment {
@@ -1189,21 +893,15 @@ mod segment {
       ops,
    };
 
-   use cab_util::{
-      Lazy,
-      force_ref,
-      reffed,
-   };
+   use cab_util::reffed;
    use ranged::{
       IntoSize as _,
       IntoSpan as _,
       Span,
    };
    use smallvec::SmallVec;
-   use ust::report::Report;
 
    use crate::{
-      Kind,
       node,
       red,
       token,
@@ -1286,7 +984,7 @@ mod segment {
    }
 
    #[derive(Debug, Clone, PartialEq, Eq)]
-   enum Straight<'a> {
+   pub enum Straight<'a> {
       Line {
          span: Span,
          text: &'a str,
@@ -1303,14 +1001,14 @@ mod segment {
 
    #[derive(Debug, Clone, PartialEq, Eq)]
    pub struct Segments<'a> {
-      span: Span,
+      pub span: Span,
 
       pub is_multiline: bool,
 
-      line_span_first: Option<Span>,
-      line_span_last:  Option<Span>,
+      pub line_span_first: Option<Span>,
+      pub line_span_last:  Option<Span>,
 
-      straights: SmallVec<Straight<'a>, 4>,
+      pub straights: SmallVec<Straight<'a>, 4>,
    }
 
    impl<'a> IntoIterator for Segments<'a> {
@@ -1420,7 +1118,7 @@ mod segment {
    }
 
    impl Segments<'_> {
-      fn indent(&self) -> Result<(Option<char>, usize), SmallVec<char, 4>> {
+      pub fn indent(&self) -> Result<(Option<char>, usize), SmallVec<char, 4>> {
          let mut indents = SmallVec::<char, 4>::new();
          let mut indent_width = None::<usize>;
 
@@ -1465,55 +1163,6 @@ mod segment {
          }
 
          Ok((indents.first().copied(), indent_width.unwrap_or(0)))
-      }
-
-      pub fn validate(&self, to: &mut Vec<Report>, report: &mut Lazy!(Report)) {
-         for straight in &self.straights {
-            match *straight {
-               Straight::Line { span, text, .. } => {
-                  if let Err(invalids) = token::unescape_string(text) {
-                     for invalid in invalids {
-                        force_ref!(report)
-                           .push_primary(invalid.offset(span.start), "invalid escape");
-                     }
-                  }
-               },
-
-               Straight::Interpolation(interpolation) => interpolation.expression().validate(to),
-            }
-         }
-
-         if let Err(indents) = self.indent() {
-            force_ref!(report).push_primary(
-               self.span,
-               format!(
-                  "cannot mix different kinds of space in indents: {indents}",
-                  indents = indents
-                     .into_iter()
-                     .map(|c| {
-                        match token::escape(c)
-                           .is_first(true)
-                           .delimiter(('\'', "\\'"))
-                           .call()
-                        {
-                           Some(escaped) => escaped.to_owned(),
-                           None => format!("'{c}'"),
-                        }
-                     })
-                     .intersperse(", ".to_owned())
-                     .collect::<String>(),
-               ),
-            );
-         }
-
-         if self.is_multiline {
-            for span in [self.line_span_first, self.line_span_last]
-               .into_iter()
-               .flatten()
-            {
-               force_ref!(report).push_primary(span, "first and last lines must be empty");
-            }
-         }
       }
    }
 
@@ -1665,27 +1314,6 @@ mod segment {
          let mut segments = self.segments().into_iter().peekable();
 
          segments.next().is_some_and(|segment| segment.is_content()) && segments.peek().is_none()
-      }
-
-      fn validate_closing(&self, to: &mut Vec<Report>, end: Kind, type_: &str) {
-         if self
-            .children_with_tokens()
-            .last()
-            .is_some_and(|token| token.kind() == end)
-         {
-            return;
-         }
-
-         let start = self
-            .children_with_tokens()
-            .next()
-            .expect("delimited must have tokens");
-
-         to.push(
-            Report::error(format!("unclosed {type_}"))
-               .secondary(start.span(), format!("{type_} starts here"))
-               .primary(Span::empty(self.span().end), format!("expected {end} here")),
-         );
       }
    }
 }

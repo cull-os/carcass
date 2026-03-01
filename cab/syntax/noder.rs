@@ -139,8 +139,6 @@ impl ParseOracle {
          }
       });
 
-      expression.validate(&mut noder.reports);
-
       Parse {
          expression: expression.to_owned(),
          node,

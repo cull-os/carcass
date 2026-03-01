@@ -29,5 +29,6 @@ num.workspace         = true
 paste.workspace       = true
 peekmore.workspace    = true
 phf.workspace         = true
+slotmap.workspace     = true
 smallvec.workspace    = true
 stacksafe.workspace   = true

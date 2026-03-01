@@ -831,10 +831,15 @@ impl<'a> Emitter<'a> {
       match expression {
          node::ExpressionRef::Error(_) => unreachable!("{EXPECT_VALID}"),
 
-         node::ExpressionRef::Parenthesis(parenthesis) => self.emit_parenthesis(parenthesis),
-
-         node::ExpressionRef::List(list) => self.emit_list(list),
-         node::ExpressionRef::Attributes(attributes) => self.emit_attributes(attributes),
+         node::ExpressionRef::Parenthesis(parenthesis) => {
+            self.emit_parenthesis(parenthesis);
+         },
+         node::ExpressionRef::List(list) => {
+            self.emit_list(list);
+         },
+         node::ExpressionRef::Attributes(attributes) => {
+            self.emit_attributes(attributes);
+         },
 
          node::ExpressionRef::PrefixOperation(prefix_operation) => {
             self.emit_prefix_operation(prefix_operation);
@@ -846,7 +851,9 @@ impl<'a> Emitter<'a> {
             self.emit_suffix_operation(suffix_operation);
          },
 
-         node::ExpressionRef::Path(path) => self.emit_path(path),
+         node::ExpressionRef::Path(path) => {
+            self.emit_path(path);
+         },
 
          node::ExpressionRef::Bind(bind) => {
             self
@@ -870,7 +877,9 @@ impl<'a> Emitter<'a> {
             self.emit_push(float.span(), float.value());
          },
 
-         node::ExpressionRef::If(if_) => self.emit_if(if_),
+         node::ExpressionRef::If(if_) => {
+            self.emit_if(if_);
+         },
       }
    }
 

@@ -158,6 +158,7 @@ rpds                 = "1.1.1"
 rustc-hash           = "2.1.1"
 serde                = { features = [ "derive" ], version = "1.0.219" }
 smallvec             = "2.0.0-alpha.10"
+slotmap              = "1.0.7"
 stacksafe            = "1.0.0"
 syn                  = "2.0.104"
 terminal_size        = "0.4.1"
