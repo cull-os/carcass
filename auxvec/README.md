@@ -45,7 +45,7 @@ However, this crate uses `auxvec::VectorKey::<type-here>` instead and doesn't
 define the enumerations using the C naming style. `AT_PAGESZ` vs
 `auxvec::VectorKey::PageSize`, for example.
 
-TODO: write rest of the README and finish documenting `mod.rs`.
+TODO: write rest of the README.
 
 More reading on the auxiliary vector:
 

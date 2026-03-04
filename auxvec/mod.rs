@@ -1,7 +1,16 @@
-#![cfg_attr(doc, doc = include_str!("README.md"))]
+#![doc = include_str!("README.md")]
 #![no_std]
 #![feature(impl_trait_in_assoc_type, gen_blocks)]
-#![expect(clippy::undocumented_unsafe_blocks)]
+#![expect(
+   clippy::undocumented_unsafe_blocks,
+   reason = "all unsafe code is already explained and repeating everything for each unsafe block \
+             is a waste of time"
+)]
+#![expect(
+   clippy::doc_include_without_cfg,
+   reason = "must include all the time to make the warning below stop"
+)]
+#![warn(missing_docs)]
 
 use core::{
    marker,
@@ -10,9 +19,17 @@ use core::{
 
 use derive_more::Display;
 
+/// A decoded auxiliary vector entry.
+///
+/// The key is converted to [`VectorKey`] when recognized, or left as its raw
+/// numeric representation in `Err` when unknown.
 pub type VectorEntry = (Result<VectorKey, usize>, usize);
+/// A raw auxiliary vector entry represented as `(key, value)`.
 pub type VectorEntryRaw = (usize, usize);
 
+/// Known keys used in an ELF auxiliary vector (`auxv`).
+///
+/// Variants map to Linux `AT_*` constants and preserve their numeric values.
 #[derive(Debug, Display, Clone, Copy, PartialEq, Eq, num_enum::TryFromPrimitive)]
 #[repr(usize)]
 pub enum VectorKey {
@@ -344,6 +361,10 @@ pub enum VectorKey {
    SignalStackSizeMinimum                   = 51,
 }
 
+/// A borrowed view over an auxiliary vector in process memory.
+///
+/// The vector is represented as consecutive `(key, value)` pairs ending at an
+/// entry with [`VectorKey::End`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Vector<'elf> {
    start:    *mut (usize, usize),
