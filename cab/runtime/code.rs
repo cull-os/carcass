@@ -223,8 +223,8 @@ impl Display for Code {
                               // TODO: This isn't indented as our indenter:
                               //
                               // 1. Doesn't support dynamic indent widths. This is easily fixed by
-                              //    storing an indent (like std::iter::continuations) and measuring
-                              //    the length in IndentWrite::width.
+                              //    storing an indent (like iter::continuations) and measuring the
+                              //    length in IndentWrite::width.
                               //
                               // 2. Doesn't support specifying `Place`.
                               //

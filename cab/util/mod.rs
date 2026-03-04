@@ -1,22 +1,36 @@
-//! Miscellaneous utilities.
+//! Miscellneous utilities.
+
+#![warn(missing_docs)]
 
 mod lazy;
 mod reffed;
 
 pub mod suffix;
 
+/// Internal re-exports used by crate macros.
 #[doc(hidden)]
 pub mod private {
    pub use paste::paste;
 }
 
-/// Rebind an identifier with concise call-chain syntax.
+/// Rebinds an identifier to a transformed value using method-call syntax.
+///
+/// This macro lets you write `let <name> = <name>.<chain>();` in a compact
+/// form that starts from the identifier. It is useful when repeatedly
+/// rebinding a value through a short transformation pipeline.
 ///
 /// # Example
 ///
 /// ```rs
-/// call!(mut foo.bar.baz());
-/// // let mut foo = foo.bar.baz();
+/// # use cab_util::call;
+/// let values = vec![1_u8, 2, 3];
+/// call!(values.into_iter().map(u16::from).collect::<Vec<_>>());
+/// assert_eq!(values, vec![1_u16, 2, 3]);
+///
+/// let words = vec!["cab", "util"];
+/// call!(mut words.into_iter().map(str::to_uppercase).collect::<Vec<_>>());
+/// words.push(String::from("DONE"));
+/// assert_eq!(words.last(), Some(&String::from("DONE")));
 /// ```
 #[macro_export]
 macro_rules! call {
@@ -31,7 +45,11 @@ macro_rules! call {
 
 macro_rules! call_alias {
    ([$d:tt] $name:ident => $($call:tt)+) => {
-      #[doc = concat!("Alias for `call!` with `", stringify!($($call)+), "` as the suffix, with multiple identifier support.")]
+      #[doc = concat!(
+         "Alias for [`call!`] that appends `",
+         stringify!($($call)+),
+         "`. Supports comma-separated identifiers and optional `mut`."
+      )]
       #[macro_export]
       macro_rules! $name {
          ($d(mut $d identifier:ident),* $d(,)?) => {

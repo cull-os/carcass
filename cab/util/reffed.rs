@@ -1,3 +1,33 @@
+//! Macro helpers for paired owned/reference enums.
+
+/// Declares an enum and an associated borrowed enum generated as `<Name>Ref`.
+///
+/// The macro generates:
+/// - the owned enum exactly as declared,
+/// - a borrowed companion enum where each payload is `&'a T`,
+/// - `as_ref(&self) -> <Name>Ref<'_>` on the owned enum,
+/// - `to_owned(self) -> <Name>` on the borrowed enum.
+///
+/// `to_owned` clones each payload, so every variant payload type must implement
+/// [`Clone`] for that method to compile.
+///
+/// # Example
+///
+/// ```rs
+/// # use cab_util::reffed;
+/// reffed! {
+///    #[derive(Clone)]
+///    pub enum Token {
+///       Word(String),
+///       Number(u32),
+///    }
+/// }
+///
+/// let token = Token::Word(String::from("doodoo"));
+/// let token_ref = token.as_ref();
+/// assert!(matches!(token_ref, TokenRef::Word(_)));
+/// assert!(matches!(token_ref.to_owned(), Token::Word(_)));
+/// ```
 #[macro_export]
 macro_rules! reffed {
    (

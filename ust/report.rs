@@ -333,6 +333,8 @@ impl Report {
 
 #[cfg(test)]
 mod tests {
+   use std::ops;
+
    use super::*;
 
    #[test]
@@ -345,7 +347,7 @@ mod tests {
             $range:expr =>
             $slice:literal,($start_line:literal : $start_column:literal),($end_line:literal : $end_column:literal)
          ) => {
-            let range: std::ops::Range<usize> = $range;
+            let range: ops::Range<usize> = $range;
 
             assert_eq!(&source[range.clone()], $slice);
 
