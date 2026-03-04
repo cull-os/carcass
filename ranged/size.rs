@@ -12,7 +12,7 @@ use dup::Dupe;
 pub struct Size(u32);
 
 impl Size {
-   // Creates a new [`Size`].
+   /// Creates a new [`Size`].
    #[inline]
    pub fn new(size: impl Into<Size>) -> Self {
       into!(size);
@@ -103,6 +103,7 @@ impl From<cstree::text::TextSize> for Size {
 /// A trait to extract [`Size`] from types that relate to source code and have
 /// sizes.
 pub trait IntoSize {
+   /// Returns the size represented by this value.
    fn size(&self) -> Size;
 }
 

@@ -457,7 +457,14 @@ impl Loder {
 
             lode::Select {
                scope:      equal,
-               expression: self.refence("!".spanned(operation.operator_token().unwrap().span())),
+               expression: self.refence(
+                  "!".spanned(
+                     operation
+                        .operator_token()
+                        .expect("operator token must exist")
+                        .span(),
+                  ),
+               ),
             }
             .into()
          },
@@ -465,7 +472,14 @@ impl Loder {
          node::InfixOperator::And => lode::And { left, right }.into(),
          node::InfixOperator::Or => lode::Or { left, right }.into(),
          node::InfixOperator::Implication => {
-            let attribute = self.refence("!".spanned(operation.operator_token().unwrap().span()));
+            let attribute = self.refence(
+               "!".spanned(
+                  operation
+                     .operator_token()
+                     .expect("operator token must exist")
+                     .span(),
+               ),
+            );
 
             let left = self.insert(
                lode::Select {
@@ -516,7 +530,12 @@ impl Loder {
 
                   _ => unreachable!(),
                }
-               .spanned(operation.operator_token().unwrap().span()),
+               .spanned(
+                  operation
+                     .operator_token()
+                     .expect("operator token must exist")
+                     .span(),
+               ),
             );
 
             let method = self.insert(
@@ -740,7 +759,10 @@ impl Loder {
          return self.throw("invalid char".spanned(char.span()));
       }
 
-      char.value().into()
+      char
+         .value()
+         .expect("char was validated and has first character")
+         .into()
    }
 
    fn lode_integer(&mut self, integer: &node::Integer) -> lode::ExpressionRaw {

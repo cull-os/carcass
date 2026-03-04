@@ -221,19 +221,26 @@ mod cstree_span {
    }
 }
 
+/// A value paired with the [`Span`] where it originated.
+///
+/// This is useful for carrying source locations through parsing, analysis, and
+/// diagnostics.
 #[derive(Deref, DerefMut, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Spanned<T> {
    span:      Span,
    #[deref]
    #[deref_mut]
+   /// The wrapped value.
    pub value: T,
 }
 
 impl<T> Spanned<T> {
+   /// Creates a new [`Spanned`].
    pub fn new(span: Span, value: T) -> Self {
       Self { span, value }
    }
 
+   /// Maps the wrapped value while preserving its original span.
    pub fn map<U>(self, function: impl FnOnce(T) -> U) -> Spanned<U> {
       Spanned {
          span:  self.span,
@@ -241,6 +248,7 @@ impl<T> Spanned<T> {
       }
    }
 
+   /// Borrows the wrapped value while preserving the same span.
    pub fn as_ref(&self) -> Spanned<&T> {
       Spanned {
          span:  self.span,
@@ -249,7 +257,9 @@ impl<T> Spanned<T> {
    }
 }
 
+/// Extension trait for attaching a [`Span`] to any value.
 pub trait SpannedExt {
+   /// Wraps `self` in [`Spanned`] with the provided span.
    fn spanned(self, span: Span) -> Spanned<Self>
    where
       Self: Sized,
@@ -263,6 +273,7 @@ impl<T> SpannedExt for T {}
 /// A trait to extract [`Span`] from types that relate to source code and have
 /// spans.
 pub trait IntoSpan {
+   /// Returns the source span represented by this value.
    fn span(&self) -> Span;
 }
 

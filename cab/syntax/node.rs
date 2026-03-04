@@ -409,7 +409,7 @@ impl PrefixOperation {
          .children_with_tokens()
          .filter_map(red::ElementRef::into_token)
          .find(|token| PrefixOperator::try_from(token.kind()).is_ok())
-         .unwrap()
+         .expect("operator-less prefix operation cannot exist")
    }
 
    /// Returns the operator of this operation.
@@ -418,7 +418,7 @@ impl PrefixOperation {
          .children_with_tokens()
          .filter_map(red::ElementRef::into_token)
          .find_map(|token| PrefixOperator::try_from(token.kind()).ok())
-         .unwrap()
+         .expect("operator-less prefix operation cannot exist")
    }
 }
 
@@ -664,7 +664,7 @@ impl SuffixOperation {
          .children_with_tokens()
          .filter_map(red::ElementRef::into_token)
          .find(|token| SuffixOperator::try_from(token.kind()).is_ok())
-         .unwrap()
+         .expect("operator-less suffix operation cannot exist")
    }
 
    /// Returns the operator of this operation.
@@ -673,7 +673,7 @@ impl SuffixOperation {
          .children_with_tokens()
          .filter_map(red::ElementRef::into_token)
          .find_map(|token| SuffixOperator::try_from(token.kind()).ok())
-         .unwrap()
+         .expect("operator-less suffix operation cannot exist")
    }
 }
 
@@ -814,12 +814,17 @@ impl Segmented for Char {}
 
 impl Char {
    #[must_use]
-   pub fn value(&self) -> char {
-      let Segment::Content { content, .. } = self.segments().into_iter().next().unwrap() else {
-         unreachable!()
+   pub fn value(&self) -> Option<char> {
+      let Segment::Content { content, .. } = self
+         .segments()
+         .into_iter()
+         .next()
+         .expect("segmented cannot be empty")
+      else {
+         unreachable!("segmented cannot start with interpolation")
       };
 
-      content.chars().next().unwrap()
+      content.chars().next()
    }
 }
 
@@ -833,11 +838,6 @@ node! {
 
 impl Integer {
    get_token! { token_integer -> &token::Integer }
-
-   #[must_use]
-   pub fn value(&self) -> num::BigInt {
-      self.token_integer().value().expect("integer must be valid")
-   }
 }
 
 // FLOAT
@@ -850,11 +850,6 @@ node! {
 
 impl Float {
    get_token! { token_float -> &token::Float }
-
-   #[must_use]
-   pub fn value(&self) -> f64 {
-      self.token_float().value().expect("float must be valid")
-   }
 }
 
 // IF

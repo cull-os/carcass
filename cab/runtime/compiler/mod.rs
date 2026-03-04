@@ -868,13 +868,19 @@ impl<'a> Emitter<'a> {
          node::ExpressionRef::SString(string) => self.emit_string(string),
 
          node::ExpressionRef::Char(char) => {
-            self.emit_push(char.span(), char.value());
+            self.emit_push(char.span(), char.value().expect(EXPECT_VALID));
          },
          node::ExpressionRef::Integer(integer) => {
-            self.emit_push(integer.span(), value::Integer::from(integer.value()));
+            self.emit_push(
+               integer.span(),
+               value::Integer::from(integer.token_integer().value().expect(EXPECT_VALID)),
+            );
          },
          node::ExpressionRef::Float(float) => {
-            self.emit_push(float.span(), float.value());
+            self.emit_push(
+               float.span(),
+               float.token_float().value().expect(EXPECT_VALID),
+            );
          },
 
          node::ExpressionRef::If(if_) => {

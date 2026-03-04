@@ -1,3 +1,5 @@
+#![warn(missing_docs)]
+
 //! Span and related type definitions.
 
 mod size;
