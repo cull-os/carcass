@@ -41,16 +41,9 @@ mod red {
    use super::*;
 
    pub type Node = cstree::syntax::ResolvedNode<Kind>;
-   pub type ResolvedNode = cstree::syntax::SyntaxNode<Kind>;
-
    pub type Token = cstree::syntax::ResolvedToken<Kind>;
-   pub type ResolvedToken = cstree::syntax::SyntaxToken<Kind>;
-
    pub type Element = cstree::syntax::ResolvedElement<Kind>;
-   pub type ResolvedElement = cstree::syntax::SyntaxElement<Kind>;
-
    pub type ElementRef<'a> = cstree::util::NodeOrToken<&'a Node, &'a Token>;
-   pub type ResolvedElementRef<'a> = cstree::util::NodeOrToken<&'a Node, &'a Token>;
 }
 
 pub trait Node = TryFrom<red::Node> + ops::Deref<Target = red::Node>;
