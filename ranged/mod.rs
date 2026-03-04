@@ -1,6 +1,6 @@
-#![warn(missing_docs)]
-
 //! Span and related type definitions.
+
+#![warn(missing_docs)]
 
 mod size;
 pub use size::{

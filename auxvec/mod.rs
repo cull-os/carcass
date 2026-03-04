@@ -1,4 +1,5 @@
 #![doc = include_str!("README.md")]
+#![warn(missing_docs)]
 #![no_std]
 #![feature(impl_trait_in_assoc_type, gen_blocks)]
 #![expect(
@@ -6,11 +7,6 @@
    reason = "all unsafe code is already explained and repeating everything for each unsafe block \
              is a waste of time"
 )]
-#![expect(
-   clippy::doc_include_without_cfg,
-   reason = "must include all the time to make the warning below stop"
-)]
-#![warn(missing_docs)]
 
 use core::{
    marker,

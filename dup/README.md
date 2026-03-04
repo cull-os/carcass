@@ -1,5 +1,3 @@
-# dup
-
 Cheap clone trait for distinguishing expensive clones from things that should
 have been Copy.
 

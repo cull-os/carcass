@@ -1,5 +1,3 @@
-# auxvec
-
 Auxiliary vector (auxv) reader and modifier.
 
 ## What is an "auxiliary vector"?
