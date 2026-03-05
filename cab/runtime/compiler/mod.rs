@@ -1,34 +1,17 @@
 use std::ops;
 
-use cab_syntax::{
-   node,
-   node::Segmented as _,
-};
+use cab_syntax::lode;
 use cab_util::{
-   as_ref,
    into,
    suffix::Arc as _,
-   unwrap,
-};
-use cyn::{
-   Result,
-   ResultExt as _,
-   bail,
 };
 use dup::Dupe as _;
 use ranged::{
    IntoSpan as _,
    Span,
+   Spanned,
 };
 use smallvec::SmallVec;
-use ust::{
-   Display,
-   Write,
-   report::{
-      self,
-      Report,
-   },
-};
 
 use crate::{
    Code,
@@ -37,51 +20,7 @@ use crate::{
    value,
 };
 
-mod scope;
-use scope::{
-   LocalName,
-   Scope,
-};
-
 const EXPECT_CODE: &str = "emitter must have at least one code at all times";
-const EXPECT_VALID: &str = "syntax must be valid";
-
-pub struct Compile {
-   pub code:    Code,
-   pub reports: Vec<Report>,
-}
-
-impl Compile {
-   pub fn extractlnln(
-      self,
-      writer: &mut impl Write,
-      location: &impl Display,
-      source: &report::PositionStr<'_>,
-   ) -> Result<Code> {
-      let mut fail: usize = 0;
-
-      for report in self.reports {
-         if let report::Severity::Error | report::Severity::Bug = report.severity {
-            fail += 1;
-         }
-
-         writer
-            .write_report(&report, location, source)
-            .chain_err("failed to write report")?;
-
-         write!(writer, "\n\n").chain_err("failed to write report")?;
-      }
-
-      if fail > 0 {
-         bail!(
-            "compilation failed due to {fail} previous error{s}",
-            s = if fail == 1 { "" } else { "s" },
-         );
-      }
-
-      Ok(self.code)
-   }
-}
 
 pub struct CompileOracle {
    _reserved: (),
@@ -99,35 +38,24 @@ impl CompileOracle {
    #[must_use]
    pub fn compile(
       &self,
-      #[builder(start_fn)] expression: node::ExpressionRef<'_>,
+      #[builder(start_fn)] expression: lode::Resolved<'_, &lode::Expression>,
       #[builder(finish_fn)] path: value::Path,
-   ) -> Compile {
+   ) -> Code {
       let mut emitter = Emitter::new(path);
 
       emitter.emit_scope(expression.span(), |this| {
          this.emit_force(expression);
       });
 
-      emitter
-         .reports
-         .sort_by_key(|report| report.labels.iter().map(|label| label.span.start).min());
-
-      Compile {
-         code: emitter.codes.pop().expect(EXPECT_CODE),
-
-         reports: emitter.reports,
-      }
+      emitter.codes.pop().expect(EXPECT_CODE)
    }
 }
 
-struct Emitter<'a> {
+struct Emitter {
    codes: Vec<Code>,
-
-   _scopes: Vec<Scope<'a>>,
-   reports: Vec<Report>,
 }
 
-impl ops::Deref for Emitter<'_> {
+impl ops::Deref for Emitter {
    type Target = Code;
 
    fn deref(&self) -> &Self::Target {
@@ -135,29 +63,22 @@ impl ops::Deref for Emitter<'_> {
    }
 }
 
-impl ops::DerefMut for Emitter<'_> {
+impl ops::DerefMut for Emitter {
    fn deref_mut(&mut self) -> &mut Self::Target {
       self.codes.last_mut().expect(EXPECT_CODE)
    }
 }
 
-impl Emitter<'_> {
+impl Emitter {
    fn new(path: value::Path) -> Self {
-      Emitter {
+      Self {
          codes: vec![Code::new(path)],
-
-         _scopes: vec![Scope::global()],
-         reports: Vec::new(),
       }
    }
-
-   // fn scope(&mut self) -> &mut Scope<'a> {
-   //    self.scopes.last_mut().expect(EXPECT_SCOPE)
-   // }
 }
 
 #[bon::bon]
-impl<'a> Emitter<'a> {
+impl Emitter {
    fn emit_push(&mut self, span: Span, value: impl Into<Value>) {
       into!(value);
 
@@ -167,38 +88,14 @@ impl<'a> Emitter<'a> {
       self.push_u64(*index as _);
    }
 
-   fn emit_resolve(&mut self, span: Span, identifier: impl AsRef<str>) {
-      as_ref!(identifier);
-
-      self.emit_push(span, Value::Reference(value::SString::from(identifier)));
-      self.push_operation(span, Operation::Resolve);
-   }
-
    fn emit_scope(&mut self, span: Span, with: impl FnOnce(&mut Self)) {
-      // self.scopes.push(Scope::new());
-
       self.push_operation(span, Operation::ScopeStart);
-
       with(self);
-
       self.push_operation(span, Operation::ScopeEnd);
-
-      // for local in self.scopes.pop().expect("scope was just pushed").finish()
-      // {    self.reports.push(
-      //       Report::warn(if let Ok(name) =
-      // TryInto::<&str>::try_into(&local.name) {          format!("unused
-      // bind '{name}'")       } else {
-      //          "unused bind".to_owned()
-      //       })
-      //       .primary(local.span, "no usage")
-      //       .tip("remove this or rename it to start with '_'"),
-      //    );
-      // }
    }
 
    fn emit_thunk_start(&mut self) {
-      let path = self.path().dupe();
-      self.codes.push(Code::new(path));
+      self.codes.push(Code::new(self.path().dupe()));
    }
 
    #[builder(finish_fn(name = "needs_argument"))]
@@ -237,13 +134,16 @@ impl<'a> Emitter<'a> {
       self.emit_thunkable_end(span).needs_argument(needs_argument);
    }
 
-   fn emit_parenthesis(&mut self, parenthesis: &'a node::Parenthesis) {
+   fn emit_parenthesis<'arena>(
+      &mut self,
+      parenthesis: lode::Resolved<'arena, Spanned<&'arena lode::Parenthesis>>,
+   ) {
       self.emit_scope(parenthesis.span(), |this| {
-         this.emit(parenthesis.expression().expect(EXPECT_VALID));
+         this.emit(parenthesis.expression());
       });
    }
 
-   fn emit_list(&mut self, list: &'a node::List) {
+   fn emit_list<'arena>(&mut self, list: lode::Resolved<'arena, Spanned<&'arena lode::List>>) {
       for item in list.items() {
          self.emit_thunk_start();
          self.emit(item);
@@ -257,7 +157,10 @@ impl<'a> Emitter<'a> {
       }
    }
 
-   fn emit_attributes(&mut self, attributes: &'a node::Attributes) {
+   fn emit_attributes<'arena>(
+      &mut self,
+      attributes: lode::Resolved<'arena, Spanned<&'arena lode::Attributes>>,
+   ) {
       match attributes.expression() {
          Some(expression) => {
             self.emit_thunk(attributes.span()).with(|this| {
@@ -282,31 +185,11 @@ impl<'a> Emitter<'a> {
    }
 
    #[builder(finish_fn(name = "right"))]
-   fn emit_select_static(
-      &mut self,
-      #[builder(start_fn)] span: Span,
-      #[builder(finish_fn)] right: &str,
-      left: (Span, impl FnOnce(&mut Emitter<'a>)),
-   ) {
-      self.emit_select(span).left(left).right((span, |this| {
-         // This scope is here because we want the bytecode to be an exact match for:
-         //   a + b
-         // and:
-         //   a.`+` b
-         this.emit_scope(span, |this| {
-            this.emit_thunk(span).with(|this| {
-               this.emit_resolve(span, right);
-            });
-         });
-      }));
-   }
-
-   #[builder(finish_fn(name = "right"))]
    fn emit_select(
       &mut self,
       #[builder(start_fn)] span: Span,
-      #[builder(finish_fn)] right: (Span, impl FnOnce(&mut Emitter<'a>)),
-      left: (Span, impl FnOnce(&mut Emitter<'a>)),
+      #[builder(finish_fn)] right: (Span, impl FnOnce(&mut Emitter)),
+      left: (Span, impl FnOnce(&mut Emitter)),
    ) {
       let (right_span, emit_right) = right;
       let (left_span, emit_left) = left;
@@ -317,481 +200,329 @@ impl<'a> Emitter<'a> {
          self.push_u16(u16::default())
       };
 
-      // <left>
       self.push_operation(left_span, Operation::ScopeSwap);
 
-      // <old-scope-or-error>
       let to_end_ = {
          self.push_operation(span, Operation::JumpIfError);
          self.push_u16(u16::default())
       };
 
-      // <old-scope>
       emit_right(self);
       self.push_operation(right_span, Operation::Force);
 
-      // <old-scope>
-      // <right-forced>
       self.push_operation(span, Operation::Swap);
-
-      // <right-forced>
-      // <old-scope>
       self.push_operation(span, Operation::ScopeSwap);
-
-      // <right-forced>
-      // <left>
       self.push_operation(span, Operation::Pop);
 
       self.point_here(to_end_);
       self.point_here(to_end);
    }
 
-   fn emit_prefix_operation(&mut self, operation: &'a node::PrefixOperation) {
-      let right = operation.right();
-
-      self
-         .emit_thunk(operation.span())
-         .needs_argument(right.is_none())
-         .with(|this| {
-            unwrap!(right);
-
-            this
-               .emit_select_static(operation.span())
-               .left((right.span(), |this| {
-                  this.emit_force(right);
-               }))
-               .right(match operation.operator() {
-                  node::PrefixOperator::Swwallation => "+",
-                  node::PrefixOperator::Negation => "-",
-                  node::PrefixOperator::Not => "!",
-               });
-         });
+   fn emit_same<'arena>(&mut self, same: lode::Resolved<'arena, Spanned<&'arena lode::Same>>) {
+      self.emit(same.left());
+      self.emit(same.right());
+      self.push_operation(same.span(), Operation::All);
    }
 
-   fn emit_infix_operation(&mut self, operation: &'a node::InfixOperation) {
-      let left = operation.left();
-      let right = operation.right();
-
-      self
-         .emit_thunk(operation.span())
-         .needs_argument(
-            // If any operand is missing.
-            (left.is_none() || right.is_none())
-            // Or if it is actually a lambda.
-            || operation.operator() == node::InfixOperator::Lambda,
-         )
-         .with(|this| {
-            // TODO: Actually handle this.
-            unwrap!(left, right);
-
-            match operation.operator() {
-               node::InfixOperator::Sequence => {
-                  this.emit_force(left);
-                  let to_end = {
-                     this.push_operation(operation.span(), Operation::JumpIfError);
-                     this.push_u16(u16::default())
-                  };
-                  this.push_operation(operation.span(), Operation::Pop);
-
-                  this.emit_force(right);
-
-                  this.point_here(to_end);
-               },
-
-               operator @ (node::InfixOperator::ImplicitCall
-               | node::InfixOperator::Call
-               | node::InfixOperator::Pipe) => {
-                  match operator {
-                     node::InfixOperator::ImplicitCall | node::InfixOperator::Call => {
-                        this.emit_force(left);
-                     },
-
-                     node::InfixOperator::Pipe => {
-                        this.emit_force(right);
-                     },
-
-                     _ => unreachable!(),
-                  }
-
-                  let to_end = {
-                     this.push_operation(operation.span(), Operation::JumpIfError);
-                     this.push_u16(u16::default())
-                  };
-
-                  match operator {
-                     node::InfixOperator::ImplicitCall | node::InfixOperator::Call => {
-                        this.emit(right);
-                     },
-
-                     node::InfixOperator::Pipe => {
-                        this.emit(left);
-                     },
-
-                     _ => unreachable!(),
-                  }
-
-                  this.push_operation(operation.span(), Operation::Call);
-                  this.point_here(to_end);
-               },
-
-               node::InfixOperator::Construct => {
-                  this.emit(left);
-                  this.emit(right);
-
-                  this.push_operation(operation.span(), Operation::Construct);
-               },
-
-               node::InfixOperator::Select => {
-                  this
-                     .emit_select(operation.span())
-                     .left((left.span(), |this| this.emit_force(left)))
-                     .right((right.span(), |this| {
-                        // let scopes = this.scopes.split_off(1);
-                        this.emit_scope(right.span(), |this| {
-                           // this.scope().push(Span::dummy(), LocalName::wildcard());
-
-                           this.emit(right);
-                        });
-                        // this.scopes.extend(scopes);
-                     }));
-               },
-
-               operator @ (node::InfixOperator::Equal | node::InfixOperator::NotEqual) => {
-                  let emit_equal = |this: &mut Emitter<'a>| {
-                     this.emit(left);
-                     this.emit(right);
-
-                     this.push_operation(operation.span(), Operation::Equal);
-                  };
-
-                  match operator {
-                     node::InfixOperator::Equal => emit_equal(this),
-
-                     node::InfixOperator::NotEqual => {
-                        this
-                           .emit_select_static(operation.span())
-                           .left((left.span(), emit_equal))
-                           .right("!");
-                     },
-
-                     _ => unreachable!(),
-                  }
-               },
-
-               node::InfixOperator::And => {
-                  this.emit_force(left);
-                  let to_right = {
-                     this.push_operation(left.span(), Operation::JumpIf);
-                     this.push_u16(u16::default())
-                  };
-                  let over_right = {
-                     this.push_operation(operation.span(), Operation::Jump);
-                     this.push_u16(u16::default())
-                  };
-
-                  this.point_here(to_right);
-                  this.push_operation(operation.span(), Operation::Pop);
-                  this.emit_force(right);
-                  this.push_operation(right.span(), Operation::AssertBoolean);
-
-                  this.point_here(over_right);
-               },
-
-               operator @ (node::InfixOperator::Or | node::InfixOperator::Implication) => {
-                  match operator {
-                     node::InfixOperator::Or => {
-                        this.emit_force(left);
-                     },
-
-                     node::InfixOperator::Implication => {
-                        this.emit_thunk(operation.span()).with(|this| {
-                           this
-                              .emit_select_static(operation.span())
-                              .left((left.span(), |this| this.emit_force(left)))
-                              .right("!");
-                        });
-                        this.push_operation(operation.span(), Operation::Force);
-                     },
-
-                     _ => unreachable!(),
-                  }
-
-                  let to_end = {
-                     this.push_operation(operation.span(), Operation::JumpIf);
-                     this.push_u16(u16::default())
-                  };
-
-                  this.push_operation(operation.span(), Operation::Pop);
-                  this.emit_force(right);
-                  this.push_operation(operation.span(), Operation::AssertBoolean);
-
-                  this.point_here(to_end);
-               },
-
-               node::InfixOperator::Same | node::InfixOperator::All => {
-                  this.emit(left);
-                  this.emit(right);
-
-                  this.push_operation(operation.span(), Operation::All);
-               },
-
-               node::InfixOperator::Any => {
-                  this.emit(left);
-                  this.emit(right);
-
-                  this.push_operation(operation.span(), Operation::Any);
-               },
-
-               node::InfixOperator::Lambda => {
-                  this.emit_scope(operation.span(), |this| {
-                     // @foo => bar, `@foo` is the right parameter of the equality
-                     // comparision, and the left parameter is the argument.
-                     this.emit_force(left);
-                     this.push_operation(left.span(), Operation::Equal);
-
-                     let to_body = {
-                        this.push_operation(left.span(), Operation::JumpIf);
-                        this.push_u16(u16::default())
-                     };
-
-                     this.push_operation(operation.span(), Operation::Pop);
-                     this.emit_push(
-                        left.span(),
-                        value::Error::new(value::string::new!("parameters were not equal")).arc(),
-                     );
-
-                     let over_body = {
-                        this.push_operation(operation.span(), Operation::Jump);
-                        this.push_u16(u16::default())
-                     };
-
-                     this.point_here(to_body);
-                     this.push_operation(operation.span(), Operation::Pop);
-                     this.emit_force(right);
-
-                     this.point_here(over_body);
-                  });
-               },
-
-               operator @ (node::InfixOperator::Concat
-               | node::InfixOperator::Update
-               | node::InfixOperator::LessOrEqual
-               | node::InfixOperator::Less
-               | node::InfixOperator::MoreOrEqual
-               | node::InfixOperator::More
-               | node::InfixOperator::Addition
-               | node::InfixOperator::Subtraction
-               | node::InfixOperator::Multiplication
-               | node::InfixOperator::Power
-               | node::InfixOperator::Division) => {
-                  this.emit_thunk(operation.span()).with(|this| {
-                     this
-                        .emit_select_static(operation.span())
-                        .left((left.span(), |this| this.emit_force(left)))
-                        .right(match operator {
-                           node::InfixOperator::Concat => "++",
-                           node::InfixOperator::Update => "//",
-                           node::InfixOperator::LessOrEqual => "<=",
-                           node::InfixOperator::Less => "<",
-                           node::InfixOperator::MoreOrEqual => ">=",
-                           node::InfixOperator::More => ">",
-                           node::InfixOperator::Addition => "+",
-                           node::InfixOperator::Subtraction => "-",
-                           node::InfixOperator::Multiplication => "*",
-                           node::InfixOperator::Power => "^",
-                           node::InfixOperator::Division => "/",
-                           _ => unreachable!(),
-                        });
-                  });
-
-                  this.emit(right);
-                  this.push_operation(operation.span(), Operation::Call);
-               },
-            }
-         });
-   }
-
-   #[expect(unreachable_code)]
-   fn emit_suffix_operation(&mut self, operation: &'a node::SuffixOperation) {
-      let left = operation.left();
-
-      self
-         .emit_thunk(operation.span())
-         .needs_argument(left.is_none())
-         .with(|this| {
-            if let Some(left) = left {
-               this.emit(left);
-            }
-
-            this.push_operation(operation.span(), match operation.operator() {});
-         });
-   }
-
-   fn emit_path(&mut self, path: &'a node::Path) {
-      let needs_thunk = !path.is_trivial();
-
-      self.emit_thunk(path.span()).if_(needs_thunk).with(|this| {
-         let segments = path.segments().into_iter().collect::<SmallVec<_, 4>>();
-
-         for segment in &segments {
-            match *segment {
-               node::Segment::Content { span, ref content } => {
-                  this.emit_push(
-                     span,
-                     value::Path::rootless(
-                        content
-                           .split(value::path::SEPARATOR)
-                           .filter(|part| !part.is_empty())
-                           .map(value::SString::from)
-                           .collect(),
-                     ),
-                  );
-               },
-
-               node::Segment::Interpolation(interpolation) => {
-                  this.emit_scope(interpolation.span(), |this| {
-                     this.emit_force(interpolation.expression());
-                  });
-               },
-            }
-         }
-
-         if !path.is_trivial() {
-            this.push_operation(path.span(), Operation::Interpolate);
-            this.push_u64(segments.len() as _);
-         }
-      });
-   }
-
-   #[builder(finish_fn(name = "span"))]
-   fn emit_identifier(
+   fn emit_sequence<'arena>(
       &mut self,
-      #[builder(start_fn)] identifier: &'a node::Identifier,
-      #[builder(finish_fn)] span: Span,
-      #[builder(default)] is_bind: bool,
+      sequence: lode::Resolved<'arena, Spanned<&'arena lode::Sequence>>,
    ) {
-      let needs_thunk =
-         // References are always thunked.
-         !is_bind ||
-         // Binds are thunked if they aren't trivial.
-         !identifier.value().is_trivial();
+      let left = sequence.left();
+      let right = sequence.right();
 
-      self.emit_thunk(span).if_(needs_thunk).with(|this| {
-         let __name = match identifier.value() {
-            node::IdentifierValueRef::Plain(plain) => {
-               if is_bind {
-                  this.emit_push(span, Value::Bind(value::SString::from(plain.text())));
-               } else {
-                  this.emit_resolve(span, plain.text());
-               }
+      self.emit_force(left);
+      let to_end = {
+         self.push_operation(sequence.span(), Operation::JumpIfError);
+         self.push_u16(u16::default())
+      };
+      self.push_operation(sequence.span(), Operation::Pop);
 
-               LocalName::plain(plain.text())
-            },
+      self.emit_force(right);
 
-            node::IdentifierValueRef::Quoted(quoted) => {
-               let segments = quoted.segments().into_iter().collect::<SmallVec<_, 4>>();
-
-               for segment in &segments {
-                  match *segment {
-                     node::Segment::Content { span, ref content } => {
-                        this.emit_push(
-                           span,
-                           if is_bind {
-                              Value::Bind(value::SString::from(&**content))
-                           } else {
-                              Value::Reference(value::SString::from(&**content))
-                           },
-                        );
-                     },
-
-                     node::Segment::Interpolation(interpolation) => {
-                        this.emit_scope(interpolation.span(), |this| {
-                           this.emit_force(interpolation.expression());
-                        });
-                     },
-                  }
-               }
-
-               if !quoted.is_trivial() {
-                  this.push_operation(span, Operation::Interpolate);
-                  this.push_u64(segments.len() as _);
-               }
-
-               if !is_bind {
-                  this.push_operation(span, Operation::Resolve);
-               }
-
-               LocalName::new(
-                  segments
-                     .into_iter()
-                     .filter_map(|segment| {
-                        match segment {
-                           node::Segment::Content { content, .. } => Some(content),
-
-                           node::Segment::Interpolation(_) => None,
-                        }
-                     })
-                     .collect(),
-               )
-            },
-         };
-
-         // if is_bind {
-         //    this.scope().push(span, name);
-         //    return;
-         // }
-
-         // TODO: Scope logic is wrong. Don't locate it all immediately, do it
-         // in scopes. match Scope::locate(&mut this.scopes, &name) {
-         //    LocalPosition::Undefined => {
-         //       this.reports.push(
-         //          Report::warn(if let Ok(name) =
-         // TryInto::<&str>::try_into(&name) {
-         // format!("undefined reference '{name}'")          } else {
-         //             "undefined reference".to_owned()
-         //          })
-         //          .primary(span, "no definition"),
-         //       );
-         //    },
-
-         //    mut position => position.mark_used(),
-         // }
-      });
+      self.point_here(to_end);
    }
 
-   fn emit_string(&mut self, string: &'a node::SString) {
-      let needs_thunk = !string.is_trivial();
+   fn emit_call<'arena>(&mut self, call: lode::Resolved<'arena, Spanned<&'arena lode::Call>>) {
+      let function = call.function();
+      let argument = call.argument();
+
+      self.emit_force(function);
+
+      let to_end = {
+         self.push_operation(call.span(), Operation::JumpIfError);
+         self.push_u16(u16::default())
+      };
+
+      self.emit(argument);
+      self.push_operation(call.span(), Operation::Call);
+      self.point_here(to_end);
+   }
+
+   fn emit_construct<'arena>(
+      &mut self,
+      construct: lode::Resolved<'arena, Spanned<&'arena lode::Construct>>,
+   ) {
+      self.emit(construct.head());
+      self.emit(construct.tail());
+      self.push_operation(construct.span(), Operation::Construct);
+   }
+
+   fn emit_select_expression<'arena>(
+      &mut self,
+      select: lode::Resolved<'arena, Spanned<&'arena lode::Select>>,
+   ) {
+      let scope = select.scope();
+      let expression = select.expression();
 
       self
-         .emit_thunk(string.span())
-         .if_(needs_thunk)
+         .emit_select(select.span())
+         .left((scope.span(), |this| this.emit_force(scope)))
+         .right((expression.span(), |this| {
+            this.emit_scope(expression.span(), |this| {
+               this.emit(expression);
+            });
+         }));
+   }
+
+   fn emit_equal<'arena>(&mut self, equal: lode::Resolved<'arena, Spanned<&'arena lode::Equal>>) {
+      self.emit(equal.left());
+      self.emit(equal.right());
+      self.push_operation(equal.span(), Operation::Equal);
+   }
+
+   fn emit_and<'arena>(&mut self, and: lode::Resolved<'arena, Spanned<&'arena lode::And>>) {
+      let left = and.left();
+      let right = and.right();
+
+      self.emit_force(left);
+      let to_right = {
+         self.push_operation(left.span(), Operation::JumpIf);
+         self.push_u16(u16::default())
+      };
+      let over_right = {
+         self.push_operation(and.span(), Operation::Jump);
+         self.push_u16(u16::default())
+      };
+
+      self.point_here(to_right);
+      self.push_operation(and.span(), Operation::Pop);
+      self.emit_force(right);
+      self.push_operation(right.span(), Operation::AssertBoolean);
+
+      self.point_here(over_right);
+   }
+
+   fn emit_or<'arena>(&mut self, or: lode::Resolved<'arena, Spanned<&'arena lode::Or>>) {
+      let left = or.left();
+      let right = or.right();
+
+      self.emit_force(left);
+
+      let to_end = {
+         self.push_operation(or.span(), Operation::JumpIf);
+         self.push_u16(u16::default())
+      };
+
+      self.push_operation(or.span(), Operation::Pop);
+      self.emit_force(right);
+      self.push_operation(or.span(), Operation::AssertBoolean);
+
+      self.point_here(to_end);
+   }
+
+   fn emit_all<'arena>(&mut self, all: lode::Resolved<'arena, Spanned<&'arena lode::All>>) {
+      self.emit(all.left());
+      self.emit(all.right());
+      self.push_operation(all.span(), Operation::All);
+   }
+
+   fn emit_any<'arena>(&mut self, any: lode::Resolved<'arena, Spanned<&'arena lode::Any>>) {
+      self.emit(any.left());
+      self.emit(any.right());
+      self.push_operation(any.span(), Operation::Any);
+   }
+
+   fn emit_lambda<'arena>(
+      &mut self,
+      lambda: lode::Resolved<'arena, Spanned<&'arena lode::Lambda>>,
+   ) {
+      let argument = lambda.argument();
+      let expression = lambda.expression();
+
+      self
+         .emit_thunk(lambda.span())
+         .needs_argument(true)
          .with(|this| {
-            let segments = string.segments().into_iter().collect::<SmallVec<_, 4>>();
+            this.emit_scope(lambda.span(), |this| {
+               this.emit_force(argument);
+               this.push_operation(argument.span(), Operation::Equal);
+
+               let to_body = {
+                  this.push_operation(argument.span(), Operation::JumpIf);
+                  this.push_u16(u16::default())
+               };
+
+               this.push_operation(lambda.span(), Operation::Pop);
+               this.emit_push(
+                  argument.span(),
+                  value::Error::new(value::string::new!("parameters were not equal")).arc(),
+               );
+
+               let over_body = {
+                  this.push_operation(lambda.span(), Operation::Jump);
+                  this.push_u16(u16::default())
+               };
+
+               this.point_here(to_body);
+               this.push_operation(lambda.span(), Operation::Pop);
+               this.emit_force(expression);
+
+               this.point_here(over_body);
+            });
+         });
+   }
+
+   fn emit_path<'arena>(&mut self, path: lode::Resolved<'arena, Spanned<&'arena lode::Path>>) {
+      let segments = path.segments();
+      let segments_are_trivial = segments.is_trivial();
+
+      self
+         .emit_thunk(path.span())
+         .if_(!segments_are_trivial)
+         .with(|this| {
+            let segments = segments.into_iter().collect::<SmallVec<_, 4>>();
 
             for segment in &segments {
-               match *segment {
-                  node::Segment::Content { span, ref content } => {
-                     this.emit_push(span, value::SString::from(&**content));
+               match &segment.value {
+                  &lode::Segment::Content(ref content) => {
+                     let content = &***content;
+
+                     this.emit_push(
+                        segment.span(),
+                        value::Path::rootless(
+                           content
+                              .split(value::path::SEPARATOR)
+                              .filter(|part| !part.is_empty())
+                              .map(value::SString::from)
+                              .collect(),
+                        ),
+                     );
                   },
 
-                  node::Segment::Interpolation(interpolation) => {
-                     this.emit_scope(interpolation.span(), |this| {
-                        this.emit_force(interpolation.expression());
+                  &lode::Segment::Interpolation(ref interpolation) => {
+                     this.emit_scope(segment.span(), |this| {
+                        this.emit_force(*interpolation);
                      });
                   },
                }
             }
 
-            if !string.is_trivial() {
+            if !segments_are_trivial {
+               this.push_operation(path.span(), Operation::Interpolate);
+               this.push_u64(segments.len() as _);
+            }
+         });
+   }
+
+   fn emit_identifier_like<'arena>(
+      &mut self,
+      segments: lode::Resolved<'arena, &'arena lode::Segments>,
+      span: Span,
+      is_bind: bool,
+   ) {
+      let segments_are_trivial = segments.is_trivial();
+      let needs_thunk = !is_bind || !segments_are_trivial;
+
+      self.emit_thunk(span).if_(needs_thunk).with(|this| {
+         let segments = segments.into_iter().collect::<SmallVec<_, 4>>();
+
+         for segment in &segments {
+            match &segment.value {
+               &lode::Segment::Content(ref content) => {
+                  let content = &***content;
+
+                  this.emit_push(
+                     segment.span(),
+                     if is_bind {
+                        Value::Bind(value::SString::from(content))
+                     } else {
+                        Value::Reference(value::SString::from(content))
+                     },
+                  );
+               },
+
+               &lode::Segment::Interpolation(ref interpolation) => {
+                  this.emit_scope(segment.span(), |this| {
+                     this.emit_force(*interpolation);
+                  });
+               },
+            }
+         }
+
+         if !segments_are_trivial {
+            this.push_operation(span, Operation::Interpolate);
+            this.push_u64(segments.len() as _);
+         }
+
+         if !is_bind {
+            this.push_operation(span, Operation::Resolve);
+         }
+      });
+   }
+
+   fn emit_bind<'arena>(&mut self, bind: lode::Resolved<'arena, Spanned<&'arena lode::Bind>>) {
+      self.emit_identifier_like(bind.segments(), bind.span(), true);
+   }
+
+   fn emit_identifier<'arena>(
+      &mut self,
+      identifier: lode::Resolved<'arena, Spanned<&'arena lode::Identifier>>,
+   ) {
+      self.emit_identifier_like(identifier.segments(), identifier.span(), false);
+   }
+
+   fn emit_string<'arena>(
+      &mut self,
+      string: lode::Resolved<'arena, Spanned<&'arena lode::SString>>,
+   ) {
+      let segments = string.segments();
+      let segments_are_trivial = segments.is_trivial();
+
+      self
+         .emit_thunk(string.span())
+         .if_(!segments_are_trivial)
+         .with(|this| {
+            let segments = segments.into_iter().collect::<SmallVec<_, 4>>();
+
+            for segment in &segments {
+               match &segment.value {
+                  &lode::Segment::Content(ref content) => {
+                     this.emit_push(segment.span(), value::SString::from(&***content));
+                  },
+
+                  &lode::Segment::Interpolation(ref interpolation) => {
+                     this.emit_scope(segment.span(), |this| {
+                        this.emit_force(*interpolation);
+                     });
+                  },
+               }
+            }
+
+            if !segments_are_trivial {
                this.push_operation(string.span(), Operation::Interpolate);
                this.push_u64(segments.len() as _);
             }
          });
    }
 
-   fn emit_if(&mut self, if_: &'a node::If) {
+   fn emit_if<'arena>(&mut self, if_: lode::Resolved<'arena, Spanned<&'arena lode::If>>) {
+      let condition = if_.condition();
+      let consequence = if_.consequence();
+      let alternative = if_.alternative();
+
       self.emit_thunk(if_.span()).with(|this| {
-         this.emit_force(if_.condition());
+         this.emit_force(condition);
          let to_end = {
             this.push_operation(if_.span(), Operation::JumpIfError);
             this.push_u16(u16::default())
@@ -806,8 +537,8 @@ impl<'a> Emitter<'a> {
          };
 
          this.push_operation(if_.span(), Operation::Pop);
-         this.emit_scope(if_.alternative().span(), |this| {
-            this.emit_force(if_.alternative());
+         this.emit_scope(alternative.span(), |this| {
+            this.emit_force(alternative);
          });
          let over_consequence = {
             this.push_operation(if_.span(), Operation::Jump);
@@ -816,8 +547,8 @@ impl<'a> Emitter<'a> {
 
          this.point_here(to_consequence);
          this.push_operation(if_.span(), Operation::Pop);
-         this.emit_scope(if_.consequence().span(), |this| {
-            this.emit_force(if_.consequence());
+         this.emit_scope(consequence.span(), |this| {
+            this.emit_force(consequence);
          });
 
          this.point_here(over_consequence);
@@ -827,69 +558,99 @@ impl<'a> Emitter<'a> {
    }
 
    #[stacksafe::stacksafe]
-   fn emit(&mut self, expression: node::ExpressionRef<'a>) {
-      match expression {
-         node::ExpressionRef::Error(_) => unreachable!("{EXPECT_VALID}"),
-
-         node::ExpressionRef::Parenthesis(parenthesis) => {
+   fn emit<'arena>(&mut self, expression: lode::Resolved<'arena, &'arena lode::Expression>) {
+      match expression.propagate() {
+         lode::ExpressionPropagated::Parenthesis(parenthesis) => {
             self.emit_parenthesis(parenthesis);
          },
-         node::ExpressionRef::List(list) => {
+
+         lode::ExpressionPropagated::List(list) => {
             self.emit_list(list);
          },
-         node::ExpressionRef::Attributes(attributes) => {
+
+         lode::ExpressionPropagated::Attributes(attributes) => {
             self.emit_attributes(attributes);
          },
 
-         node::ExpressionRef::PrefixOperation(prefix_operation) => {
-            self.emit_prefix_operation(prefix_operation);
-         },
-         node::ExpressionRef::InfixOperation(infix_operation) => {
-            self.emit_infix_operation(infix_operation);
-         },
-         node::ExpressionRef::SuffixOperation(suffix_operation) => {
-            self.emit_suffix_operation(suffix_operation);
+         lode::ExpressionPropagated::Same(same) => {
+            self.emit_same(same);
          },
 
-         node::ExpressionRef::Path(path) => {
+         lode::ExpressionPropagated::Sequence(sequence) => {
+            self.emit_sequence(sequence);
+         },
+
+         lode::ExpressionPropagated::Call(call) => {
+            self.emit_call(call);
+         },
+
+         lode::ExpressionPropagated::Construct(construct) => {
+            self.emit_construct(construct);
+         },
+
+         lode::ExpressionPropagated::Select(select) => {
+            self.emit_select_expression(select);
+         },
+
+         lode::ExpressionPropagated::Equal(equal) => {
+            self.emit_equal(equal);
+         },
+
+         lode::ExpressionPropagated::And(and) => {
+            self.emit_and(and);
+         },
+
+         lode::ExpressionPropagated::Or(or) => {
+            self.emit_or(or);
+         },
+
+         lode::ExpressionPropagated::All(all) => {
+            self.emit_all(all);
+         },
+
+         lode::ExpressionPropagated::Any(any) => {
+            self.emit_any(any);
+         },
+
+         lode::ExpressionPropagated::Lambda(lambda) => {
+            self.emit_lambda(lambda);
+         },
+
+         lode::ExpressionPropagated::Path(path) => {
             self.emit_path(path);
          },
 
-         node::ExpressionRef::Bind(bind) => {
-            self
-               .emit_identifier(bind.identifier())
-               .is_bind(true)
-               .span(bind.span());
-         },
-         node::ExpressionRef::Identifier(identifier) => {
-            self.emit_identifier(identifier).span(identifier.span());
+         lode::ExpressionPropagated::Bind(bind) => {
+            self.emit_bind(bind);
          },
 
-         node::ExpressionRef::SString(string) => self.emit_string(string),
-
-         node::ExpressionRef::Char(char) => {
-            self.emit_push(char.span(), char.value().expect(EXPECT_VALID));
-         },
-         node::ExpressionRef::Integer(integer) => {
-            self.emit_push(
-               integer.span(),
-               value::Integer::from(integer.token_integer().value().expect(EXPECT_VALID)),
-            );
-         },
-         node::ExpressionRef::Float(float) => {
-            self.emit_push(
-               float.span(),
-               float.token_float().value().expect(EXPECT_VALID),
-            );
+         lode::ExpressionPropagated::Identifier(identifier) => {
+            self.emit_identifier(identifier);
          },
 
-         node::ExpressionRef::If(if_) => {
+         lode::ExpressionPropagated::SString(string) => {
+            self.emit_string(string);
+         },
+
+         lode::ExpressionPropagated::Char(char) => {
+            self.emit_push(char.span(), ***char);
+         },
+
+         lode::ExpressionPropagated::Integer(integer) => {
+            self.emit_push(integer.span(), value::Integer::from((**integer).to_owned()));
+         },
+
+         lode::ExpressionPropagated::Float(float) => {
+            self.emit_push(float.span(), ***float);
+         },
+
+         lode::ExpressionPropagated::If(if_) => {
             self.emit_if(if_);
          },
       }
    }
 
-   fn emit_force(&mut self, expression: node::ExpressionRef<'a>) {
+   fn emit_force<'arena>(&mut self, expression: lode::Resolved<'arena, &'arena lode::Expression>) {
       self.emit(expression);
       self.push_operation(expression.span(), Operation::Force);
    }

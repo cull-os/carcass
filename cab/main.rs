@@ -65,42 +65,55 @@ async fn main() -> cyn::Termination {
       .root(value::path::blob(Value::from(value::SString::from(&*expression))).arc())
       .subpath(List::new_sync());
 
-   // TODO: position_cache in Path.
    let source = path.read().await?.to_vec();
    let source = String::from_utf8(source).expect("source was created from UTF-8 string");
    let source = report::PositionStr::new(&source);
 
-   let parse_oracle = syntax::ParseOracle::new();
-   let parse = parse_oracle.parse(syntax::tokenize(&source).inspect(|&(kind, slice)| {
-      match cli.dump_token {
-         DumpToken::False => {},
-         DumpToken::True => {
+   // SOURCE -> TOKENS
+   let tokens = syntax::tokenize(&source);
+
+   match cli.dump_token {
+      DumpToken::False => {},
+      DumpToken::True => {
+         for (kind, slice) in tokens.clone() {
             writeln!(out, "{kind:?} {slice:?}").expect("TODO move this inside the runtime");
-         },
-         DumpToken::Color => {
+         }
+         writeln!(out).expect("TODO move inside the runtime");
+      },
+      DumpToken::Color => {
+         for (kind, slice) in tokens.clone() {
             let style = COLORS[kind as usize];
 
             write(out, &slice.style(style)).expect("TODO move inside the runtime");
-         },
-      }
-   }));
-
-   if let DumpToken::True | DumpToken::Color = cli.dump_token {
-      writeln!(out).expect("TODO move inside the runtime");
+         }
+         writeln!(out).expect("TODO move inside the runtime");
+      },
    }
+
+   // TOKENS -> PARSE
+   let parse_oracle = syntax::ParseOracle::new();
+   let parse = parse_oracle.parse(tokens);
 
    if cli.dump_syntax {
       // The Display of this already has a newline. So use write! instead.
       write!(out, "{node:#?}", node = &parse.node).expect("TODO move inside the runtime");
    }
 
+   // EXTRACT EXPRESSION
    let expression = parse.extractlnln(err, &path, &source)?;
 
+   // EXPRESSION -> LOWERED EXPRESSION
+   let lower_oracle = syntax::LowerOracle::new();
+   let lower = lower_oracle.lower(expression.as_ref());
+
+   // TODO: Flag for displaying lower.
+
+   // EXTRACT EXPRESSION
+   let expression = lower.extractlnln(err, &path, &source)?;
+
+   // EXPRESSION -> CODE
    let compile_oracle = runtime::CompileOracle::new();
-   let code = compile_oracle
-      .compile(expression.as_ref())
-      .path(path.dupe())
-      .extractlnln(err, &path, &source)?;
+   let code = compile_oracle.compile(expression).path(path.dupe());
 
    if cli.dump_code {
       code
@@ -109,6 +122,7 @@ async fn main() -> cyn::Termination {
       writeln!(out).expect("TODO move inside the runtime");
    }
 
+   // CODE -> THUNK
    let thunk = value::Thunk::forceable(code.arc())
       .scopes(
          runtime::Scopes::new().push(runtime::Scope::from(&value::attributes::new! {

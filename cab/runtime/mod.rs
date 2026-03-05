@@ -16,10 +16,7 @@ pub use code::{
 };
 
 mod compiler;
-pub use compiler::{
-   Compile,
-   CompileOracle,
-};
+pub use compiler::CompileOracle;
 
 mod scope;
 pub use scope::{

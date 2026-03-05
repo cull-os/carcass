@@ -68,11 +68,11 @@ impl Lower {
    }
 
    pub fn extractlnln(
-      self,
+      &self,
       writer: &mut impl Write,
       location: &impl Display,
       source: &report::PositionStr<'_>,
-   ) -> Result<Self> {
+   ) -> Result<lode::Resolved<'_, &lode::Expression>> {
       let mut fail: usize = 0;
 
       for report in &*self.reports {
@@ -94,7 +94,7 @@ impl Lower {
          );
       }
 
-      Ok(self)
+      Ok(self.expression())
    }
 }
 

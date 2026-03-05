@@ -121,8 +121,8 @@ macro_rules! reffed {
          suffix: Ref<'a>,
          transform_prefix: (&'a ),
          transform_suffix: (),
-         into_paired: as_ref(this) { this },
-         from_paired: to_owned(this) { this.clone() },
+         into_paired: as_ref(variant) { variant },
+         from_paired: to_owned(variant) { variant.clone() },
          attributes: (
             $(#[$attribute])*
             #[derive(Copy)]

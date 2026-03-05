@@ -6,7 +6,11 @@ use derive_more::{
    Deref,
    From,
 };
-use ranged::Spanned;
+use ranged::{
+   IntoSpan as _,
+   Spanned,
+   SpannedExt as _,
+};
 
 const EXPECT_ARENA: &str = "expression must be in arena";
 
@@ -50,7 +54,7 @@ macro_rules! lode {
          $($field_declaration)*
       }
 
-      impl<'arena> Resolved<'arena, &'arena Spanned<$name>> {
+      impl<'arena> Resolved<'arena, Spanned<&'arena $name>> {
          $($field_getter)*
       }
    };
@@ -128,25 +132,32 @@ macro_rules! lode {
 macro_rules! get {
    (&$lifetime:lifetime $field:ident) => {
       pub fn $field(&self) -> Resolved<$lifetime, &$lifetime Expression> {
-         self.arena.get(self.$field).expect(EXPECT_ARENA).resolved(self.arena)
+         self
+            .arena
+            .get(self.$field)
+            .expect(EXPECT_ARENA)
+            .resolved(self.arena)
       }
    };
 
    (Option < &$lifetime:lifetime $field:ident >) => {
       pub fn $field(&self) -> Option<Resolved<$lifetime, &$lifetime Expression>> {
-         self
-            .$field
-            .map(|expression| self.arena.get(expression).expect(EXPECT_ARENA).resolved(self.arena))
+         self.$field.map(|expression| {
+            self
+               .arena
+               .get(expression)
+               .expect(EXPECT_ARENA)
+               .resolved(self.arena)
+         })
       }
    };
 
 
    ([ &$lifetime:lifetime $field:ident ]) => {
       pub fn $field(&self) -> impl Iterator<Item = Resolved<$lifetime, &$lifetime Expression>> {
-         self
-            .$field
-            .iter()
-            .map(|&item| self.arena.get(item).expect(EXPECT_ARENA).resolved(self.arena))
+         self.$field.iter().map(|&item| {
+            self.arena.get(item).expect(EXPECT_ARENA).resolved(self.arena)
+         })
       }
    };
 }
@@ -158,34 +169,59 @@ slotmap::new_key_type! {
 }
 
 pub type Expression = Spanned<ExpressionRaw>;
-#[derive(Debug, Clone, PartialEq, From)]
-pub enum ExpressionRaw {
-   Parenthesis(Parenthesis),
-   List(List),
-   Attributes(Attributes),
+cab_util::paired! {
+   suffix: Propagated<'arena>,
+   transform_prefix: (Resolved<'arena, Spanned<&'arena ),
+   transform_suffix: (>>),
+   into_paired: propagate(expression, arena: &'arena slotmap::SlotMap<ExpressionId, Expression>, span: ranged::Span) {
+      expression.spanned(span).resolved(arena)
+   },
+   from_paired: to_owned(variant) {
+      (**variant).to_owned()
+   },
+   attributes: (#[derive(Clone, Copy)]),
+   #[derive(Debug, Clone, PartialEq, From)]
+   pub enum ExpressionRaw {
+      Parenthesis(Parenthesis),
+      List(List),
+      Attributes(Attributes),
 
-   Same(Same),
-   Sequence(Sequence),
-   Call(Call),
-   Construct(Construct),
-   Select(Select),
-   Equal(Equal),
-   And(And),
-   Or(Or),
-   All(All),
-   Any(Any),
-   Lambda(Lambda),
+      Same(Same),
+      Sequence(Sequence),
+      Call(Call),
+      Construct(Construct),
+      Select(Select),
+      Equal(Equal),
+      And(And),
+      Or(Or),
+      All(All),
+      Any(Any),
+      Lambda(Lambda),
 
-   Path(Path),
-   Bind(Bind),
-   Identifier(Identifier),
-   SString(SString),
+      Path(Path),
+      Bind(Bind),
+      Identifier(Identifier),
+      SString(SString),
 
-   Char(char),
-   Integer(num::BigInt),
-   Float(f64),
+      Char(char),
+      Integer(num::BigInt),
+      Float(f64),
 
-   If(If),
+      If(If),
+   }
+}
+pub use ExpressionRawPropagated as ExpressionPropagated;
+
+impl<'arena> Resolved<'arena, &'arena Expression> {
+   #[must_use]
+   pub fn raw(&self) -> &'arena ExpressionRaw {
+      self
+   }
+
+   #[must_use]
+   pub fn propagate(self) -> ExpressionPropagated<'arena> {
+      self.raw().propagate(self.arena, self.span())
+   }
 }
 
 // PARENTHESIS
@@ -245,7 +281,7 @@ impl<I> Segment<'_, I> {
 pub struct Segments(pub(crate) Vec<Segment<'static, ExpressionId>>);
 
 impl<'content, 'arena> IntoIterator for Resolved<'arena, &'content Segments> {
-   type Item = Segment<'content, &'arena Expression>;
+   type Item = Spanned<Segment<'content, Resolved<'arena, &'arena Expression>>>;
 
    type IntoIter = impl Iterator<Item = Self::Item>;
 
@@ -254,9 +290,16 @@ impl<'content, 'arena> IntoIterator for Resolved<'arena, &'content Segments> {
          match segment {
             &Segment::Content(ref content) => {
                Segment::Content(content.as_ref().map(|inner| Cow::Borrowed(&**inner)))
+                  .spanned(content.span())
             },
             &Segment::Interpolation(expression) => {
-               Segment::Interpolation(self.arena.get(expression).expect(EXPECT_ARENA))
+               let expression = self
+                  .arena
+                  .get(expression)
+                  .expect(EXPECT_ARENA)
+                  .resolved(self.arena);
+
+               Segment::Interpolation(expression).spanned(expression.span())
             },
          }
       })
@@ -283,7 +326,7 @@ macro_rules! segmented {
       #[derive(Deref, Debug, Clone, PartialEq, Eq)]
       pub struct $name(pub Segments);
 
-      impl<'arena> Resolved<'arena, $name> {
+      impl<'arena> Resolved<'arena, Spanned<&'arena $name>> {
          pub fn segments(&self) -> Resolved<'arena, &'_ Segments> {
             (&self.0).resolved(self.arena)
          }

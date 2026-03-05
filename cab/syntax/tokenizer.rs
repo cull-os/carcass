@@ -9,7 +9,7 @@ use crate::{
 };
 
 /// Returns an iterator of tokens that reference the given string.
-pub fn tokenize(source: &str) -> impl Iterator<Item = (Kind, &str)> {
+pub fn tokenize(source: &str) -> impl Iterator<Item = (Kind, &str)> + Clone {
    Tokenizer::new(source)
 }
 

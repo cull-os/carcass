@@ -3,7 +3,7 @@
 #![warn(missing_docs)]
 
 mod lazy;
-mod reffed;
+mod paired;
 
 pub mod suffix;
 
