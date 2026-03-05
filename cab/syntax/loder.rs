@@ -35,9 +35,14 @@ use crate::{
       self,
       *,
    },
-   lode,
-   node,
-   node::Segmented as _,
+   lode::{
+      self,
+      ResolvedExt as _,
+   },
+   node::{
+      self,
+      Segmented as _,
+   },
    token,
 };
 
@@ -55,13 +60,11 @@ pub struct Lower {
 impl Lower {
    #[must_use]
    pub fn expression(&self) -> lode::Resolved<'_, &lode::Expression> {
-      lode::Resolved::new(
-         &self.arena,
-         self
-            .arena
-            .get(self.expression)
-            .expect("lode expression must be in arena"),
-      )
+      self
+         .arena
+         .get(self.expression)
+         .expect("lode expression must be in arena")
+         .resolved(&self.arena)
    }
 
    pub fn extractlnln(

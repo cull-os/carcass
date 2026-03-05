@@ -17,11 +17,16 @@ pub struct Resolved<'arena, T> {
    value: T,
 }
 
-impl<'arena, T> Resolved<'arena, T> {
-   pub(crate) fn new(arena: &'arena slotmap::SlotMap<ExpressionId, Expression>, value: T) -> Self {
-      Self { arena, value }
+pub(crate) trait ResolvedExt {
+   fn resolved(self, arena: &slotmap::SlotMap<ExpressionId, Expression>) -> Resolved<'_, Self>
+   where
+      Self: Sized,
+   {
+      Resolved { arena, value: self }
    }
 }
+
+impl<T> ResolvedExt for T {}
 
 macro_rules! lode {
    ($name:ident { $($field:tt)* }) => {
@@ -123,7 +128,7 @@ macro_rules! lode {
 macro_rules! get {
    (&$lifetime:lifetime $field:ident) => {
       pub fn $field(&self) -> Resolved<$lifetime, &$lifetime Expression> {
-         Resolved::new(self.arena, self.arena.get(self.$field).expect(EXPECT_ARENA))
+         self.arena.get(self.$field).expect(EXPECT_ARENA).resolved(self.arena)
       }
    };
 
@@ -131,7 +136,7 @@ macro_rules! get {
       pub fn $field(&self) -> Option<Resolved<$lifetime, &$lifetime Expression>> {
          self
             .$field
-            .map(|expression| Resolved::new(self.arena, self.arena.get(expression).expect(EXPECT_ARENA)))
+            .map(|expression| self.arena.get(expression).expect(EXPECT_ARENA).resolved(self.arena))
       }
    };
 
@@ -141,7 +146,7 @@ macro_rules! get {
          self
             .$field
             .iter()
-            .map(|&item| Resolved::new(self.arena, self.arena.get(item).expect(EXPECT_ARENA)))
+            .map(|&item| self.arena.get(item).expect(EXPECT_ARENA).resolved(self.arena))
       }
    };
 }
@@ -280,7 +285,7 @@ macro_rules! segmented {
 
       impl<'arena> Resolved<'arena, $name> {
          pub fn segments(&self) -> Resolved<'arena, &'_ Segments> {
-            Resolved::new(self.arena, &self.0)
+            (&self.0).resolved(self.arena)
          }
       }
    };
