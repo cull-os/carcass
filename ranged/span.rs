@@ -235,11 +235,6 @@ pub struct Spanned<T> {
 }
 
 impl<T> Spanned<T> {
-   /// Creates a new [`Spanned`].
-   pub fn new(span: Span, value: T) -> Self {
-      Self { span, value }
-   }
-
    /// Maps the wrapped value while preserving its original span.
    pub fn map<U>(self, function: impl FnOnce(T) -> U) -> Spanned<U> {
       Spanned {
@@ -264,7 +259,7 @@ pub trait SpannedExt {
    where
       Self: Sized,
    {
-      Spanned::new(span, self)
+      Spanned { span, value: self }
    }
 }
 
