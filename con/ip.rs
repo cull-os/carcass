@@ -1,9 +1,13 @@
 use std::{
    collections::VecDeque,
    mem,
-   pin::pin,
+   pin::{
+      Pin,
+      pin,
+   },
    sync::Arc,
    task,
+   time::Duration,
 };
 
 use derive_more::Deref;
@@ -27,6 +31,7 @@ use libp2p::{
 };
 use ringbuf::traits::{
    Consumer as _,
+   Observer as _,
    Producer as _,
    Split as _,
 };
@@ -34,7 +39,10 @@ use rustc_hash::{
    FxBuildHasher,
    FxHashMap,
 };
-use tokio::io;
+use tokio::{
+   io,
+   time as tokio_time,
+};
 
 const PROTOCOL: p2p_swarm::StreamProtocol = p2p_swarm::StreamProtocol::new("/ip/0.0.1");
 
@@ -49,13 +57,15 @@ impl Packet {
 
    pub async fn read_from(mut stream: p2p::Stream) -> io::Result<(p2p::Stream, Self)> {
       let mut len = [0_u8; 2];
-
       stream.read_exact(&mut len).await?;
-
       let len = u16::from_le_bytes(len) as usize;
 
       let mut data = Vec::with_capacity(len);
-      stream.read_exact(&mut data).await?;
+
+      (&mut stream)
+         .take(len as u64)
+         .read_to_end(&mut data)
+         .await?;
 
       if data.len() != len {
          return Err(io::Error::new(
@@ -85,16 +95,23 @@ impl Packet {
    }
 }
 
-enum HandlerAction {
+#[derive(Default)]
+enum ReadState {
    Reading(BoxFuture<'static, io::Result<(p2p::Stream, Packet)>>),
-   Writing(BoxFuture<'static, io::Result<p2p::Stream>>),
-   Idle(Option<p2p_swarm::Stream>),
+   Connected(p2p::Stream),
+   Backoff(Pin<Box<tokio_time::Sleep>>),
+   #[default]
+   Disconnected,
 }
 
-impl Default for HandlerAction {
-   fn default() -> Self {
-      Self::Idle(None)
-   }
+#[derive(Default)]
+enum WriteState {
+   Writing(BoxFuture<'static, io::Result<p2p::Stream>>),
+   Connected(p2p::Stream),
+   Backoff(Pin<Box<tokio_time::Sleep>>),
+   Requested,
+   #[default]
+   Disconnected,
 }
 
 const PACKET_BUFFER_SIZE: usize = 256;
@@ -103,14 +120,22 @@ type PacketConsumer = ringbuf::CachingCons<Arc<ringbuf::StaticRb<Packet, PACKET_
 
 pub struct Handler {
    consumer: PacketConsumer,
-   action:   HandlerAction,
+
+   read:       ReadState,
+   read_tries: u32,
+
+   write:       WriteState,
+   write_tries: u32,
 }
 
 impl Handler {
    fn new(consumer: PacketConsumer) -> Self {
       Handler {
          consumer,
-         action: HandlerAction::default(),
+         read: ReadState::Disconnected,
+         read_tries: 0,
+         write: WriteState::Disconnected,
+         write_tries: 0,
       }
    }
 }
@@ -150,19 +175,23 @@ impl p2p_swarm::ConnectionHandler for Handler {
          (),
       >,
    ) {
-      let stream_new = match event {
-         p2p_swarm_handler::ConnectionEvent::FullyNegotiatedInbound(new) => new.protocol,
-         p2p_swarm_handler::ConnectionEvent::FullyNegotiatedOutbound(new) => new.protocol,
-         _ => return,
-      };
-
-      match self.action {
-         HandlerAction::Reading(_) => {},
-         HandlerAction::Writing(_) => {},
-
-         HandlerAction::Idle(ref mut stream) => {
-            *stream = Some(stream_new);
+      match event {
+         p2p_swarm_handler::ConnectionEvent::FullyNegotiatedInbound(new) => {
+            if let ReadState::Disconnected = self.read {
+               self.read = ReadState::Connected(new.protocol);
+            }
          },
+         p2p_swarm_handler::ConnectionEvent::FullyNegotiatedOutbound(new) => {
+            if let WriteState::Requested = self.write {
+               self.write = WriteState::Connected(new.protocol);
+            }
+         },
+         p2p_swarm_handler::ConnectionEvent::DialUpgradeError(_) => {
+            if let WriteState::Requested = self.write {
+               self.write = WriteState::Disconnected;
+            }
+         },
+         _ => {},
       }
    }
 
@@ -186,54 +215,99 @@ impl p2p_swarm::ConnectionHandler for Handler {
          Ready,
       };
 
-      match mem::take(&mut self.action) {
-         HandlerAction::Reading(mut read) => {
-            let Ready(result) = pin!(&mut read).poll(context) else {
-               self.action = HandlerAction::Reading(read);
-               return Pending;
-            };
+      'read: {
+         match self.read {
+            ReadState::Reading(ref mut read) => {
+               let Ready(result) = pin!(read).poll(context) else {
+                  break 'read;
+               };
 
-            match result {
-               Ok((stream, packet)) => {
-                  self.action = HandlerAction::Idle(Some(stream));
+               let Ok((stream, packet)) = result else {
+                  tracing::warn!(
+                     "Failed to read packet from stream: {error}",
+                     error = result.unwrap_err(),
+                  );
+                  self.read_tries += 1;
+                  self.read = ReadState::Backoff(Box::pin(tokio_time::sleep(Duration::from_secs(
+                     1_u64.checked_shl(self.read_tries).unwrap_or(u64::MAX),
+                  ))));
+                  break 'read;
+               };
 
-                  return Ready(NotifyBehaviour(packet));
-               },
+               self.read_tries = 0;
+               self.read = ReadState::Connected(stream);
+               return Ready(NotifyBehaviour(packet));
+            },
 
-               Err(error) => {
-                  tracing::warn!("Failed to read packet from stream: {error}");
-               },
-            }
-         },
+            ReadState::Connected(..) => {
+               let ReadState::Connected(stream) = mem::take(&mut self.read) else {
+                  unreachable!();
+               };
 
-         HandlerAction::Writing(mut write) => {
-            let Ready(result) = pin!(&mut write).poll(context) else {
-               self.action = HandlerAction::Writing(write);
-               return Pending;
-            };
+               self.read = ReadState::Reading(Box::pin(Packet::read_from(stream)));
+            },
 
-            match result {
-               Ok(stream) => self.action = HandlerAction::Idle(Some(stream)),
+            ReadState::Backoff(ref mut sleep) => {
+               let Ready(()) = sleep.as_mut().poll(context) else {
+                  break 'read;
+               };
 
-               Err(error) => {
-                  tracing::warn!("Failed to write packet to stream: {error}");
-               },
-            }
-         },
+               self.read = ReadState::Disconnected;
+            },
 
-         HandlerAction::Idle(Some(stream)) => {
-            if let Some(packet) = self.consumer.try_pop() {
-               self.action = HandlerAction::Writing(Box::pin(packet.write_to(stream)));
-            } else {
-               self.action = HandlerAction::Reading(Box::pin(Packet::read_from(stream)));
-            }
-         },
+            ReadState::Disconnected => {},
+         }
+      }
 
-         HandlerAction::Idle(None) => {
-            return Ready(OutboundSubstreamRequest {
-               protocol: self.listen_protocol(),
-            });
-         },
+      'write: {
+         match self.write {
+            WriteState::Writing(ref mut write) => {
+               let Ready(result) = pin!(write).poll(context) else {
+                  break 'write;
+               };
+
+               let Ok(stream) = result else {
+                  tracing::warn!("Failed to write packet to stream: {}", result.unwrap_err());
+                  self.write_tries += 1;
+                  self.write = WriteState::Backoff(Box::pin(tokio_time::sleep(
+                     Duration::from_secs(1_u64.checked_shl(self.write_tries).unwrap_or(u64::MAX)),
+                  )));
+                  break 'write;
+               };
+
+               self.write_tries = 0;
+               self.write = WriteState::Connected(stream);
+            },
+
+            WriteState::Connected(..) => {
+               if let Some(packet) = self.consumer.try_pop() {
+                  let WriteState::Connected(stream) = mem::take(&mut self.write) else {
+                     unreachable!();
+                  };
+
+                  self.write = WriteState::Writing(Box::pin(packet.write_to(stream)));
+               }
+            },
+
+            WriteState::Backoff(ref mut sleep) => {
+               let Ready(()) = sleep.as_mut().poll(context) else {
+                  break 'write;
+               };
+
+               self.write = WriteState::Disconnected;
+            },
+
+            WriteState::Requested => {},
+
+            WriteState::Disconnected => {
+               if !self.consumer.is_empty() {
+                  self.write = WriteState::Requested;
+                  return Ready(OutboundSubstreamRequest {
+                     protocol: self.listen_protocol(),
+                  });
+               }
+            },
+         }
       }
 
       Pending
@@ -243,35 +317,47 @@ impl p2p_swarm::ConnectionHandler for Handler {
 pub trait Policy = FnMut(&p2p::PeerId) -> Result<(), p2p_swarm::ConnectionDenied> + 'static;
 
 pub struct Behaviour<P: Policy> {
+   queued_events: VecDeque<p2p_swarm::ToSwarm<Packet, ()>>,
+
    inbound_policy: P,
-   inbound_queue:  VecDeque<Packet>,
 
    outbound_handlers: FxHashMap<p2p::PeerId, PacketProducer>,
-   outbound_packets:  FxHashMap<p2p::PeerId, Vec<Packet>>,
+   outbound_buffers:  FxHashMap<p2p::PeerId, (PacketProducer, PacketConsumer)>,
 }
 
 impl<P: Policy> Behaviour<P> {
    pub fn new(inbound_policy: P) -> Self {
       Self {
+         queued_events: VecDeque::new(),
+
          inbound_policy,
-         inbound_queue: VecDeque::new(),
 
          outbound_handlers: FxHashMap::with_hasher(FxBuildHasher),
-         outbound_packets: FxHashMap::with_hasher(FxBuildHasher),
+         outbound_buffers: FxHashMap::with_hasher(FxBuildHasher),
       }
    }
 
    pub fn send(&mut self, peer_id: &p2p::PeerId, packet: Packet) {
-      let Some(producer) = self.outbound_handlers.get_mut(peer_id) else {
-         self
-            .outbound_packets
+      let producer = if let Some(producer) = self.outbound_handlers.get_mut(peer_id) {
+         producer
+      } else if let Some(&mut (ref mut producer, _)) = self.outbound_buffers.get_mut(peer_id) {
+         producer
+      } else {
+         self.queued_events.push_back(p2p_swarm::ToSwarm::Dial {
+            opts: p2p_swarm_dial_opts::DialOpts::peer_id(*peer_id).build(),
+         });
+
+         &mut self
+            .outbound_buffers
             .entry(*peer_id)
-            .or_default()
-            .push(packet);
-         return;
+            .or_insert_with(|| ringbuf::StaticRb::default().split())
+            .0
       };
 
-      let _ = producer.try_push(packet);
+      let Ok(()) = producer.try_push(packet) else {
+         tracing::warn!("Packet buffer full for peer '{peer_id}', dropping packet.");
+         return;
+      };
    }
 }
 
@@ -289,11 +375,10 @@ impl<P: Policy> p2p_swarm::NetworkBehaviour for Behaviour<P> {
    ) -> Result<Handler, p2p_swarm::ConnectionDenied> {
       (self.inbound_policy)(&peer_id)?;
 
-      let (mut producer, consumer) = ringbuf::StaticRb::default().split();
-
-      if let Some(packets) = self.outbound_packets.remove(&peer_id) {
-         producer.push_iter(packets.into_iter());
-      }
+      let (producer, consumer) = self
+         .outbound_buffers
+         .remove(&peer_id)
+         .unwrap_or_else(|| ringbuf::StaticRb::default().split());
 
       self.outbound_handlers.insert(peer_id, producer);
 
@@ -308,18 +393,24 @@ impl<P: Policy> p2p_swarm::NetworkBehaviour for Behaviour<P> {
       _role_override: p2p_core::Endpoint,
       _port_use: p2p_core_transport::PortUse,
    ) -> Result<Handler, p2p_swarm::ConnectionDenied> {
-      let (mut producer, consumer) = ringbuf::StaticRb::default().split();
-
-      if let Some(packets) = self.outbound_packets.remove(&peer_id) {
-         producer.push_iter(packets.into_iter());
-      }
+      let (producer, consumer) = self
+         .outbound_buffers
+         .remove(&peer_id)
+         .unwrap_or_else(|| ringbuf::StaticRb::default().split());
 
       self.outbound_handlers.insert(peer_id, producer);
 
       Ok(Handler::new(consumer))
    }
 
-   fn on_swarm_event(&mut self, _event: p2p_swarm::FromSwarm) {}
+   fn on_swarm_event(&mut self, event: p2p_swarm::FromSwarm) {
+      match event {
+         p2p_swarm::FromSwarm::ConnectionClosed(closed) if closed.remaining_established == 0 => {
+            self.outbound_handlers.remove(&closed.peer_id);
+         },
+         _ => {},
+      }
+   }
 
    fn on_connection_handler_event(
       &mut self,
@@ -327,7 +418,9 @@ impl<P: Policy> p2p_swarm::NetworkBehaviour for Behaviour<P> {
       _connection_id: p2p_swarm::ConnectionId,
       packet: Packet,
    ) {
-      self.inbound_queue.push_back(packet);
+      self
+         .queued_events
+         .push_back(p2p_swarm::ToSwarm::GenerateEvent(packet));
    }
 
    #[tracing::instrument(level = "trace", name = "NetworkBehaviour::poll", skip(self, _context))]
@@ -335,19 +428,8 @@ impl<P: Policy> p2p_swarm::NetworkBehaviour for Behaviour<P> {
       &mut self,
       _context: &mut task::Context<'_>,
    ) -> task::Poll<p2p_swarm::ToSwarm<Packet, ()>> {
-      // Check for outbound packets and dial.
-      #[expect(clippy::iter_over_hash_type)]
-      for outbound_peer_id in self.outbound_packets.keys() {
-         if !self.outbound_handlers.contains_key(outbound_peer_id) {
-            return task::Poll::Ready(p2p_swarm::ToSwarm::Dial {
-               opts: p2p_swarm_dial_opts::DialOpts::peer_id(*outbound_peer_id).build(),
-            });
-         }
-      }
-
-      // Then check for incoming packets to emit.
-      match self.inbound_queue.pop_front() {
-         Some(packet) => task::Poll::Ready(p2p_swarm::ToSwarm::GenerateEvent(packet)),
+      match self.queued_events.pop_front() {
+         Some(event) => task::Poll::Ready(event),
          None => task::Poll::Pending,
       }
    }
