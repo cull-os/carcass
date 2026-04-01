@@ -133,6 +133,7 @@ archery              = "1.2.1"
 arcstr               = "1.2.0"
 async-once-cell      = "0.5.4"
 async-trait          = "0.1.86"
+asynchronous-codec   = "0.7.0"
 bon                  = "3.6.4"
 bytes                = "1.10.0"
 clap                 = { features = [ "derive" ], version = "4.5.4" }

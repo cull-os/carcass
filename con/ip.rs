@@ -1,15 +1,21 @@
 use std::{
    collections::VecDeque,
-   mem,
-   pin::{
-      Pin,
-      pin,
-   },
+   io,
+   pin::Pin,
    sync::Arc,
    task,
-   time::Duration,
 };
 
+use asynchronous_codec::{
+   Decoder,
+   Encoder,
+   Framed,
+};
+use bytes::{
+   Buf as _,
+   BufMut as _,
+   BytesMut,
+};
 use derive_more::Deref;
 use libp2p::{
    self as p2p,
@@ -19,9 +25,8 @@ use libp2p::{
       upgrade as p2p_core_upgrade,
    },
    futures::{
-      AsyncReadExt as _,
-      AsyncWriteExt as _,
-      future::BoxFuture,
+      SinkExt as _,
+      StreamExt as _,
    },
    swarm::{
       self as p2p_swarm,
@@ -39,103 +44,97 @@ use rustc_hash::{
    FxBuildHasher,
    FxHashMap,
 };
-use tokio::{
-   io,
-   time as tokio_time,
-};
 
 const PROTOCOL: p2p_swarm::StreamProtocol = p2p_swarm::StreamProtocol::new("/ip/0.0.1");
 
 #[derive(Debug, Deref, Clone)]
-pub struct Packet(Vec<u8>);
+pub struct Packet(pub Vec<u8>);
 
-impl Packet {
-   #[must_use]
-   pub fn new(data: Vec<u8>) -> Self {
-      Self(data)
+struct PacketCodec;
+
+impl Encoder for PacketCodec {
+   type Item<'a> = &'a Packet;
+   type Error = io::Error;
+
+   fn encode(&mut self, item: Self::Item<'_>, dst: &mut BytesMut) -> Result<(), Self::Error> {
+      let len = u16::try_from(item.len()).map_err(|_| {
+         io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "packet too large, must fit in u16::MAX bytes",
+         )
+      })?;
+
+      dst.reserve(2 + item.len());
+      dst.put_u16_le(len);
+      dst.extend_from_slice(item);
+
+      Ok(())
    }
+}
 
-   pub async fn read_from(mut stream: p2p::Stream) -> io::Result<(p2p::Stream, Self)> {
-      let mut len = [0_u8; 2];
-      stream.read_exact(&mut len).await?;
-      let len = u16::from_le_bytes(len) as usize;
+impl Decoder for PacketCodec {
+   type Item = Packet;
+   type Error = io::Error;
 
-      let mut data = Vec::with_capacity(len);
-
-      (&mut stream)
-         .take(len as u64)
-         .read_to_end(&mut data)
-         .await?;
-
-      if data.len() != len {
-         return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            "packet data size did not match packet length header",
-         ));
+   fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+      if src.len() < 2 {
+         return Ok(None);
       }
 
-      Ok((stream, Self(data)))
-   }
+      let len = u16::from_le_bytes([src[0], src[1]]) as usize;
 
-   pub async fn write_to(self, mut stream: p2p::Stream) -> io::Result<p2p::Stream> {
-      let len = u16::try_from(self.len())
-         .map_err(|_| {
-            io::Error::new(
-               io::ErrorKind::InvalidInput,
-               "packet too large, must fit in u16::MAX bytes",
-            )
-         })?
-         .to_le_bytes();
+      if src.len() < 2 + len {
+         src.reserve(2 + len - src.len());
+         return Ok(None);
+      }
 
-      stream.write_all(&len).await?;
-      stream.write_all(&self).await?;
-      stream.flush().await?;
+      src.advance(2);
+      let data = src.split_to(len);
 
-      Ok(stream)
+      Ok(Some(Packet(data.to_vec())))
    }
 }
 
-#[derive(Default)]
-enum ReadState {
-   Reading(BoxFuture<'static, io::Result<(p2p::Stream, Packet)>>),
-   Connected(p2p::Stream),
-   Backoff(Pin<Box<tokio_time::Sleep>>),
-   #[default]
-   Disconnected,
+type FramedStream = Framed<p2p::Stream, PacketCodec>;
+
+enum InboundState {
+   WaitingInput(FramedStream),
+   Closing(FramedStream),
 }
 
-#[derive(Default)]
-enum WriteState {
-   Writing(BoxFuture<'static, io::Result<p2p::Stream>>),
-   Connected(p2p::Stream),
-   Backoff(Pin<Box<tokio_time::Sleep>>),
-   Requested,
-   #[default]
-   Disconnected,
+enum OutboundState {
+   WaitingOutput(FramedStream),
+   PendingSend(FramedStream, Packet),
+   PendingFlush(FramedStream),
 }
+
+const MAX_SUBSTREAM_ATTEMPTS: usize = 5;
 
 const PACKET_BUFFER_SIZE: usize = 256;
 type PacketProducer = ringbuf::CachingProd<Arc<ringbuf::StaticRb<Packet, PACKET_BUFFER_SIZE>>>;
 type PacketConsumer = ringbuf::CachingCons<Arc<ringbuf::StaticRb<Packet, PACKET_BUFFER_SIZE>>>;
 
-pub struct Handler {
-   consumer: PacketConsumer,
-
-   read:       ReadState,
-   read_tries: u32,
-
-   write:       WriteState,
-   write_tries: u32,
+pub enum Handler {
+   Enabled {
+      consumer:              PacketConsumer,
+      inbound:               Option<InboundState>,
+      outbound:              Option<OutboundState>,
+      outbound_establishing: bool,
+      inbound_attempts:      usize,
+      outbound_attempts:     usize,
+   },
+   Disabled,
 }
 
 impl Handler {
    fn new(consumer: PacketConsumer) -> Self {
-      Handler {
+      Handler::Enabled {
          consumer,
-         read: ReadState::Disconnected,
-         read_tries: 0,
-         write: WriteState::Disconnected,
-         write_tries: 0,
+         inbound: None,
+         outbound: None,
+         outbound_establishing: false,
+         inbound_attempts: 0,
+         outbound_attempts: 0,
       }
    }
 }
@@ -175,30 +174,54 @@ impl p2p_swarm::ConnectionHandler for Handler {
          (),
       >,
    ) {
+      let Handler::Enabled {
+         ref mut inbound,
+         ref mut outbound,
+         ref mut outbound_establishing,
+         ref mut inbound_attempts,
+         ref mut outbound_attempts,
+         ..
+      } = *self
+      else {
+         return;
+      };
+
       match event {
          p2p_swarm_handler::ConnectionEvent::FullyNegotiatedInbound(new) => {
-            if let ReadState::Disconnected = self.read {
-               self.read = ReadState::Connected(new.protocol);
+            *inbound = Some(InboundState::WaitingInput(Framed::new(
+               new.protocol,
+               PacketCodec,
+            )));
+
+            *inbound_attempts += 1;
+            if *inbound_attempts >= MAX_SUBSTREAM_ATTEMPTS {
+               tracing::warn!("Maximum inbound substream attempts exceeded.");
+               *self = Handler::Disabled;
             }
          },
          p2p_swarm_handler::ConnectionEvent::FullyNegotiatedOutbound(new) => {
-            if let WriteState::Requested = self.write {
-               self.write = WriteState::Connected(new.protocol);
-            }
+            *outbound = Some(OutboundState::WaitingOutput(Framed::new(
+               new.protocol,
+               PacketCodec,
+            )));
+            *outbound_establishing = false;
          },
          p2p_swarm_handler::ConnectionEvent::DialUpgradeError(_) => {
-            if let WriteState::Requested = self.write {
-               self.write = WriteState::Disconnected;
+            *outbound_establishing = false;
+            *outbound_attempts += 1;
+            if *outbound_attempts >= MAX_SUBSTREAM_ATTEMPTS {
+               tracing::warn!("Maximum outbound substream attempts exceeded.");
+               *self = Handler::Disabled;
             }
          },
          _ => {},
       }
    }
 
-   #[tracing::instrument(level = "trace", name = "ConnectionHandler::poll", skip(self, context))]
+   #[tracing::instrument(level = "trace", name = "ConnectionHandler::poll", skip(self, cx))]
    fn poll(
       &mut self,
-      context: &mut task::Context<'_>,
+      cx: &mut task::Context<'_>,
    ) -> task::Poll<
       p2p_swarm::ConnectionHandlerEvent<
          Self::OutboundProtocol,
@@ -215,98 +238,121 @@ impl p2p_swarm::ConnectionHandler for Handler {
          Ready,
       };
 
-      'read: {
-         match self.read {
-            ReadState::Reading(ref mut read) => {
-               let Ready(result) = pin!(read).poll(context) else {
-                  break 'read;
-               };
+      let Handler::Enabled {
+         ref mut consumer,
+         ref mut inbound,
+         ref mut outbound,
+         ref mut outbound_establishing,
+         ..
+      } = *self
+      else {
+         return Pending;
+      };
 
-               let Ok((stream, packet)) = result else {
-                  tracing::warn!(
-                     "Failed to read packet from stream: {error}",
-                     error = result.unwrap_err(),
-                  );
-                  self.read_tries += 1;
-                  self.read = ReadState::Backoff(Box::pin(tokio_time::sleep(Duration::from_secs(
-                     1_u64.checked_shl(self.read_tries).unwrap_or(u64::MAX),
-                  ))));
-                  break 'read;
-               };
+      // Request outbound substream if needed.
+      if outbound.is_none() && !*outbound_establishing && !consumer.is_empty() {
+         *outbound_establishing = true;
+         return Ready(OutboundSubstreamRequest {
+            protocol: p2p_swarm::SubstreamProtocol::new(
+               p2p_core_upgrade::ReadyUpgrade::new(PROTOCOL),
+               (),
+            ),
+         });
+      }
 
-               self.read_tries = 0;
-               self.read = ReadState::Connected(stream);
-               return Ready(NotifyBehaviour(packet));
+      // Process outbound.
+      loop {
+         match outbound.take() {
+            Some(OutboundState::WaitingOutput(substream)) => {
+               if let Some(packet) = consumer.try_pop() {
+                  *outbound = Some(OutboundState::PendingSend(substream, packet));
+                  continue;
+               }
+
+               *outbound = Some(OutboundState::WaitingOutput(substream));
+               break;
             },
-
-            ReadState::Connected(..) => {
-               let ReadState::Connected(stream) = mem::take(&mut self.read) else {
-                  unreachable!();
-               };
-
-               self.read = ReadState::Reading(Box::pin(Packet::read_from(stream)));
+            Some(OutboundState::PendingSend(mut substream, packet)) => {
+               match Pin::new(&mut substream).poll_ready(cx) {
+                  Ready(Ok(())) => {
+                     match Pin::new(&mut substream).start_send(&packet) {
+                        Ok(()) => {
+                           *outbound = Some(OutboundState::PendingFlush(substream));
+                        },
+                        Err(error) => {
+                           tracing::debug!("Failed to send packet on outbound stream: {error}");
+                           *outbound = None;
+                           break;
+                        },
+                     }
+                  },
+                  Ready(Err(error)) => {
+                     tracing::debug!("Failed to send packet on outbound stream: {error}");
+                     *outbound = None;
+                     break;
+                  },
+                  Pending => {
+                     *outbound = Some(OutboundState::PendingSend(substream, packet));
+                     break;
+                  },
+               }
             },
-
-            ReadState::Backoff(ref mut sleep) => {
-               let Ready(()) = sleep.as_mut().poll(context) else {
-                  break 'read;
-               };
-
-               self.read = ReadState::Disconnected;
+            Some(OutboundState::PendingFlush(mut substream)) => {
+               match Pin::new(&mut substream).poll_flush(cx) {
+                  Ready(Ok(())) => {
+                     *outbound = Some(OutboundState::WaitingOutput(substream));
+                  },
+                  Ready(Err(error)) => {
+                     tracing::debug!("Failed to flush outbound stream: {error}");
+                     *outbound = None;
+                     break;
+                  },
+                  Pending => {
+                     *outbound = Some(OutboundState::PendingFlush(substream));
+                     break;
+                  },
+               }
             },
-
-            ReadState::Disconnected => {},
+            None => break,
          }
       }
 
-      'write: {
-         match self.write {
-            WriteState::Writing(ref mut write) => {
-               let Ready(result) = pin!(write).poll(context) else {
-                  break 'write;
-               };
-
-               let Ok(stream) = result else {
-                  tracing::warn!("Failed to write packet to stream: {}", result.unwrap_err());
-                  self.write_tries += 1;
-                  self.write = WriteState::Backoff(Box::pin(tokio_time::sleep(
-                     Duration::from_secs(1_u64.checked_shl(self.write_tries).unwrap_or(u64::MAX)),
-                  )));
-                  break 'write;
-               };
-
-               self.write_tries = 0;
-               self.write = WriteState::Connected(stream);
-            },
-
-            WriteState::Connected(..) => {
-               if let Some(packet) = self.consumer.try_pop() {
-                  let WriteState::Connected(stream) = mem::take(&mut self.write) else {
-                     unreachable!();
-                  };
-
-                  self.write = WriteState::Writing(Box::pin(packet.write_to(stream)));
+      // Process inbound.
+      loop {
+         match inbound.take() {
+            Some(InboundState::WaitingInput(mut substream)) => {
+               match substream.poll_next_unpin(cx) {
+                  Ready(Some(Ok(packet))) => {
+                     *inbound = Some(InboundState::WaitingInput(substream));
+                     return Ready(NotifyBehaviour(packet));
+                  },
+                  Ready(Some(Err(error))) => {
+                     tracing::debug!("Failed to read from inbound stream: {error}");
+                     *inbound = Some(InboundState::Closing(substream));
+                  },
+                  Ready(None) => {
+                     tracing::debug!("Inbound stream closed by remote.");
+                     *inbound = Some(InboundState::Closing(substream));
+                  },
+                  Pending => {
+                     *inbound = Some(InboundState::WaitingInput(substream));
+                     break;
+                  },
                }
             },
-
-            WriteState::Backoff(ref mut sleep) => {
-               let Ready(()) = sleep.as_mut().poll(context) else {
-                  break 'write;
-               };
-
-               self.write = WriteState::Disconnected;
-            },
-
-            WriteState::Requested => {},
-
-            WriteState::Disconnected => {
-               if !self.consumer.is_empty() {
-                  self.write = WriteState::Requested;
-                  return Ready(OutboundSubstreamRequest {
-                     protocol: self.listen_protocol(),
-                  });
+            Some(InboundState::Closing(mut substream)) => {
+               match Pin::new(&mut substream).poll_close(cx) {
+                  Ready(_) => {
+                     *inbound = None;
+                     break;
+                  },
+                  Pending => {
+                     *inbound = Some(InboundState::Closing(substream));
+                     break;
+                  },
                }
             },
+            None => break,
          }
       }
 

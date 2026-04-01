@@ -203,7 +203,7 @@ pub async fn run(config: Config) -> cyn::Result<()> {
             };
 
             // Send packet to peer
-            let packet = ip::Packet::new(packet.to_vec());
+            let packet = ip::Packet(packet.to_vec());
             swarm.behaviour_mut().ip.send(&peer_id, packet);
          },
       }

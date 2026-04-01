@@ -24,7 +24,9 @@ cyn.path = "../cyn"
 dup.path = "../dup"
 ust.path = "../ust"
 
+asynchronous-codec.workspace = true
 async-trait.workspace        = true
+bytes.workspace              = true
 clap.workspace               = true
 derive_more.workspace        = true
 heck.workspace               = true
