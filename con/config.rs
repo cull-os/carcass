@@ -48,6 +48,8 @@ pub struct Config {
 
    pub interface: String,
 
+   pub listen: Vec<p2p::Multiaddr>,
+
    pub peers: Vec<Peer>,
 
    pub bootstrap: Vec<p2p::Multiaddr>,
@@ -81,6 +83,16 @@ impl Config {
          keypair,
 
          interface: "con".to_owned(),
+
+         listen: [
+            "/ip4/0.0.0.0/tcp/0",
+            "/ip6/::/tcp/0",
+            "/ip4/0.0.0.0/udp/0/quic-v1",
+            "/ip6/::/udp/0/quic-v1",
+         ]
+         .iter()
+         .map(|addr| p2p::Multiaddr::from_str(addr).expect("literals are valid"))
+         .collect(),
 
          peers: Vec::new(),
 

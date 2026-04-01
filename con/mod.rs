@@ -132,9 +132,11 @@ pub async fn run(config: Config) -> cyn::Result<()> {
       .unwrap()
       .build();
 
-   swarm
-      .listen_on(p2p::Multiaddr::from_str("/ip6/::/tcp/0").expect("literal is valid"))
-      .chain_err("failed to listen on local port")?;
+   for addr in config.listen {
+      swarm
+         .listen_on(addr)
+         .chain_err("failed to listen on local port")?;
+   }
 
    swarm
       .behaviour_mut()
