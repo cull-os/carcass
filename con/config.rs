@@ -10,12 +10,11 @@ use libp2p::{
 };
 
 mod keypair {
+   use libp2p::identity::ed25519;
    use serde::{
       Deserialize as _,
       de,
    };
-
-   use super::*;
 
    pub fn serialize<S: serde::Serializer>(
       keypair: &ed25519::Keypair,
@@ -46,7 +45,7 @@ pub struct Config {
    #[serde(rename = "private-key", with = "keypair")]
    pub keypair: ed25519::Keypair,
 
-   pub interface: String,
+   pub interface: Option<String>,
 
    pub listen: Vec<p2p::Multiaddr>,
 
@@ -82,7 +81,7 @@ impl Config {
          id,
          keypair,
 
-         interface: "con".to_owned(),
+         interface: None,
 
          listen: [
             "/ip4/0.0.0.0/tcp/0",
@@ -129,10 +128,9 @@ impl Config {
       }
 
       tracing::info!("Generated node id '{id}'.", id = config.id);
-      tracing::info!(
-         "Using interface '{interface}'.",
-         interface = config.interface,
-      );
+      if let Some(ref interface) = config.interface {
+         tracing::info!("Using interface '{interface}'.");
+      }
       tracing::info!("Using {n} bootstrap peers.", n = config.bootstrap.len());
 
       Ok(config)

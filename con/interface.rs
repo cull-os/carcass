@@ -1,42 +1,53 @@
-use std::net;
+use std::{
+   io,
+   iter,
+   net,
+};
 
 use cyn::ResultExt as _;
-use derive_more::{
-   Deref,
-   DerefMut,
-};
+
+use super::address;
 
 pub const MTU: u16 = 1420;
 
-#[derive(Deref, DerefMut)]
 pub struct Interface {
-   #[deref]
-   #[deref_mut]
-   device: tun::AsyncDevice,
-
-   pub v4: net::Ipv4Addr,
-   pub v6: net::Ipv6Addr,
+   device: tun_rs::AsyncDevice,
 }
 
 impl Interface {
-   pub fn create(name: &str, v4: net::Ipv4Addr, v6: net::Ipv6Addr) -> cyn::Result<Self> {
-      tracing::info!("Creating TUN device '{name}' with IPv4 {v4} and IPv6 {v6}.");
+   pub fn create(name: Option<&str>, prefix: address::Prefix) -> cyn::Result<Self> {
+      let mut builder = tun_rs::DeviceBuilder::new()
+         .ipv6(
+            net::Ipv6Addr::from(
+               <[u8; _]>::try_from(
+                  prefix
+                     .into_iter()
+                     .chain(iter::repeat(0))
+                     .take(size_of::<net::Ipv6Addr>())
+                     .collect::<Vec<_>>(),
+               )
+               .expect("size matches"),
+            ),
+            u8::try_from(address::Prefix::BITS).expect("prefix fits in u8"),
+         )
+         .mtu(MTU);
 
-      let mut config = tun::Configuration::default();
+      if let Some(name) = name {
+         builder = builder.name(name);
+      }
 
-      config.tun_name(name);
-      config.address(v4);
-      config.netmask(net::Ipv4Addr::new(255, 255, 0, 0));
-      config.mtu(MTU);
-      config.up();
+      let device = builder
+         .build_async()
+         .chain_err("failed to create tun device")?;
 
-      #[cfg(any(target_os = "macos", target_os = "ios"))]
-      config.platform_config(|config| {
-         config.packet_information(false);
-      });
+      Ok(Self { device })
+   }
 
-      let device = tun::create_as_async(&config).chain_err("failed to create tun device")?;
+   pub async fn recv(&self, buf: &mut [u8]) -> io::Result<usize> {
+      self.device.recv(buf).await
+   }
 
-      Ok(Self { device, v4, v6 })
+   pub async fn send(&self, buf: &[u8]) -> io::Result<usize> {
+      self.device.send(buf).await
    }
 }

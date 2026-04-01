@@ -20,13 +20,7 @@ use libp2p::{
    tcp as p2p_tcp,
    yamux as p2p_yamux,
 };
-use tokio::{
-   io::{
-      AsyncReadExt as _,
-      AsyncWriteExt as _,
-   },
-   select,
-};
+use tokio::select;
 
 pub mod address;
 
@@ -41,20 +35,14 @@ pub use interface::{
 
 pub mod ip;
 
-fn ip_of(packet: &[u8]) -> Option<net::IpAddr> {
-   Some(match packet.first()? >> 4 {
-      4 => {
-         net::IpAddr::V4(net::Ipv4Addr::from(
-            <[u8; 4]>::try_from(packet.get(16..20)?).expect("size matches"),
-         ))
-      },
-      6 => {
-         net::IpAddr::V6(net::Ipv6Addr::from(
-            <[u8; 16]>::try_from(packet.get(24..40)?).expect("size matches"),
-         ))
-      },
-      _ => return None,
-   })
+fn destination_of(packet: &[u8]) -> Option<net::Ipv6Addr> {
+   if packet.first()? >> 4_usize != 6 {
+      return None;
+   }
+
+   Some(net::Ipv6Addr::from(
+      <[u8; _]>::try_from(packet.get(24..40)?).expect("size matches"),
+   ))
 }
 
 #[derive(p2p_swarm::NetworkBehaviour)]
@@ -105,7 +93,7 @@ pub async fn run(config: Config) -> cyn::Result<()> {
 
                      Some(peer_id)
                   }) else {
-                     tracing::warn!("Bootstrap address '{addr}' has no peer ID, skipping.");
+                     tracing::error!("Bootstrap address '{addr}' has no peer ID, skipping.");
                      continue;
                   };
 
@@ -149,19 +137,19 @@ pub async fn run(config: Config) -> cyn::Result<()> {
       .map(|peer| peer.id)
       .collect::<rustc_hash::FxHashSet<_>>();
 
-   let mut tun_buffer = vec![0_u8; MTU as usize];
-   let mut tun_interface = Interface::create(
-      &config.interface,
-      address::generate_v4(&config.id),
-      address::generate_v6(&config.id),
-   )?;
-
-   let mut address_map = address::Map::new();
+   let mut address_map = address::Map::new(config.id);
 
    for peer in &config.peers {
-      address_map.v4_of(peer.id);
-      address_map.v6_of(peer.id);
+      address_map.prefix_of(peer.id);
    }
+
+   let mut tun_buffer = vec![0_u8; MTU as usize];
+   let tun_interface = Interface::create(
+      config.interface.as_deref(),
+      address_map
+         .prefix_of(config.id)
+         .expect("self is always in map"),
+   )?;
 
    loop {
       select! {
@@ -174,8 +162,8 @@ pub async fn run(config: Config) -> cyn::Result<()> {
                p2p_swarm::SwarmEvent::Behaviour(BehaviourEvent::Ip(packet)) => {
                   tracing::trace!("Got packet: {packet:?}");
 
-                  if let Err(error) = tun_interface.write_all(&packet).await {
-                     tracing::warn!("Failed to write packet to TUN interface: {error}");
+                  if let Err(error) = tun_interface.send(&packet).await {
+                     tracing::error!("Failed to write packet to TUN interface: {error}");
                   }
                },
 
@@ -190,9 +178,9 @@ pub async fn run(config: Config) -> cyn::Result<()> {
             }
          },
 
-         tun_result = tun_interface.read(&mut tun_buffer) => {
+         tun_result = tun_interface.recv(&mut tun_buffer) => {
             let Ok(packet_len) = tun_result.inspect_err(|error| {
-               tracing::warn!("Failed to read from TUN interface: {error}");
+               tracing::error!("Failed to read from TUN interface: {error}");
             }) else {
                continue;
             };
@@ -201,18 +189,13 @@ pub async fn run(config: Config) -> cyn::Result<()> {
 
             tracing::trace!("Got tun packet: {packet:?}");
 
-            let Some(ip) = ip_of(packet) else {
-               tracing::warn!("Ignoring invalid tun packet (could not determine ip) {packet:?}");
+            let Some(destination) = destination_of(packet) else {
+               tracing::warn!("Ignoring invalid tun packet (could not determine destination) {packet:?}");
                continue;
             };
 
-            let peer_id = match ip {
-               net::IpAddr::V4(v4) => address_map.peer_of_v4(&v4),
-               net::IpAddr::V6(v6) => address_map.peer_of_v6(&v6),
-            };
-
-            let Some(peer_id) = peer_id else {
-               tracing::warn!("Tried to send packet to ip {ip} not in peer map, dropping.");
+            let Some(peer_id) = address_map.peer_of(&address::Prefix::from(destination)) else {
+               tracing::warn!("Tried to send packet to {destination} not in peer map, dropping.");
                continue;
             };
 
