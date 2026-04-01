@@ -1,9 +1,6 @@
 #![feature(trait_alias)]
 
-use std::{
-   net,
-   str::FromStr as _,
-};
+use std::net;
 
 use cyn::ResultExt as _;
 use libp2p::{
@@ -17,6 +14,7 @@ use libp2p::{
    },
    multiaddr as p2p_multiaddr,
    noise as p2p_noise,
+   ping as p2p_ping,
    relay as p2p_relay,
    swarm as p2p_swarm,
    tcp as p2p_tcp,
@@ -62,6 +60,7 @@ fn ip_of(packet: &[u8]) -> Option<net::IpAddr> {
 #[derive(p2p_swarm::NetworkBehaviour)]
 pub struct Behaviour<P: ip::Policy> {
    pub identify: p2p_identify::Behaviour,
+   pub ping:     p2p_ping::Behaviour,
    pub relay:    p2p_relay::Behaviour,
    pub dcutr:    p2p_dcutr::Behaviour,
    pub kad:      p2p_kad::Behaviour<p2p_kad_store::MemoryStore>,
@@ -86,6 +85,8 @@ pub async fn run(config: Config) -> cyn::Result<()> {
                p2p_identify::PROTOCOL_NAME.to_string(),
                keypair.public(),
             )),
+
+            ping: p2p_ping::Behaviour::default(),
 
             relay: p2p_relay::Behaviour::new(peer_id, p2p_relay::Config::default()),
 
@@ -115,7 +116,11 @@ pub async fn run(config: Config) -> cyn::Result<()> {
             },
 
             ip: ip::Behaviour::new({
-               let peer_ids = config.peers.iter().map(|peer| peer.id).collect::<Vec<_>>();
+               let peer_ids = config
+                  .peers
+                  .iter()
+                  .map(|peer| peer.id)
+                  .collect::<rustc_hash::FxHashSet<_>>();
 
                move |peer_id| {
                   if !peer_ids.contains(peer_id) {
@@ -138,11 +143,11 @@ pub async fn run(config: Config) -> cyn::Result<()> {
          .chain_err("failed to listen on local port")?;
    }
 
-   swarm
-      .behaviour_mut()
-      .kad
-      .bootstrap()
-      .chain_err("failed to start DHT bootstrap")?;
+   let peer_ids = config
+      .peers
+      .iter()
+      .map(|peer| peer.id)
+      .collect::<rustc_hash::FxHashSet<_>>();
 
    let mut tun_buffer = vec![0_u8; MTU as usize];
    let mut tun_interface = Interface::create(
@@ -172,6 +177,13 @@ pub async fn run(config: Config) -> cyn::Result<()> {
                   if let Err(error) = tun_interface.write_all(&packet).await {
                      tracing::warn!("Failed to write packet to TUN interface: {error}");
                   }
+               },
+
+               p2p_swarm::SwarmEvent::OutgoingConnectionError { peer_id: Some(peer_id), .. }
+                  if peer_ids.contains(&peer_id) =>
+               {
+                  tracing::info!("Dial to '{peer_id}' failed, discovering via DHT.");
+                  swarm.behaviour_mut().kad.get_closest_peers(peer_id);
                },
 
                other => tracing::debug!("Other swarm event: {other:?}."),

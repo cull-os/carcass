@@ -395,6 +395,9 @@ impl<P: Policy> Behaviour<P> {
       let producer = if let Some(producer) = self.outbound_handlers.get_mut(peer_id) {
          producer
       } else if let Some(&mut (ref mut producer, _)) = self.outbound_buffers.get_mut(peer_id) {
+         self.queued_events.push_back(p2p_swarm::ToSwarm::Dial {
+            opts: p2p_swarm_dial_opts::DialOpts::peer_id(*peer_id).build(),
+         });
          producer
       } else {
          self.queued_events.push_back(p2p_swarm::ToSwarm::Dial {
