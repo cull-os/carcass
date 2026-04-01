@@ -29,6 +29,7 @@ async-trait.workspace        = true
 bytes.workspace              = true
 clap.workspace               = true
 derive_more.workspace        = true
+either.workspace             = true
 heck.workspace               = true
 hostname.workspace           = true
 libp2p                       = { features = [ "full" ], workspace = true }

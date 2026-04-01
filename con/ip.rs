@@ -1,6 +1,7 @@
 use std::{
    collections::VecDeque,
    io,
+   mem,
    pin::Pin,
    sync::Arc,
    task,
@@ -14,9 +15,11 @@ use asynchronous_codec::{
 use bytes::{
    Buf as _,
    BufMut as _,
+   Bytes,
    BytesMut,
 };
 use derive_more::Deref;
+use either::Either;
 use libp2p::{
    self as p2p,
    core::{
@@ -25,7 +28,7 @@ use libp2p::{
       upgrade as p2p_core_upgrade,
    },
    futures::{
-      SinkExt as _,
+      Sink as _,
       StreamExt as _,
    },
    swarm::{
@@ -48,7 +51,7 @@ use rustc_hash::{
 const PROTOCOL: p2p_swarm::StreamProtocol = p2p_swarm::StreamProtocol::new("/ip/0.0.1");
 
 #[derive(Debug, Deref, Clone)]
-pub struct Packet(pub Vec<u8>);
+pub struct Packet(pub Bytes);
 
 struct PacketCodec;
 
@@ -77,35 +80,38 @@ impl Decoder for PacketCodec {
    type Error = io::Error;
 
    fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-      if src.len() < 2 {
+      let Some(len_bytes) = src.get(..2) else {
          return Ok(None);
-      }
+      };
 
-      let len = u16::from_le_bytes([src[0], src[1]]) as usize;
+      let len =
+         u16::from_le_bytes(<[u8; 2]>::try_from(len_bytes).expect("length checked")) as usize;
 
       if src.len() < 2 + len {
-         src.reserve(2 + len - src.len());
          return Ok(None);
       }
 
       src.advance(2);
-      let data = src.split_to(len);
-
-      Ok(Some(Packet(data.to_vec())))
+      Ok(Some(Packet(src.split_to(len).freeze())))
    }
 }
 
 type FramedStream = Framed<p2p::Stream, PacketCodec>;
 
 enum InboundState {
+   Disconnected,
    WaitingInput(FramedStream),
    Closing(FramedStream),
+   Poisoned,
 }
 
 enum OutboundState {
+   Disconnected,
+   Requested,
    WaitingOutput(FramedStream),
    PendingSend(FramedStream, Packet),
    PendingFlush(FramedStream),
+   Poisoned,
 }
 
 const MAX_SUBSTREAM_ATTEMPTS: usize = 5;
@@ -114,28 +120,29 @@ const PACKET_BUFFER_SIZE: usize = 256;
 type PacketProducer = ringbuf::CachingProd<Arc<ringbuf::StaticRb<Packet, PACKET_BUFFER_SIZE>>>;
 type PacketConsumer = ringbuf::CachingCons<Arc<ringbuf::StaticRb<Packet, PACKET_BUFFER_SIZE>>>;
 
+pub struct EnabledHandler {
+   consumer:          PacketConsumer,
+   inbound:           InboundState,
+   inbound_attempts:  usize,
+   outbound:          OutboundState,
+   outbound_attempts: usize,
+}
+
+#[expect(clippy::large_enum_variant)]
 pub enum Handler {
-   Enabled {
-      consumer:              PacketConsumer,
-      inbound:               Option<InboundState>,
-      outbound:              Option<OutboundState>,
-      outbound_establishing: bool,
-      inbound_attempts:      usize,
-      outbound_attempts:     usize,
-   },
+   Enabled(EnabledHandler),
    Disabled,
 }
 
 impl Handler {
    fn new(consumer: PacketConsumer) -> Self {
-      Handler::Enabled {
+      Handler::Enabled(EnabledHandler {
          consumer,
-         inbound: None,
-         outbound: None,
-         outbound_establishing: false,
+         inbound: InboundState::Disconnected,
          inbound_attempts: 0,
+         outbound: OutboundState::Disconnected,
          outbound_attempts: 0,
-      }
+      })
    }
 }
 
@@ -144,7 +151,8 @@ impl p2p_swarm::ConnectionHandler for Handler {
 
    type ToBehaviour = Packet;
 
-   type InboundProtocol = p2p_core_upgrade::ReadyUpgrade<p2p::StreamProtocol>;
+   type InboundProtocol =
+      Either<p2p_core_upgrade::ReadyUpgrade<p2p::StreamProtocol>, p2p_core_upgrade::DeniedUpgrade>;
 
    type OutboundProtocol = p2p_core_upgrade::ReadyUpgrade<p2p::StreamProtocol>;
 
@@ -155,7 +163,17 @@ impl p2p_swarm::ConnectionHandler for Handler {
    fn listen_protocol(
       &self,
    ) -> p2p_swarm::SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
-      p2p_swarm::SubstreamProtocol::new(p2p_core_upgrade::ReadyUpgrade::new(PROTOCOL), ())
+      p2p_swarm::SubstreamProtocol::new(
+         match *self {
+            Handler::Enabled(..) => Either::Left(p2p_core_upgrade::ReadyUpgrade::new(PROTOCOL)),
+            Handler::Disabled => Either::Right(p2p_core_upgrade::DeniedUpgrade),
+         },
+         (),
+      )
+   }
+
+   fn connection_keep_alive(&self) -> bool {
+      matches!(self, Handler::Enabled(..))
    }
 
    fn on_behaviour_event(&mut self, _event: Self::FromBehaviour) {}
@@ -174,42 +192,30 @@ impl p2p_swarm::ConnectionHandler for Handler {
          (),
       >,
    ) {
-      let Handler::Enabled {
-         ref mut inbound,
-         ref mut outbound,
-         ref mut outbound_establishing,
-         ref mut inbound_attempts,
-         ref mut outbound_attempts,
-         ..
-      } = *self
-      else {
+      let Handler::Enabled(ref mut handler) = *self else {
          return;
       };
 
       match event {
          p2p_swarm_handler::ConnectionEvent::FullyNegotiatedInbound(new) => {
-            *inbound = Some(InboundState::WaitingInput(Framed::new(
-               new.protocol,
-               PacketCodec,
-            )));
+            #[expect(clippy::absolute_paths)]
+            let p2p::futures::future::Either::Left(stream) = new.protocol;
 
-            *inbound_attempts += 1;
-            if *inbound_attempts >= MAX_SUBSTREAM_ATTEMPTS {
+            handler.inbound = InboundState::WaitingInput(Framed::new(stream, PacketCodec));
+
+            handler.inbound_attempts += 1;
+            if handler.inbound_attempts >= MAX_SUBSTREAM_ATTEMPTS {
                tracing::warn!("Maximum inbound substream attempts exceeded.");
                *self = Handler::Disabled;
             }
          },
          p2p_swarm_handler::ConnectionEvent::FullyNegotiatedOutbound(new) => {
-            *outbound = Some(OutboundState::WaitingOutput(Framed::new(
-               new.protocol,
-               PacketCodec,
-            )));
-            *outbound_establishing = false;
+            handler.outbound = OutboundState::WaitingOutput(Framed::new(new.protocol, PacketCodec));
          },
          p2p_swarm_handler::ConnectionEvent::DialUpgradeError(_) => {
-            *outbound_establishing = false;
-            *outbound_attempts += 1;
-            if *outbound_attempts >= MAX_SUBSTREAM_ATTEMPTS {
+            handler.outbound = OutboundState::Disconnected;
+            handler.outbound_attempts += 1;
+            if handler.outbound_attempts >= MAX_SUBSTREAM_ATTEMPTS {
                tracing::warn!("Maximum outbound substream attempts exceeded.");
                *self = Handler::Disabled;
             }
@@ -238,122 +244,124 @@ impl p2p_swarm::ConnectionHandler for Handler {
          Ready,
       };
 
-      let Handler::Enabled {
-         ref mut consumer,
-         ref mut inbound,
-         ref mut outbound,
-         ref mut outbound_establishing,
-         ..
-      } = *self
-      else {
+      let Handler::Enabled(ref mut handler) = *self else {
          return Pending;
       };
 
-      // Request outbound substream if needed.
-      if outbound.is_none() && !*outbound_establishing && !consumer.is_empty() {
-         *outbound_establishing = true;
-         return Ready(OutboundSubstreamRequest {
-            protocol: p2p_swarm::SubstreamProtocol::new(
-               p2p_core_upgrade::ReadyUpgrade::new(PROTOCOL),
-               (),
-            ),
-         });
-      }
-
-      // Process outbound.
       loop {
-         match outbound.take() {
-            Some(OutboundState::WaitingOutput(substream)) => {
-               if let Some(packet) = consumer.try_pop() {
-                  *outbound = Some(OutboundState::PendingSend(substream, packet));
+         match mem::replace(&mut handler.outbound, OutboundState::Poisoned) {
+            OutboundState::Disconnected => {
+               if !handler.consumer.is_empty() {
+                  handler.outbound = OutboundState::Requested;
+                  return Ready(OutboundSubstreamRequest {
+                     protocol: p2p_swarm::SubstreamProtocol::new(
+                        p2p_core_upgrade::ReadyUpgrade::new(PROTOCOL),
+                        (),
+                     ),
+                  });
+               }
+
+               handler.outbound = OutboundState::Disconnected;
+            },
+            OutboundState::Requested => {
+               handler.outbound = OutboundState::Requested;
+            },
+            OutboundState::WaitingOutput(substream) => {
+               if let Some(packet) = handler.consumer.try_pop() {
+                  handler.outbound = OutboundState::PendingSend(substream, packet);
                   continue;
                }
 
-               *outbound = Some(OutboundState::WaitingOutput(substream));
-               break;
+               handler.outbound = OutboundState::WaitingOutput(substream);
             },
-            Some(OutboundState::PendingSend(mut substream, packet)) => {
+            OutboundState::PendingSend(mut substream, packet) => {
                match Pin::new(&mut substream).poll_ready(cx) {
                   Ready(Ok(())) => {
                      match Pin::new(&mut substream).start_send(&packet) {
                         Ok(()) => {
-                           *outbound = Some(OutboundState::PendingFlush(substream));
+                           handler.outbound = OutboundState::PendingFlush(substream);
+                           continue;
                         },
                         Err(error) => {
                            tracing::debug!("Failed to send packet on outbound stream: {error}");
-                           *outbound = None;
-                           break;
+                           handler.outbound = OutboundState::Disconnected;
                         },
                      }
                   },
                   Ready(Err(error)) => {
                      tracing::debug!("Failed to send packet on outbound stream: {error}");
-                     *outbound = None;
-                     break;
+                     handler.outbound = OutboundState::Disconnected;
                   },
                   Pending => {
-                     *outbound = Some(OutboundState::PendingSend(substream, packet));
-                     break;
+                     handler.outbound = OutboundState::PendingSend(substream, packet);
                   },
                }
             },
-            Some(OutboundState::PendingFlush(mut substream)) => {
+            OutboundState::PendingFlush(mut substream) => {
                match Pin::new(&mut substream).poll_flush(cx) {
                   Ready(Ok(())) => {
-                     *outbound = Some(OutboundState::WaitingOutput(substream));
+                     handler.outbound = OutboundState::WaitingOutput(substream);
+                     continue;
                   },
                   Ready(Err(error)) => {
                      tracing::debug!("Failed to flush outbound stream: {error}");
-                     *outbound = None;
-                     break;
+                     handler.outbound = OutboundState::Disconnected;
                   },
                   Pending => {
-                     *outbound = Some(OutboundState::PendingFlush(substream));
-                     break;
+                     handler.outbound = OutboundState::PendingFlush(substream);
                   },
                }
             },
-            None => break,
+            OutboundState::Poisoned => unreachable!(),
          }
+
+         break;
       }
 
-      // Process inbound.
       loop {
-         match inbound.take() {
-            Some(InboundState::WaitingInput(mut substream)) => {
+         match mem::replace(&mut handler.inbound, InboundState::Poisoned) {
+            InboundState::WaitingInput(mut substream) => {
                match substream.poll_next_unpin(cx) {
                   Ready(Some(Ok(packet))) => {
-                     *inbound = Some(InboundState::WaitingInput(substream));
+                     handler.inbound = InboundState::WaitingInput(substream);
                      return Ready(NotifyBehaviour(packet));
                   },
                   Ready(Some(Err(error))) => {
                      tracing::debug!("Failed to read from inbound stream: {error}");
-                     *inbound = Some(InboundState::Closing(substream));
+                     handler.inbound = InboundState::Closing(substream);
+                     continue;
                   },
                   Ready(None) => {
                      tracing::debug!("Inbound stream closed by remote.");
-                     *inbound = Some(InboundState::Closing(substream));
+                     handler.inbound = InboundState::Closing(substream);
+                     continue;
                   },
                   Pending => {
-                     *inbound = Some(InboundState::WaitingInput(substream));
-                     break;
+                     handler.inbound = InboundState::WaitingInput(substream);
                   },
                }
             },
-            Some(InboundState::Closing(mut substream)) => {
+            InboundState::Closing(mut substream) => {
                match Pin::new(&mut substream).poll_close(cx) {
-                  Ready(_) => {
-                     *inbound = None;
-                     break;
+                  Ready(Ok(())) => {
+                     handler.inbound = InboundState::Disconnected;
+                  },
+                  Ready(Err(error)) => {
+                     tracing::debug!("Failed to close inbound stream: {error}");
+                     handler.inbound = InboundState::Disconnected;
                   },
                   Pending => {
-                     *inbound = Some(InboundState::Closing(substream));
-                     break;
+                     handler.inbound = InboundState::Closing(substream);
                   },
                }
             },
-            None => break,
+            InboundState::Disconnected => {
+               handler.inbound = InboundState::Disconnected;
+            },
+            InboundState::Poisoned => unreachable!(),
          }
+
+         break;
       }
 
       Pending

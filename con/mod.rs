@@ -185,7 +185,7 @@ pub async fn run(config: Config) -> cyn::Result<()> {
 
             let packet = &tun_buffer[..packet_len];
 
-            tracing::warn!("Got tun packet: {packet:?}");
+            tracing::trace!("Got tun packet: {packet:?}");
 
             let Some(ip) = ip_of(packet) else {
                tracing::warn!("Ignoring invalid tun packet (could not determine ip) {packet:?}");
@@ -203,7 +203,7 @@ pub async fn run(config: Config) -> cyn::Result<()> {
             };
 
             // Send packet to peer
-            let packet = ip::Packet(packet.to_vec());
+            let packet = ip::Packet(bytes::Bytes::copy_from_slice(packet));
             swarm.behaviour_mut().ip.send(&peer_id, packet);
          },
       }
