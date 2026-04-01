@@ -1,12 +1,6 @@
 //! Runtime implementation.
 
-#![feature(
-   gen_blocks,
-   if_let_guard,
-   impl_trait_in_assoc_type,
-   iter_intersperse,
-   str_from_raw_parts
-)]
+#![feature(gen_blocks)]
 
 mod code;
 pub use code::{

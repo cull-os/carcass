@@ -690,24 +690,20 @@ fn write_report(
 
          location.display_styled(writer)?;
 
-         wrap(
-            writer,
-            [
-               ":".styled(),
-               line
-                  .number
-                  .to_string()
-                  .as_str()
-                  .style(STYLE_HEADER_POSITION),
-               ":".styled(),
-               width(&line.content[..*line.styles.first().unwrap().span.start as _])
-                  .add(1)
-                  .to_string()
-                  .as_str()
-                  .style(STYLE_HEADER_POSITION),
-            ]
-            .into_iter(),
-         )?;
+         wrap(writer, [
+            ":".styled(),
+            line
+               .number
+               .to_string()
+               .as_str()
+               .style(STYLE_HEADER_POSITION),
+            ":".styled(),
+            width(&line.content[..*line.styles.first().unwrap().span.start as _])
+               .add(1)
+               .to_string()
+               .as_str()
+               .style(STYLE_HEADER_POSITION),
+         ])?;
       }
 
       writer.write_char('\n')?;

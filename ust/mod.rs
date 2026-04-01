@@ -1,4 +1,4 @@
-#![feature(anonymous_lifetime_in_impl_trait, gen_blocks, if_let_guard)]
+#![feature(gen_blocks)]
 #![allow(unstable_name_collisions)] // Itertools::intersperse
 
 use std::fmt;

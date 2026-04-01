@@ -1,9 +1,7 @@
 //! Token, tokenizer, node, noder implementations.
 
 #![feature(
-   assert_matches,
    gen_blocks,
-   if_let_guard,
    impl_trait_in_assoc_type,
    iter_intersperse,
    lazy_cell_into_inner,

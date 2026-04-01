@@ -1,7 +1,7 @@
 #![doc = include_str!("README.md")]
 #![warn(missing_docs)]
 #![no_std]
-#![feature(impl_trait_in_assoc_type, gen_blocks)]
+#![feature(gen_blocks)]
 #![expect(
    clippy::undocumented_unsafe_blocks,
    reason = "all unsafe code is already explained and repeating everything for each unsafe block \
