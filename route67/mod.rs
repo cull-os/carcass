@@ -57,23 +57,15 @@ struct Behaviour<P: ip::Policy> {
 
 pub async fn run(config: Config) -> cyn::Result<()> {
    let local = config.local()?;
-   let local_id = local.keypair.id();
 
-   let mut address_map = address::Map::new(local_id);
+   let mut address_map = address::Map::new(local.id);
    for peer in &config.peers {
-      match peer {
-         &config::Peer::Remote { id } => {
-            if address_map.prefix_of(id).is_none() {
-               tracing::error!("Peer '{id}' has a prefix collision, skipping.");
-            }
-         },
-         &config::Peer::RemoteControl { ref keypair } => {
-            let id = keypair.id();
-            if address_map.prefix_of(id).is_none() {
-               tracing::error!("Peer '{id}' has a prefix collision, skipping.");
-            }
-         },
-         &config::Peer::Local(_) | &config::Peer::Bootstrap(_) => {},
+      let (&config::Peer::Remote { id } | &config::Peer::RemoteControl { id, .. }) = peer else {
+         continue;
+      };
+
+      if address_map.prefix_of(id).is_none() {
+         tracing::error!("Peer '{id}' has a prefix collision, skipping.");
       }
    }
 
@@ -81,11 +73,11 @@ pub async fn run(config: Config) -> cyn::Result<()> {
    let tun_interface = Interface::create(
       local.interface.as_deref(),
       address_map
-         .prefix_of(local_id)
+         .prefix_of(local.id)
          .expect("self is always in map"),
    )?;
 
-   let mut swarm = p2p::SwarmBuilder::with_existing_identity(local.keypair.0.clone().into())
+   let mut swarm = p2p::SwarmBuilder::with_existing_identity(local.keypair.clone().into())
       .with_tokio()
       .with_tcp(
          p2p_tcp::Config::default(),
@@ -143,8 +135,9 @@ pub async fn run(config: Config) -> cyn::Result<()> {
                   .iter()
                   .filter_map(|peer| {
                      match peer {
-                        &config::Peer::Remote { id } => Some(id),
-                        &config::Peer::RemoteControl { ref keypair } => Some(keypair.id()),
+                        &config::Peer::Remote { id } | &config::Peer::RemoteControl { id, .. } => {
+                           Some(id)
+                        },
                         _ => None,
                      }
                   })
@@ -176,8 +169,7 @@ pub async fn run(config: Config) -> cyn::Result<()> {
       .iter()
       .filter_map(|peer| {
          match peer {
-            &config::Peer::Remote { id } => Some(id),
-            &config::Peer::RemoteControl { ref keypair } => Some(keypair.id()),
+            &config::Peer::Remote { id } | &config::Peer::RemoteControl { id, .. } => Some(id),
             _ => None,
          }
       })

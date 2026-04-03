@@ -11,49 +11,76 @@ use libp2p::{
    },
 };
 
-#[derive(Clone)]
-pub struct Keypair(pub ed25519::Keypair);
+mod keypair {
+   use libp2p::identity::ed25519;
 
-impl Keypair {
-   const SERIALIZE_PREFIX: &str = "route67-keypair:";
+   const PREFIX: &str = "route67-keypair:";
 
-   #[must_use]
-   pub fn id(&self) -> p2p::PeerId {
-      p2p::PeerId::from_public_key(&p2p_id::PublicKey::from(self.0.public()))
+   pub fn serialize<S: serde::Serializer>(
+      keypair: &ed25519::Keypair,
+      serializer: S,
+   ) -> Result<S::Ok, S::Error> {
+      let encoded = multibase::encode(multibase::Base::Base58Btc, keypair.to_bytes());
+      serializer.serialize_str(&format!("{PREFIX}{encoded}"))
    }
-}
 
-impl serde::Serialize for Keypair {
-   fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-      let encoded = multibase::encode(multibase::Base::Base58Btc, self.0.to_bytes());
-      serializer.serialize_str(&format!(
-         "{prefix}{encoded}",
-         prefix = Self::SERIALIZE_PREFIX,
-      ))
-   }
-}
-
-impl<'de> serde::Deserialize<'de> for Keypair {
-   fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-      use serde::de::Error as _;
+   pub fn deserialize<'de, D: serde::Deserializer<'de>>(
+      deserializer: D,
+   ) -> Result<ed25519::Keypair, D::Error> {
+      use serde::de::{
+         Deserialize as _,
+         Error as _,
+      };
 
       let string = String::deserialize(deserializer)?;
-      let string = string
-         .strip_prefix(Self::SERIALIZE_PREFIX)
+      let stripped = string
+         .strip_prefix(PREFIX)
          .ok_or_else(|| D::Error::custom("missing route67-keypair: prefix"))?;
 
-      let (_, mut decoded) = multibase::decode(string).map_err(D::Error::custom)?;
+      let (_, mut decoded) = multibase::decode(stripped).map_err(D::Error::custom)?;
 
-      ed25519::Keypair::try_from_bytes(&mut decoded)
-         .map(Keypair)
-         .map_err(D::Error::custom)
+      ed25519::Keypair::try_from_bytes(&mut decoded).map_err(D::Error::custom)
+   }
+}
+
+mod peer_id {
+   use libp2p as p2p;
+
+   const PREFIX: &str = "route67:";
+
+   pub fn serialize<S: serde::Serializer>(
+      id: &p2p::PeerId,
+      serializer: S,
+   ) -> Result<S::Ok, S::Error> {
+      serializer.serialize_str(&format!("{PREFIX}{id}"))
+   }
+
+   pub fn deserialize<'de, D: serde::Deserializer<'de>>(
+      deserializer: D,
+   ) -> Result<p2p::PeerId, D::Error> {
+      use serde::de::{
+         Deserialize as _,
+         Error as _,
+      };
+
+      let string = String::deserialize(deserializer)?;
+      let stripped = string
+         .strip_prefix(PREFIX)
+         .ok_or_else(|| D::Error::custom("missing route67: prefix"))?;
+
+      stripped.parse().map_err(D::Error::custom)
    }
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct LocalPeer {
-   pub keypair:   Keypair,
+   #[serde(with = "peer_id")]
+   pub id: p2p::PeerId,
+
+   #[serde(with = "keypair")]
+   pub keypair: ed25519::Keypair,
+
    pub interface: Option<String>,
    pub listen:    Vec<p2p::Multiaddr>,
 }
@@ -61,8 +88,16 @@ pub struct LocalPeer {
 #[derive(serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Peer {
-   Remote { id: p2p::PeerId },
-   RemoteControl { keypair: Keypair },
+   Remote {
+      #[serde(with = "peer_id")]
+      id: p2p::PeerId,
+   },
+   RemoteControl {
+      #[serde(with = "peer_id")]
+      id:      p2p::PeerId,
+      #[serde(with = "keypair")]
+      keypair: ed25519::Keypair,
+   },
    Local(LocalPeer),
    Bootstrap(p2p::Multiaddr),
 }
@@ -83,7 +118,16 @@ impl Config {
       });
 
       match (locals.next(), locals.next()) {
-         (Some(local), None) => Ok(local),
+         (Some(local), None) => {
+            if local.id
+               != p2p::PeerId::from_public_key(&p2p_id::PublicKey::from(
+                  local.keypair.public(),
+               ))
+            {
+               cyn::bail!("local peer id does not match keypair");
+            }
+            Ok(local)
+         },
          (None, None) => cyn::bail!("no local peer in config"),
          (Some(_), Some(_)) => cyn::bail!("more than one local peer in config"),
          _ => unreachable!(),
@@ -92,9 +136,13 @@ impl Config {
 
    #[must_use]
    pub fn generate() -> Self {
+      let keypair = ed25519::Keypair::generate();
+      let id = p2p::PeerId::from_public_key(&p2p_id::PublicKey::from(keypair.public()));
+
       Self {
          peers: iter::once(Peer::Local(LocalPeer {
-            keypair:   Keypair(ed25519::Keypair::generate()),
+            id,
+            keypair,
             interface: None,
             listen:    [
                "/ip4/0.0.0.0/tcp/0",
