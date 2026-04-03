@@ -47,11 +47,14 @@ fn hash(to: &mut [bool], from: impl IntoIterator<Item = bool>) {
    }
 }
 
-#[derive(Deref, DerefMut, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Deref, DerefMut, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Prefix([u8; HOST_PREFIX_RANGE.end / 8]);
 
 impl Prefix {
-   #[expect(clippy::cast_possible_truncation, reason = "try_from + expect is not const compatible yet (in Rust 1.96)")]
+   #[expect(
+      clippy::cast_possible_truncation,
+      reason = "try_from + expect is not const compatible yet (in Rust 1.96)"
+   )]
    pub const BITS: u32 = size_of::<Self>() as u32 * 8;
 }
 
@@ -112,5 +115,80 @@ impl Map {
    #[must_use]
    pub fn peer_of(&self, prefix: &Prefix) -> Option<p2p::PeerId> {
       self.prefix_to_peer.get(prefix).copied()
+   }
+}
+
+#[cfg(test)]
+mod tests {
+   use std::iter;
+
+   use p2p::identity::{
+      self,
+      ed25519,
+   };
+   use proptest::prelude::*;
+
+   use super::*;
+
+   fn peer_id_strategy() -> impl Strategy<Value = p2p::PeerId> {
+      any::<[u8; 32]>().prop_map(|bytes| {
+         p2p::PeerId::from_public_key(&identity::PublicKey::from(
+            ed25519::Keypair::from(
+               ed25519::SecretKey::try_from_bytes(bytes).expect("32 bytes is valid ed25519"),
+            )
+            .public(),
+         ))
+      })
+   }
+
+   proptest! {
+      #[test]
+      fn prefix_starts_with_fd67(id in peer_id_strategy()) {
+         let mut map = Map::new(id);
+         let prefix = map.prefix_of(id).expect("self always succeeds");
+
+         prop_assert_eq!(prefix[0], 0xFD);
+         prop_assert_eq!(prefix[1], 0x67);
+      }
+
+      #[test]
+      fn prefix_deterministic(id in peer_id_strategy()) {
+         let mut map1 = Map::new(id);
+         let mut map2 = Map::new(id);
+
+         prop_assert_eq!(
+            map1.prefix_of(id).expect("no collision"),
+            map2.prefix_of(id).expect("no collision"),
+         );
+      }
+
+      #[test]
+      fn map_roundtrip(self_id in peer_id_strategy(), peer_id in peer_id_strategy()) {
+         let mut map = Map::new(self_id);
+
+         if let Some(prefix) = map.prefix_of(peer_id) {
+            prop_assert_eq!(map.peer_of(&prefix), Some(peer_id));
+         }
+      }
+
+      #[test]
+      fn prefix_from_ipv6_roundtrip(id in peer_id_strategy()) {
+         let mut map = Map::new(id);
+         let prefix = map.prefix_of(id).expect("self always succeeds");
+
+         let v6 = net::Ipv6Addr::from(
+            <[u8; _]>::try_from(
+               prefix
+                  .iter()
+                  .copied()
+                  .chain(iter::repeat(0))
+                  .take(size_of::<net::Ipv6Addr>())
+                  .collect::<Vec<_>>(),
+            )
+            .expect("size matches"),
+         );
+
+         prop_assert_eq!(Prefix::from(v6), prefix);
+      }
    }
 }
