@@ -17,6 +17,7 @@ const fn assert_byte_sized(bits: Range<usize>) -> Range<usize> {
    bits
 }
 
+pub const VPN_PREFIX: [u8; 2] = [0xFD, 0x67];
 pub const VPN_PREFIX_RANGE: Range<usize> = assert_byte_sized(0..16);
 pub const HOST_PREFIX_RANGE: Range<usize> =
    assert_byte_sized(VPN_PREFIX_RANGE.end..VPN_PREFIX_RANGE.end + 64);
@@ -89,8 +90,7 @@ impl Map {
 
       let mut prefix = [false; HOST_PREFIX_RANGE.end];
 
-      // fd67::
-      for (index, bit) in bits([0xFD, 0x67]).enumerate() {
+      for (index, bit) in bits(VPN_PREFIX).enumerate() {
          prefix[index] = bit;
       }
 
@@ -147,8 +147,7 @@ mod tests {
          let mut map = Map::new(id);
          let prefix = map.prefix_of(id).expect("self always succeeds");
 
-         prop_assert_eq!(prefix[0], 0xFD);
-         prop_assert_eq!(prefix[1], 0x67);
+         prop_assert!(prefix.starts_with(&VPN_PREFIX));
       }
 
       #[test]

@@ -1,4 +1,7 @@
-use std::str::FromStr as _;
+use std::{
+   iter,
+   str::FromStr as _,
+};
 
 use libp2p::{
    self as p2p,
@@ -53,7 +56,6 @@ pub struct LocalPeer {
    pub keypair:   Keypair,
    pub interface: Option<String>,
    pub listen:    Vec<p2p::Multiaddr>,
-   pub bootstrap: Vec<p2p::Multiaddr>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -62,18 +64,7 @@ pub enum Peer {
    Remote { id: p2p::PeerId },
    RemoteControl { keypair: Keypair },
    Local(LocalPeer),
-}
-
-impl Peer {
-   #[must_use]
-   pub fn id(&self) -> p2p::PeerId {
-      match *self {
-         Peer::Remote { id } => id,
-         Peer::RemoteControl { ref keypair } | Peer::Local(LocalPeer { ref keypair, .. }) => {
-            keypair.id()
-         },
-      }
-   }
+   Bootstrap(p2p::Multiaddr),
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -102,12 +93,10 @@ impl Config {
    #[must_use]
    pub fn generate() -> Self {
       Self {
-         peers: vec![Peer::Local(LocalPeer {
-            keypair: Keypair(ed25519::Keypair::generate()),
-
+         peers: iter::once(Peer::Local(LocalPeer {
+            keypair:   Keypair(ed25519::Keypair::generate()),
             interface: None,
-
-            listen: [
+            listen:    [
                "/ip4/0.0.0.0/tcp/0",
                "/ip6/::/tcp/0",
                "/ip4/0.0.0.0/udp/0/quic-v1",
@@ -116,9 +105,10 @@ impl Config {
             .iter()
             .map(|addr| p2p::Multiaddr::from_str(addr).expect("literals are valid"))
             .collect(),
-
+         }))
+         .chain(
             #[rustfmt::skip]
-            bootstrap: [
+            [
                "/ip4/152.67.75.145/tcp/110/p2p/12D3KooWQWsHPUUeFhe4b6pyCaD1hBoj8j6Z7S7kTznRTh1p1eVt",
                "/ip4/152.67.75.145/udp/110/quic-v1/p2p/12D3KooWQWsHPUUeFhe4b6pyCaD1hBoj8j6Z7S7kTznRTh1p1eVt",
                "/ip4/152.67.75.145/tcp/995/p2p/QmbrAHuh4RYcyN9fWePCZMVmQjbaNXtyvrDCWz4VrchbXh",
@@ -141,9 +131,11 @@ impl Config {
                "/dnsaddr/bootstrap.libp2p.io/p2p/QmcZf59bWwK5XFi76CZX8cbJ4BhTzzA3gU1ZjYZcYW3dwt",
             ]
             .iter()
-            .map(|multiaddr| p2p::Multiaddr::from_str(multiaddr).expect("literals are valid"))
-            .collect(),
-         })],
+            .map(|addr| {
+               Peer::Bootstrap(p2p::Multiaddr::from_str(addr).expect("literals are valid"))
+            }),
+         )
+         .collect(),
       }
    }
 }

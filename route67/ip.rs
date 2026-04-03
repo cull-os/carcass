@@ -181,11 +181,6 @@ impl p2p_swarm::ConnectionHandler for Handler {
       match event {}
    }
 
-   #[tracing::instrument(
-      level = "trace",
-      name = "ConnectionHandler::on_connection_event",
-      skip(self)
-   )]
    fn on_connection_event(
       &mut self,
       event: p2p_swarm_handler::ConnectionEvent<
@@ -227,7 +222,6 @@ impl p2p_swarm::ConnectionHandler for Handler {
       }
    }
 
-   #[tracing::instrument(level = "trace", name = "ConnectionHandler::poll", skip(self, cx))]
    fn poll(
       &mut self,
       cx: &mut task::Context<'_>,
@@ -483,7 +477,6 @@ impl<P: Policy> p2p_swarm::NetworkBehaviour for Behaviour<P> {
          .push_back(p2p_swarm::ToSwarm::GenerateEvent(packet));
    }
 
-   #[tracing::instrument(level = "trace", name = "NetworkBehaviour::poll", skip(self, _context))]
    fn poll(
       &mut self,
       _context: &mut task::Context<'_>,

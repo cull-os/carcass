@@ -1,4 +1,4 @@
-#![feature(trait_alias)]
+#![feature(trait_alias, stmt_expr_attributes)]
 
 use std::net;
 
@@ -59,6 +59,32 @@ pub async fn run(config: Config) -> cyn::Result<()> {
    let local = config.local()?;
    let local_id = local.keypair.id();
 
+   let mut address_map = address::Map::new(local_id);
+   for peer in &config.peers {
+      match peer {
+         &config::Peer::Remote { id } => {
+            if address_map.prefix_of(id).is_none() {
+               tracing::error!("Peer '{id}' has a prefix collision, skipping.");
+            }
+         },
+         &config::Peer::RemoteControl { ref keypair } => {
+            let id = keypair.id();
+            if address_map.prefix_of(id).is_none() {
+               tracing::error!("Peer '{id}' has a prefix collision, skipping.");
+            }
+         },
+         &config::Peer::Local(_) | &config::Peer::Bootstrap(_) => {},
+      }
+   }
+
+   let mut tun_buffer = vec![0_u8; MTU as usize];
+   let tun_interface = Interface::create(
+      local.interface.as_deref(),
+      address_map
+         .prefix_of(local_id)
+         .expect("self is always in map"),
+   )?;
+
    let mut swarm = p2p::SwarmBuilder::with_existing_identity(local.keypair.0.clone().into())
       .with_tokio()
       .with_tcp(
@@ -88,7 +114,12 @@ pub async fn run(config: Config) -> cyn::Result<()> {
                   p2p_kad::Behaviour::new(peer_id, p2p_kad_store::MemoryStore::new(peer_id));
 
                // Add bootstrap peers to Kademlia DHT for peer discovery.
-               for addr in &local.bootstrap {
+               for addr in config.peers.iter().filter_map(|peer| {
+                  match peer {
+                     &config::Peer::Bootstrap(ref addr) => Some(addr),
+                     _ => None,
+                  }
+               }) {
                   let Some(peer_id) = addr.iter().find_map(|protocol| {
                      let p2p_multiaddr::Protocol::P2p(peer_id) = protocol else {
                         return None;
@@ -110,7 +141,13 @@ pub async fn run(config: Config) -> cyn::Result<()> {
                let peer_ids = config
                   .peers
                   .iter()
-                  .map(config::Peer::id)
+                  .filter_map(|peer| {
+                     match peer {
+                        &config::Peer::Remote { id } => Some(id),
+                        &config::Peer::RemoteControl { ref keypair } => Some(keypair.id()),
+                        _ => None,
+                     }
+                  })
                   .collect::<rustc_hash::FxHashSet<_>>();
 
                move |peer_id| {
@@ -134,25 +171,17 @@ pub async fn run(config: Config) -> cyn::Result<()> {
          .chain_err("failed to listen on local port")?;
    }
 
-   let peer_ids = config
+   let allowed_ids = config
       .peers
       .iter()
-      .map(config::Peer::id)
+      .filter_map(|peer| {
+         match peer {
+            &config::Peer::Remote { id } => Some(id),
+            &config::Peer::RemoteControl { ref keypair } => Some(keypair.id()),
+            _ => None,
+         }
+      })
       .collect::<rustc_hash::FxHashSet<_>>();
-
-   let mut address_map = address::Map::new(local_id);
-
-   for peer in &config.peers {
-      address_map.prefix_of(peer.id());
-   }
-
-   let mut tun_buffer = vec![0_u8; MTU as usize];
-   let tun_interface = Interface::create(
-      local.interface.as_deref(),
-      address_map
-         .prefix_of(local_id)
-         .expect("self is always in map"),
-   )?;
 
    loop {
       select! {
@@ -171,7 +200,7 @@ pub async fn run(config: Config) -> cyn::Result<()> {
                },
 
                p2p_swarm::SwarmEvent::OutgoingConnectionError { peer_id: Some(peer_id), .. }
-                  if peer_ids.contains(&peer_id) =>
+                  if allowed_ids.contains(&peer_id) =>
                {
                   tracing::info!("Dial to '{peer_id}' failed, discovering via DHT.");
                   swarm.behaviour_mut().kad.get_closest_peers(peer_id);
@@ -196,6 +225,11 @@ pub async fn run(config: Config) -> cyn::Result<()> {
                tracing::warn!("Ignoring invalid tun packet (could not determine destination) {packet:?}");
                continue;
             };
+
+            // Silently drop multicast packets.
+            if !destination.octets().starts_with(&address::VPN_PREFIX) {
+               continue;
+            }
 
             let Some(peer_id) = address_map.peer_of(&address::Prefix::from(destination)) else {
                tracing::warn!("Tried to send packet to {destination} not in peer map, dropping.");
