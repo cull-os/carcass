@@ -1,14 +1,10 @@
 #![feature(trait_alias, stmt_expr_attributes)]
 
-use std::{
-   net,
-   time,
-};
+use std::net;
 
 use cyn::ResultExt as _;
 use libp2p::{
    self as p2p,
-   autonat as p2p_autonat,
    dcutr as p2p_dcutr,
    futures::StreamExt as _,
    identify as p2p_identify,
@@ -28,6 +24,8 @@ use libp2p::{
    upnp::tokio as p2p_upnp,
    yamux as p2p_yamux,
 };
+use n0_watcher::Watcher as _;
+use netwatch::netmon;
 use tokio::select;
 
 pub mod address;
@@ -57,7 +55,6 @@ fn destination_of(packet: &[u8]) -> Option<net::Ipv6Addr> {
 struct Behaviour<P: ip::Policy> {
    identify:     p2p_identify::Behaviour,
    ping:         p2p_ping::Behaviour,
-   autonat:      p2p_autonat::Behaviour,
    upnp:         p2p_upnp::Behaviour,
    relay_server: p2p_relay::Behaviour,
    relay_client: p2p_relay_client::Behaviour,
@@ -71,13 +68,34 @@ pub async fn run(config: Config) -> cyn::Result<()> {
    let local = config.local()?;
 
    let mut address_map = address::Map::new(local.id);
+
+   tracing::info!(
+      "Peer (local) '{id}' was added with prefix '{prefix}'",
+      id = local.id,
+      prefix = net::Ipv6Addr::from(
+         address_map
+            .prefix_of(local.id)
+            .expect("local is always in map"),
+      )
+   );
+
    for peer in &config.peers {
       let (&config::Peer::Remote { id } | &config::Peer::RemoteControl { id, .. }) = peer else {
          continue;
       };
 
-      if address_map.prefix_of(id).is_none() {
-         tracing::error!("Peer '{id}' has a prefix collision, skipping.");
+      match address_map.prefix_of(id) {
+         None => {
+            tracing::error!(
+               "Peer '{id}' has a prefix collision, skipping. (How the hell did you hit this?)"
+            );
+         },
+         Some(prefix) => {
+            tracing::info!(
+               "Peer '{id}' was added with prefix '{prefix}'",
+               prefix = net::Ipv6Addr::from(prefix),
+            );
+         },
       }
    }
 
@@ -111,7 +129,6 @@ pub async fn run(config: Config) -> cyn::Result<()> {
 
             ping: p2p_ping::Behaviour::default(),
 
-            autonat: p2p_autonat::Behaviour::new(peer_id, p2p_autonat::Config::default()),
             upnp: p2p_upnp::Behaviour::default(),
 
             relay_server: p2p_relay::Behaviour::new(peer_id, p2p_relay::Config::default()),
@@ -120,15 +137,8 @@ pub async fn run(config: Config) -> cyn::Result<()> {
             dcutr: p2p_dcutr::Behaviour::new(peer_id),
 
             kad: {
-               let mut kad = p2p_kad::Behaviour::with_config(
-                  peer_id,
-                  p2p_kad_store::MemoryStore::new(peer_id),
-                  {
-                     let mut config = p2p_kad::Config::default();
-                     config.set_periodic_bootstrap_interval(Some(time::Duration::from_secs(5)));
-                     config
-                  },
-               );
+               let mut kad =
+                  p2p_kad::Behaviour::new(peer_id, p2p_kad_store::MemoryStore::new(peer_id));
 
                // Add bootstrap peers to Kademlia DHT for peer discovery.
                for addr in config.peers.iter().filter_map(|peer| {
@@ -189,29 +199,51 @@ pub async fn run(config: Config) -> cyn::Result<()> {
          .chain_err_with(|| format!("failed to listen on address {addr}"))?;
    }
 
-   if let Err(error) = swarm.behaviour_mut().kad.bootstrap() {
-      tracing::warn!("Failed to bootstrap kademlia: {error}");
-   }
+   let recover = |swarm: &mut p2p::Swarm<Behaviour<_>>| {
+      for address in swarm.external_addresses().cloned().collect::<Vec<_>>() {
+         swarm.remove_external_address(&address);
+      }
 
-   let allowed_ids = config
-      .peers
-      .iter()
-      .filter_map(|peer| {
-         match peer {
-            &config::Peer::Remote { id } | &config::Peer::RemoteControl { id, .. } => Some(id),
-            _ => None,
-         }
-      })
-      .collect::<rustc_hash::FxHashSet<_>>();
+      if let Err(error) = swarm.behaviour_mut().kad.bootstrap() {
+         tracing::warn!("Failed to bootstrap kademlia: {error}");
+      }
+   };
 
-   let mut nat_status = p2p_autonat::NatStatus::Unknown;
+   recover(&mut swarm);
+
+   let mut network_monitor = netmon::Monitor::new()
+      .await
+      .chain_err("failed to create network monitor")?
+      .interface_state();
+
+   let mut network_state = network_monitor.get();
 
    loop {
       select! {
+         Ok(new_network_state) = network_monitor.updated() => {
+            let unsuspended = match (new_network_state.last_unsuspend, network_state.last_unsuspend) {
+               (Some(new), Some(old)) => new > old,
+               (Some(_), None) => true,
+               _ => false,
+            };
+
+            if unsuspended || new_network_state.is_major_change(&network_state) {
+               tracing::info!("Network change detected, recovering.");
+               recover(&mut swarm);
+            }
+
+            network_state = new_network_state;
+         },
+
          swarm_event = swarm.select_next_some() => {
             match swarm_event {
                p2p_swarm::SwarmEvent::NewListenAddr { address, .. } => {
                   tracing::info!("Listening on {address:?}.");
+               },
+
+               p2p_swarm::SwarmEvent::OutgoingConnectionError { peer_id: Some(peer_id), error: p2p_swarm::DialError::NoAddresses, .. } => {
+                  tracing::info!("Dial to '{peer_id}' failed as there are no addresses pointing to it, discovering via DHT.");
+                  swarm.behaviour_mut().kad.get_closest_peers(peer_id);
                },
 
                p2p_swarm::SwarmEvent::Behaviour(BehaviourEvent::Ip(packet)) => {
@@ -222,17 +254,10 @@ pub async fn run(config: Config) -> cyn::Result<()> {
                   }
                },
 
-               p2p_swarm::SwarmEvent::Behaviour(BehaviourEvent::Autonat(
-                  p2p_autonat::Event::StatusChanged { new, .. },
-               )) => {
-                  tracing::info!("NAT status changed: {new:?}");
-                  nat_status = new;
-               },
-
                p2p_swarm::SwarmEvent::Behaviour(BehaviourEvent::Identify(
                   p2p_identify::Event::Received { peer_id, info, .. },
                )) => {
-                  if nat_status != p2p_autonat::NatStatus::Private || !info.protocols.contains(&p2p_relay::HOP_PROTOCOL_NAME) {
+                  if !info.protocols.contains(&p2p_relay::HOP_PROTOCOL_NAME) {
                      continue;
                   }
 
@@ -245,7 +270,7 @@ pub async fn run(config: Config) -> cyn::Result<()> {
                      })
                      .count();
 
-                  if relay_peer_count >= 10 {
+                  if relay_peer_count >= 4 {
                      continue;
                   }
 
@@ -259,13 +284,6 @@ pub async fn run(config: Config) -> cyn::Result<()> {
                         Err(error) => tracing::debug!("Failed to listen via relay {addr}: {error}"),
                      }
                   }
-               },
-
-               p2p_swarm::SwarmEvent::OutgoingConnectionError { peer_id: Some(peer_id), .. }
-                  if allowed_ids.contains(&peer_id) =>
-               {
-                  tracing::info!("Dial to '{peer_id}' failed, discovering via DHT.");
-                  swarm.behaviour_mut().kad.get_closest_peers(peer_id);
                },
 
                other => tracing::debug!("Other swarm event: {other:?}"),

@@ -61,8 +61,17 @@ impl Prefix {
 
 impl From<net::Ipv6Addr> for Prefix {
    fn from(addr: net::Ipv6Addr) -> Self {
-      let octets = addr.octets();
-      Self(<[u8; _]>::try_from(&octets[..HOST_PREFIX_RANGE.end / 8]).expect("size matches"))
+      let mut octets = [0; _];
+      octets.copy_from_slice(&addr.octets()[..HOST_PREFIX_RANGE.end / 8]);
+      Self(octets)
+   }
+}
+
+impl From<Prefix> for net::Ipv6Addr {
+   fn from(prefix: Prefix) -> Self {
+      let mut octets = [0; _];
+      octets[..prefix.len()].copy_from_slice(&*prefix);
+      Self::from(octets)
    }
 }
 

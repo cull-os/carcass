@@ -30,7 +30,6 @@ clap.workspace = true
 derive_more.workspace = true
 either.workspace = true
 libp2p = { features = [
-  "autonat",
   "dcutr",
   "dns",
   "ecdsa",
@@ -50,6 +49,8 @@ libp2p = { features = [
   "websocket",
   "yamux",
 ], workspace = true }
+n0-watcher.workspace = true
+netwatch.workspace = true
 multibase.workspace = true
 ringbuf.workspace = true
 rustc-hash.workspace = true
