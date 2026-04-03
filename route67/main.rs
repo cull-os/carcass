@@ -135,6 +135,10 @@ async fn main() -> cyn::Termination {
 
          route67::run(config).await?;
       },
+
+      Command::Node {
+         command: Node::Reload,
+      } => unimplemented!(),
    }
 
    cyn::Termination::success()

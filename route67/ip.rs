@@ -1,5 +1,6 @@
 use std::{
    collections::VecDeque,
+   convert::Infallible,
    io,
    mem,
    pin::Pin,
@@ -147,7 +148,7 @@ impl Handler {
 }
 
 impl p2p_swarm::ConnectionHandler for Handler {
-   type FromBehaviour = ();
+   type FromBehaviour = Infallible;
 
    type ToBehaviour = Packet;
 
@@ -176,7 +177,9 @@ impl p2p_swarm::ConnectionHandler for Handler {
       matches!(self, Handler::Enabled(..))
    }
 
-   fn on_behaviour_event(&mut self, _event: Self::FromBehaviour) {}
+   fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
+      match event {}
+   }
 
    #[tracing::instrument(
       level = "trace",
@@ -188,8 +191,8 @@ impl p2p_swarm::ConnectionHandler for Handler {
       event: p2p_swarm_handler::ConnectionEvent<
          Self::InboundProtocol,
          Self::OutboundProtocol,
-         (),
-         (),
+         Self::InboundOpenInfo,
+         Self::OutboundOpenInfo,
       >,
    ) {
       let Handler::Enabled(ref mut handler) = *self else {
@@ -371,7 +374,7 @@ impl p2p_swarm::ConnectionHandler for Handler {
 pub trait Policy = FnMut(&p2p::PeerId) -> Result<(), p2p_swarm::ConnectionDenied> + 'static;
 
 pub struct Behaviour<P: Policy> {
-   queued_events: VecDeque<p2p_swarm::ToSwarm<Packet, ()>>,
+   queued_events: VecDeque<p2p_swarm::ToSwarm<Packet, Infallible>>,
 
    inbound_policy: P,
 
@@ -429,7 +432,7 @@ impl<P: Policy> p2p_swarm::NetworkBehaviour for Behaviour<P> {
       peer_id: p2p::PeerId,
       _local_addr: &p2p::Multiaddr,
       _remote_addr: &p2p::Multiaddr,
-   ) -> Result<Handler, p2p_swarm::ConnectionDenied> {
+   ) -> Result<Self::ConnectionHandler, p2p_swarm::ConnectionDenied> {
       (self.inbound_policy)(&peer_id)?;
 
       let (producer, consumer) = self
@@ -449,7 +452,7 @@ impl<P: Policy> p2p_swarm::NetworkBehaviour for Behaviour<P> {
       _addr: &p2p::Multiaddr,
       _role_override: p2p_core::Endpoint,
       _port_use: p2p_core_transport::PortUse,
-   ) -> Result<Handler, p2p_swarm::ConnectionDenied> {
+   ) -> Result<Self::ConnectionHandler, p2p_swarm::ConnectionDenied> {
       let (producer, consumer) = self
          .outbound_buffers
          .remove(&peer_id)
@@ -473,7 +476,7 @@ impl<P: Policy> p2p_swarm::NetworkBehaviour for Behaviour<P> {
       &mut self,
       _peer_id: p2p::PeerId,
       _connection_id: p2p_swarm::ConnectionId,
-      packet: Packet,
+      packet: p2p_swarm::THandlerOutEvent<Self>,
    ) {
       self
          .queued_events
@@ -484,7 +487,7 @@ impl<P: Policy> p2p_swarm::NetworkBehaviour for Behaviour<P> {
    fn poll(
       &mut self,
       _context: &mut task::Context<'_>,
-   ) -> task::Poll<p2p_swarm::ToSwarm<Packet, ()>> {
+   ) -> task::Poll<p2p_swarm::ToSwarm<Self::ToSwarm, p2p_swarm::THandlerInEvent<Self>>> {
       match self.queued_events.pop_front() {
          Some(event) => task::Poll::Ready(event),
          None => task::Poll::Pending,
