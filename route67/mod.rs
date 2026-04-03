@@ -178,15 +178,7 @@ pub async fn run(config: Config) -> cyn::Result<()> {
                   })
                   .collect::<rustc_hash::FxHashSet<_>>();
 
-               move |peer_id| {
-                  if !peer_ids.contains(peer_id) {
-                     return Err(p2p_swarm::ConnectionDenied::new(format!(
-                        "peer '{peer_id}' is not in the peer list"
-                     )));
-                  }
-
-                  Ok(())
-               }
+               move |peer_id| peer_ids.contains(peer_id)
             }),
          }
       })

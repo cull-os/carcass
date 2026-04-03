@@ -365,7 +365,7 @@ impl p2p_swarm::ConnectionHandler for Handler {
    }
 }
 
-pub trait Policy = FnMut(&p2p::PeerId) -> Result<(), p2p_swarm::ConnectionDenied> + 'static;
+pub trait Policy = FnMut(&p2p::PeerId) -> bool + 'static;
 
 pub struct Behaviour<P: Policy> {
    queued_events: VecDeque<p2p_swarm::ToSwarm<Packet, Infallible>>,
@@ -427,7 +427,9 @@ impl<P: Policy> p2p_swarm::NetworkBehaviour for Behaviour<P> {
       _local_addr: &p2p::Multiaddr,
       _remote_addr: &p2p::Multiaddr,
    ) -> Result<Self::ConnectionHandler, p2p_swarm::ConnectionDenied> {
-      (self.inbound_policy)(&peer_id)?;
+      if !(self.inbound_policy)(&peer_id) {
+         return Ok(Handler::Disabled);
+      }
 
       let (producer, consumer) = self
          .buffers
