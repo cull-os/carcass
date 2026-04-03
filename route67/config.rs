@@ -14,7 +14,7 @@ use libp2p::{
 mod keypair {
    use libp2p::identity::ed25519;
 
-   const PREFIX: &str = "route67-keypair:";
+   const PREFIX: &str = "route67private_";
 
    pub fn serialize<S: serde::Serializer>(
       keypair: &ed25519::Keypair,
@@ -35,7 +35,7 @@ mod keypair {
       let string = String::deserialize(deserializer)?;
       let stripped = string
          .strip_prefix(PREFIX)
-         .ok_or_else(|| D::Error::custom("missing route67-keypair: prefix"))?;
+         .ok_or_else(|| D::Error::custom(format!("missing {PREFIX} prefix")))?;
 
       let (_, mut decoded) = multibase::decode(stripped).map_err(D::Error::custom)?;
 
@@ -46,7 +46,7 @@ mod keypair {
 mod peer_id {
    use libp2p as p2p;
 
-   const PREFIX: &str = "route67:";
+   const PREFIX: &str = "route67_";
 
    pub fn serialize<S: serde::Serializer>(
       id: &p2p::PeerId,
@@ -66,7 +66,7 @@ mod peer_id {
       let string = String::deserialize(deserializer)?;
       let stripped = string
          .strip_prefix(PREFIX)
-         .ok_or_else(|| D::Error::custom("missing route67: prefix"))?;
+         .ok_or_else(|| D::Error::custom(format!("missing {PREFIX} prefix")))?;
 
       stripped.parse().map_err(D::Error::custom)
    }
@@ -120,9 +120,7 @@ impl Config {
       match (locals.next(), locals.next()) {
          (Some(local), None) => {
             if local.id
-               != p2p::PeerId::from_public_key(&p2p_id::PublicKey::from(
-                  local.keypair.public(),
-               ))
+               != p2p::PeerId::from_public_key(&p2p_id::PublicKey::from(local.keypair.public()))
             {
                cyn::bail!("local peer id does not match keypair");
             }
