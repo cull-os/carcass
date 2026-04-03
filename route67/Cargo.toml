@@ -30,7 +30,10 @@ clap.workspace = true
 derive_more.workspace = true
 either.workspace = true
 libp2p = { features = [
+  "autonat",
   "dcutr",
+  "dns",
+  "ecdsa",
   "ed25519",
   "identify",
   "kad",
@@ -39,8 +42,12 @@ libp2p = { features = [
   "ping",
   "quic",
   "relay",
+  "rsa",
+  "secp256k1",
   "tcp",
   "tokio",
+  "upnp",
+  "websocket",
   "yamux",
 ], workspace = true }
 multibase.workspace = true

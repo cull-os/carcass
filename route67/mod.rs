@@ -1,10 +1,14 @@
 #![feature(trait_alias, stmt_expr_attributes)]
 
-use std::net;
+use std::{
+   net,
+   time,
+};
 
 use cyn::ResultExt as _;
 use libp2p::{
    self as p2p,
+   autonat as p2p_autonat,
    dcutr as p2p_dcutr,
    futures::StreamExt as _,
    identify as p2p_identify,
@@ -15,9 +19,13 @@ use libp2p::{
    multiaddr as p2p_multiaddr,
    noise as p2p_noise,
    ping as p2p_ping,
-   relay as p2p_relay,
+   relay::{
+      self as p2p_relay,
+      client as p2p_relay_client,
+   },
    swarm as p2p_swarm,
    tcp as p2p_tcp,
+   upnp::tokio as p2p_upnp,
    yamux as p2p_yamux,
 };
 use tokio::select;
@@ -47,14 +55,18 @@ fn destination_of(packet: &[u8]) -> Option<net::Ipv6Addr> {
 
 #[derive(p2p_swarm::NetworkBehaviour)]
 struct Behaviour<P: ip::Policy> {
-   identify: p2p_identify::Behaviour,
-   ping:     p2p_ping::Behaviour,
-   relay:    p2p_relay::Behaviour,
-   dcutr:    p2p_dcutr::Behaviour,
-   kad:      p2p_kad::Behaviour<p2p_kad_store::MemoryStore>,
-   ip:       ip::Behaviour<P>,
+   identify:     p2p_identify::Behaviour,
+   ping:         p2p_ping::Behaviour,
+   autonat:      p2p_autonat::Behaviour,
+   upnp:         p2p_upnp::Behaviour,
+   relay_server: p2p_relay::Behaviour,
+   relay_client: p2p_relay_client::Behaviour,
+   dcutr:        p2p_dcutr::Behaviour,
+   kad:          p2p_kad::Behaviour<p2p_kad_store::MemoryStore>,
+   ip:           ip::Behaviour<P>,
 }
 
+#[expect(clippy::cognitive_complexity, reason = "event loop")]
 pub async fn run(config: Config) -> cyn::Result<()> {
    let local = config.local()?;
 
@@ -81,7 +93,14 @@ pub async fn run(config: Config) -> cyn::Result<()> {
       )
       .chain_err("failed to create tcp transport layer")?
       .with_quic()
-      .with_behaviour(|keypair| {
+      .with_dns()
+      .chain_err("failed to create dns resolver")?
+      .with_websocket(p2p_noise::Config::new, p2p_yamux::Config::default)
+      .await
+      .chain_err("failed to create websocket transport")?
+      .with_relay_client(p2p_noise::Config::new, p2p_yamux::Config::default)
+      .chain_err("failed to create relay client transport")?
+      .with_behaviour(|keypair, relay_client| {
          let peer_id = keypair.public().to_peer_id();
 
          Behaviour {
@@ -92,13 +111,24 @@ pub async fn run(config: Config) -> cyn::Result<()> {
 
             ping: p2p_ping::Behaviour::default(),
 
-            relay: p2p_relay::Behaviour::new(peer_id, p2p_relay::Config::default()),
+            autonat: p2p_autonat::Behaviour::new(peer_id, p2p_autonat::Config::default()),
+            upnp: p2p_upnp::Behaviour::default(),
+
+            relay_server: p2p_relay::Behaviour::new(peer_id, p2p_relay::Config::default()),
+            relay_client,
 
             dcutr: p2p_dcutr::Behaviour::new(peer_id),
 
             kad: {
-               let mut kad =
-                  p2p_kad::Behaviour::new(peer_id, p2p_kad_store::MemoryStore::new(peer_id));
+               let mut kad = p2p_kad::Behaviour::with_config(
+                  peer_id,
+                  p2p_kad_store::MemoryStore::new(peer_id),
+                  {
+                     let mut config = p2p_kad::Config::default();
+                     config.set_periodic_bootstrap_interval(Some(time::Duration::from_secs(5)));
+                     config
+                  },
+               );
 
                // Add bootstrap peers to Kademlia DHT for peer discovery.
                for addr in config.peers.iter().filter_map(|peer| {
@@ -150,13 +180,17 @@ pub async fn run(config: Config) -> cyn::Result<()> {
             }),
          }
       })
-      .unwrap()
+      .chain_err("failed to create swarm")?
       .build();
 
    for addr in &local.listen {
       swarm
          .listen_on(addr.clone())
-         .chain_err("failed to listen on local port")?;
+         .chain_err_with(|| format!("failed to listen on address {addr}"))?;
+   }
+
+   if let Err(error) = swarm.behaviour_mut().kad.bootstrap() {
+      tracing::warn!("Failed to bootstrap kademlia: {error}");
    }
 
    let allowed_ids = config
@@ -169,6 +203,8 @@ pub async fn run(config: Config) -> cyn::Result<()> {
          }
       })
       .collect::<rustc_hash::FxHashSet<_>>();
+
+   let mut nat_status = p2p_autonat::NatStatus::Unknown;
 
    loop {
       select! {
@@ -186,6 +222,45 @@ pub async fn run(config: Config) -> cyn::Result<()> {
                   }
                },
 
+               p2p_swarm::SwarmEvent::Behaviour(BehaviourEvent::Autonat(
+                  p2p_autonat::Event::StatusChanged { new, .. },
+               )) => {
+                  tracing::info!("NAT status changed: {new:?}");
+                  nat_status = new;
+               },
+
+               p2p_swarm::SwarmEvent::Behaviour(BehaviourEvent::Identify(
+                  p2p_identify::Event::Received { peer_id, info, .. },
+               )) => {
+                  if nat_status != p2p_autonat::NatStatus::Private || !info.protocols.contains(&p2p_relay::HOP_PROTOCOL_NAME) {
+                     continue;
+                  }
+
+                  let relay_peer_count = swarm
+                     .listeners()
+                     .filter(|addr| {
+                        addr
+                           .iter()
+                           .any(|part| matches!(part, p2p_multiaddr::Protocol::P2pCircuit))
+                     })
+                     .count();
+
+                  if relay_peer_count >= 10 {
+                     continue;
+                  }
+
+                  for addr in info.listen_addrs {
+                     let addr = addr
+                        .with(p2p_multiaddr::Protocol::P2p(peer_id))
+                        .with(p2p_multiaddr::Protocol::P2pCircuit);
+
+                     match swarm.listen_on(addr.clone()) {
+                        Ok(_) => tracing::info!("Listening via relay {addr}."),
+                        Err(error) => tracing::debug!("Failed to listen via relay {addr}: {error}"),
+                     }
+                  }
+               },
+
                p2p_swarm::SwarmEvent::OutgoingConnectionError { peer_id: Some(peer_id), .. }
                   if allowed_ids.contains(&peer_id) =>
                {
@@ -193,7 +268,7 @@ pub async fn run(config: Config) -> cyn::Result<()> {
                   swarm.behaviour_mut().kad.get_closest_peers(peer_id);
                },
 
-               other => tracing::debug!("Other swarm event: {other:?}."),
+               other => tracing::debug!("Other swarm event: {other:?}"),
             }
          },
 
