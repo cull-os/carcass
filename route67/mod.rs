@@ -70,12 +70,7 @@ pub async fn run(config: Config) -> cyn::Result<()> {
    }
 
    let mut tun_buffer = vec![0_u8; MTU as usize];
-   let tun_interface = Interface::create(
-      local.interface.as_deref(),
-      address_map
-         .prefix_of(local.id)
-         .expect("self is always in map"),
-   )?;
+   let tun_interface = Interface::create(local.interface.as_deref())?;
 
    let mut swarm = p2p::SwarmBuilder::with_existing_identity(local.keypair.clone().into())
       .with_tokio()

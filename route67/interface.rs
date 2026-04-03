@@ -1,6 +1,5 @@
 use std::{
    io,
-   iter,
    net,
 };
 
@@ -15,20 +14,15 @@ pub struct Interface {
 }
 
 impl Interface {
-   pub fn create(name: Option<&str>, prefix: address::Prefix) -> cyn::Result<Self> {
+   pub fn create(name: Option<&str>) -> cyn::Result<Self> {
       let mut builder = tun_rs::DeviceBuilder::new()
          .ipv6(
-            net::Ipv6Addr::from(
-               <[u8; _]>::try_from(
-                  prefix
-                     .into_iter()
-                     .chain(iter::repeat(0))
-                     .take(size_of::<net::Ipv6Addr>())
-                     .collect::<Vec<_>>(),
-               )
-               .expect("size matches"),
-            ),
-            u8::try_from(address::Prefix::BITS).expect("prefix fits in u8"),
+            net::Ipv6Addr::from({
+               let mut addr = [0_u8; size_of::<net::Ipv6Addr>()];
+               addr[..address::VPN_PREFIX.len()].copy_from_slice(&address::VPN_PREFIX);
+               addr
+            }),
+            u8::try_from(address::VPN_PREFIX.len() * 8).expect("prefix fits in u8"),
          )
          .mtu(MTU);
 
