@@ -1,8 +1,8 @@
 [package]
-name        = "con"
+name        = "route67"
 description = "True Mesh VPN"
 license     = "MPL-2.0"
-repository  = "https://github.com/cull-os/carcass/tree/master/con"
+repository  = "https://github.com/cull-os/carcass/tree/master/route67"
 version     = "0.0.1"
 publish     = true
 
@@ -13,7 +13,7 @@ edition.workspace = true
 path = "mod.rs"
 
 [[bin]]
-name = "con"
+name = "route67"
 path = "main.rs"
 
 [lints]

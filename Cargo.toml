@@ -12,11 +12,11 @@ members = [
   "cab/task",
   "cab/util",
 
-  "con",
-
   "cyn",
 
   "ranged",
+
+  "route67",
 
   "ust",
 ]

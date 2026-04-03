@@ -41,15 +41,6 @@ enum Command {
       #[command(subcommand)]
       command: Node,
    },
-
-   /// Show inbox.
-   Inbox,
-
-   /// List peers.
-   Peers,
-
-   /// Ping peer.
-   Ping,
 }
 
 #[derive(clap::Subcommand, Debug, Clone)]
@@ -70,7 +61,7 @@ enum Node {
 #[tokio::main]
 async fn main() -> cyn::Termination {
    {
-      const VARIABLE: &str = "CON_LOG";
+      const VARIABLE: &str = "ROUTE67_LOG";
 
       tracing_subscriber::fmt()
          .with_writer(std_io::stderr)
@@ -102,7 +93,7 @@ async fn main() -> cyn::Termination {
       Command::Config {
          command: Config::Generate,
       } => {
-         let config = con::Config::generate()?;
+         let config = route67::Config::generate()?;
 
          let config = toml::to_string_pretty(&config)
             .chain_err("failed to generate config, this is a bug")?;
@@ -120,7 +111,7 @@ async fn main() -> cyn::Termination {
             .await
             .chain_err("failed to read config from stdin")?;
 
-         let config: con::Config = match toml::from_str(&config) {
+         let config: route67::Config = match toml::from_str(&config) {
             Ok(config) => config,
             Err(error) => {
                let report = if let Some(span) = error.span() {
@@ -142,15 +133,8 @@ async fn main() -> cyn::Termination {
             },
          };
 
-         con::run(config).await?;
+         route67::run(config).await?;
       },
-      Command::Node {
-         command: Node::Reload,
-      } => todo!(),
-
-      Command::Inbox => todo!(),
-      Command::Peers => todo!(),
-      Command::Ping => todo!(),
    }
 
    cyn::Termination::success()
