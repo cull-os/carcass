@@ -378,8 +378,8 @@ pub struct Behaviour<P: Policy> {
 
    inbound_policy: P,
 
-   outbound_handlers: FxHashMap<p2p::PeerId, PacketProducer>,
-   outbound_buffers:  FxHashMap<p2p::PeerId, (PacketProducer, PacketConsumer)>,
+   handlers: FxHashMap<p2p::PeerId, PacketProducer>,
+   buffers:  FxHashMap<p2p::PeerId, (PacketProducer, PacketConsumer)>,
 }
 
 impl<P: Policy> Behaviour<P> {
@@ -389,15 +389,15 @@ impl<P: Policy> Behaviour<P> {
 
          inbound_policy,
 
-         outbound_handlers: FxHashMap::with_hasher(FxBuildHasher),
-         outbound_buffers: FxHashMap::with_hasher(FxBuildHasher),
+         handlers: FxHashMap::with_hasher(FxBuildHasher),
+         buffers: FxHashMap::with_hasher(FxBuildHasher),
       }
    }
 
    pub fn send(&mut self, peer_id: &p2p::PeerId, packet: Packet) {
-      let producer = if let Some(producer) = self.outbound_handlers.get_mut(peer_id) {
+      let producer = if let Some(producer) = self.handlers.get_mut(peer_id) {
          producer
-      } else if let Some(&mut (ref mut producer, _)) = self.outbound_buffers.get_mut(peer_id) {
+      } else if let Some(&mut (ref mut producer, _)) = self.buffers.get_mut(peer_id) {
          self.queued_events.push_back(p2p_swarm::ToSwarm::Dial {
             opts: p2p_swarm_dial_opts::DialOpts::peer_id(*peer_id).build(),
          });
@@ -408,7 +408,7 @@ impl<P: Policy> Behaviour<P> {
          });
 
          &mut self
-            .outbound_buffers
+            .buffers
             .entry(*peer_id)
             .or_insert_with(|| ringbuf::StaticRb::default().split())
             .0
@@ -436,11 +436,11 @@ impl<P: Policy> p2p_swarm::NetworkBehaviour for Behaviour<P> {
       (self.inbound_policy)(&peer_id)?;
 
       let (producer, consumer) = self
-         .outbound_buffers
+         .buffers
          .remove(&peer_id)
          .unwrap_or_else(|| ringbuf::StaticRb::default().split());
 
-      self.outbound_handlers.insert(peer_id, producer);
+      self.handlers.insert(peer_id, producer);
 
       Ok(Handler::new(consumer))
    }
@@ -454,11 +454,11 @@ impl<P: Policy> p2p_swarm::NetworkBehaviour for Behaviour<P> {
       _port_use: p2p_core_transport::PortUse,
    ) -> Result<Self::ConnectionHandler, p2p_swarm::ConnectionDenied> {
       let (producer, consumer) = self
-         .outbound_buffers
+         .buffers
          .remove(&peer_id)
          .unwrap_or_else(|| ringbuf::StaticRb::default().split());
 
-      self.outbound_handlers.insert(peer_id, producer);
+      self.handlers.insert(peer_id, producer);
 
       Ok(Handler::new(consumer))
    }
@@ -466,7 +466,7 @@ impl<P: Policy> p2p_swarm::NetworkBehaviour for Behaviour<P> {
    fn on_swarm_event(&mut self, event: p2p_swarm::FromSwarm) {
       match event {
          p2p_swarm::FromSwarm::ConnectionClosed(closed) if closed.remaining_established == 0 => {
-            self.outbound_handlers.remove(&closed.peer_id);
+            self.handlers.remove(&closed.peer_id);
          },
          _ => {},
       }

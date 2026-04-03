@@ -93,7 +93,7 @@ async fn main() -> cyn::Termination {
       Command::Config {
          command: Config::Generate,
       } => {
-         let config = route67::Config::generate()?;
+         let config = route67::Config::generate();
 
          let config = toml::to_string_pretty(&config)
             .chain_err("failed to generate config, this is a bug")?;

@@ -46,17 +46,20 @@ fn destination_of(packet: &[u8]) -> Option<net::Ipv6Addr> {
 }
 
 #[derive(p2p_swarm::NetworkBehaviour)]
-pub struct Behaviour<P: ip::Policy> {
-   pub identify: p2p_identify::Behaviour,
-   pub ping:     p2p_ping::Behaviour,
-   pub relay:    p2p_relay::Behaviour,
-   pub dcutr:    p2p_dcutr::Behaviour,
-   pub kad:      p2p_kad::Behaviour<p2p_kad_store::MemoryStore>,
-   pub ip:       ip::Behaviour<P>,
+struct Behaviour<P: ip::Policy> {
+   identify: p2p_identify::Behaviour,
+   ping:     p2p_ping::Behaviour,
+   relay:    p2p_relay::Behaviour,
+   dcutr:    p2p_dcutr::Behaviour,
+   kad:      p2p_kad::Behaviour<p2p_kad_store::MemoryStore>,
+   ip:       ip::Behaviour<P>,
 }
 
 pub async fn run(config: Config) -> cyn::Result<()> {
-   let mut swarm = p2p::SwarmBuilder::with_existing_identity(config.keypair.clone().into())
+   let local = config.local()?;
+   let local_id = local.keypair.id();
+
+   let mut swarm = p2p::SwarmBuilder::with_existing_identity(local.keypair.0.clone().into())
       .with_tokio()
       .with_tcp(
          p2p_tcp::Config::default(),
@@ -85,7 +88,7 @@ pub async fn run(config: Config) -> cyn::Result<()> {
                   p2p_kad::Behaviour::new(peer_id, p2p_kad_store::MemoryStore::new(peer_id));
 
                // Add bootstrap peers to Kademlia DHT for peer discovery.
-               for addr in &config.bootstrap {
+               for addr in &local.bootstrap {
                   let Some(peer_id) = addr.iter().find_map(|protocol| {
                      let p2p_multiaddr::Protocol::P2p(peer_id) = protocol else {
                         return None;
@@ -107,7 +110,7 @@ pub async fn run(config: Config) -> cyn::Result<()> {
                let peer_ids = config
                   .peers
                   .iter()
-                  .map(|peer| peer.id)
+                  .map(config::Peer::id)
                   .collect::<rustc_hash::FxHashSet<_>>();
 
                move |peer_id| {
@@ -125,29 +128,29 @@ pub async fn run(config: Config) -> cyn::Result<()> {
       .unwrap()
       .build();
 
-   for addr in config.listen {
+   for addr in &local.listen {
       swarm
-         .listen_on(addr)
+         .listen_on(addr.clone())
          .chain_err("failed to listen on local port")?;
    }
 
    let peer_ids = config
       .peers
       .iter()
-      .map(|peer| peer.id)
+      .map(config::Peer::id)
       .collect::<rustc_hash::FxHashSet<_>>();
 
-   let mut address_map = address::Map::new(config.id);
+   let mut address_map = address::Map::new(local_id);
 
    for peer in &config.peers {
-      address_map.prefix_of(peer.id);
+      address_map.prefix_of(peer.id());
    }
 
    let mut tun_buffer = vec![0_u8; MTU as usize];
    let tun_interface = Interface::create(
-      config.interface.as_deref(),
+      local.interface.as_deref(),
       address_map
-         .prefix_of(config.id)
+         .prefix_of(local_id)
          .expect("self is always in map"),
    )?;
 
