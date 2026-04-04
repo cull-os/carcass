@@ -215,6 +215,8 @@ async fn create(config: Config) -> cyn::Result<Program<impl ip::Policy>> {
                   let mut kad =
                      p2p_kad::Behaviour::new(peer_id, p2p_kad_store::MemoryStore::new(peer_id));
 
+                  kad.set_mode(Some(p2p_kad::Mode::Client));
+
                   // Add bootstrap peers to Kademlia DHT for peer discovery.
                   for peer in &config.peers {
                      let &config::Peer::Bootstrap(ref address) = peer else {
