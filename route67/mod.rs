@@ -422,7 +422,11 @@ pub async fn run(config: Config) -> cyn::Result<()> {
          swarm_event = program.swarm.select_next_some() => {
             match swarm_event {
                Se::NewListenAddr { address, .. } => {
-                  tracing::info!(%address, "Listening on address");
+                  if address.iter().any(|part| matches!(part, p2p_multiaddr::Protocol::P2pCircuit)) {
+                     tracing::debug!(%address, "Listening on relay address");
+                  } else {
+                     tracing::info!(%address, "Listening on address");
+                  }
                },
 
                Se::OutgoingConnectionError { peer_id: Some(peer_id), error: p2p_swarm::DialError::NoAddresses, .. } => {
