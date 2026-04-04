@@ -119,9 +119,12 @@ type PacketProducer = ringbuf::CachingProd<Arc<ringbuf::StaticRb<Packet, PACKET_
 type PacketConsumer = ringbuf::CachingCons<Arc<ringbuf::StaticRb<Packet, PACKET_BUFFER_SIZE>>>;
 
 pub struct EnabledHandler {
-   consumer:          PacketConsumer,
-   inbound:           InboundState,
-   inbound_attempts:  usize,
+   peer_id:  p2p::PeerId,
+   consumer: PacketConsumer,
+
+   inbound:          InboundState,
+   inbound_attempts: usize,
+
    outbound:          OutboundState,
    outbound_attempts: usize,
 }
@@ -133,11 +136,14 @@ pub enum Handler {
 }
 
 impl Handler {
-   fn new(consumer: PacketConsumer) -> Self {
+   fn new(peer_id: p2p::PeerId, consumer: PacketConsumer) -> Self {
       Handler::Enabled(EnabledHandler {
+         peer_id,
          consumer,
+
          inbound: InboundState::Disconnected,
          inbound_attempts: 0,
+
          outbound: OutboundState::Disconnected,
          outbound_attempts: 0,
       })
@@ -200,7 +206,7 @@ impl p2p_swarm::ConnectionHandler for Handler {
 
             handler.inbound_attempts += 1;
             if handler.inbound_attempts >= MAX_SUBSTREAM_ATTEMPTS {
-               tracing::warn!("Maximum inbound substream attempts exceeded.");
+               tracing::warn!(peer_id = %handler.peer_id, "Maximum inbound substream attempts exceeded");
                *self = Handler::Disabled;
             }
          },
@@ -211,7 +217,7 @@ impl p2p_swarm::ConnectionHandler for Handler {
             handler.outbound = OutboundState::Disconnected;
             handler.outbound_attempts += 1;
             if handler.outbound_attempts >= MAX_SUBSTREAM_ATTEMPTS {
-               tracing::warn!("Maximum outbound substream attempts exceeded.");
+               tracing::warn!(peer_id = %handler.peer_id, "Maximum outbound substream attempts exceeded");
                *self = Handler::Disabled;
             }
          },
@@ -278,13 +284,13 @@ impl p2p_swarm::ConnectionHandler for Handler {
                            continue;
                         },
                         Err(error) => {
-                           tracing::debug!("Failed to send packet on outbound stream: {error}");
+                           tracing::debug!(%error, "Failed to send packet on outbound stream");
                            handler.outbound = OutboundState::Disconnected;
                         },
                      }
                   },
                   Ready(Err(error)) => {
-                     tracing::debug!("Failed to send packet on outbound stream: {error}");
+                     tracing::debug!(%error, "Failed to send packet on outbound stream");
                      handler.outbound = OutboundState::Disconnected;
                   },
                   Pending => {
@@ -299,7 +305,7 @@ impl p2p_swarm::ConnectionHandler for Handler {
                      continue;
                   },
                   Ready(Err(error)) => {
-                     tracing::debug!("Failed to flush outbound stream: {error}");
+                     tracing::debug!(%error, "Failed to flush outbound stream");
                      handler.outbound = OutboundState::Disconnected;
                   },
                   Pending => {
@@ -322,12 +328,12 @@ impl p2p_swarm::ConnectionHandler for Handler {
                      return Ready(NotifyBehaviour(packet));
                   },
                   Ready(Some(Err(error))) => {
-                     tracing::debug!("Failed to read from inbound stream: {error}");
+                     tracing::debug!(%error, "Failed to read from inbound stream");
                      handler.inbound = InboundState::Closing(substream);
                      continue;
                   },
                   Ready(None) => {
-                     tracing::debug!("Inbound stream closed by remote.");
+                     tracing::debug!(peer_id = %handler.peer_id, "Inbound stream closed by remote");
                      handler.inbound = InboundState::Closing(substream);
                      continue;
                   },
@@ -342,7 +348,7 @@ impl p2p_swarm::ConnectionHandler for Handler {
                      handler.inbound = InboundState::Disconnected;
                   },
                   Ready(Err(error)) => {
-                     tracing::debug!("Failed to close inbound stream: {error}");
+                     tracing::debug!(%error, "Failed to close inbound stream");
                      handler.inbound = InboundState::Disconnected;
                   },
                   Pending => {
@@ -407,7 +413,7 @@ impl<P: Policy> Behaviour<P> {
       };
 
       let Ok(()) = producer.try_push(packet) else {
-         tracing::warn!("Packet buffer full for peer '{peer_id}', dropping packet.");
+         tracing::warn!(%peer_id, "Packet buffer full, dropping packet");
          return;
       };
    }
@@ -436,7 +442,7 @@ impl<P: Policy> p2p_swarm::NetworkBehaviour for Behaviour<P> {
 
       self.handlers.insert(peer_id, producer);
 
-      Ok(Handler::new(consumer))
+      Ok(Handler::new(peer_id, consumer))
    }
 
    fn handle_established_outbound_connection(
@@ -454,7 +460,7 @@ impl<P: Policy> p2p_swarm::NetworkBehaviour for Behaviour<P> {
 
       self.handlers.insert(peer_id, producer);
 
-      Ok(Handler::new(consumer))
+      Ok(Handler::new(peer_id, consumer))
    }
 
    fn on_swarm_event(&mut self, event: p2p_swarm::FromSwarm) {
