@@ -163,7 +163,7 @@ ringbuf              = "0.4.8"
 rpds                 = "1.1.1"
 rustc-hash           = "2.1.1"
 serde                = { features = [ "derive" ], version = "1.0.219" }
-sha2                 = "0.10.9"
+sha2                 = "0.11.0"
 slotmap              = "1.0.7"
 smallvec             = "2.0.0-alpha.10"
 stacksafe            = "1.0.0"
