@@ -44,10 +44,7 @@ use ringbuf::traits::{
    Producer as _,
    Split as _,
 };
-use rustc_hash::{
-   FxBuildHasher,
-   FxHashMap,
-};
+use rustc_hash::FxHashMap;
 
 const PROTOCOL: p2p_swarm::StreamProtocol = p2p_swarm::StreamProtocol::new("/ip/0.0.1");
 
@@ -384,8 +381,8 @@ impl<P: Policy> Behaviour<P> {
 
          inbound_policy,
 
-         handlers: FxHashMap::with_hasher(FxBuildHasher),
-         buffers: FxHashMap::with_hasher(FxBuildHasher),
+         handlers: FxHashMap::default(),
+         buffers: FxHashMap::default(),
       }
    }
 

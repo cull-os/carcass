@@ -29,6 +29,7 @@ bytes.workspace = true
 clap.workspace = true
 derive_more.workspace = true
 either.workspace = true
+indexmap.workspace = true
 libp2p = { features = [
   "dcutr",
   "dns",

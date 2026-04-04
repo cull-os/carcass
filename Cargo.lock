@@ -3971,6 +3971,7 @@ dependencies = [
  "derive_more",
  "dup",
  "either",
+ "indexmap",
  "libp2p",
  "multibase",
  "n0-watcher",

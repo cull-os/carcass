@@ -10,8 +10,10 @@ use derive_more::{
    Deref,
    DerefMut,
 };
+use indexmap::IndexMap;
 use libp2p::{
    self as p2p,
+   core::transport as p2p_transport,
    dcutr as p2p_dcutr,
    futures::StreamExt as _,
    identify as p2p_identify,
@@ -52,18 +54,6 @@ pub mod ip;
 const RELAY_PEER_TARGET: usize = 4;
 const RELAY_ADDRS_PER_PEER: usize = 4;
 
-fn pick_diverse(addresses: &[p2p::Multiaddr]) -> impl Iterator<Item = &p2p::Multiaddr> {
-   let mut seen = FxHashMap::<Vec<&'static str>, &p2p::Multiaddr>::default();
-
-   for address in addresses {
-      seen
-         .entry(address.iter().map(|protocol| protocol.tag()).collect())
-         .or_insert(address);
-   }
-
-   seen.into_values()
-}
-
 fn destination_of(packet: &[u8]) -> Option<net::Ipv6Addr> {
    if packet.first()? >> 4_usize != 6 {
       return None;
@@ -86,6 +76,23 @@ struct Behaviour<P: ip::Policy> {
    ip:           ip::Behaviour<P>,
 }
 
+struct Relay {
+   ping:      time::Duration,
+   addresses: Vec<(Option<p2p_transport::ListenerId>, p2p::Multiaddr)>,
+}
+
+impl Relay {
+   fn new(addresses: impl IntoIterator<Item = p2p::Multiaddr>) -> Self {
+      Self {
+         ping:      time::Duration::MAX,
+         addresses: addresses
+            .into_iter()
+            .map(|address| (None, address))
+            .collect(),
+      }
+   }
+}
+
 #[derive(Deref, DerefMut)]
 struct Program<P: ip::Policy> {
    local: config::LocalPeer,
@@ -98,7 +105,7 @@ struct Program<P: ip::Policy> {
 
    address_map: address::Map,
 
-   relays: FxHashMap<p2p::PeerId, (Vec<p2p::Multiaddr>, time::Duration)>,
+   relays: IndexMap<p2p::PeerId, Relay, rustc_hash::FxBuildHasher>,
 
    #[deref]
    #[deref_mut]
@@ -161,7 +168,7 @@ async fn create(config: Config) -> cyn::Result<Program<impl ip::Policy>> {
 
       address_map,
 
-      relays: FxHashMap::default(),
+      relays: IndexMap::default(),
 
       swarm: p2p::SwarmBuilder::with_existing_identity(local.keypair.clone().into())
          .with_tokio()
@@ -257,43 +264,58 @@ impl<P: ip::Policy> Program<P> {
       }
    }
 
-   fn active_relays(&self) -> impl Iterator<Item = p2p::PeerId> {
-      self.listeners().filter_map(|address| {
-         address
-            .iter()
-            .any(|part| matches!(part, p2p_multiaddr::Protocol::P2pCircuit))
-            .then(|| {
-               address.iter().find_map(|part| {
-                  let p2p_multiaddr::Protocol::P2p(peer_id) = part else {
-                     return None;
-                  };
-
-                  Some(peer_id)
-               })
-            })
-            .flatten()
-      })
+   fn active_relays(&self) -> impl Iterator<Item = &p2p::PeerId> {
+      self
+         .relays
+         .iter()
+         .filter(|&(_, relay)| {
+            relay
+               .addresses
+               .iter()
+               .any(|&(listener_id, _)| listener_id.is_some())
+         })
+         .map(|(peer_id, _)| peer_id)
    }
 
    fn fill_relays(&mut self) {
-      let peers_active = self.active_relays().collect::<Vec<_>>();
-      let peers_need = RELAY_PEER_TARGET.saturating_sub(peers_active.len());
+      fn pick_diverse(
+         addresses: &mut [(Option<p2p_transport::ListenerId>, p2p::Multiaddr)],
+      ) -> impl Iterator<Item = &mut (Option<p2p_transport::ListenerId>, p2p::Multiaddr)> {
+         let mut seen = FxHashMap::default();
 
-      let mut peers_candidate = self
-         .relays
-         .iter()
-         .filter(|&(peer_id, _)| !peers_active.contains(peer_id))
-         .collect::<Vec<_>>();
-      peers_candidate.sort_by_key(|&(_, &(_, rtt))| rtt);
+         for item in addresses.iter_mut() {
+            seen
+               .entry(
+                  item
+                     .1
+                     .iter()
+                     .map(|protocol| protocol.tag())
+                     .collect::<Vec<_>>(),
+               )
+               .or_insert(item);
+         }
+
+         seen.into_values()
+      }
+
+      let peers_need = RELAY_PEER_TARGET.saturating_sub(self.active_relays().count());
 
       let mut peers_filled = 0_usize;
-      for &(&peer_id, &(ref addresses, _)) in &peers_candidate {
+      for (&peer_id, relay) in &mut self.relays {
          if peers_filled >= peers_need {
             break;
          }
 
+         if relay
+            .addresses
+            .iter()
+            .any(|&(listener_id, _)| listener_id.is_some())
+         {
+            continue;
+         }
+
          let mut addresses_listened = 0_usize;
-         for address in pick_diverse(addresses) {
+         for &mut (ref mut listener_id_opt, ref address) in pick_diverse(&mut relay.addresses) {
             if addresses_listened >= RELAY_ADDRS_PER_PEER {
                break;
             }
@@ -306,6 +328,7 @@ impl<P: ip::Policy> Program<P> {
             if let Ok(listener_id) = self.swarm.listen_on(address.clone()) {
                tracing::info!(%address, %listener_id, "Listening via relay");
                addresses_listened += 1;
+               listener_id_opt.replace(listener_id);
             }
          }
 
@@ -373,20 +396,23 @@ pub async fn run(config: Config) -> cyn::Result<()> {
                   info,
                   ..
                })) if info.protocols.contains(&p2p_relay::HOP_PROTOCOL_NAME) => {
-                  let rtt = program.relays
-                     .get(&peer_id)
-                     .map_or(time::Duration::MAX, |&(_, rtt)| rtt);
+                  let mut relay = Relay::new(info.listen_addrs);
+                  if let Some(existing) = program.relays.get(&peer_id) {
+                     relay.ping = existing.ping;
+                  }
 
-                  program.relays.insert(peer_id, (info.listen_addrs, rtt));
+                  program.relays.insert(peer_id, relay);
+                  program.relays.sort_by(|_, relay_a, _, relay_b| relay_a.ping.cmp(&relay_b.ping));
                   program.fill_relays();
                },
 
                Se::Behaviour(Be::Ping(p2p_ping::Event {
                   peer,
-                  result: Ok(new_rtt),
+                  result: Ok(ping),
                   ..
-               })) if let Some(&mut (_, ref mut rtt)) = program.relays.get_mut(&peer) => {
-                  *rtt = new_rtt;
+               })) if let Some(ref mut relay) = program.relays.get_mut(&peer) => {
+                  relay.ping = ping;
+                  program.relays.sort_by(|_, relay_a, _, relay_b| relay_a.ping.cmp(&relay_b.ping));
                },
 
                Se::ListenerClosed { addresses, .. } => {
