@@ -415,7 +415,7 @@ pub async fn run(config: Config) -> cyn::Result<()> {
                   program.relays.sort_by(|_, relay_a, _, relay_b| relay_a.ping.cmp(&relay_b.ping));
                },
 
-               Se::ListenerClosed { addresses, .. } => {
+               Se::ListenerClosed { listener_id, addresses, .. } => {
                   let is_relay = addresses
                      .iter()
                      .any(|address| {
@@ -425,6 +425,14 @@ pub async fn run(config: Config) -> cyn::Result<()> {
                      });
 
                   if is_relay {
+                     for relay in program.relays.values_mut() {
+                        for &mut (ref mut id, _) in &mut relay.addresses {
+                           if *id == Some(listener_id) {
+                              *id = None;
+                           }
+                        }
+                     }
+
                      program.fill_relays();
                   }
                },
