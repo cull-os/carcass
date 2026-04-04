@@ -91,6 +91,13 @@ impl Relay {
             .collect(),
       }
    }
+
+   fn is_active(&self) -> bool {
+      self
+         .addresses
+         .iter()
+         .any(|&(listener_id, _)| listener_id.is_some())
+   }
 }
 
 #[derive(Deref, DerefMut)]
@@ -268,12 +275,7 @@ impl<P: ip::Policy> Program<P> {
       self
          .relays
          .iter()
-         .filter(|&(_, relay)| {
-            relay
-               .addresses
-               .iter()
-               .any(|&(listener_id, _)| listener_id.is_some())
-         })
+         .filter(|&(_, relay)| relay.is_active())
          .map(|(peer_id, _)| peer_id)
    }
 
@@ -306,11 +308,7 @@ impl<P: ip::Policy> Program<P> {
             break;
          }
 
-         if relay
-            .addresses
-            .iter()
-            .any(|&(listener_id, _)| listener_id.is_some())
-         {
+         if relay.is_active() {
             continue;
          }
 
@@ -336,6 +334,53 @@ impl<P: ip::Policy> Program<P> {
             peers_filled += 1;
          }
       }
+   }
+
+   fn pick_closest_relays(&mut self) {
+      let Some((worst_active_peer, worst_active_ping)) = self
+         .relays
+         .iter()
+         .filter(|&(_, relay)| relay.is_active())
+         .max_by_key(|&(_, relay)| relay.ping)
+         .map(|(peer_id, relay)| (*peer_id, relay.ping))
+      else {
+         return;
+      };
+
+      let Some(best_inactive_ping) = self
+         .relays
+         .iter()
+         .filter(|&(_, relay)| !relay.is_active())
+         .min_by_key(|&(_, relay)| relay.ping)
+         .map(|(_, relay)| relay.ping)
+      else {
+         return;
+      };
+
+      if best_inactive_ping >= worst_active_ping * 2 / 3
+         || worst_active_ping.saturating_sub(best_inactive_ping) <= time::Duration::from_millis(10)
+      {
+         return;
+      }
+
+      tracing::info!(
+         %worst_active_peer,
+         ?worst_active_ping,
+         ?best_inactive_ping,
+         "Evicting slow relay for faster candidate",
+      );
+
+      let relay = self
+         .relays
+         .get_mut(&worst_active_peer)
+         .expect("peer was just found");
+      for &mut (ref mut listener_id, _) in &mut relay.addresses {
+         if let Some(id) = listener_id.take() {
+            self.swarm.remove_listener(id);
+         }
+      }
+
+      self.fill_relays();
    }
 }
 
@@ -413,6 +458,7 @@ pub async fn run(config: Config) -> cyn::Result<()> {
                })) if let Some(ref mut relay) = program.relays.get_mut(&peer) => {
                   relay.ping = ping;
                   program.relays.sort_by(|_, relay_a, _, relay_b| relay_a.ping.cmp(&relay_b.ping));
+                  program.pick_closest_relays();
                },
 
                Se::ListenerClosed { listener_id, addresses, .. } => {
