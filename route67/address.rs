@@ -10,59 +10,20 @@ use derive_more::{
 };
 use libp2p as p2p;
 use rustc_hash::FxHashMap;
-
-const fn assert_byte_sized(bits: Range<usize>) -> Range<usize> {
-   assert!(bits.end.is_multiple_of(8));
-   assert!(bits.start.is_multiple_of(8));
-   bits
-}
+use sha2::Digest as _;
 
 pub const VPN_PREFIX: [u8; 2] = [0xFD, 0x67];
-pub const VPN_PREFIX_RANGE: Range<usize> = assert_byte_sized(0..16);
-pub const HOST_PREFIX_RANGE: Range<usize> =
-   assert_byte_sized(VPN_PREFIX_RANGE.end..VPN_PREFIX_RANGE.end + 64);
-pub const HOST_SUBNET_RANGE: Range<usize> =
-   assert_byte_sized(HOST_PREFIX_RANGE.end..HOST_PREFIX_RANGE.end + 48);
-
-fn bits(bytes: impl IntoIterator<Item = u8>) -> impl Iterator<Item = bool> {
-   bytes
-      .into_iter()
-      .flat_map(|byte| (0_usize..8_usize).map(move |index| byte & (1 << (7_usize - index)) != 0))
-}
-
-fn from_bits<const N: usize>(bits: impl IntoIterator<Item = bool>) -> [u8; N] {
-   let mut to = [0; N];
-
-   for (index, bit) in bits.into_iter().enumerate() {
-      if bit {
-         to[index / 8] |= 1 << (7 - (index % 8));
-      }
-   }
-
-   to
-}
-
-fn hash(to: &mut [bool], from: impl IntoIterator<Item = bool>) {
-   for (index, from_bit) in from.into_iter().enumerate() {
-      to[index % to.len()] ^= from_bit;
-   }
-}
+pub const VPN_PREFIX_RANGE: Range<usize> = 0..2;
+pub const HOST_PREFIX_RANGE: Range<usize> = VPN_PREFIX_RANGE.end..VPN_PREFIX_RANGE.end + 8;
+pub const HOST_SUBNET_RANGE: Range<usize> = HOST_PREFIX_RANGE.end..HOST_PREFIX_RANGE.end + 6;
 
 #[derive(Deref, DerefMut, Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct Prefix([u8; HOST_PREFIX_RANGE.end / 8]);
-
-impl Prefix {
-   #[expect(
-      clippy::cast_possible_truncation,
-      reason = "try_from + expect is not const compatible yet (in Rust 1.96)"
-   )]
-   pub const BITS: u32 = size_of::<Self>() as u32 * 8;
-}
+pub struct Prefix([u8; HOST_PREFIX_RANGE.end]);
 
 impl From<net::Ipv6Addr> for Prefix {
    fn from(addr: net::Ipv6Addr) -> Self {
       let mut octets = [0; _];
-      octets.copy_from_slice(&addr.octets()[..HOST_PREFIX_RANGE.end / 8]);
+      octets.copy_from_slice(&addr.octets()[..HOST_PREFIX_RANGE.end]);
       Self(octets)
    }
 }
@@ -97,19 +58,11 @@ impl Map {
          return Some(prefix);
       }
 
-      let mut prefix = [false; HOST_PREFIX_RANGE.end];
+      let mut prefix = Prefix([0; _]);
+      prefix[VPN_PREFIX_RANGE].copy_from_slice(&VPN_PREFIX);
 
-      for (index, bit) in bits(VPN_PREFIX).enumerate() {
-         prefix[index] = bit;
-      }
-
-      // fd67:dead:beef:cafe:babe::
-      hash(
-         &mut prefix[HOST_PREFIX_RANGE.clone()],
-         bits(peer_id.to_bytes()),
-      );
-
-      let prefix = Prefix(from_bits(prefix.iter().copied()));
+      let hash = sha2::Sha256::digest(peer_id.to_bytes());
+      prefix[HOST_PREFIX_RANGE].copy_from_slice(&hash[..HOST_PREFIX_RANGE.len()]);
 
       let hash_map::Entry::Vacant(entry) = self.prefix_to_peer.entry(prefix) else {
          return None;
@@ -129,8 +82,6 @@ impl Map {
 
 #[cfg(test)]
 mod tests {
-   use std::iter;
-
    use p2p::identity::{
       self,
       ed25519,
@@ -184,19 +135,7 @@ mod tests {
          let mut map = Map::new(id);
          let prefix = map.prefix_of(id).expect("self always succeeds");
 
-         let v6 = net::Ipv6Addr::from(
-            <[u8; _]>::try_from(
-               prefix
-                  .iter()
-                  .copied()
-                  .chain(iter::repeat(0))
-                  .take(size_of::<net::Ipv6Addr>())
-                  .collect::<Vec<_>>(),
-            )
-            .expect("size matches"),
-         );
-
-         prop_assert_eq!(Prefix::from(v6), prefix);
+         prop_assert_eq!(Prefix::from(net::Ipv6Addr::from(prefix)), prefix);
       }
    }
 }
