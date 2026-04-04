@@ -100,7 +100,12 @@ pub async fn run(config: Config) -> cyn::Result<()> {
    }
 
    let mut tun_buffer = vec![0_u8; MTU as usize];
-   let tun_interface = Interface::create(local.interface.as_deref())?;
+   let tun_interface = Interface::create(
+      local.interface.as_deref(),
+      address_map
+         .prefix_of(local.id)
+         .expect("local is always in map"),
+   )?;
 
    let mut swarm = p2p::SwarmBuilder::with_existing_identity(local.keypair.clone().into())
       .with_tokio()
@@ -307,6 +312,14 @@ pub async fn run(config: Config) -> cyn::Result<()> {
                tracing::warn!("Tried to send packet to {destination} not in peer map, dropping.");
                continue;
             };
+
+            // Loopback: write self-addressed packets back to TUN.
+            if peer_id == local.id {
+               if let Err(error) = tun_interface.send(packet).await {
+                  tracing::error!("Failed to write loopback packet to TUN interface: {error}");
+               }
+               continue;
+            }
 
             // Send packet to peer
             let packet = ip::Packet(bytes::Bytes::copy_from_slice(packet));

@@ -14,12 +14,14 @@ pub struct Interface {
 }
 
 impl Interface {
-   pub fn create(name: Option<&str>) -> cyn::Result<Self> {
+   pub fn create(name: Option<&str>, prefix: address::Prefix) -> cyn::Result<Self> {
       let mut builder = tun_rs::DeviceBuilder::new()
          .ipv6(
             net::Ipv6Addr::from({
                let mut addr = [0_u8; size_of::<net::Ipv6Addr>()];
-               addr[..address::VPN_PREFIX.len()].copy_from_slice(&address::VPN_PREFIX);
+               addr[..prefix.len()].copy_from_slice(&*prefix);
+               // ::1 in the subnet portion.
+               *addr.last_mut().expect("non-empty") = 1;
                addr
             }),
             u8::try_from(address::VPN_PREFIX.len() * 8).expect("prefix fits in u8"),
