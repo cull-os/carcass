@@ -429,17 +429,17 @@ pub async fn run(config: Config) -> cyn::Result<()> {
                   }
                },
 
-               Se::OutgoingConnectionError { peer_id: Some(peer_id), error: p2p_swarm::DialError::NoAddresses, .. } => {
-                  tracing::info!(%peer_id, "Dial failed with no addresses, discovering via DHT");
-                  program.behaviour_mut().kad.get_closest_peers(peer_id);
-               },
-
-               Se::Behaviour(Be::Ip(packet)) => {
+               Se::Behaviour(Be::Ip(ip::Event::Packet(packet))) => {
                   tracing::trace!(?packet, "Got packet");
 
                   if let Err(error) = program.tun_interface.send(&packet).await {
                      tracing::error!(%error, "Failed to write packet to TUN interface");
                   }
+               },
+
+               Se::Behaviour(Be::Ip(ip::Event::DiscoverPeer(peer_id))) => {
+                  tracing::debug!(%peer_id, "Discovering peer via DHT");
+                  program.behaviour_mut().kad.get_closest_peers(peer_id);
                },
 
                Se::Behaviour(Be::Identify(p2p_identify::Event::Received {

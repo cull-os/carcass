@@ -1,10 +1,8 @@
 use std::{
    collections::VecDeque,
-   convert::Infallible,
    io,
    mem,
    pin::Pin,
-   sync::Arc,
    task,
 };
 
@@ -38,18 +36,25 @@ use libp2p::{
       handler as p2p_swarm_handler,
    },
 };
-use ringbuf::traits::{
-   Consumer as _,
-   Observer as _,
-   Producer as _,
-   Split as _,
+use ringbuf::{
+   storage as ringbuf_storage,
+   traits::{
+      Consumer as _,
+      Observer as _,
+      Producer as _,
+   },
 };
-use rustc_hash::FxHashMap;
 
 const PROTOCOL: p2p_swarm::StreamProtocol = p2p_swarm::StreamProtocol::new("/ip/0.0.1");
 
 #[derive(Debug, Deref, Clone)]
 pub struct Packet(pub Bytes);
+
+#[derive(Debug)]
+pub enum Event {
+   Packet(Packet),
+   DiscoverPeer(p2p::PeerId),
+}
 
 struct PacketCodec;
 
@@ -115,18 +120,16 @@ enum OutboundState {
 const MAX_SUBSTREAM_ATTEMPTS: usize = 5;
 
 const PACKET_BUFFER_SIZE: usize = 256;
-type PacketProducer = ringbuf::CachingProd<Arc<ringbuf::StaticRb<Packet, PACKET_BUFFER_SIZE>>>;
-type PacketConsumer = ringbuf::CachingCons<Arc<ringbuf::StaticRb<Packet, PACKET_BUFFER_SIZE>>>;
 
 pub struct EnabledHandler {
-   peer_id:  p2p::PeerId,
-   consumer: PacketConsumer,
+   peer_id: p2p::PeerId,
 
    inbound:          InboundState,
    inbound_attempts: usize,
 
    outbound:          OutboundState,
    outbound_attempts: usize,
+   outbound_packets:  ringbuf::LocalRb<ringbuf_storage::Array<Packet, PACKET_BUFFER_SIZE>>,
 }
 
 #[expect(clippy::large_enum_variant)]
@@ -136,22 +139,22 @@ pub enum Handler {
 }
 
 impl Handler {
-   fn new(peer_id: p2p::PeerId, consumer: PacketConsumer) -> Self {
+   fn new(peer_id: p2p::PeerId) -> Self {
       Handler::Enabled(EnabledHandler {
          peer_id,
-         consumer,
 
          inbound: InboundState::Disconnected,
          inbound_attempts: 0,
 
          outbound: OutboundState::Disconnected,
          outbound_attempts: 0,
+         outbound_packets: ringbuf::LocalRb::default(),
       })
    }
 }
 
 impl p2p_swarm::ConnectionHandler for Handler {
-   type FromBehaviour = Infallible;
+   type FromBehaviour = Packet;
 
    type ToBehaviour = Packet;
 
@@ -180,8 +183,19 @@ impl p2p_swarm::ConnectionHandler for Handler {
       matches!(self, Handler::Enabled(..))
    }
 
-   fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
-      match event {}
+   fn on_behaviour_event(&mut self, packet: Self::FromBehaviour) {
+      let Handler::Enabled(ref mut handler) = *self else {
+         return;
+      };
+
+      if let Err(packet) = handler.outbound_packets.try_push(packet) {
+         tracing::warn!(peer_id = %handler.peer_id, "Packet buffer full, dropping oldest packet");
+         handler.outbound_packets.try_pop().expect("buffer is full");
+         handler
+            .outbound_packets
+            .try_push(packet)
+            .expect("just popped");
+      }
    }
 
    fn on_connection_event(
@@ -252,7 +266,7 @@ impl p2p_swarm::ConnectionHandler for Handler {
       loop {
          match mem::replace(&mut handler.outbound, OutboundState::Poisoned) {
             OutboundState::Disconnected => {
-               if !handler.consumer.is_empty() {
+               if !handler.outbound_packets.is_empty() {
                   handler.outbound = OutboundState::Requested;
                   return Ready(OutboundSubstreamRequest {
                      protocol: p2p_swarm::SubstreamProtocol::new(
@@ -268,7 +282,7 @@ impl p2p_swarm::ConnectionHandler for Handler {
                handler.outbound = OutboundState::Requested;
             },
             OutboundState::WaitingOutput(substream) => {
-               if let Some(packet) = handler.consumer.try_pop() {
+               if let Some(packet) = handler.outbound_packets.try_pop() {
                   handler.outbound = OutboundState::PendingSend(substream, packet);
                   continue;
                }
@@ -372,12 +386,15 @@ impl p2p_swarm::ConnectionHandler for Handler {
 pub trait Policy = FnMut(&p2p::PeerId) -> bool + 'static;
 
 pub struct Behaviour<P: Policy> {
-   queued_events: VecDeque<p2p_swarm::ToSwarm<Packet, Infallible>>,
+   queued_events: VecDeque<p2p_swarm::ToSwarm<Event, Packet>>,
 
    inbound_policy: P,
 
-   handlers: FxHashMap<p2p::PeerId, PacketProducer>,
-   buffers:  FxHashMap<p2p::PeerId, (PacketProducer, PacketConsumer)>,
+   connected: rustc_hash::FxHashSet<p2p::PeerId>,
+   pending: rustc_hash::FxHashMap<
+      p2p::PeerId,
+      ringbuf::LocalRb<ringbuf_storage::Array<Packet, PACKET_BUFFER_SIZE>>,
+   >,
 }
 
 impl<P: Policy> Behaviour<P> {
@@ -387,42 +404,41 @@ impl<P: Policy> Behaviour<P> {
 
          inbound_policy,
 
-         handlers: FxHashMap::default(),
-         buffers: FxHashMap::default(),
+         connected: rustc_hash::FxHashSet::default(),
+         pending: rustc_hash::FxHashMap::default(),
       }
    }
 
    pub fn send(&mut self, peer_id: &p2p::PeerId, packet: Packet) {
-      let producer = if let Some(producer) = self.handlers.get_mut(peer_id) {
-         producer
-      } else if let Some(&mut (ref mut producer, _)) = self.buffers.get_mut(peer_id) {
-         self.queued_events.push_back(p2p_swarm::ToSwarm::Dial {
-            opts: p2p_swarm_dial_opts::DialOpts::peer_id(*peer_id).build(),
-         });
-         producer
-      } else {
+      let true = self.connected.contains(peer_id) else {
          self.queued_events.push_back(p2p_swarm::ToSwarm::Dial {
             opts: p2p_swarm_dial_opts::DialOpts::peer_id(*peer_id).build(),
          });
 
-         &mut self
-            .buffers
-            .entry(*peer_id)
-            .or_insert_with(|| ringbuf::StaticRb::default().split())
-            .0
-      };
+         let buffer = self.pending.entry(*peer_id).or_default();
+         if let Err(packet) = buffer.try_push(packet) {
+            tracing::warn!(%peer_id, "Packet buffer full, dropping oldest packet");
+            buffer.try_pop().expect("buffer is full");
+            buffer.try_push(packet).expect("just popped");
+         }
 
-      let Ok(()) = producer.try_push(packet) else {
-         tracing::warn!(%peer_id, "Packet buffer full, dropping packet");
          return;
       };
+
+      self
+         .queued_events
+         .push_back(p2p_swarm::ToSwarm::NotifyHandler {
+            peer_id: *peer_id,
+            handler: p2p_swarm::NotifyHandler::Any,
+            event:   packet,
+         });
    }
 }
 
 impl<P: Policy> p2p_swarm::NetworkBehaviour for Behaviour<P> {
    type ConnectionHandler = Handler;
 
-   type ToSwarm = Packet;
+   type ToSwarm = Event;
 
    fn handle_established_inbound_connection(
       &mut self,
@@ -435,14 +451,8 @@ impl<P: Policy> p2p_swarm::NetworkBehaviour for Behaviour<P> {
          return Ok(Handler::Disabled);
       }
 
-      let (producer, consumer) = self
-         .buffers
-         .remove(&peer_id)
-         .unwrap_or_else(|| ringbuf::StaticRb::default().split());
-
-      self.handlers.insert(peer_id, producer);
-
-      Ok(Handler::new(peer_id, consumer))
+      self.connected.insert(peer_id);
+      Ok(Handler::new(peer_id))
    }
 
    fn handle_established_outbound_connection(
@@ -453,20 +463,29 @@ impl<P: Policy> p2p_swarm::NetworkBehaviour for Behaviour<P> {
       _role_override: p2p_core::Endpoint,
       _port_use: p2p_core_transport::PortUse,
    ) -> Result<Self::ConnectionHandler, p2p_swarm::ConnectionDenied> {
-      let (producer, consumer) = self
-         .buffers
-         .remove(&peer_id)
-         .unwrap_or_else(|| ringbuf::StaticRb::default().split());
-
-      self.handlers.insert(peer_id, producer);
-
-      Ok(Handler::new(peer_id, consumer))
+      self.connected.insert(peer_id);
+      Ok(Handler::new(peer_id))
    }
 
    fn on_swarm_event(&mut self, event: p2p_swarm::FromSwarm) {
       match event {
-         p2p_swarm::FromSwarm::ConnectionClosed(closed) if closed.remaining_established == 0 => {
-            self.handlers.remove(&closed.peer_id);
+         p2p_swarm::FromSwarm::ConnectionClosed(p2p_swarm::ConnectionClosed {
+            peer_id,
+            remaining_established: 0,
+            ..
+         }) => {
+            self.connected.remove(&peer_id);
+         },
+         p2p_swarm::FromSwarm::DialFailure(p2p_swarm::DialFailure {
+            peer_id: Some(peer_id),
+            error: &p2p_swarm::DialError::NoAddresses,
+            ..
+         }) => {
+            self
+               .queued_events
+               .push_back(p2p_swarm::ToSwarm::GenerateEvent(Event::DiscoverPeer(
+                  peer_id,
+               )));
          },
          _ => {},
       }
@@ -480,13 +499,31 @@ impl<P: Policy> p2p_swarm::NetworkBehaviour for Behaviour<P> {
    ) {
       self
          .queued_events
-         .push_back(p2p_swarm::ToSwarm::GenerateEvent(packet));
+         .push_back(p2p_swarm::ToSwarm::GenerateEvent(Event::Packet(packet)));
    }
 
    fn poll(
       &mut self,
       _context: &mut task::Context<'_>,
    ) -> task::Poll<p2p_swarm::ToSwarm<Self::ToSwarm, p2p_swarm::THandlerInEvent<Self>>> {
+      self.pending.retain(|&peer_id, buffer| {
+         if !self.connected.contains(&peer_id) {
+            return true;
+         }
+
+         while let Some(packet) = buffer.try_pop() {
+            self
+               .queued_events
+               .push_back(p2p_swarm::ToSwarm::NotifyHandler {
+                  peer_id,
+                  handler: p2p_swarm::NotifyHandler::Any,
+                  event: packet,
+               });
+         }
+
+         false
+      });
+
       match self.queued_events.pop_front() {
          Some(event) => task::Poll::Ready(event),
          None => task::Poll::Pending,
