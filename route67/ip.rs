@@ -222,6 +222,7 @@ impl p2p_swarm::ConnectionHandler for Handler {
       }
    }
 
+   #[expect(clippy::cognitive_complexity)]
    fn poll(
       &mut self,
       cx: &mut task::Context<'_>,

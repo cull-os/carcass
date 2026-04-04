@@ -49,9 +49,9 @@ libp2p = { features = [
   "websocket",
   "yamux",
 ], workspace = true }
+multibase.workspace = true
 n0-watcher.workspace = true
 netwatch.workspace = true
-multibase.workspace = true
 ringbuf.workspace = true
 rustc-hash.workspace = true
 serde.workspace = true
