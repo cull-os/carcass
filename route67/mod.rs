@@ -359,7 +359,7 @@ impl<P: ip::Policy> Program<P> {
          return;
       };
 
-      if best_inactive_ping >= worst_active_ping * 2 / 3
+      if best_inactive_ping >= worst_active_ping / 3 * 2
          || worst_active_ping.saturating_sub(best_inactive_ping) <= time::Duration::from_millis(10)
       {
          return;
