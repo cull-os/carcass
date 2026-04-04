@@ -72,7 +72,7 @@ mod peer_id {
    }
 }
 
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct LocalPeer {
    #[serde(with = "peer_id")]
@@ -85,7 +85,7 @@ pub struct LocalPeer {
    pub listen:    Vec<p2p::Multiaddr>,
 }
 
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Peer {
    Remote {
@@ -102,7 +102,7 @@ pub enum Peer {
    Bootstrap(p2p::Multiaddr),
 }
 
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct Config {
    pub peers: Vec<Peer>,

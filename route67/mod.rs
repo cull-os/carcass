@@ -1,8 +1,15 @@
 #![feature(trait_alias, stmt_expr_attributes)]
 
-use std::net;
+use std::{
+   net,
+   time,
+};
 
 use cyn::ResultExt as _;
+use derive_more::{
+   Deref,
+   DerefMut,
+};
 use libp2p::{
    self as p2p,
    dcutr as p2p_dcutr,
@@ -26,6 +33,7 @@ use libp2p::{
 };
 use n0_watcher::Watcher as _;
 use netwatch::netmon;
+use rustc_hash::FxHashMap;
 use tokio::select;
 
 pub mod address;
@@ -40,6 +48,21 @@ pub use interface::{
 };
 
 pub mod ip;
+
+const RELAY_PEER_TARGET: usize = 4;
+const RELAY_ADDRS_PER_PEER: usize = 4;
+
+fn pick_diverse(addresses: &[p2p::Multiaddr]) -> impl Iterator<Item = &p2p::Multiaddr> {
+   let mut seen = FxHashMap::<Vec<&'static str>, &p2p::Multiaddr>::default();
+
+   for address in addresses {
+      seen
+         .entry(address.iter().map(|protocol| protocol.tag()).collect())
+         .or_insert(address);
+   }
+
+   seen.into_values()
+}
 
 fn destination_of(packet: &[u8]) -> Option<net::Ipv6Addr> {
    if packet.first()? >> 4_usize != 6 {
@@ -63,20 +86,39 @@ struct Behaviour<P: ip::Policy> {
    ip:           ip::Behaviour<P>,
 }
 
-#[expect(clippy::cognitive_complexity, reason = "event loop")]
-pub async fn run(config: Config) -> cyn::Result<()> {
+#[derive(Deref, DerefMut)]
+struct Program<P: ip::Policy> {
+   local: config::LocalPeer,
+
+   tun_buffer:    [u8; MTU as usize],
+   tun_interface: Interface,
+
+   network_state:   netmon::State,
+   network_monitor: n0_watcher::Direct<netmon::State>,
+
+   address_map: address::Map,
+
+   relays: FxHashMap<p2p::PeerId, (Vec<p2p::Multiaddr>, time::Duration)>,
+
+   #[deref]
+   #[deref_mut]
+   swarm: p2p::Swarm<Behaviour<P>>,
+}
+
+#[expect(clippy::cognitive_complexity)]
+async fn create(config: Config) -> cyn::Result<Program<impl ip::Policy>> {
    let local = config.local()?;
 
    let mut address_map = address::Map::new(local.id);
 
    tracing::info!(
-      "Peer (local) '{id}' was added with prefix '{prefix}'",
-      id = local.id,
-      prefix = net::Ipv6Addr::from(
+      id = %local.id,
+      prefix = %net::Ipv6Addr::from(
          address_map
             .prefix_of(local.id)
-            .expect("local is always in map"),
-      )
+            .expect("local is always in map")
+      ),
+      "Local peer added",
    );
 
    for peer in &config.peers {
@@ -86,220 +128,298 @@ pub async fn run(config: Config) -> cyn::Result<()> {
 
       match address_map.prefix_of(id) {
          None => {
-            tracing::error!(
-               "Peer '{id}' has a prefix collision, skipping. (How the hell did you hit this?)"
-            );
+            tracing::error!(%id, "Peer has a prefix collision, skipping");
          },
          Some(prefix) => {
             tracing::info!(
-               "Peer '{id}' was added with prefix '{prefix}'",
-               prefix = net::Ipv6Addr::from(prefix),
+               %id,
+               prefix = %net::Ipv6Addr::from(prefix),
+               "Peer added",
             );
          },
       }
    }
-
-   let mut tun_buffer = vec![0_u8; MTU as usize];
-   let tun_interface = Interface::create(
-      local.interface.as_deref(),
-      address_map
-         .prefix_of(local.id)
-         .expect("local is always in map"),
-   )?;
-
-   let mut swarm = p2p::SwarmBuilder::with_existing_identity(local.keypair.clone().into())
-      .with_tokio()
-      .with_tcp(
-         p2p_tcp::Config::default(),
-         p2p_noise::Config::new,
-         p2p_yamux::Config::default,
-      )
-      .chain_err("failed to create tcp transport layer")?
-      .with_quic()
-      .with_dns()
-      .chain_err("failed to create dns resolver")?
-      .with_websocket(p2p_noise::Config::new, p2p_yamux::Config::default)
-      .await
-      .chain_err("failed to create websocket transport")?
-      .with_relay_client(p2p_noise::Config::new, p2p_yamux::Config::default)
-      .chain_err("failed to create relay client transport")?
-      .with_behaviour(|keypair, relay_client| {
-         let peer_id = keypair.public().to_peer_id();
-
-         Behaviour {
-            identify: p2p_identify::Behaviour::new(p2p_identify::Config::new(
-               p2p_identify::PROTOCOL_NAME.to_string(),
-               keypair.public(),
-            )),
-
-            ping: p2p_ping::Behaviour::default(),
-
-            upnp: p2p_upnp::Behaviour::default(),
-
-            relay_server: p2p_relay::Behaviour::new(peer_id, p2p_relay::Config::default()),
-            relay_client,
-
-            dcutr: p2p_dcutr::Behaviour::new(peer_id),
-
-            kad: {
-               let mut kad =
-                  p2p_kad::Behaviour::new(peer_id, p2p_kad_store::MemoryStore::new(peer_id));
-
-               // Add bootstrap peers to Kademlia DHT for peer discovery.
-               for addr in config.peers.iter().filter_map(|peer| {
-                  match peer {
-                     &config::Peer::Bootstrap(ref addr) => Some(addr),
-                     _ => None,
-                  }
-               }) {
-                  let Some(peer_id) = addr.iter().find_map(|protocol| {
-                     let p2p_multiaddr::Protocol::P2p(peer_id) = protocol else {
-                        return None;
-                     };
-
-                     Some(peer_id)
-                  }) else {
-                     tracing::error!("Bootstrap address '{addr}' has no peer ID, skipping.");
-                     continue;
-                  };
-
-                  kad.add_address(&peer_id, addr.clone());
-               }
-
-               kad
-            },
-
-            ip: ip::Behaviour::new({
-               let peer_ids = config
-                  .peers
-                  .iter()
-                  .filter_map(|peer| {
-                     match peer {
-                        &config::Peer::Remote { id } | &config::Peer::RemoteControl { id, .. } => {
-                           Some(id)
-                        },
-                        _ => None,
-                     }
-                  })
-                  .collect::<rustc_hash::FxHashSet<_>>();
-
-               move |peer_id| peer_ids.contains(peer_id)
-            }),
-         }
-      })
-      .chain_err("failed to create swarm")?
-      .build();
-
-   for addr in &local.listen {
-      swarm
-         .listen_on(addr.clone())
-         .chain_err_with(|| format!("failed to listen on address {addr}"))?;
-   }
-
-   let recover = |swarm: &mut p2p::Swarm<Behaviour<_>>| {
-      for address in swarm.external_addresses().cloned().collect::<Vec<_>>() {
-         swarm.remove_external_address(&address);
-      }
-
-      if let Err(error) = swarm.behaviour_mut().kad.bootstrap() {
-         tracing::warn!("Failed to bootstrap kademlia: {error}");
-      }
-   };
-
-   recover(&mut swarm);
 
    let mut network_monitor = netmon::Monitor::new()
       .await
       .chain_err("failed to create network monitor")?
       .interface_state();
 
-   let mut network_state = network_monitor.get();
+   Ok(Program {
+      local: local.clone(),
+
+      tun_buffer: [0; _],
+      tun_interface: Interface::create(
+         local.interface.as_deref(),
+         address_map
+            .prefix_of(local.id)
+            .expect("local is always in map"),
+      )?,
+
+      network_state: network_monitor.get(),
+      network_monitor,
+
+      address_map,
+
+      relays: FxHashMap::default(),
+
+      swarm: p2p::SwarmBuilder::with_existing_identity(local.keypair.clone().into())
+         .with_tokio()
+         .with_tcp(
+            p2p_tcp::Config::default(),
+            p2p_noise::Config::new,
+            p2p_yamux::Config::default,
+         )
+         .chain_err("failed to create tcp transport layer")?
+         .with_quic()
+         .with_dns()
+         .chain_err("failed to create dns resolver")?
+         .with_websocket(p2p_noise::Config::new, p2p_yamux::Config::default)
+         .await
+         .chain_err("failed to create websocket transport")?
+         .with_relay_client(p2p_noise::Config::new, p2p_yamux::Config::default)
+         .chain_err("failed to create relay client transport")?
+         .with_behaviour(|keypair, relay_client| {
+            let peer_id = keypair.public().to_peer_id();
+
+            Behaviour {
+               identify: p2p_identify::Behaviour::new(p2p_identify::Config::new(
+                  p2p_identify::PROTOCOL_NAME.to_string(),
+                  keypair.public(),
+               )),
+
+               ping: p2p_ping::Behaviour::default(),
+
+               upnp: p2p_upnp::Behaviour::default(),
+
+               relay_server: p2p_relay::Behaviour::new(peer_id, p2p_relay::Config::default()),
+               relay_client,
+
+               dcutr: p2p_dcutr::Behaviour::new(peer_id),
+
+               kad: {
+                  let mut kad =
+                     p2p_kad::Behaviour::new(peer_id, p2p_kad_store::MemoryStore::new(peer_id));
+
+                  // Add bootstrap peers to Kademlia DHT for peer discovery.
+                  for peer in &config.peers {
+                     let &config::Peer::Bootstrap(ref address) = peer else {
+                        continue;
+                     };
+
+                     let Some(peer_id) = address.iter().find_map(|protocol| {
+                        let p2p_multiaddr::Protocol::P2p(peer_id) = protocol else {
+                           return None;
+                        };
+
+                        Some(peer_id)
+                     }) else {
+                        tracing::error!(%address, "Bootstrap address has no peer ID, skipping");
+                        continue;
+                     };
+
+                     kad.add_address(&peer_id, address.clone());
+                  }
+
+                  kad
+               },
+
+               ip: ip::Behaviour::new({
+                  let peer_ids = config
+                     .peers
+                     .iter()
+                     .filter_map(|peer| {
+                        match peer {
+                           &config::Peer::Remote { id }
+                           | &config::Peer::RemoteControl { id, .. } => Some(id),
+                           _ => None,
+                        }
+                     })
+                     .collect::<rustc_hash::FxHashSet<_>>();
+
+                  move |peer_id| peer_ids.contains(peer_id)
+               }),
+            }
+         })
+         .chain_err("failed to create swarm")?
+         .build(),
+   })
+}
+
+impl<P: ip::Policy> Program<P> {
+   fn recover(&mut self) {
+      for address in self.external_addresses().cloned().collect::<Vec<_>>() {
+         self.remove_external_address(&address);
+      }
+
+      if let Err(error) = self.behaviour_mut().kad.bootstrap() {
+         tracing::warn!(%error, "Failed to bootstrap kademlia");
+      }
+   }
+
+   fn active_relays(&self) -> impl Iterator<Item = p2p::PeerId> {
+      self.listeners().filter_map(|address| {
+         address
+            .iter()
+            .any(|part| matches!(part, p2p_multiaddr::Protocol::P2pCircuit))
+            .then(|| {
+               address.iter().find_map(|part| {
+                  let p2p_multiaddr::Protocol::P2p(peer_id) = part else {
+                     return None;
+                  };
+
+                  Some(peer_id)
+               })
+            })
+            .flatten()
+      })
+   }
+
+   fn fill_relays(&mut self) {
+      let peers_active = self.active_relays().collect::<Vec<_>>();
+      let peers_need = RELAY_PEER_TARGET.saturating_sub(peers_active.len());
+
+      let mut peers_candidate = self
+         .relays
+         .iter()
+         .filter(|&(peer_id, _)| !peers_active.contains(peer_id))
+         .collect::<Vec<_>>();
+      peers_candidate.sort_by_key(|&(_, &(_, rtt))| rtt);
+
+      let mut peers_filled = 0_usize;
+      for &(&peer_id, &(ref addresses, _)) in &peers_candidate {
+         if peers_filled >= peers_need {
+            break;
+         }
+
+         let mut addresses_listened = 0_usize;
+         for address in pick_diverse(addresses) {
+            if addresses_listened >= RELAY_ADDRS_PER_PEER {
+               break;
+            }
+
+            let address = address
+               .clone()
+               .with(p2p_multiaddr::Protocol::P2p(peer_id))
+               .with(p2p_multiaddr::Protocol::P2pCircuit);
+
+            if let Ok(listener_id) = self.swarm.listen_on(address.clone()) {
+               tracing::info!(%address, %listener_id, "Listening via relay");
+               addresses_listened += 1;
+            }
+         }
+
+         if addresses_listened > 0 {
+            peers_filled += 1;
+         }
+      }
+   }
+}
+
+#[expect(clippy::cognitive_complexity, reason = "event loop")]
+pub async fn run(config: Config) -> cyn::Result<()> {
+   use BehaviourEvent as Be;
+   use p2p_swarm::SwarmEvent as Se;
+
+   let mut program = create(config).await?;
+
+   for address in &program.local.listen {
+      program
+         .swarm
+         .listen_on(address.clone())
+         .chain_err_with(|| format!("failed to listen on address {address}"))?;
+   }
+
+   program.recover();
 
    loop {
       select! {
-         Ok(new_network_state) = network_monitor.updated() => {
-            let unsuspended = match (new_network_state.last_unsuspend, network_state.last_unsuspend) {
+         Ok(new_network_state) = program.network_monitor.updated() => {
+            let unsuspended = match (new_network_state.last_unsuspend, program.network_state.last_unsuspend) {
                (Some(new), Some(old)) => new > old,
                (Some(_), None) => true,
                _ => false,
             };
 
-            if unsuspended || new_network_state.is_major_change(&network_state) {
-               tracing::info!("Network change detected, recovering.");
-               recover(&mut swarm);
+            if unsuspended || new_network_state.is_major_change(&program.network_state) {
+               tracing::info!("Network change detected, recovering");
+               program.recover();
             }
 
-            network_state = new_network_state;
+            program.network_state = new_network_state;
          },
 
-         swarm_event = swarm.select_next_some() => {
+         swarm_event = program.swarm.select_next_some() => {
             match swarm_event {
-               p2p_swarm::SwarmEvent::NewListenAddr { address, .. } => {
-                  tracing::info!("Listening on {address:?}.");
+               Se::NewListenAddr { address, .. } => {
+                  tracing::info!(%address, "Listening on address");
                },
 
-               p2p_swarm::SwarmEvent::OutgoingConnectionError { peer_id: Some(peer_id), error: p2p_swarm::DialError::NoAddresses, .. } => {
-                  tracing::info!("Dial to '{peer_id}' failed as there are no addresses pointing to it, discovering via DHT.");
-                  swarm.behaviour_mut().kad.get_closest_peers(peer_id);
+               Se::OutgoingConnectionError { peer_id: Some(peer_id), error: p2p_swarm::DialError::NoAddresses, .. } => {
+                  tracing::info!(%peer_id, "Dial failed with no addresses, discovering via DHT");
+                  program.behaviour_mut().kad.get_closest_peers(peer_id);
                },
 
-               p2p_swarm::SwarmEvent::Behaviour(BehaviourEvent::Ip(packet)) => {
-                  tracing::trace!("Got packet: {packet:?}");
+               Se::Behaviour(Be::Ip(packet)) => {
+                  tracing::trace!(?packet, "Got packet");
 
-                  if let Err(error) = tun_interface.send(&packet).await {
-                     tracing::error!("Failed to write packet to TUN interface: {error}");
+                  if let Err(error) = program.tun_interface.send(&packet).await {
+                     tracing::error!(%error, "Failed to write packet to TUN interface");
                   }
                },
 
-               p2p_swarm::SwarmEvent::Behaviour(BehaviourEvent::Identify(
-                  p2p_identify::Event::Received { peer_id, info, .. },
-               )) => {
-                  if !info.protocols.contains(&p2p_relay::HOP_PROTOCOL_NAME) {
-                     continue;
-                  }
+               Se::Behaviour(Be::Identify(p2p_identify::Event::Received {
+                  peer_id,
+                  info,
+                  ..
+               })) if info.protocols.contains(&p2p_relay::HOP_PROTOCOL_NAME) => {
+                  let rtt = program.relays
+                     .get(&peer_id)
+                     .map_or(time::Duration::MAX, |&(_, rtt)| rtt);
 
-                  let relay_peer_count = swarm
-                     .listeners()
-                     .filter(|addr| {
-                        addr
+                  program.relays.insert(peer_id, (info.listen_addrs, rtt));
+                  program.fill_relays();
+               },
+
+               Se::Behaviour(Be::Ping(p2p_ping::Event {
+                  peer,
+                  result: Ok(new_rtt),
+                  ..
+               })) if let Some(&mut (_, ref mut rtt)) = program.relays.get_mut(&peer) => {
+                  *rtt = new_rtt;
+               },
+
+               Se::ListenerClosed { addresses, .. } => {
+                  let is_relay = addresses
+                     .iter()
+                     .any(|address| {
+                        address
                            .iter()
                            .any(|part| matches!(part, p2p_multiaddr::Protocol::P2pCircuit))
-                     })
-                     .count();
+                     });
 
-                  if relay_peer_count >= 4 {
-                     continue;
-                  }
-
-                  for addr in info.listen_addrs {
-                     let addr = addr
-                        .with(p2p_multiaddr::Protocol::P2p(peer_id))
-                        .with(p2p_multiaddr::Protocol::P2pCircuit);
-
-                     match swarm.listen_on(addr.clone()) {
-                        Ok(_) => tracing::info!("Listening via relay {addr}."),
-                        Err(error) => tracing::debug!("Failed to listen via relay {addr}: {error}"),
-                     }
+                  if is_relay {
+                     program.fill_relays();
                   }
                },
 
-               other => tracing::debug!("Other swarm event: {other:?}"),
+               other => tracing::debug!(?other, "Other swarm event"),
             }
          },
 
-         tun_result = tun_interface.recv(&mut tun_buffer) => {
+         tun_result = program.tun_interface.recv(&mut program.tun_buffer) => {
             let Ok(packet_len) = tun_result.inspect_err(|error| {
-               tracing::error!("Failed to read from TUN interface: {error}");
+               tracing::error!(%error, "Failed to read from TUN interface");
             }) else {
                continue;
             };
 
-            let packet = &tun_buffer[..packet_len];
+            let packet = &program.tun_buffer[..packet_len];
 
-            tracing::trace!("Got tun packet: {packet:?}");
+            tracing::trace!(?packet, "Got TUN packet");
 
             let Some(destination) = destination_of(packet) else {
-               tracing::warn!("Ignoring invalid tun packet (could not determine destination) {packet:?}");
+               tracing::warn!(?packet, "Ignoring invalid TUN packet, could not determine destination");
                continue;
             };
 
@@ -308,22 +428,22 @@ pub async fn run(config: Config) -> cyn::Result<()> {
                continue;
             }
 
-            let Some(peer_id) = address_map.peer_of(&address::Prefix::from(destination)) else {
-               tracing::warn!("Tried to send packet to {destination} not in peer map, dropping.");
+            let Some(peer_id) = program.address_map.peer_of(&address::Prefix::from(destination)) else {
+               tracing::warn!(%destination, "Destination not in peer map, dropping");
                continue;
             };
 
             // Loopback: write self-addressed packets back to TUN.
-            if peer_id == local.id {
-               if let Err(error) = tun_interface.send(packet).await {
-                  tracing::error!("Failed to write loopback packet to TUN interface: {error}");
+            if peer_id == program.local.id {
+               if let Err(error) = program.tun_interface.send(packet).await {
+                  tracing::error!(%error, "Failed to write loopback packet to TUN interface");
                }
                continue;
             }
 
             // Send packet to peer
             let packet = ip::Packet(bytes::Bytes::copy_from_slice(packet));
-            swarm.behaviour_mut().ip.send(&peer_id, packet);
+            program.behaviour_mut().ip.send(&peer_id, packet);
          },
       }
    }
