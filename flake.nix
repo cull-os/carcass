@@ -7,6 +7,7 @@
     show-trace               = true;
 
     experimental-features = [
+      "cgroups"
       "flakes"
       "nix-command"
       "pipe-operators"
