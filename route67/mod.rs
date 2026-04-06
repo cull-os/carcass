@@ -165,7 +165,8 @@ async fn create(config: Config) -> cyn::Result<Program<impl ip::Policy>> {
          address_map
             .prefix_of(local.id)
             .expect("local is always in map"),
-      )?,
+      )
+      .await?,
 
       network_state: network_monitor.get(),
       network_monitor,
@@ -519,11 +520,8 @@ pub async fn run(config: Config) -> cyn::Result<()> {
                continue;
             };
 
-            // Loopback: write self-addressed packets back to TUN.
             if peer_id == program.local.id {
-               if let Err(error) = program.tun_interface.send(packet).await {
-                  tracing::error!(%error, "Failed to write loopback packet to TUN interface");
-               }
+               tracing::warn!(%destination, "Dropping self-addressed packet, interface should be configured to route this locally");
                continue;
             }
 

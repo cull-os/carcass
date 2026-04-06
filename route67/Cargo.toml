@@ -64,5 +64,8 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 tun-rs.workspace = true
 
+[target.'cfg(target_os = "linux")'.dependencies]
+rtnetlink.workspace = true
+
 [dev-dependencies]
 proptest.workspace = true

@@ -161,6 +161,7 @@ proptest             = "1.11.0"
 quote                = "1.0.40"
 ringbuf              = "0.4.8"
 rpds                 = "1.1.1"
+rtnetlink            = "0.20.0"
 rustc-hash           = "2.1.1"
 serde                = { features = [ "derive" ], version = "1.0.219" }
 sha2                 = "0.11.0"

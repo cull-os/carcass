@@ -4031,6 +4031,7 @@ dependencies = [
  "netwatch",
  "proptest",
  "ringbuf",
+ "rtnetlink",
  "rustc-hash",
  "serde",
  "sha2 0.11.0",
