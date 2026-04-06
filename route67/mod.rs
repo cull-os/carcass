@@ -51,9 +51,6 @@ pub use interface::{
 
 pub mod ip;
 
-const RELAY_PEER_TARGET: usize = 4;
-const RELAY_ADDRS_PER_PEER: usize = 4;
-
 fn destination_of(packet: &[u8]) -> Option<net::Ipv6Addr> {
    if packet.first()? >> 4_usize != 6 {
       return None;
@@ -282,6 +279,9 @@ impl<P: ip::Policy> Program<P> {
    }
 
    fn fill_relays(&mut self) {
+      const RELAY_PEER_TARGET: usize = 4;
+      const RELAY_ADDRS_PER_PEER: usize = 4;
+
       fn pick_diverse(
          addresses: &mut [(Option<p2p_transport::ListenerId>, p2p::Multiaddr)],
       ) -> impl Iterator<Item = &mut (Option<p2p_transport::ListenerId>, p2p::Multiaddr)> {
