@@ -14,9 +14,12 @@ pub struct Interface {
 }
 
 impl Interface {
-   #[expect(
-      clippy::unused_async,
-      reason = "await used on linux for netlink route addition"
+   #[cfg_attr(
+      not(target_os = "linux"),
+      expect(
+         clippy::unused_async,
+         reason = "await used on linux for netlink route addition"
+      )
    )]
    pub async fn create(name: Option<&str>, prefix: address::Prefix) -> cyn::Result<Self> {
       let mut builder = tun_rs::DeviceBuilder::new()
@@ -46,6 +49,8 @@ impl Interface {
       {
          const RT_TABLE_LOCAL: u32 = 255;
 
+         use rtnetlink::packet_route::route;
+
          let (connection, handle, _) =
             rtnetlink::new_connection().chain_err("failed to create netlink connection")?;
          tokio::spawn(connection);
@@ -64,8 +69,8 @@ impl Interface {
                         .if_index()
                         .chain_err("failed to get tun interface index")?,
                   )
-                  .kind(rtnetlink::packet_route::route::RouteType::Local)
-                  .scope(rtnetlink::packet_route::route::RouteScope::Host)
+                  .kind(route::RouteType::Local)
+                  .scope(route::RouteScope::Host)
                   .table_id(RT_TABLE_LOCAL)
                   .build(),
             )
