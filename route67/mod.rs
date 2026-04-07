@@ -15,7 +15,10 @@ use libp2p::{
    self as p2p,
    core::transport as p2p_transport,
    dcutr as p2p_dcutr,
-   futures::StreamExt as _,
+   futures::{
+      FutureExt as _,
+      StreamExt as _,
+   },
    identify as p2p_identify,
    kad::{
       self as p2p_kad,
@@ -421,113 +424,118 @@ pub async fn run(config: Config) -> cyn::Result<()> {
          },
 
          swarm_event = program.swarm.select_next_some() => {
-            match swarm_event {
-               Se::NewListenAddr { address, .. } => {
-                  if address.iter().any(|part| matches!(part, p2p_multiaddr::Protocol::P2pCircuit)) {
-                     tracing::debug!(%address, "Listening on relay address");
-                  } else {
-                     tracing::info!(%address, "Listening on address");
-                  }
-               },
+            let mut swarm_pending = Some(swarm_event);
+            while let Some(swarm_event) = swarm_pending.take().or_else(|| program.swarm.next().now_or_never().flatten()) {
+               match swarm_event {
+                  Se::NewListenAddr { address, .. } => {
+                     if address.iter().any(|part| matches!(part, p2p_multiaddr::Protocol::P2pCircuit)) {
+                        tracing::debug!(%address, "Listening on relay address");
+                     } else {
+                        tracing::info!(%address, "Listening on address");
+                     }
+                  },
 
-               Se::Behaviour(Be::Ip(ip::Event::Packet(packet))) => {
-                  tracing::trace!(?packet, "Got packet");
+                  Se::Behaviour(Be::Ip(ip::Event::Packet(packet))) => {
+                     tracing::trace!(?packet, "Got packet");
 
-                  if let Err(error) = program.tun_interface.send(&packet).await {
-                     tracing::error!(%error, "Failed to write packet to TUN interface");
-                  }
-               },
+                     if let Err(error) = program.tun_interface.send(&packet).await {
+                        tracing::error!(%error, "Failed to write packet to TUN interface");
+                     }
+                  },
 
-               Se::Behaviour(Be::Ip(ip::Event::DiscoverPeer(peer_id))) => {
-                  tracing::debug!(%peer_id, "Discovering peer via DHT");
-                  program.behaviour_mut().kad.get_closest_peers(peer_id);
-               },
+                  Se::Behaviour(Be::Ip(ip::Event::DiscoverPeer(peer_id))) => {
+                     tracing::debug!(%peer_id, "Discovering peer via DHT");
+                     program.behaviour_mut().kad.get_closest_peers(peer_id);
+                  },
 
-               Se::Behaviour(Be::Identify(p2p_identify::Event::Received {
-                  peer_id,
-                  info,
-                  ..
-               })) if info.protocols.contains(&p2p_relay::HOP_PROTOCOL_NAME) => {
-                  let mut relay = Relay::new(info.listen_addrs);
-                  if let Some(existing) = program.relays.get(&peer_id) {
-                     relay.ping = existing.ping;
-                  }
-
-                  program.relays.insert(peer_id, relay);
-                  program.relays.sort_by(|_, relay_a, _, relay_b| relay_a.ping.cmp(&relay_b.ping));
-                  program.fill_relays();
-               },
-
-               Se::Behaviour(Be::Ping(p2p_ping::Event {
-                  peer,
-                  result: Ok(ping),
-                  ..
-               })) if let Some(ref mut relay) = program.relays.get_mut(&peer) => {
-                  relay.ping = ping;
-                  program.relays.sort_by(|_, relay_a, _, relay_b| relay_a.ping.cmp(&relay_b.ping));
-                  program.pick_closest_relays();
-               },
-
-               Se::ListenerClosed { listener_id, addresses, .. } => {
-                  let is_relay = addresses
-                     .iter()
-                     .any(|address| {
-                        address
-                           .iter()
-                           .any(|part| matches!(part, p2p_multiaddr::Protocol::P2pCircuit))
-                     });
-
-                  if is_relay {
-                     for relay in program.relays.values_mut() {
-                        for &mut (ref mut id, _) in &mut relay.addresses {
-                           if *id == Some(listener_id) {
-                              *id = None;
-                           }
-                        }
+                  Se::Behaviour(Be::Identify(p2p_identify::Event::Received {
+                     peer_id,
+                     info,
+                     ..
+                  })) if info.protocols.contains(&p2p_relay::HOP_PROTOCOL_NAME) => {
+                     let mut relay = Relay::new(info.listen_addrs);
+                     if let Some(existing) = program.relays.get(&peer_id) {
+                        relay.ping = existing.ping;
                      }
 
+                     program.relays.insert(peer_id, relay);
+                     program.relays.sort_by(|_, relay_a, _, relay_b| relay_a.ping.cmp(&relay_b.ping));
                      program.fill_relays();
-                  }
-               },
+                  },
 
-               other => tracing::debug!(?other, "Other swarm event"),
+                  Se::Behaviour(Be::Ping(p2p_ping::Event {
+                     peer,
+                     result: Ok(ping),
+                     ..
+                  })) if let Some(ref mut relay) = program.relays.get_mut(&peer) => {
+                     relay.ping = ping;
+                     program.relays.sort_by(|_, relay_a, _, relay_b| relay_a.ping.cmp(&relay_b.ping));
+                     program.pick_closest_relays();
+                  },
+
+                  Se::ListenerClosed { listener_id, addresses, .. } => {
+                     let is_relay = addresses
+                        .iter()
+                        .any(|address| {
+                           address
+                              .iter()
+                              .any(|part| matches!(part, p2p_multiaddr::Protocol::P2pCircuit))
+                        });
+
+                     if is_relay {
+                        for relay in program.relays.values_mut() {
+                           for &mut (ref mut id, _) in &mut relay.addresses {
+                              if *id == Some(listener_id) {
+                                 *id = None;
+                              }
+                           }
+                        }
+
+                        program.fill_relays();
+                     }
+                  },
+
+                  other => tracing::debug!(?other, "Other swarm event"),
+               }
             }
          },
 
          tun_result = program.tun_interface.recv(&mut program.tun_buffer) => {
-            let Ok(packet_len) = tun_result.inspect_err(|error| {
-               tracing::error!(%error, "Failed to read from TUN interface");
-            }) else {
-               continue;
-            };
+            let mut tun_pending = Some(tun_result);
+            while let Some(tun_result) = tun_pending.take().or_else(|| program.tun_interface.recv(&mut program.tun_buffer).now_or_never()) {
+               let Ok(packet_len) = tun_result.inspect_err(|error| {
+                  tracing::error!(%error, "Failed to read from TUN interface");
+               }) else {
+                  break;
+               };
 
-            let packet = &program.tun_buffer[..packet_len];
+               let packet = &program.tun_buffer[..packet_len];
 
-            tracing::trace!(?packet, "Got TUN packet");
+               tracing::trace!(?packet, "Got TUN packet");
 
-            let Some(destination) = destination_of(packet) else {
-               tracing::warn!(?packet, "Ignoring invalid TUN packet, could not determine destination");
-               continue;
-            };
+               let Some(destination) = destination_of(packet) else {
+                  tracing::warn!(?packet, "Ignoring invalid TUN packet, could not determine destination");
+                  continue;
+               };
 
-            // Silently drop multicast packets.
-            if !destination.octets().starts_with(&address::VPN_PREFIX) {
-               continue;
+               // Silently drop multicast packets.
+               if !destination.octets().starts_with(&address::VPN_PREFIX) {
+                  continue;
+               }
+
+               let Some(peer_id) = program.address_map.peer_of(&address::Prefix::from(destination)) else {
+                  tracing::warn!(%destination, "Destination not in peer map, dropping");
+                  continue;
+               };
+
+               if peer_id == program.local.id {
+                  tracing::warn!(%destination, "Dropping self-addressed packet, interface should be configured to route this locally");
+                  continue;
+               }
+
+               let packet = ip::Packet(bytes::Bytes::copy_from_slice(packet));
+               program.behaviour_mut().ip.send(&peer_id, packet);
             }
-
-            let Some(peer_id) = program.address_map.peer_of(&address::Prefix::from(destination)) else {
-               tracing::warn!(%destination, "Destination not in peer map, dropping");
-               continue;
-            };
-
-            if peer_id == program.local.id {
-               tracing::warn!(%destination, "Dropping self-addressed packet, interface should be configured to route this locally");
-               continue;
-            }
-
-            // Send packet to peer
-            let packet = ip::Packet(bytes::Bytes::copy_from_slice(packet));
-            program.behaviour_mut().ip.send(&peer_id, packet);
          },
       }
    }
