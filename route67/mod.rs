@@ -74,6 +74,15 @@ fn destination_of(packet: &[u8]) -> Option<net::Ipv6Addr> {
    ))
 }
 
+fn peer_id_of(address: &p2p::Multiaddr) -> Option<p2p::PeerId> {
+   address.iter().find_map(|protocol| {
+      let p2p_multiaddr::Protocol::P2p(peer_id) = protocol else {
+         return None;
+      };
+      Some(peer_id)
+   })
+}
+
 #[derive(p2p_swarm::NetworkBehaviour)]
 struct Behaviour<P: ip::Policy> {
    identify:     p2p_identify::Behaviour,
@@ -112,7 +121,7 @@ impl Relay {
 
 #[derive(Deref, DerefMut)]
 struct Program<P: ip::Policy> {
-   local: config::LocalPeer,
+   config: Config,
 
    tun_buffer:    [u8; MTU as usize],
    tun_interface: Interface,
@@ -131,32 +140,33 @@ struct Program<P: ip::Policy> {
 
 #[expect(clippy::cognitive_complexity)]
 async fn create(config: Config) -> cyn::Result<Program<impl ip::Policy>> {
-   let local = config.local()?;
+   config.validate()?;
 
-   let mut address_map = address::Map::new(local.id);
+   let mut address_map = address::Map::new(config.id);
 
    tracing::info!(
-      id = %local.id,
+      id = %config.id,
       prefix = %net::Ipv6Addr::from(
          address_map
-            .prefix_of(local.id)
+            .prefix_of(config.id)
             .expect("local is always in map")
       ),
       "Local peer added",
    );
 
    for peer in &config.peers {
-      let (&config::Peer::Remote { id } | &config::Peer::RemoteControl { id, .. }) = peer else {
+      let Some(peer_id) = peer_id_of(&peer.address) else {
+         tracing::error!(address = %peer.address, "Peer address has no peer ID, skipping");
          continue;
       };
 
-      match address_map.prefix_of(id) {
+      match address_map.prefix_of(peer_id) {
          None => {
-            tracing::error!(%id, "Peer has a prefix collision, skipping");
+            tracing::error!(%peer_id, "Peer has a prefix collision, skipping");
          },
          Some(prefix) => {
             tracing::info!(
-               %id,
+               %peer_id,
                prefix = %net::Ipv6Addr::from(prefix),
                "Peer added",
             );
@@ -170,13 +180,11 @@ async fn create(config: Config) -> cyn::Result<Program<impl ip::Policy>> {
       .interface_state();
 
    Ok(Program {
-      local: local.clone(),
-
       tun_buffer: [0; _],
       tun_interface: Interface::create(
-         local.interface.as_deref(),
+         config.interface.as_deref(),
          address_map
-            .prefix_of(local.id)
+            .prefix_of(config.id)
             .expect("local is always in map"),
       )
       .await?,
@@ -188,7 +196,7 @@ async fn create(config: Config) -> cyn::Result<Program<impl ip::Policy>> {
 
       relays: IndexMap::default(),
 
-      swarm: p2p::SwarmBuilder::with_existing_identity(local.keypair.clone().into())
+      swarm: p2p::SwarmBuilder::with_existing_identity(config.keypair.clone().into())
          .with_tokio()
          .with_tcp(
             p2p_tcp::Config::default(),
@@ -228,24 +236,12 @@ async fn create(config: Config) -> cyn::Result<Program<impl ip::Policy>> {
 
                   kad.set_mode(Some(p2p_kad::Mode::Client));
 
-                  // Add bootstrap peers to Kademlia DHT for peer discovery.
                   for peer in &config.peers {
-                     let &config::Peer::Bootstrap(ref address) = peer else {
+                     let Some(peer_id) = peer_id_of(&peer.address) else {
                         continue;
                      };
 
-                     let Some(peer_id) = address.iter().find_map(|protocol| {
-                        let p2p_multiaddr::Protocol::P2p(peer_id) = protocol else {
-                           return None;
-                        };
-
-                        Some(peer_id)
-                     }) else {
-                        tracing::error!(%address, "Bootstrap address has no peer ID, skipping");
-                        continue;
-                     };
-
-                     kad.add_address(&peer_id, address.clone());
+                     kad.add_address(&peer_id, peer.address.clone());
                   }
 
                   kad
@@ -255,13 +251,8 @@ async fn create(config: Config) -> cyn::Result<Program<impl ip::Policy>> {
                   let peer_ids = config
                      .peers
                      .iter()
-                     .filter_map(|peer| {
-                        match peer {
-                           &config::Peer::Remote { id }
-                           | &config::Peer::RemoteControl { id, .. } => Some(id),
-                           _ => None,
-                        }
-                     })
+                     .filter(|peer| !peer.allow.is_empty()) // TODO
+                     .filter_map(|peer| peer_id_of(&peer.address))
                      .collect::<rustc_hash::FxHashSet<_>>();
 
                   move |peer_id| peer_ids.contains(peer_id)
@@ -270,6 +261,8 @@ async fn create(config: Config) -> cyn::Result<Program<impl ip::Policy>> {
          })
          .chain_err("failed to create swarm")?
          .build(),
+
+      config,
    })
 }
 
@@ -407,7 +400,7 @@ pub async fn run(config: Config) -> cyn::Result<()> {
 
    let mut program = create(config).await?;
 
-   for address in &program.local.listen {
+   for address in &program.config.listen {
       program
          .swarm
          .listen_on(address.clone())
@@ -556,7 +549,7 @@ pub async fn run(config: Config) -> cyn::Result<()> {
                   continue;
                };
 
-               if peer_id == program.local.id {
+               if peer_id == program.config.id {
                   tracing::warn!(%destination, "Dropping self-addressed packet, interface should be configured to route this locally");
                   continue;
                }

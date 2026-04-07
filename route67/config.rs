@@ -1,7 +1,4 @@
-use std::{
-   iter,
-   str::FromStr as _,
-};
+use std::str::FromStr as _;
 
 use libp2p::{
    self as p2p,
@@ -74,7 +71,16 @@ mod peer_id {
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
-pub struct LocalPeer {
+pub struct Peer {
+   pub address: p2p::Multiaddr,
+
+   #[serde(default, skip_serializing_if = "Vec::is_empty")]
+   pub allow: Vec<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct Config {
    #[serde(with = "peer_id")]
    pub id: p2p::PeerId,
 
@@ -83,53 +89,18 @@ pub struct LocalPeer {
 
    pub interface: Option<String>,
    pub listen:    Vec<p2p::Multiaddr>,
-}
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum Peer {
-   Remote {
-      #[serde(with = "peer_id")]
-      id: p2p::PeerId,
-   },
-   RemoteControl {
-      #[serde(with = "peer_id")]
-      id:      p2p::PeerId,
-      #[serde(with = "keypair")]
-      keypair: ed25519::Keypair,
-   },
-   Local(LocalPeer),
-   Bootstrap(p2p::Multiaddr),
-}
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub struct Config {
+   #[serde(default, rename = "peer")]
    pub peers: Vec<Peer>,
 }
 
 impl Config {
-   pub fn local(&self) -> cyn::Result<&LocalPeer> {
-      let mut locals = self.peers.iter().filter_map(|peer| {
-         match peer {
-            &Peer::Local(ref local) => Some(local),
-            _ => None,
-         }
-      });
-
-      match (locals.next(), locals.next()) {
-         (Some(local), None) => {
-            if local.id
-               != p2p::PeerId::from_public_key(&p2p_id::PublicKey::from(local.keypair.public()))
-            {
-               cyn::bail!("local peer id does not match keypair");
-            }
-            Ok(local)
-         },
-         (None, None) => cyn::bail!("no local peer in config"),
-         (Some(_), Some(_)) => cyn::bail!("more than one local peer in config"),
-         _ => unreachable!(),
+   pub fn validate(&self) -> cyn::Result<()> {
+      if self.id != p2p::PeerId::from_public_key(&p2p_id::PublicKey::from(self.keypair.public())) {
+         cyn::bail!("peer id does not match keypair");
       }
+
+      Ok(())
    }
 
    #[must_use]
@@ -138,49 +109,49 @@ impl Config {
       let id = p2p::PeerId::from_public_key(&p2p_id::PublicKey::from(keypair.public()));
 
       Self {
-         peers: iter::once(Peer::Local(LocalPeer {
-            id,
-            keypair,
-            interface: None,
-            listen:    [
-               "/ip4/0.0.0.0/tcp/0",
-               "/ip6/::/tcp/0",
-               "/ip4/0.0.0.0/udp/0/quic-v1",
-               "/ip6/::/udp/0/quic-v1",
-            ]
-            .iter()
-            .map(|addr| p2p::Multiaddr::from_str(addr).expect("literals are valid"))
-            .collect(),
-         }))
-         .chain(
-            #[rustfmt::skip]
-            [
-               "/ip4/152.67.75.145/tcp/110/p2p/12D3KooWQWsHPUUeFhe4b6pyCaD1hBoj8j6Z7S7kTznRTh1p1eVt",
-               "/ip4/152.67.75.145/udp/110/quic-v1/p2p/12D3KooWQWsHPUUeFhe4b6pyCaD1hBoj8j6Z7S7kTznRTh1p1eVt",
-               "/ip4/152.67.75.145/tcp/995/p2p/QmbrAHuh4RYcyN9fWePCZMVmQjbaNXtyvrDCWz4VrchbXh",
-               "/ip4/152.67.75.145/udp/995/quic-v1/p2p/QmbrAHuh4RYcyN9fWePCZMVmQjbaNXtyvrDCWz4VrchbXh",
-               "/ip4/95.216.8.12/tcp/110/p2p/Qmd7QHZU8UjfYdwmjmq1SBh9pvER9AwHpfwQvnvNo3HBBo",
-               "/ip4/95.216.8.12/udp/110/quic-v1/p2p/Qmd7QHZU8UjfYdwmjmq1SBh9pvER9AwHpfwQvnvNo3HBBo",
-               "/ip4/95.216.8.12/tcp/995/p2p/QmYs4xNBby2fTs8RnzfXEk161KD4mftBfCiR8yXtgGPj4J",
-               "/ip4/95.216.8.12/udp/995/quic-v1/p2p/QmYs4xNBby2fTs8RnzfXEk161KD4mftBfCiR8yXtgGPj4J",
-               "/ip4/152.67.73.164/tcp/995/p2p/12D3KooWL84sAtq1QTYwb7gVbhSNX5ZUfVt4kgYKz8pdif1zpGUh",
-               "/ip4/152.67.73.164/udp/995/quic-v1/p2p/12D3KooWL84sAtq1QTYwb7gVbhSNX5ZUfVt4kgYKz8pdif1zpGUh",
-               "/ip4/37.27.11.202/udp/21/quic-v1/p2p/12D3KooWN31twBvdEcxz2jTv4tBfPe3mkNueBwDJFCN4xn7ZwFbi",
-               "/ip4/37.27.11.202/udp/443/quic-v1/p2p/12D3KooWN31twBvdEcxz2jTv4tBfPe3mkNueBwDJFCN4xn7ZwFbi",
-               "/ip4/37.27.11.202/udp/500/quic-v1/p2p/12D3KooWN31twBvdEcxz2jTv4tBfPe3mkNueBwDJFCN4xn7ZwFbi",
-               "/ip4/37.27.11.202/udp/995/quic-v1/p2p/12D3KooWN31twBvdEcxz2jTv4tBfPe3mkNueBwDJFCN4xn7ZwFbi",
-               "/dnsaddr/bootstrap.libp2p.io/p2p/12D3KooWEZXjE41uU4EL2gpkAQeDXYok6wghN7wwNVPF5bwkaNfS",
-               "/dnsaddr/bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN",
-               "/dnsaddr/bootstrap.libp2p.io/p2p/QmQCU2EcMqAqQPR2i9bChDtGNJchTbq5TbXJJ16u19uLTa",
-               "/dnsaddr/bootstrap.libp2p.io/p2p/QmZa1sAxajnQjVM8WjWXoMbmPd7NsWhfKsPkErzpm9wGkp",
-               "/dnsaddr/bootstrap.libp2p.io/p2p/QmbLHAnMoJPWSCR5Zhtx6BHJX9KiKNN6tpvbUcqanj75Nb",
-               "/dnsaddr/bootstrap.libp2p.io/p2p/QmcZf59bWwK5XFi76CZX8cbJ4BhTzzA3gU1ZjYZcYW3dwt",
-            ]
-            .iter()
-            .map(|addr| {
-               Peer::Bootstrap(p2p::Multiaddr::from_str(addr).expect("literals are valid"))
-            }),
-         )
+         id,
+         keypair,
+         interface: None,
+         listen: [
+            "/ip4/0.0.0.0/tcp/0",
+            "/ip6/::/tcp/0",
+            "/ip4/0.0.0.0/udp/0/quic-v1",
+            "/ip6/::/udp/0/quic-v1",
+         ]
+         .iter()
+         .map(|addr| p2p::Multiaddr::from_str(addr).expect("literals are valid"))
+         .collect(),
+
+         #[rustfmt::skip]
+         peers: [
+            "/ip4/152.67.75.145/tcp/110/p2p/12D3KooWQWsHPUUeFhe4b6pyCaD1hBoj8j6Z7S7kTznRTh1p1eVt",
+            "/ip4/152.67.75.145/udp/110/quic-v1/p2p/12D3KooWQWsHPUUeFhe4b6pyCaD1hBoj8j6Z7S7kTznRTh1p1eVt",
+            "/ip4/152.67.75.145/tcp/995/p2p/QmbrAHuh4RYcyN9fWePCZMVmQjbaNXtyvrDCWz4VrchbXh",
+            "/ip4/152.67.75.145/udp/995/quic-v1/p2p/QmbrAHuh4RYcyN9fWePCZMVmQjbaNXtyvrDCWz4VrchbXh",
+            "/ip4/95.216.8.12/tcp/110/p2p/Qmd7QHZU8UjfYdwmjmq1SBh9pvER9AwHpfwQvnvNo3HBBo",
+            "/ip4/95.216.8.12/udp/110/quic-v1/p2p/Qmd7QHZU8UjfYdwmjmq1SBh9pvER9AwHpfwQvnvNo3HBBo",
+            "/ip4/95.216.8.12/tcp/995/p2p/QmYs4xNBby2fTs8RnzfXEk161KD4mftBfCiR8yXtgGPj4J",
+            "/ip4/95.216.8.12/udp/995/quic-v1/p2p/QmYs4xNBby2fTs8RnzfXEk161KD4mftBfCiR8yXtgGPj4J",
+            "/ip4/152.67.73.164/tcp/995/p2p/12D3KooWL84sAtq1QTYwb7gVbhSNX5ZUfVt4kgYKz8pdif1zpGUh",
+            "/ip4/152.67.73.164/udp/995/quic-v1/p2p/12D3KooWL84sAtq1QTYwb7gVbhSNX5ZUfVt4kgYKz8pdif1zpGUh",
+            "/ip4/37.27.11.202/udp/21/quic-v1/p2p/12D3KooWN31twBvdEcxz2jTv4tBfPe3mkNueBwDJFCN4xn7ZwFbi",
+            "/ip4/37.27.11.202/udp/443/quic-v1/p2p/12D3KooWN31twBvdEcxz2jTv4tBfPe3mkNueBwDJFCN4xn7ZwFbi",
+            "/ip4/37.27.11.202/udp/500/quic-v1/p2p/12D3KooWN31twBvdEcxz2jTv4tBfPe3mkNueBwDJFCN4xn7ZwFbi",
+            "/ip4/37.27.11.202/udp/995/quic-v1/p2p/12D3KooWN31twBvdEcxz2jTv4tBfPe3mkNueBwDJFCN4xn7ZwFbi",
+            "/dnsaddr/bootstrap.libp2p.io/p2p/12D3KooWEZXjE41uU4EL2gpkAQeDXYok6wghN7wwNVPF5bwkaNfS",
+            "/dnsaddr/bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN",
+            "/dnsaddr/bootstrap.libp2p.io/p2p/QmQCU2EcMqAqQPR2i9bChDtGNJchTbq5TbXJJ16u19uLTa",
+            "/dnsaddr/bootstrap.libp2p.io/p2p/QmZa1sAxajnQjVM8WjWXoMbmPd7NsWhfKsPkErzpm9wGkp",
+            "/dnsaddr/bootstrap.libp2p.io/p2p/QmbLHAnMoJPWSCR5Zhtx6BHJX9KiKNN6tpvbUcqanj75Nb",
+            "/dnsaddr/bootstrap.libp2p.io/p2p/QmcZf59bWwK5XFi76CZX8cbJ4BhTzzA3gU1ZjYZcYW3dwt",
+         ]
+         .iter()
+         .map(|address| {
+            Peer {
+               address: p2p::Multiaddr::from_str(address).expect("literals are valid"),
+               allow:   Vec::new(),
+            }
+         })
          .collect(),
       }
    }
