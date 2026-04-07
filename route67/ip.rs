@@ -52,7 +52,7 @@ pub struct Packet(pub Bytes);
 
 #[derive(Debug)]
 pub enum Event {
-   Packet(Packet),
+   Packet(p2p::PeerId, Packet),
    DiscoverPeer(p2p::PeerId),
 }
 
@@ -493,13 +493,13 @@ impl<P: Policy> p2p_swarm::NetworkBehaviour for Behaviour<P> {
 
    fn on_connection_handler_event(
       &mut self,
-      _peer_id: p2p::PeerId,
+      peer_id: p2p::PeerId,
       _connection_id: p2p_swarm::ConnectionId,
       packet: p2p_swarm::THandlerOutEvent<Self>,
    ) {
       self
          .queued_events
-         .push_back(p2p_swarm::ToSwarm::GenerateEvent(Event::Packet(packet)));
+         .push_back(p2p_swarm::ToSwarm::GenerateEvent(Event::Packet(peer_id, packet)));
    }
 
    fn poll(

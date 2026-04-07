@@ -54,13 +54,23 @@ pub use interface::{
 
 pub mod ip;
 
+fn source_of(packet: &[u8]) -> Option<net::Ipv6Addr> {
+   if packet.first()? >> 4_usize != 6 {
+      return None;
+   }
+
+   Some(net::Ipv6Addr::from(
+      <[u8; _]>::try_from(packet.get(8..8 + 16)?).expect("size matches"),
+   ))
+}
+
 fn destination_of(packet: &[u8]) -> Option<net::Ipv6Addr> {
    if packet.first()? >> 4_usize != 6 {
       return None;
    }
 
    Some(net::Ipv6Addr::from(
-      <[u8; _]>::try_from(packet.get(24..40)?).expect("size matches"),
+      <[u8; _]>::try_from(packet.get(24..24 + 16)?).expect("size matches"),
    ))
 }
 
@@ -435,8 +445,26 @@ pub async fn run(config: Config) -> cyn::Result<()> {
                      }
                   },
 
-                  Se::Behaviour(Be::Ip(ip::Event::Packet(packet))) => {
-                     tracing::trace!(?packet, "Got packet");
+                  Se::Behaviour(Be::Ip(ip::Event::Packet(peer_id, packet))) => {
+                     tracing::trace!(%peer_id, ?packet, "Got packet");
+
+                     let Some(source) = source_of(&packet) else {
+                        tracing::warn!(?packet, "Dropping inbound packet: could not parse source");
+                        continue;
+                     };
+
+                     match program.address_map.peer_of(&address::Prefix::from(source)) {
+                        Some(expected_peer_id) if expected_peer_id == peer_id => {},
+                        expected_peer_id => {
+                           tracing::warn!(
+                              %source,
+                              source_peer_id = %peer_id,
+                              source_expected_peer_id = ?expected_peer_id,
+                              "Dropping packet with spoofed source",
+                           );
+                           continue;
+                        },
+                     }
 
                      if let Err(error) = program.tun_interface.send(&packet).await {
                         tracing::error!(%error, "Failed to write packet to TUN interface");
