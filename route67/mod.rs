@@ -74,15 +74,6 @@ fn destination_of(packet: &[u8]) -> Option<net::Ipv6Addr> {
    ))
 }
 
-fn peer_id_of(address: &p2p::Multiaddr) -> Option<p2p::PeerId> {
-   address.iter().find_map(|protocol| {
-      let p2p_multiaddr::Protocol::P2p(peer_id) = protocol else {
-         return None;
-      };
-      Some(peer_id)
-   })
-}
-
 #[derive(p2p_swarm::NetworkBehaviour)]
 struct Behaviour<P: ip::Policy> {
    identify:     p2p_identify::Behaviour,
@@ -155,10 +146,7 @@ async fn create(config: Config) -> cyn::Result<Program<impl ip::Policy>> {
    );
 
    for peer in &config.peers {
-      let Some(peer_id) = peer_id_of(&peer.address) else {
-         tracing::error!(address = %peer.address, "Peer address has no peer ID, skipping");
-         continue;
-      };
+      let peer_id = peer.id();
 
       match address_map.prefix_of(peer_id) {
          None => {
@@ -237,11 +225,7 @@ async fn create(config: Config) -> cyn::Result<Program<impl ip::Policy>> {
                   kad.set_mode(Some(p2p_kad::Mode::Client));
 
                   for peer in &config.peers {
-                     let Some(peer_id) = peer_id_of(&peer.address) else {
-                        continue;
-                     };
-
-                     kad.add_address(&peer_id, peer.address.clone());
+                     kad.add_address(&peer.id(), peer.address.clone());
                   }
 
                   kad
@@ -252,7 +236,7 @@ async fn create(config: Config) -> cyn::Result<Program<impl ip::Policy>> {
                      .peers
                      .iter()
                      .filter(|peer| !peer.allow.is_empty()) // TODO
-                     .filter_map(|peer| peer_id_of(&peer.address))
+                     .map(config::Peer::id)
                      .collect::<rustc_hash::FxHashSet<_>>();
 
                   move |peer_id| peer_ids.contains(peer_id)
@@ -399,6 +383,12 @@ pub async fn run(config: Config) -> cyn::Result<()> {
    use p2p_swarm::SwarmEvent as Se;
 
    let mut program = create(config).await?;
+
+   for peer in &program.config.peers {
+      program
+         .swarm
+         .add_peer_address(peer.id(), peer.address.clone());
+   }
 
    for address in &program.config.listen {
       program

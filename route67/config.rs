@@ -6,6 +6,7 @@ use libp2p::{
       self as p2p_id,
       ed25519,
    },
+   multiaddr as p2p_multiaddr,
 };
 
 mod keypair {
@@ -78,6 +79,23 @@ pub struct Peer {
    pub allow: Vec<String>,
 }
 
+impl Peer {
+   #[must_use]
+   pub fn id(&self) -> p2p::PeerId {
+      self
+         .address
+         .iter()
+         .find_map(|protocol| {
+            let p2p_multiaddr::Protocol::P2p(peer_id) = protocol else {
+               return None;
+            };
+
+            Some(peer_id)
+         })
+         .expect("validated")
+   }
+}
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct Config {
@@ -98,6 +116,19 @@ impl Config {
    pub fn validate(&self) -> cyn::Result<()> {
       if self.id != p2p::PeerId::from_public_key(&p2p_id::PublicKey::from(self.keypair.public())) {
          cyn::bail!("peer id does not match keypair");
+      }
+
+      for peer in &self.peers {
+         if !peer
+            .address
+            .iter()
+            .any(|protocol| matches!(protocol, p2p_multiaddr::Protocol::P2p(_)))
+         {
+            cyn::bail!(
+               "peer address {address} has no peer ID",
+               address = peer.address
+            );
+         }
       }
 
       Ok(())
