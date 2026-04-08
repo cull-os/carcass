@@ -8,16 +8,20 @@ use std::{
 };
 
 use cyn::ResultExt as _;
-use dup::Dupe as _;
 use derive_more::{
    Deref,
    DerefMut,
 };
+use dup::Dupe as _;
 use indexmap::IndexMap;
 use libp2p::{
    self as p2p,
    core::transport as p2p_transport,
    dcutr as p2p_dcutr,
+   identity::{
+      self as p2p_id,
+      ed25519,
+   },
    futures::{
       FutureExt as _,
       StreamExt as _,
@@ -115,8 +119,6 @@ impl Relay {
 
 #[derive(Deref, DerefMut)]
 struct Program<P: ip::Policy> {
-   config: Config,
-
    tun_buffer:    [u8; MTU as usize],
    tun_interface: Interface,
 
@@ -133,16 +135,19 @@ struct Program<P: ip::Policy> {
    swarm: p2p::Swarm<Behaviour<P>>,
 }
 
-async fn create(config: Config) -> cyn::Result<Program<impl ip::Policy>> {
-   config.validate()?;
-
-   let address_map = address::Map::new(config.id);
+#[bon::builder]
+async fn create(
+   peer_id: p2p::PeerId,
+   keypair: ed25519::Keypair,
+   interface: Option<&str>,
+) -> cyn::Result<Program<impl ip::Policy>> {
+   let address_map = address::Map::new(peer_id);
 
    tracing::info!(
-      id = %config.id,
+      %peer_id,
       prefix = %net::Ipv6Addr::from(
          address_map
-            .prefix_of(&config.id)
+            .prefix_of(&peer_id)
             .expect("local is always in map")
       ),
       "Local peer added",
@@ -158,9 +163,9 @@ async fn create(config: Config) -> cyn::Result<Program<impl ip::Policy>> {
    Ok(Program {
       tun_buffer: [0; _],
       tun_interface: Interface::create(
-         config.interface.as_deref(),
+         interface,
          address_map
-            .prefix_of(&config.id)
+            .prefix_of(&peer_id)
             .expect("local is always in map"),
       )
       .await?,
@@ -173,7 +178,7 @@ async fn create(config: Config) -> cyn::Result<Program<impl ip::Policy>> {
 
       relays: IndexMap::default(),
 
-      swarm: p2p::SwarmBuilder::with_existing_identity(config.keypair.clone().into())
+      swarm: p2p::SwarmBuilder::with_existing_identity(p2p_id::Keypair::from(keypair))
          .with_tokio()
          .with_tcp(
             p2p_tcp::Config::default(),
@@ -221,8 +226,6 @@ async fn create(config: Config) -> cyn::Result<Program<impl ip::Policy>> {
          })
          .chain_err("failed to create swarm")?
          .build(),
-
-      config,
    })
 }
 
@@ -392,13 +395,20 @@ pub async fn run(config: Config) -> cyn::Result<()> {
    use BehaviourEvent as Be;
    use p2p_swarm::SwarmEvent as Se;
 
-   let mut program = create(config).await?;
+   config.validate()?;
 
-   for peer in &program.config.peers.clone() {
+   let mut program = create()
+      .peer_id(config.id)
+      .keypair(config.keypair)
+      .maybe_interface(config.interface.as_deref())
+      .call()
+      .await?;
+
+   for peer in &config.peers {
       program.add_peer(peer);
    }
 
-   for address in &program.config.listen {
+   for address in &config.listen {
       program
          .swarm
          .listen_on(address.clone())
@@ -547,7 +557,7 @@ pub async fn run(config: Config) -> cyn::Result<()> {
                   continue;
                };
 
-               if peer_id == program.config.id {
+               if peer_id == *program.swarm.local_peer_id() {
                   tracing::warn!(%destination, "Dropping self-addressed packet, interface should be configured to route this locally");
                   continue;
                }

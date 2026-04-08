@@ -68,7 +68,7 @@ async fn main() -> cyn::Termination {
          .with_env_filter(
             tracing_subscriber::EnvFilter::builder()
                .with_env_var(VARIABLE)
-               .with_default_directive(tracing_filter::LevelFilter::INFO.into())
+               .with_default_directive(tracing_filter::Directive::from(tracing_filter::LevelFilter::INFO))
                .from_env()
                .chain_err_with(|| {
                   format!(

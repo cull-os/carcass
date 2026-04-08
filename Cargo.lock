@@ -4018,6 +4018,7 @@ name = "route67"
 version = "0.0.1"
 dependencies = [
  "asynchronous-codec",
+ "bon",
  "bytes",
  "clap",
  "cyn",
