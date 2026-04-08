@@ -18,15 +18,15 @@ use libp2p::{
    self as p2p,
    core::transport as p2p_transport,
    dcutr as p2p_dcutr,
-   identity::{
-      self as p2p_id,
-      ed25519,
-   },
    futures::{
       FutureExt as _,
       StreamExt as _,
    },
    identify as p2p_identify,
+   identity::{
+      self as p2p_id,
+      ed25519,
+   },
    kad::{
       self as p2p_kad,
       store as p2p_kad_store,
@@ -46,7 +46,16 @@ use libp2p::{
 use n0_watcher::Watcher as _;
 use netwatch::netmon;
 use rustc_hash::FxHashMap;
-use tokio::select;
+use tokio::{
+   fs as tokio_fs,
+   io::{
+      AsyncBufReadExt as _,
+      AsyncWriteExt as _,
+      BufReader,
+   },
+   net as tokio_net,
+   select,
+};
 
 pub mod address;
 
@@ -60,6 +69,7 @@ pub use interface::{
 };
 
 pub mod ip;
+pub mod socket;
 
 fn source_of(packet: &[u8]) -> Option<net::Ipv6Addr> {
    if packet.first()? >> 4_usize != 6 {
@@ -255,7 +265,6 @@ impl<P: ip::Policy> Program<P> {
       }
    }
 
-   #[expect(dead_code, reason = "will be used by command socket")]
    fn remove_peer(&mut self, peer_id: p2p::PeerId) {
       self.address_map.remove(&peer_id);
       self.behaviour_mut().kad.remove_peer(&peer_id);
@@ -398,7 +407,7 @@ pub async fn run(config: Config) -> cyn::Result<()> {
    config.validate()?;
 
    let mut program = create()
-      .peer_id(config.id)
+      .peer_id(config.peer_id)
       .keypair(config.keypair)
       .maybe_interface(config.interface.as_deref())
       .call()
@@ -416,6 +425,30 @@ pub async fn run(config: Config) -> cyn::Result<()> {
    }
 
    program.recover();
+
+   let mut socket = match config.socket {
+      None => None,
+      Some(ref path) => {
+         let _ = tokio_fs::remove_file(path).await;
+
+         let listener = tokio_net::UnixListener::bind(path).chain_err_with(|| {
+            format!(
+               "failed to bind control socket at {path}",
+               path = path.display(),
+            )
+         })?;
+
+         let (stream, address) = listener
+            .accept()
+            .await
+            .chain_err("failed to accept control socket connection")?;
+         tracing::info!(?address, "Listening on control socket");
+
+         let (reader, writer) = stream.into_split();
+
+         Some((BufReader::new(reader).lines(), writer))
+      },
+   };
 
    loop {
       select! {
@@ -564,6 +597,27 @@ pub async fn run(config: Config) -> cyn::Result<()> {
 
                let packet = ip::Packet(bytes::Bytes::copy_from_slice(packet));
                program.behaviour_mut().ip.send(&peer_id, packet);
+            }
+         },
+
+         (Ok(Some(line)), writer) = async {
+            let &mut (ref mut lines, ref mut writer) = socket.as_mut().expect("guarded");
+            (lines.next_line().await, writer)
+         }, if socket.is_some() => {
+            let mut response =
+               serde_json::to_string(&match serde_json::from_str::<socket::Request>(&line) {
+                  Ok(request) => program.handle_request(request),
+                  Err(error) => {
+                     socket::Response::Error {
+                        error: error.to_string(),
+                     }
+                  },
+               })
+               .expect("serialization is infallible");
+            response.push('\n');
+
+            if let Err(error) = writer.write_all(response.as_bytes()).await {
+               tracing::error!(%error, "Failed to write to control socket");
             }
          },
       }

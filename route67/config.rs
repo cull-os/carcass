@@ -1,4 +1,7 @@
-use std::str::FromStr as _;
+use std::{
+   path,
+   str::FromStr as _,
+};
 
 use libp2p::{
    self as p2p,
@@ -47,10 +50,10 @@ mod peer_id {
    const PREFIX: &str = "route67_";
 
    pub fn serialize<S: serde::Serializer>(
-      id: &p2p::PeerId,
+      peer_id: &p2p::PeerId,
       serializer: S,
    ) -> Result<S::Ok, S::Error> {
-      serializer.serialize_str(&format!("{PREFIX}{id}"))
+      serializer.serialize_str(&format!("{PREFIX}{peer_id}"))
    }
 
    pub fn deserialize<'de, D: serde::Deserializer<'de>>(
@@ -99,14 +102,15 @@ impl Peer {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct Config {
-   #[serde(with = "peer_id")]
-   pub id: p2p::PeerId,
-
+   #[serde(rename = "id", with = "peer_id")]
+   pub peer_id: p2p::PeerId,
    #[serde(with = "keypair")]
    pub keypair: ed25519::Keypair,
 
    pub interface: Option<String>,
    pub listen:    Vec<p2p::Multiaddr>,
+
+   pub socket: Option<path::PathBuf>,
 
    #[serde(default, rename = "peer")]
    pub peers: Vec<Peer>,
@@ -114,7 +118,9 @@ pub struct Config {
 
 impl Config {
    pub fn validate(&self) -> cyn::Result<()> {
-      if self.id != p2p::PeerId::from_public_key(&p2p_id::PublicKey::from(self.keypair.public())) {
+      if self.peer_id
+         != p2p::PeerId::from_public_key(&p2p_id::PublicKey::from(self.keypair.public()))
+      {
          cyn::bail!("peer id does not match keypair");
       }
 
@@ -137,11 +143,12 @@ impl Config {
    #[must_use]
    pub fn generate() -> Self {
       let keypair = ed25519::Keypair::generate();
-      let id = p2p::PeerId::from_public_key(&p2p_id::PublicKey::from(keypair.public()));
+      let peer_id = p2p::PeerId::from_public_key(&p2p_id::PublicKey::from(keypair.public()));
 
       Self {
-         id,
+         peer_id,
          keypair,
+
          interface: None,
          listen: [
             "/ip4/0.0.0.0/tcp/0",
@@ -152,6 +159,8 @@ impl Config {
          .iter()
          .map(|addr| p2p::Multiaddr::from_str(addr).expect("literals are valid"))
          .collect(),
+
+         socket: None,
 
          #[rustfmt::skip]
          peers: [
