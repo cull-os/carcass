@@ -49,15 +49,11 @@ impl Map {
          prefix_to_peer: FxHashMap::default(),
       };
 
-      map.prefix_of(self_id);
+      map.add(self_id);
       map
    }
 
-   pub fn prefix_of(&mut self, peer_id: p2p::PeerId) -> Option<Prefix> {
-      if let Some(&prefix) = self.peer_to_prefix.get(&peer_id) {
-         return Some(prefix);
-      }
-
+   pub fn add(&mut self, peer_id: p2p::PeerId) -> Option<Prefix> {
       let mut prefix = Prefix([0; _]);
       prefix[VPN_PREFIX_RANGE].copy_from_slice(&VPN_PREFIX);
 
@@ -72,6 +68,18 @@ impl Map {
       self.peer_to_prefix.insert(peer_id, prefix);
 
       Some(prefix)
+   }
+
+   pub fn remove(&mut self, peer_id: &p2p::PeerId) {
+      let Some(prefix) = self.peer_to_prefix.remove(peer_id) else {
+         return;
+      };
+      self.prefix_to_peer.remove(&prefix);
+   }
+
+   #[must_use]
+   pub fn prefix_of(&self, peer_id: &p2p::PeerId) -> Option<Prefix> {
+      self.peer_to_prefix.get(peer_id).copied()
    }
 
    #[must_use]
@@ -104,20 +112,20 @@ mod tests {
    proptest! {
       #[test]
       fn prefix_starts_with_fd67(id in peer_id_strategy()) {
-         let mut map = Map::new(id);
-         let prefix = map.prefix_of(id).expect("self always succeeds");
+         let map = Map::new(id);
+         let prefix = map.prefix_of(&id).expect("self always succeeds");
 
          prop_assert!(prefix.starts_with(&VPN_PREFIX));
       }
 
       #[test]
       fn prefix_deterministic(id in peer_id_strategy()) {
-         let mut map1 = Map::new(id);
-         let mut map2 = Map::new(id);
+         let map1 = Map::new(id);
+         let map2 = Map::new(id);
 
          prop_assert_eq!(
-            map1.prefix_of(id).expect("no collision"),
-            map2.prefix_of(id).expect("no collision"),
+            map1.prefix_of(&id).expect("no collision"),
+            map2.prefix_of(&id).expect("no collision"),
          );
       }
 
@@ -125,15 +133,15 @@ mod tests {
       fn map_roundtrip(self_id in peer_id_strategy(), peer_id in peer_id_strategy()) {
          let mut map = Map::new(self_id);
 
-         if let Some(prefix) = map.prefix_of(peer_id) {
+         if let Some(prefix) = map.add(peer_id) {
             prop_assert_eq!(map.peer_of(&prefix), Some(peer_id));
          }
       }
 
       #[test]
       fn prefix_from_ipv6_roundtrip(id in peer_id_strategy()) {
-         let mut map = Map::new(id);
-         let prefix = map.prefix_of(id).expect("self always succeeds");
+         let map = Map::new(id);
+         let prefix = map.prefix_of(&id).expect("self always succeeds");
 
          prop_assert_eq!(Prefix::from(net::Ipv6Addr::from(prefix)), prefix);
       }

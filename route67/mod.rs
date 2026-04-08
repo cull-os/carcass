@@ -1,11 +1,14 @@
 #![feature(trait_alias, stmt_expr_attributes)]
 
 use std::{
+   cell::RefCell,
    net,
+   rc::Rc,
    time,
 };
 
 use cyn::ResultExt as _;
+use dup::Dupe as _;
 use derive_more::{
    Deref,
    DerefMut,
@@ -120,7 +123,8 @@ struct Program<P: ip::Policy> {
    network_state:   netmon::State,
    network_monitor: n0_watcher::Direct<netmon::State>,
 
-   address_map: address::Map,
+   address_map:   address::Map,
+   allowed_peers: Rc<RefCell<rustc_hash::FxHashSet<p2p::PeerId>>>,
 
    relays: IndexMap<p2p::PeerId, Relay, rustc_hash::FxBuildHasher>,
 
@@ -129,38 +133,22 @@ struct Program<P: ip::Policy> {
    swarm: p2p::Swarm<Behaviour<P>>,
 }
 
-#[expect(clippy::cognitive_complexity)]
 async fn create(config: Config) -> cyn::Result<Program<impl ip::Policy>> {
    config.validate()?;
 
-   let mut address_map = address::Map::new(config.id);
+   let address_map = address::Map::new(config.id);
 
    tracing::info!(
       id = %config.id,
       prefix = %net::Ipv6Addr::from(
          address_map
-            .prefix_of(config.id)
+            .prefix_of(&config.id)
             .expect("local is always in map")
       ),
       "Local peer added",
    );
 
-   for peer in &config.peers {
-      let peer_id = peer.id();
-
-      match address_map.prefix_of(peer_id) {
-         None => {
-            tracing::error!(%peer_id, "Peer has a prefix collision, skipping");
-         },
-         Some(prefix) => {
-            tracing::info!(
-               %peer_id,
-               prefix = %net::Ipv6Addr::from(prefix),
-               "Peer added",
-            );
-         },
-      }
-   }
+   let allowed_peers = Rc::new(RefCell::new(rustc_hash::FxHashSet::default()));
 
    let mut network_monitor = netmon::Monitor::new()
       .await
@@ -172,7 +160,7 @@ async fn create(config: Config) -> cyn::Result<Program<impl ip::Policy>> {
       tun_interface: Interface::create(
          config.interface.as_deref(),
          address_map
-            .prefix_of(config.id)
+            .prefix_of(&config.id)
             .expect("local is always in map"),
       )
       .await?,
@@ -181,6 +169,7 @@ async fn create(config: Config) -> cyn::Result<Program<impl ip::Policy>> {
       network_monitor,
 
       address_map,
+      allowed_peers: allowed_peers.dupe(),
 
       relays: IndexMap::default(),
 
@@ -224,23 +213,10 @@ async fn create(config: Config) -> cyn::Result<Program<impl ip::Policy>> {
 
                   kad.set_mode(Some(p2p_kad::Mode::Client));
 
-                  for peer in &config.peers {
-                     kad.add_address(&peer.id(), peer.address.clone());
-                  }
-
                   kad
                },
 
-               ip: ip::Behaviour::new({
-                  let peer_ids = config
-                     .peers
-                     .iter()
-                     .filter(|peer| !peer.allow.is_empty()) // TODO
-                     .map(config::Peer::id)
-                     .collect::<rustc_hash::FxHashSet<_>>();
-
-                  move |peer_id| peer_ids.contains(peer_id)
-               }),
+               ip: ip::Behaviour::new(move |peer_id| allowed_peers.borrow().contains(peer_id)),
             }
          })
          .chain_err("failed to create swarm")?
@@ -251,6 +227,40 @@ async fn create(config: Config) -> cyn::Result<Program<impl ip::Policy>> {
 }
 
 impl<P: ip::Policy> Program<P> {
+   fn add_peer(&mut self, peer: &config::Peer) {
+      let peer_id = peer.id();
+
+      let Some(prefix) = self.address_map.add(peer_id) else {
+         tracing::error!(%peer_id, "Peer has a prefix collision, skipping");
+         return;
+      };
+
+      tracing::info!(
+         %peer_id,
+         prefix = %net::Ipv6Addr::from(prefix),
+         "Peer added",
+      );
+
+      self
+         .behaviour_mut()
+         .kad
+         .add_address(&peer_id, peer.address.clone());
+      self.swarm.add_peer_address(peer_id, peer.address.clone());
+
+      if !peer.allow.is_empty() {
+         self.allowed_peers.borrow_mut().insert(peer_id);
+      }
+   }
+
+   #[expect(dead_code, reason = "will be used by command socket")]
+   fn remove_peer(&mut self, peer_id: p2p::PeerId) {
+      self.address_map.remove(&peer_id);
+      self.behaviour_mut().kad.remove_peer(&peer_id);
+      self.allowed_peers.borrow_mut().remove(&peer_id);
+
+      tracing::info!(%peer_id, "Peer removed");
+   }
+
    fn recover(&mut self) {
       for address in self.external_addresses().cloned().collect::<Vec<_>>() {
          self.remove_external_address(&address);
@@ -384,10 +394,8 @@ pub async fn run(config: Config) -> cyn::Result<()> {
 
    let mut program = create(config).await?;
 
-   for peer in &program.config.peers {
-      program
-         .swarm
-         .add_peer_address(peer.id(), peer.address.clone());
+   for peer in &program.config.peers.clone() {
+      program.add_peer(peer);
    }
 
    for address in &program.config.listen {
