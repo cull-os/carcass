@@ -20,7 +20,6 @@ path = "main.rs"
 workspace = true
 
 [dependencies]
-cyn.path = "../cyn"
 dup.path = "../dup"
 ust.path = "../ust"
 
@@ -29,6 +28,7 @@ bon.workspace = true
 bytes.workspace = true
 clap.workspace = true
 derive_more.workspace = true
+dirs.workspace = true
 either.workspace = true
 indexmap.workspace = true
 libp2p = { features = [
@@ -61,6 +61,7 @@ serde_json = "1.0.149"
 sha2.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
+tokio-util.workspace = true
 toml.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true

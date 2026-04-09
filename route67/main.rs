@@ -1,16 +1,29 @@
+#![feature(error_iter)]
+
 use std::{
-   env,
+   error,
    fmt::Write as _,
-   io as std_io,
+   io as blocking_io,
+   path,
+   process,
 };
 
 use clap::Parser as _;
-use cyn::ResultExt as _;
-use tokio::io::{
-   self,
-   AsyncReadExt as _,
+use route67::{
+   config,
+   socket,
 };
-use tracing_subscriber::filter as tracing_filter;
+use tokio::{
+   fs,
+   io,
+};
+use tracing_subscriber::{
+   filter as tracing_filter,
+   util::{
+      self as tracing_subscriber_util,
+      SubscriberInitExt as _,
+   },
+};
 use ust::{
    Write as _,
    report,
@@ -18,8 +31,88 @@ use ust::{
    terminal,
 };
 
-const FAIL_STDOUT: &str = "failed to write to stdout";
-const FAIL_STDERR: &str = "failed to write to stderr";
+#[derive(Debug, thiserror::Error)]
+enum Error {
+   #[error("failed to parse tracing filter from environment variable")]
+   ParseTracingFilter(#[from] tracing_filter::FromEnvError),
+
+   #[error("failed to initialize tracing")]
+   InitTracing(#[from] tracing_subscriber_util::TryInitError),
+
+   #[error("could not determine config directory")]
+   CouldNotDetermineConfigDir,
+
+   #[cfg(target_os = "linux")]
+   #[error("could not determine runtime directory (XDG_RUNTIME_DIR unset)")]
+   XdgRuntimeDirUnset,
+
+   #[error("invalid config")]
+   InvalidConfig(#[from] Box<config::Error>),
+
+   #[error("failed to create config directory '{path}'", path = .path.display())]
+   CreateConfigDir {
+      path:   path::PathBuf,
+      #[source]
+      source: io::Error,
+   },
+
+   #[error("failed to write config to '{path}'", path = .path.display())]
+   WriteConfig {
+      path:   path::PathBuf,
+      #[source]
+      source: io::Error,
+   },
+
+   #[error("failed to read config from '{path}'", path = .path.display())]
+   ReadConfig {
+      path:   path::PathBuf,
+      #[source]
+      source: io::Error,
+   },
+
+   #[error("failed to bind control socket")]
+   BindControlSocket(#[from] socket::Error),
+
+   #[error("daemon connection closed")]
+   DaemonConnectionClosed,
+
+   #[error("daemon did not respond")]
+   DaemonDidNotRespond,
+
+   #[error(transparent)]
+   Route67(#[from] Box<route67::Error>),
+}
+
+fn config_path() -> Result<path::PathBuf, Error> {
+   Ok(dirs::config_dir()
+      .ok_or(Error::CouldNotDetermineConfigDir)?
+      .join("route67")
+      .join("config.toml"))
+}
+
+#[cfg_attr(
+   not(target_os = "linux"),
+   expect(clippy::unnecessary_wraps, reason = "fallible on Linux")
+)]
+fn socket_path() -> Result<path::PathBuf, Error> {
+   #[cfg(target_os = "linux")]
+   {
+      Ok(dirs::runtime_dir()
+         .ok_or(Error::XdgRuntimeDirUnset)?
+         .join("route67")
+         .join("socket"))
+   }
+
+   #[cfg(target_os = "macos")]
+   {
+      Ok(path::PathBuf::from("/var/run/route67.socket"))
+   }
+
+   #[cfg(target_os = "windows")]
+   {
+      Ok(path::PathBuf::from(r"\\.\pipe\route67"))
+   }
+}
 
 #[derive(clap::Parser)]
 #[command(version, about)]
@@ -30,116 +123,218 @@ struct Cli {
 
 #[derive(clap::Subcommand, Debug, Clone)]
 enum Command {
-   /// Configuration related commands.
-   Config {
-      #[command(subcommand)]
-      command: Config,
+   /// Start the node.
+   Start {
+      /// Generate config if it doesn't exist.
+      #[arg(long)]
+      generate_config: bool,
    },
 
-   /// Node related commands.
-   Node {
-      #[command(subcommand)]
-      command: Node,
+   /// Query peer status.
+   Status { peer_id: libp2p::PeerId },
+
+   /// Trust a peer.
+   Trust {
+      address: libp2p::Multiaddr,
+
+      #[arg(long)]
+      allow: Vec<String>,
    },
+
+   /// Distrust a peer.
+   Distrust { peer_id: libp2p::PeerId },
 }
 
-#[derive(clap::Subcommand, Debug, Clone)]
-enum Config {
-   /// Generate a new configuration.
-   Generate,
+async fn send_request(request: socket::Request) -> Result<socket::Response, Error> {
+   let mut exchanges =
+      socket::connect::<{ socket::Type::Client }, socket::Response, socket::Request>(
+         &socket_path()?
+      )
+      .await?;
+
+   let Some((response_receiver, request_sender)) = exchanges.recv().await else {
+      return Err(Error::DaemonConnectionClosed);
+   };
+
+   let Ok(()) = request_sender.send(request) else {
+      return Err(Error::DaemonConnectionClosed);
+   };
+
+   response_receiver
+      .await
+      .map_err(|_| Error::DaemonDidNotRespond)
 }
 
-#[derive(clap::Subcommand, Debug, Clone)]
-enum Node {
-   /// Start node. Configuration is read from stdin.
-   Start,
-
-   /// Reload already running node. Configuration is read from stdin.
-   Reload,
-}
-
-#[tokio::main]
-async fn main() -> cyn::Termination {
+#[expect(
+   clippy::match_wildcard_for_single_variants,
+   clippy::cognitive_complexity
+)]
+async fn real_main() -> Result<(), Error> {
    {
       const VARIABLE: &str = "ROUTE67_LOG";
 
       tracing_subscriber::fmt()
-         .with_writer(std_io::stderr)
+         .with_writer(blocking_io::stderr)
          .with_env_filter(
             tracing_subscriber::EnvFilter::builder()
                .with_env_var(VARIABLE)
-               .with_default_directive(tracing_filter::Directive::from(tracing_filter::LevelFilter::INFO))
-               .from_env()
-               .chain_err_with(|| {
-                  format!(
-                     "failed to initialize tracing from environment variable '{VARIABLE}' with \
-                      content '{content}'",
-                     content = env::var_os(VARIABLE)
-                        .expect("unset variable cannot be invalid")
-                        .display(),
-                  )
-               })?,
+               .with_default_directive(tracing_filter::Directive::from(
+                  tracing_filter::LevelFilter::INFO,
+               ))
+               .from_env()?,
          )
-         .try_init()
-         .chain_err("failed to initialize tracing")?;
+         .finish()
+         .try_init()?;
    }
 
    let cli = Cli::parse();
 
-   let out = &mut terminal::stdout();
    let err = &mut terminal::stderr();
 
    match cli.command {
-      Command::Config {
-         command: Config::Generate,
-      } => {
-         let config = route67::Config::generate();
+      Command::Start { generate_config } => {
+         let path = config_path()?;
 
-         let config = toml::to_string_pretty(&config)
-            .chain_err("failed to generate config, this is a bug")?;
+         let config = match fs::read_to_string(&path).await {
+            Ok(content) => {
+               tracing::info!(path = %path.display(), "Using existing config");
 
-         writeln!(out, "{config}").chain_err(FAIL_STDOUT)?;
-      },
+               match route67::Config::try_from(content.as_str()) {
+                  Ok(config) => config,
+                  Err(config::Error::Parse(ref error)) => {
+                     let report = if let Some(span) = error.span() {
+                        report::Report::error("invalid config")
+                           .primary(span, error.message().to_owned())
+                     } else {
+                        report::Report::error(error.message().to_owned())
+                     };
 
-      Command::Node {
-         command: Node::Start,
-      } => {
-         let mut config = String::new();
+                     let _ = err.write_report(
+                        &report,
+                        &path.display().to_string().yellow(),
+                        &report::PositionStr::new(&content),
+                     );
 
-         io::stdin()
-            .read_to_string(&mut config)
-            .await
-            .chain_err("failed to read config from stdin")?;
+                     let _ = write!(err, "\n\n");
 
-         let config: route67::Config = match toml::from_str(&config) {
-            Ok(config) => config,
-            Err(error) => {
-               let report = if let Some(span) = error.span() {
-                  report::Report::error("invalid config").primary(span, error.message().to_owned())
-               } else {
-                  report::Report::error(error.message().to_owned())
-               };
+                     return Err(Error::InvalidConfig(Box::new(config::Error::Parse(
+                        error.clone(),
+                     ))));
+                  },
+                  Err(error) => return Err(Error::InvalidConfig(Box::new(error))),
+               }
+            },
+            Err(error) if error.kind() == io::ErrorKind::NotFound && generate_config => {
+               tracing::info!(path = %path.display(), "Generating config");
 
-               err.write_report(
-                  &report,
-                  &"<stdin>".yellow(),
-                  &report::PositionStr::new(&config),
-               )
-               .chain_err(FAIL_STDERR)?;
+               let config = route67::Config::generate();
 
-               write!(err, "\n\n").chain_err(FAIL_STDERR)?;
+               if let Some(parent) = path.parent() {
+                  fs::create_dir_all(parent).await.map_err(|source| {
+                     Error::CreateConfigDir {
+                        path: parent.to_owned(),
+                        source,
+                     }
+                  })?;
+               }
 
-               cyn::bail!("failed to parse config due to 1 previous error");
+               let serialized = toml::to_string_pretty(&config)
+                  .expect("generated config serialization must not fail");
+
+               fs::write(&path, &serialized).await.map_err(|source| {
+                  Error::WriteConfig {
+                     path: path.clone(),
+                     source,
+                  }
+               })?;
+
+               config
+            },
+            Err(source) => {
+               return Err(Error::ReadConfig {
+                  path: path.clone(),
+                  source,
+               });
             },
          };
 
-         route67::run(config).await?;
+         Box::pin(
+            route67::run()
+               .config(config)
+               .requests(
+                  socket::connect::<{ socket::Type::Server }, socket::Request, socket::Response>(
+                     &socket_path()?,
+                  )
+                  .await?,
+               )
+               .call(),
+         )
+         .await
+         .map_err(|error| Error::Route67(Box::new(error)))?;
       },
+      Command::Status { peer_id } => {
+         let response = send_request(socket::Request::PeerStatus { peer_id }).await?;
 
-      Command::Node {
-         command: Node::Reload,
-      } => unimplemented!(),
+         match response {
+            socket::Response::PeerStatus {
+               connections,
+               connection_last_active,
+               ..
+            } => {
+               if connections.is_empty() {
+                  println!("no connections");
+               } else {
+                  println!("connections:");
+                  for connection in &connections {
+                     println!("  {connection}");
+                  }
+                  if let Some(active) = connection_last_active {
+                     println!("last active: {active}");
+                  }
+               }
+            },
+            socket::Response::Error { error } => {
+               tracing::error!(%error, "Command failed");
+            },
+            response => tracing::error!(?response, "Unexpected response from daemon"),
+         }
+      },
+      Command::Trust { address, allow } => {
+         let response = send_request(socket::Request::TrustPeer { address, allow }).await?;
+
+         match response {
+            socket::Response::Ok { ok } => println!("{ok}"),
+            socket::Response::Error { error } => {
+               tracing::error!(%error, "Command failed");
+            },
+            response => tracing::error!(?response, "Unexpected response from daemon"),
+         }
+      },
+      Command::Distrust { peer_id } => {
+         let response = send_request(socket::Request::DistrustPeer { peer_id }).await?;
+
+         match response {
+            socket::Response::Ok { ok } => println!("{ok}"),
+            socket::Response::Error { error } => {
+               tracing::error!(%error, "Command failed");
+            },
+            response => tracing::error!(?response, "Unexpected response from daemon"),
+         }
+      },
    }
 
-   cyn::Termination::success()
+   Ok(())
+}
+
+#[tokio::main]
+async fn main() {
+   if let Err(error) = real_main().await {
+      tracing::error!(%error, "Fatal error");
+
+      for error in (&error as &dyn error::Error).sources().skip(1) {
+         tracing::error!(%error, "Caused by");
+      }
+
+      process::exit(1);
+   }
 }

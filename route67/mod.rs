@@ -1,4 +1,4 @@
-#![feature(trait_alias, stmt_expr_attributes)]
+#![feature(adt_const_params, trait_alias, stmt_expr_attributes)]
 
 use std::{
    cell::RefCell,
@@ -7,11 +7,6 @@ use std::{
    time,
 };
 
-use cyn::ResultExt as _;
-use derive_more::{
-   Deref,
-   DerefMut,
-};
 use dup::Dupe as _;
 use indexmap::IndexMap;
 use libp2p::{
@@ -47,14 +42,9 @@ use n0_watcher::Watcher as _;
 use netwatch::netmon;
 use rustc_hash::FxHashMap;
 use tokio::{
-   fs as tokio_fs,
-   io::{
-      AsyncBufReadExt as _,
-      AsyncWriteExt as _,
-      BufReader,
-   },
-   net as tokio_net,
+   io,
    select,
+   sync::mpsc,
 };
 
 pub mod address;
@@ -69,6 +59,7 @@ pub use interface::{
 };
 
 pub mod ip;
+
 pub mod socket;
 
 fn source_of(packet: &[u8]) -> Option<net::Ipv6Addr> {
@@ -77,7 +68,7 @@ fn source_of(packet: &[u8]) -> Option<net::Ipv6Addr> {
    }
 
    Some(net::Ipv6Addr::from(
-      <[u8; _]>::try_from(packet.get(8..8 + 16)?).expect("size matches"),
+      <[u8; _]>::try_from(packet.get(8..8 + 16)?).expect("size was statically checked"),
    ))
 }
 
@@ -87,7 +78,7 @@ fn destination_of(packet: &[u8]) -> Option<net::Ipv6Addr> {
    }
 
    Some(net::Ipv6Addr::from(
-      <[u8; _]>::try_from(packet.get(24..24 + 16)?).expect("size matches"),
+      <[u8; _]>::try_from(packet.get(24..24 + 16)?).expect("size was statically checked"),
    ))
 }
 
@@ -127,7 +118,6 @@ impl Relay {
    }
 }
 
-#[derive(Deref, DerefMut)]
 struct Program<P: ip::Policy> {
    tun_buffer:    [u8; MTU as usize],
    tun_interface: Interface,
@@ -136,13 +126,43 @@ struct Program<P: ip::Policy> {
    network_monitor: n0_watcher::Direct<netmon::State>,
 
    address_map:   address::Map,
-   allowed_peers: Rc<RefCell<rustc_hash::FxHashSet<p2p::PeerId>>>,
+   trusted_peers: Rc<RefCell<rustc_hash::FxHashSet<p2p::PeerId>>>,
 
-   relays: IndexMap<p2p::PeerId, Relay, rustc_hash::FxBuildHasher>,
+   relays:      IndexMap<p2p::PeerId, Relay, rustc_hash::FxBuildHasher>,
+   connections: FxHashMap<p2p::PeerId, Vec<(p2p_swarm::ConnectionId, p2p::Multiaddr)>>,
 
-   #[deref]
-   #[deref_mut]
    swarm: p2p::Swarm<Behaviour<P>>,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+   #[error("failed to parse config")]
+   ParseConfig(#[from] config::Error),
+
+   #[error("failed to create network monitor")]
+   CreateNetworkMonitor(#[source] netmon::Error),
+
+   #[error("failed to create tun interface")]
+   CreateInterface(#[from] interface::Error),
+
+   #[error("failed to create tcp transport layer")]
+   CreateTcpTransport(#[source] p2p_noise::Error),
+
+   #[error("failed to create dns resolver")]
+   CreateDnsResolver(#[source] io::Error),
+
+   #[error("failed to create websocket transport")]
+   CreateWebsocketTransport(#[source] p2p::WebsocketBuilderError<p2p_noise::Error>),
+
+   #[error("failed to create relay client transport")]
+   CreateRelayClientTransport(#[source] p2p_noise::Error),
+
+   #[error("failed to listen on address '{address}'")]
+   Listen {
+      address: p2p::Multiaddr,
+      #[source]
+      source:  p2p_transport::TransportError<io::Error>,
+   },
 }
 
 #[bon::builder]
@@ -150,7 +170,7 @@ async fn create(
    peer_id: p2p::PeerId,
    keypair: ed25519::Keypair,
    interface: Option<&str>,
-) -> cyn::Result<Program<impl ip::Policy>> {
+) -> Result<Program<impl ip::Policy>, Error> {
    let address_map = address::Map::new(peer_id);
 
    tracing::info!(
@@ -158,7 +178,7 @@ async fn create(
       prefix = %net::Ipv6Addr::from(
          address_map
             .prefix_of(&peer_id)
-            .expect("local is always in map")
+            .expect("self must be in map")
       ),
       "Local peer added",
    );
@@ -167,7 +187,7 @@ async fn create(
 
    let mut network_monitor = netmon::Monitor::new()
       .await
-      .chain_err("failed to create network monitor")?
+      .map_err(Error::CreateNetworkMonitor)?
       .interface_state();
 
    Ok(Program {
@@ -176,7 +196,7 @@ async fn create(
          interface,
          address_map
             .prefix_of(&peer_id)
-            .expect("local is always in map"),
+            .expect("self must be in map"),
       )
       .await?,
 
@@ -184,9 +204,10 @@ async fn create(
       network_monitor,
 
       address_map,
-      allowed_peers: allowed_peers.dupe(),
+      trusted_peers: allowed_peers.dupe(),
 
       relays: IndexMap::default(),
+      connections: FxHashMap::default(),
 
       swarm: p2p::SwarmBuilder::with_existing_identity(p2p_id::Keypair::from(keypair))
          .with_tokio()
@@ -195,15 +216,15 @@ async fn create(
             p2p_noise::Config::new,
             p2p_yamux::Config::default,
          )
-         .chain_err("failed to create tcp transport layer")?
+         .map_err(Error::CreateTcpTransport)?
          .with_quic()
          .with_dns()
-         .chain_err("failed to create dns resolver")?
+         .map_err(Error::CreateDnsResolver)?
          .with_websocket(p2p_noise::Config::new, p2p_yamux::Config::default)
          .await
-         .chain_err("failed to create websocket transport")?
+         .map_err(Error::CreateWebsocketTransport)?
          .with_relay_client(p2p_noise::Config::new, p2p_yamux::Config::default)
-         .chain_err("failed to create relay client transport")?
+         .map_err(Error::CreateRelayClientTransport)?
          .with_behaviour(|keypair, relay_client| {
             let peer_id = keypair.public().to_peer_id();
 
@@ -234,51 +255,57 @@ async fn create(
                ip: ip::Behaviour::new(move |peer_id| allowed_peers.borrow().contains(peer_id)),
             }
          })
-         .chain_err("failed to create swarm")?
+         .unwrap_or_else(|infallible| match infallible {})
          .build(),
    })
 }
 
 impl<P: ip::Policy> Program<P> {
-   fn add_peer(&mut self, peer: &config::Peer) {
+   fn trust_peer(&mut self, peer: &config::Peer) -> Result<(), String> {
       let peer_id = peer.id();
 
       let Some(prefix) = self.address_map.add(peer_id) else {
-         tracing::error!(%peer_id, "Peer has a prefix collision, skipping");
-         return;
+         tracing::error!(%peer_id, "Peer has a prefix collision, could not trust");
+         return Err("failed to trust peer due to prefix collision".to_owned());
       };
+
+      if !peer.allow.is_empty() {
+         self.trusted_peers.borrow_mut().insert(peer_id);
+      }
+
+      self.swarm.add_peer_address(peer_id, peer.address.clone());
+      self
+         .swarm
+         .behaviour_mut()
+         .kad
+         .add_address(&peer_id, peer.address.clone());
 
       tracing::info!(
          %peer_id,
          prefix = %net::Ipv6Addr::from(prefix),
-         "Peer added",
+         "Peer trusted",
       );
 
-      self
-         .behaviour_mut()
-         .kad
-         .add_address(&peer_id, peer.address.clone());
-      self.swarm.add_peer_address(peer_id, peer.address.clone());
-
-      if !peer.allow.is_empty() {
-         self.allowed_peers.borrow_mut().insert(peer_id);
-      }
+      Ok(())
    }
 
-   fn remove_peer(&mut self, peer_id: p2p::PeerId) {
+   fn distrust_peer(&mut self, peer_id: p2p::PeerId) {
       self.address_map.remove(&peer_id);
-      self.behaviour_mut().kad.remove_peer(&peer_id);
-      self.allowed_peers.borrow_mut().remove(&peer_id);
 
-      tracing::info!(%peer_id, "Peer removed");
+      self.trusted_peers.borrow_mut().remove(&peer_id);
+
+      let _ = self.swarm.disconnect_peer_id(peer_id);
+      self.swarm.behaviour_mut().kad.remove_peer(&peer_id);
+
+      tracing::info!(%peer_id, "Peer distrusted");
    }
 
    fn recover(&mut self) {
-      for address in self.external_addresses().cloned().collect::<Vec<_>>() {
-         self.remove_external_address(&address);
+      for address in self.swarm.external_addresses().cloned().collect::<Vec<_>>() {
+         self.swarm.remove_external_address(&address);
       }
 
-      if let Err(error) = self.behaviour_mut().kad.bootstrap() {
+      if let Err(error) = self.swarm.behaviour_mut().kad.bootstrap() {
          tracing::warn!(%error, "Failed to bootstrap kademlia");
       }
    }
@@ -388,7 +415,7 @@ impl<P: ip::Policy> Program<P> {
       let relay = self
          .relays
          .get_mut(&worst_active_peer)
-         .expect("peer was just found");
+         .expect("peer was just looked up");
       for &mut (ref mut listener_id, _) in &mut relay.addresses {
          if let Some(id) = listener_id.take() {
             self.swarm.remove_listener(id);
@@ -399,12 +426,14 @@ impl<P: ip::Policy> Program<P> {
    }
 }
 
-#[expect(clippy::cognitive_complexity, reason = "event loop")]
-pub async fn run(config: Config) -> cyn::Result<()> {
+#[bon::builder]
+#[expect(clippy::cognitive_complexity)]
+pub async fn run(
+   config: Config,
+   mut requests: mpsc::UnboundedReceiver<socket::Exchange<socket::Request, socket::Response>>,
+) -> Result<(), Error> {
    use BehaviourEvent as Be;
    use p2p_swarm::SwarmEvent as Se;
-
-   config.validate()?;
 
    let mut program = create()
       .peer_id(config.peer_id)
@@ -414,41 +443,21 @@ pub async fn run(config: Config) -> cyn::Result<()> {
       .await?;
 
    for peer in &config.peers {
-      program.add_peer(peer);
+      if let Err(error) = program.trust_peer(peer) {
+         tracing::error!(%error, "Failed to trust peer");
+      }
    }
 
    for address in &config.listen {
-      program
-         .swarm
-         .listen_on(address.clone())
-         .chain_err_with(|| format!("failed to listen on address {address}"))?;
+      program.swarm.listen_on(address.clone()).map_err(|source| {
+         Error::Listen {
+            address: address.clone(),
+            source,
+         }
+      })?;
    }
 
    program.recover();
-
-   let mut socket = match config.socket {
-      None => None,
-      Some(ref path) => {
-         let _ = tokio_fs::remove_file(path).await;
-
-         let listener = tokio_net::UnixListener::bind(path).chain_err_with(|| {
-            format!(
-               "failed to bind control socket at {path}",
-               path = path.display(),
-            )
-         })?;
-
-         let (stream, address) = listener
-            .accept()
-            .await
-            .chain_err("failed to accept control socket connection")?;
-         tracing::info!(?address, "Listening on control socket");
-
-         let (reader, writer) = stream.into_split();
-
-         Some((BufReader::new(reader).lines(), writer))
-      },
-   };
 
    loop {
       select! {
@@ -479,36 +488,7 @@ pub async fn run(config: Config) -> cyn::Result<()> {
                      }
                   },
 
-                  Se::Behaviour(Be::Ip(ip::Event::Packet(peer_id, packet))) => {
-                     tracing::trace!(%peer_id, ?packet, "Got packet");
-
-                     let Some(source) = source_of(&packet) else {
-                        tracing::warn!(?packet, "Dropping inbound packet: could not parse source");
-                        continue;
-                     };
-
-                     match program.address_map.peer_of(&address::Prefix::from(source)) {
-                        Some(expected_peer_id) if expected_peer_id == peer_id => {},
-                        expected_peer_id => {
-                           tracing::warn!(
-                              %source,
-                              source_peer_id = %peer_id,
-                              source_expected_peer_id = ?expected_peer_id,
-                              "Dropping packet with spoofed source",
-                           );
-                           continue;
-                        },
-                     }
-
-                     if let Err(error) = program.tun_interface.send(&packet).await {
-                        tracing::error!(%error, "Failed to write packet to TUN interface");
-                     }
-                  },
-
-                  Se::Behaviour(Be::Ip(ip::Event::DiscoverPeer(peer_id))) => {
-                     tracing::debug!(%peer_id, "Discovering peer via DHT");
-                     program.behaviour_mut().kad.get_closest_peers(peer_id);
-                  },
+                  // RELAYS
 
                   Se::Behaviour(Be::Identify(p2p_identify::Event::Received {
                      peer_id,
@@ -557,6 +537,57 @@ pub async fn run(config: Config) -> cyn::Result<()> {
                      }
                   },
 
+                  // CONNECTIONS
+
+                  Se::ConnectionEstablished { peer_id, connection_id, ref endpoint, .. } => {
+                     program
+                        .connections
+                        .entry(peer_id)
+                        .or_default()
+                        .push((connection_id, endpoint.get_remote_address().clone()));
+                  },
+                  Se::ConnectionClosed { peer_id, connection_id, .. } => {
+                     if let Some(connections) = program.connections.get_mut(&peer_id) {
+                        connections.retain(|&(id, _)| id != connection_id);
+                        if connections.is_empty() {
+                           program.connections.remove(&peer_id);
+                        }
+                     }
+                  },
+
+                  // IP
+
+                  Se::Behaviour(Be::Ip(ip::Event::Packet(peer_id, packet))) => {
+                     tracing::trace!(%peer_id, ?packet, "Got packet");
+
+                     let Some(source) = source_of(&packet) else {
+                        tracing::warn!(?packet, "Dropping inbound packet: could not parse source");
+                        continue;
+                     };
+
+                     match program.address_map.peer_of(&address::Prefix::from(source)) {
+                        Some(expected_peer_id) if expected_peer_id == peer_id => {},
+                        expected_peer_id => {
+                           tracing::warn!(
+                              %source,
+                              source_peer_id = %peer_id,
+                              source_expected_peer_id = ?expected_peer_id,
+                              "Dropping packet with spoofed source",
+                           );
+                           continue;
+                        },
+                     }
+
+                     if let Err(error) = program.tun_interface.send(&packet).await {
+                        tracing::error!(%error, "Failed to write packet to TUN interface");
+                     }
+                  },
+
+                  Se::Behaviour(Be::Ip(ip::Event::DiscoverPeer(peer_id))) => {
+                     tracing::debug!(%peer_id, "Discovering peer via DHT");
+                     program.swarm.behaviour_mut().kad.get_closest_peers(peer_id);
+                  },
+
                   other => tracing::debug!(?other, "Other swarm event"),
                }
             }
@@ -565,10 +596,12 @@ pub async fn run(config: Config) -> cyn::Result<()> {
          tun_result = program.tun_interface.recv(&mut program.tun_buffer) => {
             let mut tun_pending = Some(tun_result);
             while let Some(tun_result) = tun_pending.take().or_else(|| program.tun_interface.recv(&mut program.tun_buffer).now_or_never()) {
-               let Ok(packet_len) = tun_result.inspect_err(|error| {
-                  tracing::error!(%error, "Failed to read from TUN interface");
-               }) else {
-                  break;
+               let packet_len = match tun_result {
+                  Ok(packet_len) => packet_len,
+                  Err(error) => {
+                     tracing::error!(%error, "Failed to read from TUN interface");
+                     break;
+                  },
                };
 
                let packet = &program.tun_buffer[..packet_len];
@@ -596,29 +629,16 @@ pub async fn run(config: Config) -> cyn::Result<()> {
                }
 
                let packet = ip::Packet(bytes::Bytes::copy_from_slice(packet));
-               program.behaviour_mut().ip.send(&peer_id, packet);
+               program.swarm.behaviour_mut().ip.send(&peer_id, packet);
             }
          },
 
-         (Ok(Some(line)), writer) = async {
-            let &mut (ref mut lines, ref mut writer) = socket.as_mut().expect("guarded");
-            (lines.next_line().await, writer)
-         }, if socket.is_some() => {
-            let mut response =
-               serde_json::to_string(&match serde_json::from_str::<socket::Request>(&line) {
-                  Ok(request) => program.handle_request(request),
-                  Err(error) => {
-                     socket::Response::Error {
-                        error: error.to_string(),
-                     }
-                  },
-               })
-               .expect("serialization is infallible");
-            response.push('\n');
+         Some((request, response)) = requests.recv() => {
+            let request = request.await.expect("sender must not be dropped before sending");
 
-            if let Err(error) = writer.write_all(response.as_bytes()).await {
-               tracing::error!(%error, "Failed to write to control socket");
-            }
+            response
+               .send(program.handle_request(request))
+               .expect("response receiver must stay alive");
          },
       }
    }

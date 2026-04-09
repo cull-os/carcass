@@ -1,7 +1,4 @@
-use std::{
-   path,
-   str::FromStr as _,
-};
+use std::str::FromStr as _;
 
 use libp2p::{
    self as p2p,
@@ -11,6 +8,7 @@ use libp2p::{
    },
    multiaddr as p2p_multiaddr,
 };
+use toml::de as toml_de;
 
 mod keypair {
    use libp2p::identity::ed25519;
@@ -36,7 +34,7 @@ mod keypair {
       let string = String::deserialize(deserializer)?;
       let stripped = string
          .strip_prefix(PREFIX)
-         .ok_or_else(|| D::Error::custom(format!("missing {PREFIX} prefix")))?;
+         .ok_or_else(|| D::Error::custom(format!("missing '{PREFIX}' prefix")))?;
 
       let (_, mut decoded) = multibase::decode(stripped).map_err(D::Error::custom)?;
 
@@ -67,7 +65,7 @@ mod peer_id {
       let string = String::deserialize(deserializer)?;
       let stripped = string
          .strip_prefix(PREFIX)
-         .ok_or_else(|| D::Error::custom(format!("missing {PREFIX} prefix")))?;
+         .ok_or_else(|| D::Error::custom(format!("missing '{PREFIX}' prefix")))?;
 
       stripped.parse().map_err(D::Error::custom)
    }
@@ -95,7 +93,7 @@ impl Peer {
 
             Some(peer_id)
          })
-         .expect("validated")
+         .expect("peer address must contain a p2p protocol")
    }
 }
 
@@ -110,36 +108,58 @@ pub struct Config {
    pub interface: Option<String>,
    pub listen:    Vec<p2p::Multiaddr>,
 
-   pub socket: Option<path::PathBuf>,
-
    #[serde(default, rename = "peer")]
    pub peers: Vec<Peer>,
 }
 
-impl Config {
-   pub fn validate(&self) -> cyn::Result<()> {
-      if self.peer_id
-         != p2p::PeerId::from_public_key(&p2p_id::PublicKey::from(self.keypair.public()))
-      {
-         cyn::bail!("peer id does not match keypair");
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+   #[error("{0}")]
+   Parse(#[from] toml_de::Error),
+
+   #[error("peer id '{id}' does not match keypair id '{keypair_id}'")]
+   PeerIdMismatch {
+      id:         p2p::PeerId,
+      keypair_id: p2p::PeerId,
+   },
+
+   #[error("peer address '{address}' has no peer ID")]
+   MissingPeerId { address: p2p::Multiaddr },
+}
+
+impl TryFrom<&str> for Config {
+   type Error = Error;
+
+   fn try_from(string: &str) -> Result<Self, Error> {
+      let config: Self = toml::from_str(string)?;
+
+      let keypair_id =
+         p2p::PeerId::from_public_key(&p2p_id::PublicKey::from(config.keypair.public()));
+
+      if config.peer_id != keypair_id {
+         return Err(Error::PeerIdMismatch {
+            id: config.peer_id,
+            keypair_id,
+         });
       }
 
-      for peer in &self.peers {
+      for peer in &config.peers {
          if !peer
             .address
             .iter()
             .any(|protocol| matches!(protocol, p2p_multiaddr::Protocol::P2p(_)))
          {
-            cyn::bail!(
-               "peer address {address} has no peer ID",
-               address = peer.address
-            );
+            return Err(Error::MissingPeerId {
+               address: peer.address.clone(),
+            });
          }
       }
 
-      Ok(())
+      Ok(config)
    }
+}
 
+impl Config {
    #[must_use]
    pub fn generate() -> Self {
       let keypair = ed25519::Keypair::generate();
@@ -157,10 +177,8 @@ impl Config {
             "/ip6/::/udp/0/quic-v1",
          ]
          .iter()
-         .map(|addr| p2p::Multiaddr::from_str(addr).expect("literals are valid"))
+         .map(|addr| p2p::Multiaddr::from_str(addr).expect("literals must be valid"))
          .collect(),
-
-         socket: None,
 
          #[rustfmt::skip]
          peers: [
@@ -188,7 +206,7 @@ impl Config {
          .iter()
          .map(|address| {
             Peer {
-               address: p2p::Multiaddr::from_str(address).expect("literals are valid"),
+               address: p2p::Multiaddr::from_str(address).expect("literals must be valid"),
                allow:   Vec::new(),
             }
          })

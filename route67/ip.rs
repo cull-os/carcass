@@ -88,7 +88,7 @@ impl Decoder for PacketCodec {
       };
 
       let len =
-         u16::from_le_bytes(<[u8; 2]>::try_from(len_bytes).expect("length checked")) as usize;
+         u16::from_le_bytes(<[u8; 2]>::try_from(len_bytes).expect("length was checked")) as usize;
 
       if src.len() < 2 + len {
          return Ok(None);
@@ -190,11 +190,11 @@ impl p2p_swarm::ConnectionHandler for Handler {
 
       if let Err(packet) = handler.outbound_packets.try_push(packet) {
          tracing::warn!(peer_id = %handler.peer_id, "Packet buffer full, dropping oldest packet");
-         handler.outbound_packets.try_pop().expect("buffer is full");
+         handler.outbound_packets.try_pop().expect("full buffer must have items");
          handler
             .outbound_packets
             .try_push(packet)
-            .expect("just popped");
+            .expect("buffer must have space after pop");
       }
    }
 
@@ -390,7 +390,8 @@ pub struct Behaviour<P: Policy> {
 
    inbound_policy: P,
 
-   connected: rustc_hash::FxHashSet<p2p::PeerId>,
+   connections: rustc_hash::FxHashMap<p2p::PeerId, Option<p2p_swarm::ConnectionId>>,
+
    pending: rustc_hash::FxHashMap<
       p2p::PeerId,
       ringbuf::LocalRb<ringbuf_storage::Array<Packet, PACKET_BUFFER_SIZE>>,
@@ -404,13 +405,21 @@ impl<P: Policy> Behaviour<P> {
 
          inbound_policy,
 
-         connected: rustc_hash::FxHashSet::default(),
+         connections: rustc_hash::FxHashMap::default(),
+
          pending: rustc_hash::FxHashMap::default(),
       }
    }
 
+   pub fn last_active_connection_id(
+      &self,
+      peer_id: &p2p::PeerId,
+   ) -> Option<p2p_swarm::ConnectionId> {
+      self.connections.get(peer_id).copied().flatten()
+   }
+
    pub fn send(&mut self, peer_id: &p2p::PeerId, packet: Packet) {
-      let true = self.connected.contains(peer_id) else {
+      let true = self.connections.contains_key(peer_id) else {
          self.queued_events.push_back(p2p_swarm::ToSwarm::Dial {
             opts: p2p_swarm_dial_opts::DialOpts::peer_id(*peer_id).build(),
          });
@@ -418,8 +427,8 @@ impl<P: Policy> Behaviour<P> {
          let buffer = self.pending.entry(*peer_id).or_default();
          if let Err(packet) = buffer.try_push(packet) {
             tracing::warn!(%peer_id, "Packet buffer full, dropping oldest packet");
-            buffer.try_pop().expect("buffer is full");
-            buffer.try_push(packet).expect("just popped");
+            buffer.try_pop().expect("full buffer must have items");
+            buffer.try_push(packet).expect("buffer must have space after pop");
          }
 
          return;
@@ -451,7 +460,7 @@ impl<P: Policy> p2p_swarm::NetworkBehaviour for Behaviour<P> {
          return Ok(Handler::Disabled);
       }
 
-      self.connected.insert(peer_id);
+      self.connections.entry(peer_id).or_insert(None);
       Ok(Handler::new(peer_id))
    }
 
@@ -463,7 +472,7 @@ impl<P: Policy> p2p_swarm::NetworkBehaviour for Behaviour<P> {
       _role_override: p2p_core::Endpoint,
       _port_use: p2p_core_transport::PortUse,
    ) -> Result<Self::ConnectionHandler, p2p_swarm::ConnectionDenied> {
-      self.connected.insert(peer_id);
+      self.connections.entry(peer_id).or_insert(None);
       Ok(Handler::new(peer_id))
    }
 
@@ -474,7 +483,7 @@ impl<P: Policy> p2p_swarm::NetworkBehaviour for Behaviour<P> {
             remaining_established: 0,
             ..
          }) => {
-            self.connected.remove(&peer_id);
+            self.connections.remove(&peer_id);
          },
          p2p_swarm::FromSwarm::DialFailure(p2p_swarm::DialFailure {
             peer_id: Some(peer_id),
@@ -494,12 +503,15 @@ impl<P: Policy> p2p_swarm::NetworkBehaviour for Behaviour<P> {
    fn on_connection_handler_event(
       &mut self,
       peer_id: p2p::PeerId,
-      _connection_id: p2p_swarm::ConnectionId,
+      connection_id: p2p_swarm::ConnectionId,
       packet: p2p_swarm::THandlerOutEvent<Self>,
    ) {
+      self.connections.insert(peer_id, Some(connection_id));
       self
          .queued_events
-         .push_back(p2p_swarm::ToSwarm::GenerateEvent(Event::Packet(peer_id, packet)));
+         .push_back(p2p_swarm::ToSwarm::GenerateEvent(Event::Packet(
+            peer_id, packet,
+         )));
    }
 
    fn poll(
@@ -507,7 +519,7 @@ impl<P: Policy> p2p_swarm::NetworkBehaviour for Behaviour<P> {
       _context: &mut task::Context<'_>,
    ) -> task::Poll<p2p_swarm::ToSwarm<Self::ToSwarm, p2p_swarm::THandlerInEvent<Self>>> {
       self.pending.retain(|&peer_id, buffer| {
-         if !self.connected.contains(&peer_id) {
+         if !self.connections.contains_key(&peer_id) {
             return true;
          }
 
