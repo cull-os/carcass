@@ -389,12 +389,12 @@ impl<P: ip::Policy> Program<P> {
          return;
       };
 
-      let Some(best_inactive_ping) = self
+      let Some((best_inactive_peer, best_inactive_ping)) = self
          .relays
          .iter()
          .filter(|&(_, relay)| !relay.is_active())
          .min_by_key(|&(_, relay)| relay.ping)
-         .map(|(_, relay)| relay.ping)
+         .map(|(peer_id, relay)| (peer_id, relay.ping))
       else {
          return;
       };
@@ -408,6 +408,7 @@ impl<P: ip::Policy> Program<P> {
       tracing::info!(
          %worst_active_peer,
          ?worst_active_ping,
+         %best_inactive_peer,
          ?best_inactive_ping,
          "Evicting slow relay for faster candidate",
       );
