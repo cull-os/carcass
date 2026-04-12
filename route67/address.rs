@@ -60,11 +60,12 @@ impl Map {
       let hash = sha2::Sha256::digest(peer_id.to_bytes());
       prefix[HOST_PREFIX_RANGE].copy_from_slice(&hash[..HOST_PREFIX_RANGE.len()]);
 
-      let hash_map::Entry::Vacant(entry) = self.prefix_to_peer.entry(prefix) else {
-         return None;
+      match self.prefix_to_peer.entry(prefix) {
+         hash_map::Entry::Occupied(entry) if *entry.get() == peer_id => return Some(prefix),
+         hash_map::Entry::Occupied(_) => return None,
+         hash_map::Entry::Vacant(entry) => entry.insert(peer_id),
       };
 
-      entry.insert(peer_id);
       self.peer_to_prefix.insert(peer_id, prefix);
 
       Some(prefix)
