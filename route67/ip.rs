@@ -190,7 +190,10 @@ impl p2p_swarm::ConnectionHandler for Handler {
 
       if let Err(packet) = handler.outbound_packets.try_push(packet) {
          tracing::warn!(peer_id = %handler.peer_id, "Packet buffer full, dropping oldest packet");
-         handler.outbound_packets.try_pop().expect("full buffer must have items");
+         handler
+            .outbound_packets
+            .try_pop()
+            .expect("full buffer must have items");
          handler
             .outbound_packets
             .try_push(packet)
@@ -428,7 +431,9 @@ impl<P: Policy> Behaviour<P> {
          if let Err(packet) = buffer.try_push(packet) {
             tracing::warn!(%peer_id, "Packet buffer full, dropping oldest packet");
             buffer.try_pop().expect("full buffer must have items");
-            buffer.try_push(packet).expect("buffer must have space after pop");
+            buffer
+               .try_push(packet)
+               .expect("buffer must have space after pop");
          }
 
          return;
