@@ -261,9 +261,7 @@ async fn create(
 }
 
 impl<P: ip::Policy> Program<P> {
-   fn map_peer(&mut self, peer: &config::Peer) -> Result<(), String> {
-      let peer_id = peer.id();
-
+   fn map_peer(&mut self, peer_id: p2p::PeerId, peer: &config::Peer) -> Result<(), String> {
       let Some(prefix) = self.address_map.map(peer_id) else {
          tracing::error!(%peer_id, "Peer has a prefix collision, could not map");
          return Err("failed to map peer due to prefix collision".to_owned());
@@ -273,12 +271,14 @@ impl<P: ip::Policy> Program<P> {
          self.mapped_peers.borrow_mut().insert(peer_id);
       }
 
-      self.swarm.add_peer_address(peer_id, peer.address.clone());
-      self
-         .swarm
-         .behaviour_mut()
-         .kad
-         .add_address(&peer_id, peer.address.clone());
+      for address in &peer.addresses {
+         self.swarm.add_peer_address(peer_id, address.clone());
+         self
+            .swarm
+            .behaviour_mut()
+            .kad
+            .add_address(&peer_id, address.clone());
+      }
 
       tracing::info!(
          %peer_id,
@@ -366,7 +366,6 @@ impl<P: ip::Policy> Program<P> {
                .with(p2p_multiaddr::Protocol::P2pCircuit);
 
             if let Ok(listener_id) = self.swarm.listen_on(address.clone()) {
-               tracing::info!(%address, %listener_id, "Listening via relay");
                addresses_listened += 1;
                listener_id_opt.replace(listener_id);
             }
@@ -443,8 +442,8 @@ pub async fn run(
       .call()
       .await?;
 
-   for peer in &config.peers {
-      let _ = program.map_peer(peer);
+   for (&peer_id, peer) in &config.peers {
+      let _ = program.map_peer(peer_id, peer);
    }
 
    for address in &config.listen {
@@ -483,7 +482,7 @@ pub async fn run(
                      if address.iter().any(|part| matches!(part, p2p_multiaddr::Protocol::P2pCircuit)) {
                         tracing::debug!(%address, "Listening on relay address");
                      } else {
-                        tracing::info!(%address, "Listening on address");
+                        tracing::debug!(%address, "Listening on address");
                      }
                   },
 

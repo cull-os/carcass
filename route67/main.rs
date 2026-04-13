@@ -141,7 +141,10 @@ enum Command {
 
    /// Map a peer.
    Map {
-      address: libp2p::Multiaddr,
+      peer_id: libp2p::PeerId,
+
+      #[arg(long = "address")]
+      addresses: Vec<libp2p::Multiaddr>,
 
       #[arg(long)]
       allow: Vec<String>,
@@ -304,8 +307,17 @@ async fn real_main() -> Result<(), Error> {
             response => return Err(Error::UnexpectedResponse { response }),
          }
       },
-      Command::Map { address, allow } => {
-         let response = send_request(socket::Request::MapPeer { address, allow }).await?;
+      Command::Map {
+         peer_id,
+         addresses,
+         allow,
+      } => {
+         let response = send_request(socket::Request::MapPeer {
+            peer_id,
+            addresses,
+            allow,
+         })
+         .await?;
 
          match response {
             socket::Response::Ok { ok } => println!("{ok}"),

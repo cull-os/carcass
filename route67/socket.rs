@@ -208,10 +208,11 @@ pub async fn connect<
 #[serde(rename_all = "snake_case", tag = "command")]
 pub enum Request {
    MapPeer {
-      address: p2p::Multiaddr,
-
+      peer_id:   p2p::PeerId,
       #[serde(default)]
-      allow: Vec<String>,
+      addresses: Vec<p2p::Multiaddr>,
+      #[serde(default)]
+      allow:     Vec<String>,
    },
    UnmapPeer {
       peer_id: p2p::PeerId,
@@ -241,14 +242,15 @@ pub enum Response {
 impl<P: ip::Policy> Program<P> {
    pub fn handle_request(&mut self, request: Request) -> Response {
       match request {
-         Request::MapPeer { address, allow } => {
-            match self.map_peer(&config::Peer {
-               address: address.clone(),
-               allow,
-            }) {
+         Request::MapPeer {
+            peer_id,
+            addresses,
+            allow,
+         } => {
+            match self.map_peer(peer_id, &config::Peer { addresses, allow }) {
                Ok(()) => {
                   Response::Ok {
-                     ok: format!("mapped peer '{address}'"),
+                     ok: format!("mapped peer '{peer_id}'"),
                   }
                },
                Err(error) => Response::Error { error },

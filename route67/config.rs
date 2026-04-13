@@ -1,12 +1,12 @@
 use std::str::FromStr as _;
 
+use indexmap::IndexMap;
 use libp2p::{
    self as p2p,
    identity::{
       self as p2p_id,
       ed25519,
    },
-   multiaddr as p2p_multiaddr,
 };
 use toml::de as toml_de;
 
@@ -74,27 +74,11 @@ mod peer_id {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct Peer {
-   pub address: p2p::Multiaddr,
+   #[serde(default, skip_serializing_if = "Vec::is_empty")]
+   pub addresses: Vec<p2p::Multiaddr>,
 
    #[serde(default, skip_serializing_if = "Vec::is_empty")]
    pub allow: Vec<String>,
-}
-
-impl Peer {
-   #[must_use]
-   pub fn id(&self) -> p2p::PeerId {
-      self
-         .address
-         .iter()
-         .find_map(|protocol| {
-            let p2p_multiaddr::Protocol::P2p(peer_id) = protocol else {
-               return None;
-            };
-
-            Some(peer_id)
-         })
-         .expect("peer address must contain a p2p protocol")
-   }
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -109,7 +93,7 @@ pub struct Config {
    pub listen:    Vec<p2p::Multiaddr>,
 
    #[serde(default, rename = "peer")]
-   pub peers: Vec<Peer>,
+   pub peers: IndexMap<p2p::PeerId, Peer>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -122,9 +106,6 @@ pub enum Error {
       id:         p2p::PeerId,
       keypair_id: p2p::PeerId,
    },
-
-   #[error("peer address '{address}' has no peer ID")]
-   MissingPeerId { address: p2p::Multiaddr },
 }
 
 impl TryFrom<&str> for Config {
@@ -143,18 +124,6 @@ impl TryFrom<&str> for Config {
          });
       }
 
-      for peer in &config.peers {
-         if !peer
-            .address
-            .iter()
-            .any(|protocol| matches!(protocol, p2p_multiaddr::Protocol::P2p(_)))
-         {
-            return Err(Error::MissingPeerId {
-               address: peer.address.clone(),
-            });
-         }
-      }
-
       Ok(config)
    }
 }
@@ -162,6 +131,54 @@ impl TryFrom<&str> for Config {
 impl Config {
    #[must_use]
    pub fn generate() -> Self {
+      #[rustfmt::skip]
+      const PEERS: &[(&str, &[&str])] = &[
+         ("12D3KooWQWsHPUUeFhe4b6pyCaD1hBoj8j6Z7S7kTznRTh1p1eVt", &[
+            "/ip4/152.67.75.145/tcp/110",
+            "/ip4/152.67.75.145/udp/110/quic-v1",
+         ]),
+         ("QmbrAHuh4RYcyN9fWePCZMVmQjbaNXtyvrDCWz4VrchbXh", &[
+            "/ip4/152.67.75.145/tcp/995",
+            "/ip4/152.67.75.145/udp/995/quic-v1",
+         ]),
+         ("Qmd7QHZU8UjfYdwmjmq1SBh9pvER9AwHpfwQvnvNo3HBBo", &[
+            "/ip4/95.216.8.12/tcp/110",
+            "/ip4/95.216.8.12/udp/110/quic-v1",
+         ]),
+         ("QmYs4xNBby2fTs8RnzfXEk161KD4mftBfCiR8yXtgGPj4J", &[
+            "/ip4/95.216.8.12/tcp/995",
+            "/ip4/95.216.8.12/udp/995/quic-v1",
+         ]),
+         ("12D3KooWL84sAtq1QTYwb7gVbhSNX5ZUfVt4kgYKz8pdif1zpGUh", &[
+            "/ip4/152.67.73.164/tcp/995",
+            "/ip4/152.67.73.164/udp/995/quic-v1",
+         ]),
+         ("12D3KooWN31twBvdEcxz2jTv4tBfPe3mkNueBwDJFCN4xn7ZwFbi", &[
+            "/ip4/37.27.11.202/udp/21/quic-v1",
+            "/ip4/37.27.11.202/udp/443/quic-v1",
+            "/ip4/37.27.11.202/udp/500/quic-v1",
+            "/ip4/37.27.11.202/udp/995/quic-v1",
+         ]),
+         ("12D3KooWEZXjE41uU4EL2gpkAQeDXYok6wghN7wwNVPF5bwkaNfS", &[
+            "/dnsaddr/bootstrap.libp2p.io",
+         ]),
+         ("QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN", &[
+            "/dnsaddr/bootstrap.libp2p.io",
+         ]),
+         ("QmQCU2EcMqAqQPR2i9bChDtGNJchTbq5TbXJJ16u19uLTa", &[
+            "/dnsaddr/bootstrap.libp2p.io",
+         ]),
+         ("QmZa1sAxajnQjVM8WjWXoMbmPd7NsWhfKsPkErzpm9wGkp", &[
+            "/dnsaddr/bootstrap.libp2p.io",
+         ]),
+         ("QmbLHAnMoJPWSCR5Zhtx6BHJX9KiKNN6tpvbUcqanj75Nb", &[
+            "/dnsaddr/bootstrap.libp2p.io",
+         ]),
+         ("QmcZf59bWwK5XFi76CZX8cbJ4BhTzzA3gU1ZjYZcYW3dwt", &[
+            "/dnsaddr/bootstrap.libp2p.io",
+         ]),
+      ];
+
       let keypair = ed25519::Keypair::generate();
       let peer_id = p2p::PeerId::from_public_key(&p2p_id::PublicKey::from(keypair.public()));
 
@@ -177,40 +194,23 @@ impl Config {
             "/ip6/::/udp/0/quic-v1",
          ]
          .iter()
-         .map(|addr| p2p::Multiaddr::from_str(addr).expect("literals must be valid"))
+         .map(|address| p2p::Multiaddr::from_str(address).expect("literals must be valid"))
          .collect(),
 
-         #[rustfmt::skip]
-         peers: [
-            "/ip4/152.67.75.145/tcp/110/p2p/12D3KooWQWsHPUUeFhe4b6pyCaD1hBoj8j6Z7S7kTznRTh1p1eVt",
-            "/ip4/152.67.75.145/udp/110/quic-v1/p2p/12D3KooWQWsHPUUeFhe4b6pyCaD1hBoj8j6Z7S7kTznRTh1p1eVt",
-            "/ip4/152.67.75.145/tcp/995/p2p/QmbrAHuh4RYcyN9fWePCZMVmQjbaNXtyvrDCWz4VrchbXh",
-            "/ip4/152.67.75.145/udp/995/quic-v1/p2p/QmbrAHuh4RYcyN9fWePCZMVmQjbaNXtyvrDCWz4VrchbXh",
-            "/ip4/95.216.8.12/tcp/110/p2p/Qmd7QHZU8UjfYdwmjmq1SBh9pvER9AwHpfwQvnvNo3HBBo",
-            "/ip4/95.216.8.12/udp/110/quic-v1/p2p/Qmd7QHZU8UjfYdwmjmq1SBh9pvER9AwHpfwQvnvNo3HBBo",
-            "/ip4/95.216.8.12/tcp/995/p2p/QmYs4xNBby2fTs8RnzfXEk161KD4mftBfCiR8yXtgGPj4J",
-            "/ip4/95.216.8.12/udp/995/quic-v1/p2p/QmYs4xNBby2fTs8RnzfXEk161KD4mftBfCiR8yXtgGPj4J",
-            "/ip4/152.67.73.164/tcp/995/p2p/12D3KooWL84sAtq1QTYwb7gVbhSNX5ZUfVt4kgYKz8pdif1zpGUh",
-            "/ip4/152.67.73.164/udp/995/quic-v1/p2p/12D3KooWL84sAtq1QTYwb7gVbhSNX5ZUfVt4kgYKz8pdif1zpGUh",
-            "/ip4/37.27.11.202/udp/21/quic-v1/p2p/12D3KooWN31twBvdEcxz2jTv4tBfPe3mkNueBwDJFCN4xn7ZwFbi",
-            "/ip4/37.27.11.202/udp/443/quic-v1/p2p/12D3KooWN31twBvdEcxz2jTv4tBfPe3mkNueBwDJFCN4xn7ZwFbi",
-            "/ip4/37.27.11.202/udp/500/quic-v1/p2p/12D3KooWN31twBvdEcxz2jTv4tBfPe3mkNueBwDJFCN4xn7ZwFbi",
-            "/ip4/37.27.11.202/udp/995/quic-v1/p2p/12D3KooWN31twBvdEcxz2jTv4tBfPe3mkNueBwDJFCN4xn7ZwFbi",
-            "/dnsaddr/bootstrap.libp2p.io/p2p/12D3KooWEZXjE41uU4EL2gpkAQeDXYok6wghN7wwNVPF5bwkaNfS",
-            "/dnsaddr/bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN",
-            "/dnsaddr/bootstrap.libp2p.io/p2p/QmQCU2EcMqAqQPR2i9bChDtGNJchTbq5TbXJJ16u19uLTa",
-            "/dnsaddr/bootstrap.libp2p.io/p2p/QmZa1sAxajnQjVM8WjWXoMbmPd7NsWhfKsPkErzpm9wGkp",
-            "/dnsaddr/bootstrap.libp2p.io/p2p/QmbLHAnMoJPWSCR5Zhtx6BHJX9KiKNN6tpvbUcqanj75Nb",
-            "/dnsaddr/bootstrap.libp2p.io/p2p/QmcZf59bWwK5XFi76CZX8cbJ4BhTzzA3gU1ZjYZcYW3dwt",
-         ]
-         .iter()
-         .map(|address| {
-            Peer {
-               address: p2p::Multiaddr::from_str(address).expect("literals must be valid"),
-               allow:   Vec::new(),
-            }
-         })
-         .collect(),
+         peers: PEERS
+            .iter()
+            .map(|&(peer_id, addresses)| {
+               (peer_id.parse().expect("literals must be valid"), Peer {
+                  addresses: addresses
+                     .iter()
+                     .map(|address| {
+                        p2p::Multiaddr::from_str(address).expect("literals must be valid")
+                     })
+                     .collect(),
+                  allow:     Vec::new(),
+               })
+            })
+            .collect(),
       }
    }
 }
