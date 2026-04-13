@@ -1,4 +1,5 @@
 use std::{
+   error,
    fs,
    marker,
    path,
@@ -38,7 +39,24 @@ pub enum Type {
 
 pub type Exchange<In, Out> = (oneshot::Receiver<In>, oneshot::Sender<Out>);
 
-#[expect(clippy::cognitive_complexity)]
+#[derive(Debug, thiserror::Error)]
+enum StreamError {
+   #[error("failed to read from socket")]
+   Read(#[source] codec::LinesCodecError),
+
+   #[error("failed to deserialize socket message")]
+   Deserialize(#[source] serde_json::Error),
+
+   #[error("failed to write to socket")]
+   Write(#[source] codec::LinesCodecError),
+
+   #[error("failed to send exchange to handler")]
+   SendExchange(#[source] Box<dyn error::Error + Send + Sync>),
+
+   #[error("handler did not send response")]
+   ReceiveResponse(#[source] oneshot::error::RecvError),
+}
+
 async fn handle_stream<
    const TYPE: Type,
    In: serde_de::DeserializeOwned + Send + 'static,
@@ -46,33 +64,27 @@ async fn handle_stream<
 >(
    stream: net::UnixStream,
    sender: mpsc::UnboundedSender<Exchange<In, Out>>,
-) {
+) -> Result<(), StreamError> {
    async fn read_message<T: serde_de::DeserializeOwned>(
       stream: &mut Framed<net::UnixStream, LinesCodec>,
-   ) -> Option<T> {
-      let line = match stream.next().await? {
-         Ok(line) => line,
-         Err(error) => {
-            tracing::error!(%error, "Failed to read from socket");
-            return None;
-         },
+   ) -> Result<Option<T>, StreamError> {
+      let Some(line) = stream.next().await else {
+         return Ok(None);
       };
 
-      match serde_json::from_str(&line) {
-         Ok(value) => Some(value),
-         Err(error) => {
-            tracing::error!(%error, "Failed to deserialize socket message");
-            None
-         },
-      }
+      serde_json::from_str(&line.map_err(StreamError::Read)?)
+         .map(Some)
+         .map_err(StreamError::Deserialize)
    }
 
    async fn write_message<T: serde::Serialize>(
       stream: &mut Framed<net::UnixStream, LinesCodec>,
       value: &T,
-   ) -> Result<(), codec::LinesCodecError> {
-      let line = serde_json::to_string(value).expect("serialization must not fail");
-      stream.send(line).await
+   ) -> Result<(), StreamError> {
+      stream
+         .send(serde_json::to_string(value).expect("serialization must not fail"))
+         .await
+         .map_err(StreamError::Write)
    }
 
    let mut stream = Framed::new(stream, LinesCodec::new());
@@ -83,57 +95,43 @@ async fn handle_stream<
 
       match TYPE {
          Type::Client => {
-            if let Err(error) = sender.send((in_receiver, out_sender)) {
-               tracing::error!(?error, "Exchange receiver dropped");
-               break;
-            }
+            sender
+               .send((in_receiver, out_sender))
+               .map_err(|error| StreamError::SendExchange(Box::new(error)))?;
 
-            let out_value = match out_receiver.await {
-               Ok(out_value) => out_value,
-               Err(error) => {
-                  tracing::error!(%error, "Out sender dropped without sending");
-                  break;
-               },
-            };
-            if let Err(error) = write_message(&mut stream, &out_value).await {
-               tracing::error!(%error, "Failed to write to socket");
-               break;
-            }
+            write_message(
+               &mut stream,
+               &out_receiver.await.map_err(StreamError::ReceiveResponse)?,
+            )
+            .await?;
 
-            let Some(in_value) = read_message(&mut stream).await else {
-               break;
+            let Some(in_value) = read_message(&mut stream).await? else {
+               return Ok(());
             };
             let _ = in_sender.send(in_value);
          },
          Type::Server => {
-            let Some(in_value) = read_message(&mut stream).await else {
-               break;
+            let Some(in_value) = read_message(&mut stream).await? else {
+               return Ok(());
             };
             let _ = in_sender.send(in_value);
 
-            if let Err(error) = sender.send((in_receiver, out_sender)) {
-               tracing::error!(?error, "Exchange receiver dropped");
-               break;
-            }
+            sender
+               .send((in_receiver, out_sender))
+               .map_err(|error| StreamError::SendExchange(Box::new(error)))?;
 
-            let out_value = match out_receiver.await {
-               Ok(out_value) => out_value,
-               Err(error) => {
-                  tracing::error!(%error, "Out sender dropped without sending");
-                  break;
-               },
-            };
-            if let Err(error) = write_message(&mut stream, &out_value).await {
-               tracing::error!(%error, "Failed to write to socket");
-               break;
-            }
+            write_message(
+               &mut stream,
+               &out_receiver.await.map_err(StreamError::ReceiveResponse)?,
+            )
+            .await?;
          },
       }
    }
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum Error {
+pub enum ConnectError {
    #[error("failed to connect to socket '{path}'", path = .path.display())]
    Connect {
       path:   path::PathBuf,
@@ -155,23 +153,28 @@ pub async fn connect<
    Out: serde::Serialize + Send + Sync + 'static,
 >(
    path: &path::Path,
-) -> Result<mpsc::UnboundedReceiver<Exchange<In, Out>>, Error> {
+) -> Result<mpsc::UnboundedReceiver<Exchange<In, Out>>, ConnectError> {
    let (sender, receiver) = mpsc::unbounded_channel();
 
    match TYPE {
       Type::Client => {
-         let stream = net::UnixStream::connect(path)
-            .await
-            .map_err(|source| Error::Connect { path: path.to_owned(), source })?;
-
-         tracing::info!(address = ?stream.local_addr().expect("unix socket with path must have local address"), "Control socket listened");
+         let stream = net::UnixStream::connect(path).await.map_err(|source| {
+            ConnectError::Connect {
+               path: path.to_owned(),
+               source,
+            }
+         })?;
 
          tokio::spawn(handle_stream::<TYPE, In, Out>(stream, sender));
       },
       Type::Server => {
          let _ = fs::remove_file(path);
-         let listener =
-            net::UnixListener::bind(path).map_err(|source| Error::Bind { path: path.to_owned(), source })?;
+         let listener = net::UnixListener::bind(path).map_err(|source| {
+            ConnectError::Bind {
+               path: path.to_owned(),
+               source,
+            }
+         })?;
 
          tracing::info!(address = ?listener.local_addr().expect("unix socket with path must have local address"), "Control socket bound");
 
@@ -185,7 +188,14 @@ pub async fn connect<
                   },
                };
 
-               tokio::spawn(handle_stream::<TYPE, In, Out>(stream, sender.clone()));
+               tokio::spawn({
+                  let sender = sender.clone();
+                  async move {
+                     if let Err(error) = handle_stream::<TYPE, In, Out>(stream, sender).await {
+                        tracing::warn!(%error, "Control socket client disconnected with error");
+                     }
+                  }
+               });
             }
          });
       },

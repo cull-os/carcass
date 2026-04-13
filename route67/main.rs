@@ -71,13 +71,19 @@ enum Error {
    },
 
    #[error("failed to bind control socket")]
-   BindControlSocket(#[from] socket::Error),
+   BindControlSocket(#[from] socket::ConnectError),
 
    #[error("daemon connection closed")]
    DaemonConnectionClosed,
 
    #[error("daemon did not respond")]
    DaemonDidNotRespond,
+
+   #[error("daemon returned error: '{error}'")]
+   Daemon { error: String },
+
+   #[error("unexpected response from daemon: '{response:?}'")]
+   UnexpectedResponse { response: socket::Response },
 
    #[error(transparent)]
    Route67(#[from] Box<route67::Error>),
@@ -281,6 +287,7 @@ async fn real_main() -> Result<(), Error> {
                connection_last_active,
                ..
             } => {
+               // TODO
                if connections.is_empty() {
                   println!("no connections");
                } else {
@@ -293,10 +300,8 @@ async fn real_main() -> Result<(), Error> {
                   }
                }
             },
-            socket::Response::Error { error } => {
-               tracing::error!(%error, "Command failed");
-            },
-            response => tracing::error!(?response, "Unexpected response from daemon"),
+            socket::Response::Error { error } => return Err(Error::Daemon { error }),
+            response => return Err(Error::UnexpectedResponse { response }),
          }
       },
       Command::Trust { address, allow } => {
@@ -304,10 +309,8 @@ async fn real_main() -> Result<(), Error> {
 
          match response {
             socket::Response::Ok { ok } => println!("{ok}"),
-            socket::Response::Error { error } => {
-               tracing::error!(%error, "Command failed");
-            },
-            response => tracing::error!(?response, "Unexpected response from daemon"),
+            socket::Response::Error { error } => return Err(Error::Daemon { error }),
+            response => return Err(Error::UnexpectedResponse { response }),
          }
       },
       Command::Distrust { peer_id } => {
@@ -315,10 +318,8 @@ async fn real_main() -> Result<(), Error> {
 
          match response {
             socket::Response::Ok { ok } => println!("{ok}"),
-            socket::Response::Error { error } => {
-               tracing::error!(%error, "Command failed");
-            },
-            response => tracing::error!(?response, "Unexpected response from daemon"),
+            socket::Response::Error { error } => return Err(Error::Daemon { error }),
+            response => return Err(Error::UnexpectedResponse { response }),
          }
       },
    }
