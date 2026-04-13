@@ -125,8 +125,8 @@ struct Program<P: ip::Policy> {
    network_state:   netmon::State,
    network_monitor: n0_watcher::Direct<netmon::State>,
 
-   address_map:   address::Map,
-   trusted_peers: Rc<RefCell<rustc_hash::FxHashSet<p2p::PeerId>>>,
+   address_map:  address::Map,
+   mapped_peers: Rc<RefCell<rustc_hash::FxHashSet<p2p::PeerId>>>,
 
    relays:      IndexMap<p2p::PeerId, Relay, rustc_hash::FxBuildHasher>,
    connections: FxHashMap<p2p::PeerId, Vec<(p2p_swarm::ConnectionId, p2p::Multiaddr)>>,
@@ -180,7 +180,7 @@ async fn create(
             .prefix_of(&peer_id)
             .expect("self must be in map")
       ),
-      "Local peer added",
+      "Local peer mapped",
    );
 
    let allowed_peers = Rc::new(RefCell::new(rustc_hash::FxHashSet::default()));
@@ -204,7 +204,7 @@ async fn create(
       network_monitor,
 
       address_map,
-      trusted_peers: allowed_peers.dupe(),
+      mapped_peers: allowed_peers.dupe(),
 
       relays: IndexMap::default(),
       connections: FxHashMap::default(),
@@ -261,16 +261,16 @@ async fn create(
 }
 
 impl<P: ip::Policy> Program<P> {
-   fn trust_peer(&mut self, peer: &config::Peer) -> Result<(), String> {
+   fn map_peer(&mut self, peer: &config::Peer) -> Result<(), String> {
       let peer_id = peer.id();
 
-      let Some(prefix) = self.address_map.add(peer_id) else {
-         tracing::error!(%peer_id, "Peer has a prefix collision, could not trust");
-         return Err("failed to trust peer due to prefix collision".to_owned());
+      let Some(prefix) = self.address_map.map(peer_id) else {
+         tracing::error!(%peer_id, "Peer has a prefix collision, could not map");
+         return Err("failed to map peer due to prefix collision".to_owned());
       };
 
       if !peer.allow.is_empty() {
-         self.trusted_peers.borrow_mut().insert(peer_id);
+         self.mapped_peers.borrow_mut().insert(peer_id);
       }
 
       self.swarm.add_peer_address(peer_id, peer.address.clone());
@@ -283,21 +283,21 @@ impl<P: ip::Policy> Program<P> {
       tracing::info!(
          %peer_id,
          prefix = %net::Ipv6Addr::from(prefix),
-         "Peer trusted",
+         "Peer mapped",
       );
 
       Ok(())
    }
 
-   fn distrust_peer(&mut self, peer_id: p2p::PeerId) {
-      self.address_map.remove(&peer_id);
+   fn unmap_peer(&mut self, peer_id: p2p::PeerId) {
+      self.address_map.unmap(&peer_id);
 
-      self.trusted_peers.borrow_mut().remove(&peer_id);
+      self.mapped_peers.borrow_mut().remove(&peer_id);
 
       let _ = self.swarm.disconnect_peer_id(peer_id);
       self.swarm.behaviour_mut().kad.remove_peer(&peer_id);
 
-      tracing::info!(%peer_id, "Peer distrusted");
+      tracing::info!(%peer_id, "Peer unmapped");
    }
 
    fn recover(&mut self) {
@@ -444,9 +444,7 @@ pub async fn run(
       .await?;
 
    for peer in &config.peers {
-      if let Err(error) = program.trust_peer(peer) {
-         tracing::error!(%error, "Failed to trust peer");
-      }
+      let _ = program.map_peer(peer);
    }
 
    for address in &config.listen {

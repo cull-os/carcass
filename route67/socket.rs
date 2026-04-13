@@ -207,13 +207,13 @@ pub async fn connect<
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case", tag = "command")]
 pub enum Request {
-   TrustPeer {
+   MapPeer {
       address: p2p::Multiaddr,
 
       #[serde(default)]
       allow: Vec<String>,
    },
-   DistrustPeer {
+   UnmapPeer {
       peer_id: p2p::PeerId,
    },
    PeerStatus {
@@ -241,23 +241,23 @@ pub enum Response {
 impl<P: ip::Policy> Program<P> {
    pub fn handle_request(&mut self, request: Request) -> Response {
       match request {
-         Request::TrustPeer { address, allow } => {
-            match self.trust_peer(&config::Peer {
+         Request::MapPeer { address, allow } => {
+            match self.map_peer(&config::Peer {
                address: address.clone(),
                allow,
             }) {
                Ok(()) => {
                   Response::Ok {
-                     ok: format!("trusted peer '{address}'"),
+                     ok: format!("mapped peer '{address}'"),
                   }
                },
                Err(error) => Response::Error { error },
             }
          },
-         Request::DistrustPeer { peer_id } => {
-            let ok = format!("distrusted peer '{peer_id}'");
+         Request::UnmapPeer { peer_id } => {
+            let ok = format!("unmapped peer '{peer_id}'");
 
-            self.distrust_peer(peer_id);
+            self.unmap_peer(peer_id);
 
             Response::Ok { ok }
          },

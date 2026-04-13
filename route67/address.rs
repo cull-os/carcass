@@ -49,11 +49,11 @@ impl Map {
          prefix_to_peer: FxHashMap::default(),
       };
 
-      map.add(self_id);
+      map.map(self_id);
       map
    }
 
-   pub fn add(&mut self, peer_id: p2p::PeerId) -> Option<Prefix> {
+   pub fn map(&mut self, peer_id: p2p::PeerId) -> Option<Prefix> {
       let mut prefix = Prefix([0; _]);
       prefix[VPN_PREFIX_RANGE].copy_from_slice(&VPN_PREFIX);
 
@@ -71,7 +71,7 @@ impl Map {
       Some(prefix)
    }
 
-   pub fn remove(&mut self, peer_id: &p2p::PeerId) {
+   pub fn unmap(&mut self, peer_id: &p2p::PeerId) {
       let Some(prefix) = self.peer_to_prefix.remove(peer_id) else {
          return;
       };
@@ -133,7 +133,7 @@ mod tests {
       fn map_roundtrip(self_id in peer_id_strategy(), peer_id in peer_id_strategy()) {
          let mut map = Map::new(self_id);
 
-         if let Some(prefix) = map.add(peer_id) {
+         if let Some(prefix) = map.map(peer_id) {
             prop_assert_eq!(map.peer_of(&prefix), Some(peer_id));
          }
       }

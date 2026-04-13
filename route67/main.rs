@@ -139,16 +139,16 @@ enum Command {
    /// Query peer status.
    Status { peer_id: libp2p::PeerId },
 
-   /// Trust a peer.
-   Trust {
+   /// Map a peer.
+   Map {
       address: libp2p::Multiaddr,
 
       #[arg(long)]
       allow: Vec<String>,
    },
 
-   /// Distrust a peer.
-   Distrust { peer_id: libp2p::PeerId },
+   /// Unmap a peer.
+   Unmap { peer_id: libp2p::PeerId },
 }
 
 async fn send_request(request: socket::Request) -> Result<socket::Response, Error> {
@@ -304,8 +304,8 @@ async fn real_main() -> Result<(), Error> {
             response => return Err(Error::UnexpectedResponse { response }),
          }
       },
-      Command::Trust { address, allow } => {
-         let response = send_request(socket::Request::TrustPeer { address, allow }).await?;
+      Command::Map { address, allow } => {
+         let response = send_request(socket::Request::MapPeer { address, allow }).await?;
 
          match response {
             socket::Response::Ok { ok } => println!("{ok}"),
@@ -313,8 +313,8 @@ async fn real_main() -> Result<(), Error> {
             response => return Err(Error::UnexpectedResponse { response }),
          }
       },
-      Command::Distrust { peer_id } => {
-         let response = send_request(socket::Request::DistrustPeer { peer_id }).await?;
+      Command::Unmap { peer_id } => {
+         let response = send_request(socket::Request::UnmapPeer { peer_id }).await?;
 
          match response {
             socket::Response::Ok { ok } => println!("{ok}"),
