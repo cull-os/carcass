@@ -214,14 +214,14 @@ pub enum Request {
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 #[serde(untagged)]
 pub enum Response {
-   Ok {
-      ok: String,
-   },
    PeerStatus {
       ok:                     String,
       // TODO: Order by activity (index 0 = last active)
       connections:            Vec<p2p::Multiaddr>,
       connection_last_active: Option<p2p::Multiaddr>,
+   },
+   Ok {
+      ok: String,
    },
    Error {
       error: String,
