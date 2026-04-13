@@ -102,9 +102,10 @@ mod tests {
    fn peer_id_strategy() -> impl Strategy<Value = p2p::PeerId> {
       any::<[u8; 32]>().prop_map(|mut bytes| {
          p2p::PeerId::from_public_key(&identity::PublicKey::from(
-            ed25519::Keypair::try_from_bytes(&mut bytes)
-               .expect("size was statically checked")
-               .public(),
+            ed25519::Keypair::from(
+               ed25519::SecretKey::try_from_bytes(&mut bytes).expect("size was statically checked"),
+            )
+            .public(),
          ))
       })
    }
