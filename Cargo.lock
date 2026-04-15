@@ -1801,6 +1801,7 @@ dependencies = [
  "once_cell",
  "rand 0.9.3",
  "ring",
+ "serde",
  "socket2 0.5.10",
  "thiserror 2.0.18",
  "tinyvec",
@@ -1827,6 +1828,29 @@ dependencies = [
  "smallvec 1.15.1",
  "thiserror 2.0.18",
  "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "hickory-server"
+version = "0.25.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d53e5fe811b941c74ee46b8818228bfd2bc2688ba276a0eaeb0f2c95ea3b2585"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "cfg-if",
+ "data-encoding",
+ "enum-as-inner",
+ "futures-util",
+ "hickory-proto",
+ "ipnet",
+ "prefix-trie",
+ "serde",
+ "thiserror 2.0.18",
+ "time",
+ "tokio",
+ "tokio-util",
  "tracing",
 ]
 
@@ -2168,6 +2192,9 @@ name = "ipnet"
 version = "2.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d98f6fed1fde3f8c21bc40a1abb88dd75e67924f9cffc3ef95607bad8017f8e2"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "is_terminal_polyfill"
@@ -3655,6 +3682,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "prefix-trie"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "85cf4c7c25f1dd66c76b451e9041a8cfce26e4ca754934fa7aed8d5a59a01d20"
+dependencies = [
+ "ipnet",
+ "num-traits",
+]
+
+[[package]]
 name = "prettyplease"
 version = "0.2.37"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4064,6 +4101,7 @@ dependencies = [
 name = "route67"
 version = "0.0.1"
 dependencies = [
+ "async-trait",
  "asynchronous-codec",
  "bon",
  "bytes",
@@ -4072,11 +4110,14 @@ dependencies = [
  "dirs",
  "dup",
  "either",
+ "hickory-server",
  "indexmap",
+ "libc",
  "libp2p",
  "multibase",
  "n0-watcher",
  "netwatch",
+ "nix 0.30.1",
  "proptest",
  "ringbuf",
  "rtnetlink",
@@ -5085,6 +5126,7 @@ dependencies = [
  "idna",
  "percent-encoding",
  "serde",
+ "serde_derive",
 ]
 
 [[package]]

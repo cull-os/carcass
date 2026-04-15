@@ -49,6 +49,8 @@ use tokio::{
 
 pub mod address;
 
+pub mod dns;
+
 pub mod config;
 pub use config::Config;
 
@@ -162,6 +164,9 @@ pub enum Error {
       #[source]
       source:  p2p_transport::TransportError<io::Error>,
    },
+
+   #[error("failed to start dns server")]
+   StartDnsServer(#[from] dns::ListenError),
 }
 
 #[bon::builder]
@@ -455,6 +460,8 @@ pub async fn run(
 
    program.recover();
 
+   let mut dns_queries = dns::listen().await?;
+
    loop {
       select! {
          Ok(new_network_state) = program.network_monitor.updated() => {
@@ -617,6 +624,30 @@ pub async fn run(
             response
                .send(program.handle_request(request))
                .expect("response receiver must stay alive");
+         },
+
+         Some(query) = dns_queries.recv() => {
+            match query {
+               dns::Query::AddressForPeerId { peer_id, sender } => {
+                  let address = program.address_map.prefix_of(&peer_id).map(|prefix| {
+                     let mut octets = [0; _];
+                     octets[..address::HOST_PREFIX_RANGE.end].copy_from_slice(&*prefix);
+                     *octets.last_mut().expect("address array must not be empty") = 1;
+                     net::Ipv6Addr::from(octets)
+                  });
+
+                  sender
+                     .send(address)
+                     .expect("response receiver must stay alive");
+               },
+               dns::Query::PeerIdForAddress { address, sender } => {
+                  let peer_id = program.address_map.peer_of(&address::Prefix::from(address));
+
+                  sender
+                     .send(peer_id)
+                     .expect("response receiver must stay alive");
+               },
+            }
          },
       }
    }
