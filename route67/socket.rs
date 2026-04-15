@@ -145,6 +145,12 @@ pub enum ConnectError {
       #[source]
       source: io::Error,
    },
+   #[error("failed to remove old socket '{path}'", path = .path.display())]
+   BindRemoveOld {
+      path:   path::PathBuf,
+      #[source]
+      source: io::Error,
+   },
    #[error("failed to bind to socket '{path}'", path = .path.display())]
    Bind {
       path:   path::PathBuf,
@@ -174,7 +180,6 @@ pub async fn connect<
          tokio::spawn(handle_stream::<TYPE, In, Out>(stream, sender));
       },
       Type::Server => {
-         let _ = fs::remove_file(path);
          if let Some(parent) = path.parent()
             && let Err(error) = fs::create_dir_all(parent)
          {
@@ -183,6 +188,15 @@ pub async fn connect<
                source: error,
             });
          }
+         if let Err(error) = fs::remove_file(path)
+            && error.kind() != io::ErrorKind::NotFound
+         {
+            return Err(ConnectError::BindRemoveOld {
+               path:   path.to_owned(),
+               source: error,
+            });
+         }
+
          let listener = net::UnixListener::bind(path).map_err(|source| {
             ConnectError::Bind {
                path: path.to_owned(),
@@ -279,7 +293,7 @@ impl<P: ip::Policy> Program<P> {
          },
          Request::PeerStatus { peer_id } => {
             Response::PeerStatus {
-               ok: format!("peer '{peer_id}' status"),
+               ok:          format!("peer '{peer_id}' status"),
                connections: self
                   .swarm
                   .behaviour()
