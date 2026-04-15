@@ -139,6 +139,12 @@ pub enum ConnectError {
       source: io::Error,
    },
 
+   #[error("failed to create parent paths of socket '{path}'", path = .path.display())]
+   BindCreateParents {
+      path:   path::PathBuf,
+      #[source]
+      source: io::Error,
+   },
    #[error("failed to bind to socket '{path}'", path = .path.display())]
    Bind {
       path:   path::PathBuf,
@@ -169,6 +175,14 @@ pub async fn connect<
       },
       Type::Server => {
          let _ = fs::remove_file(path);
+         if let Some(parent) = path.parent()
+            && let Err(error) = fs::create_dir_all(parent)
+         {
+            return Err(ConnectError::BindCreateParents {
+               path:   path.to_owned(),
+               source: error,
+            });
+         }
          let listener = net::UnixListener::bind(path).map_err(|source| {
             ConnectError::Bind {
                path: path.to_owned(),
