@@ -174,10 +174,7 @@ async fn send_request(request: socket::Request) -> Result<socket::Response, Erro
       .map_err(|_| Error::DaemonDidNotRespond)
 }
 
-#[expect(
-   clippy::match_wildcard_for_single_variants,
-   clippy::cognitive_complexity
-)]
+#[expect(clippy::match_wildcard_for_single_variants)]
 async fn real_main() -> Result<(), Error> {
    {
       const VARIABLE: &str = "ROUTE67_LOG";
@@ -285,22 +282,10 @@ async fn real_main() -> Result<(), Error> {
          let response = send_request(socket::Request::PeerStatus { peer_id }).await?;
 
          match response {
-            socket::Response::PeerStatus {
-               connections,
-               connection_last_active,
-               ..
-            } => {
-               // TODO
-               if connections.is_empty() {
-                  println!("no connections");
-               } else {
-                  println!("connections:");
-                  for connection in &connections {
-                     println!("  {connection}");
-                  }
-                  if let Some(active) = connection_last_active {
-                     println!("last active: {active}");
-                  }
+            socket::Response::PeerStatus { connections, .. } => {
+               // TODO: Colors and stuff.
+               for connection in connections {
+                  println!("{connection}");
                }
             },
             socket::Response::Error { error } => return Err(Error::Daemon { error }),

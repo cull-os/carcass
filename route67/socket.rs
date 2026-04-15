@@ -226,10 +226,10 @@ pub enum Request {
 #[serde(untagged)]
 pub enum Response {
    PeerStatus {
-      ok:                     String,
-      // TODO: Order by activity (index 0 = last active)
-      connections:            Vec<p2p::Multiaddr>,
-      connection_last_active: Option<p2p::Multiaddr>,
+      ok: String,
+
+      /// Ordered by last activity.
+      connections: Vec<p2p::Multiaddr>,
    },
    Ok {
       ok: String,
@@ -264,28 +264,15 @@ impl<P: ip::Policy> Program<P> {
             Response::Ok { ok }
          },
          Request::PeerStatus { peer_id } => {
-            let peer_connections = self.connections.get(&peer_id);
-
             Response::PeerStatus {
                ok: format!("peer '{peer_id}' status"),
-
-               connections: peer_connections
-                  .iter()
-                  .flat_map(|connections| {
-                     connections.iter().map(|&(_, ref address)| address.clone())
-                  })
-                  .collect(),
-
-               connection_last_active: self
+               connections: self
                   .swarm
                   .behaviour()
                   .ip
-                  .last_active_connection_id(&peer_id)
-                  .and_then(|connection_id| {
-                     peer_connections?.iter().find_map(|&(id, ref address)| {
-                        (id == connection_id).then(|| address.clone())
-                     })
-                  }),
+                  .connections(&peer_id)
+                  .cloned()
+                  .collect(),
             }
          },
       }

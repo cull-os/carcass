@@ -393,7 +393,9 @@ pub struct Behaviour<P: Policy> {
 
    inbound_policy: P,
 
-   connections: rustc_hash::FxHashMap<p2p::PeerId, Option<p2p_swarm::ConnectionId>>,
+   /// Connections ordered by activity (front = most recently active).
+   connections:
+      rustc_hash::FxHashMap<p2p::PeerId, VecDeque<(p2p_swarm::ConnectionId, p2p::Multiaddr)>>,
 
    pending: rustc_hash::FxHashMap<
       p2p::PeerId,
@@ -414,11 +416,17 @@ impl<P: Policy> Behaviour<P> {
       }
    }
 
-   pub fn last_active_connection_id(
+   /// Multiaddrs of the peer's live connections, ordered most-recently-active first.
+   pub fn connections(
       &self,
       peer_id: &p2p::PeerId,
-   ) -> Option<p2p_swarm::ConnectionId> {
-      self.connections.get(peer_id).copied().flatten()
+   ) -> impl Iterator<Item = &p2p::Multiaddr> {
+      self
+         .connections
+         .get(peer_id)
+         .into_iter()
+         .flatten()
+         .map(|&(_, ref address)| address)
    }
 
    pub fn send(&mut self, peer_id: &p2p::PeerId, packet: Packet) {
@@ -456,28 +464,36 @@ impl<P: Policy> p2p_swarm::NetworkBehaviour for Behaviour<P> {
 
    fn handle_established_inbound_connection(
       &mut self,
-      _connection_id: p2p_swarm::ConnectionId,
+      connection_id: p2p_swarm::ConnectionId,
       peer_id: p2p::PeerId,
       _local_addr: &p2p::Multiaddr,
-      _remote_addr: &p2p::Multiaddr,
+      remote_addr: &p2p::Multiaddr,
    ) -> Result<Self::ConnectionHandler, p2p_swarm::ConnectionDenied> {
       if !(self.inbound_policy)(&peer_id) {
          return Ok(Handler::Disabled);
       }
 
-      self.connections.entry(peer_id).or_insert(None);
+      self
+         .connections
+         .entry(peer_id)
+         .or_default()
+         .push_back((connection_id, remote_addr.clone()));
       Ok(Handler::new(peer_id))
    }
 
    fn handle_established_outbound_connection(
       &mut self,
-      _connection_id: p2p_swarm::ConnectionId,
+      connection_id: p2p_swarm::ConnectionId,
       peer_id: p2p::PeerId,
-      _addr: &p2p::Multiaddr,
+      addr: &p2p::Multiaddr,
       _role_override: p2p_core::Endpoint,
       _port_use: p2p_core_transport::PortUse,
    ) -> Result<Self::ConnectionHandler, p2p_swarm::ConnectionDenied> {
-      self.connections.entry(peer_id).or_insert(None);
+      self
+         .connections
+         .entry(peer_id)
+         .or_default()
+         .push_back((connection_id, addr.clone()));
       Ok(Handler::new(peer_id))
    }
 
@@ -485,10 +501,17 @@ impl<P: Policy> p2p_swarm::NetworkBehaviour for Behaviour<P> {
       match event {
          p2p_swarm::FromSwarm::ConnectionClosed(p2p_swarm::ConnectionClosed {
             peer_id,
-            remaining_established: 0,
+            connection_id,
             ..
          }) => {
-            self.connections.remove(&peer_id);
+            let Some(connections) = self.connections.get_mut(&peer_id) else {
+               return;
+            };
+
+            connections.retain(|&(id, _)| id != connection_id);
+            if connections.is_empty() {
+               self.connections.remove(&peer_id);
+            }
          },
          p2p_swarm::FromSwarm::DialFailure(p2p_swarm::DialFailure {
             peer_id: Some(peer_id),
@@ -511,7 +534,16 @@ impl<P: Policy> p2p_swarm::NetworkBehaviour for Behaviour<P> {
       connection_id: p2p_swarm::ConnectionId,
       packet: p2p_swarm::THandlerOutEvent<Self>,
    ) {
-      self.connections.insert(peer_id, Some(connection_id));
+      if let Some(connections) = self.connections.get_mut(&peer_id)
+         && let Some(index) = connections.iter().position(|&(id, _)| id == connection_id)
+         && index != 0
+      {
+         let connection = connections
+            .remove(index)
+            .expect("position was just looked up");
+         connections.push_front(connection);
+      }
+
       self
          .queued_events
          .push_back(p2p_swarm::ToSwarm::GenerateEvent(Event::Packet(

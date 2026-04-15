@@ -128,8 +128,7 @@ struct Program<P: ip::Policy> {
    address_map:  address::Map,
    mapped_peers: Rc<RefCell<rustc_hash::FxHashSet<p2p::PeerId>>>,
 
-   relays:      IndexMap<p2p::PeerId, Relay, rustc_hash::FxBuildHasher>,
-   connections: FxHashMap<p2p::PeerId, Vec<(p2p_swarm::ConnectionId, p2p::Multiaddr)>>,
+   relays: IndexMap<p2p::PeerId, Relay, rustc_hash::FxBuildHasher>,
 
    swarm: p2p::Swarm<Behaviour<P>>,
 }
@@ -207,7 +206,6 @@ async fn create(
       mapped_peers: allowed_peers.dupe(),
 
       relays: IndexMap::default(),
-      connections: FxHashMap::default(),
 
       swarm: p2p::SwarmBuilder::with_existing_identity(p2p_id::Keypair::from(keypair))
          .with_tokio()
@@ -532,24 +530,6 @@ pub async fn run(
                         }
 
                         program.fill_relays();
-                     }
-                  },
-
-                  // CONNECTIONS
-
-                  Se::ConnectionEstablished { peer_id, connection_id, ref endpoint, .. } => {
-                     program
-                        .connections
-                        .entry(peer_id)
-                        .or_default()
-                        .push((connection_id, endpoint.get_remote_address().clone()));
-                  },
-                  Se::ConnectionClosed { peer_id, connection_id, .. } => {
-                     if let Some(connections) = program.connections.get_mut(&peer_id) {
-                        connections.retain(|&(id, _)| id != connection_id);
-                        if connections.is_empty() {
-                           program.connections.remove(&peer_id);
-                        }
                      }
                   },
 
