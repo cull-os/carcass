@@ -45,8 +45,10 @@ impl Handler {
    async fn address_for(&self, name: &rr::Name) -> Option<net::Ipv6Addr> {
       let mut labels = name.iter();
 
-      let peer_id = match (labels.next(), labels.next(), labels.next()) {
-         (Some(peer), Some(zone), None) if zone.eq_ignore_ascii_case(b"internal") => {
+      let peer_id = match (labels.next(), labels.next(), labels.next(), labels.next()) {
+         (Some(peer), Some(s67), Some(internal), None)
+            if s67.eq_ignore_ascii_case(b"67") && internal.eq_ignore_ascii_case(b"internal") =>
+         {
             let (_, bytes) = multibase::decode(str::from_utf8(peer).ok()?).ok()?;
             p2p::PeerId::from_bytes(&bytes).ok()?
          },
