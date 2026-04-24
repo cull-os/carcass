@@ -1,6 +1,7 @@
 # Carcass <!-- thank alcuin for the name -->
 
-The Cull monorepository.
+Monorepo for all things related to the Cull operating system. Canonically on
+[`rad:z2AeopTVY58JJSJC3zroqEV5T3pNp`](https://radicle.network/nodes/seed.radicle.garden/rad:z2AeopTVY58JJSJC3zroqEV5T3pNp).
 
 ## Projects
 
@@ -8,6 +9,7 @@ The Cull monorepository.
 - [`cab`](./cab/README.md): A dynamic, cacheable language (WIP).
 - [`dup`](./dup/README.md): Cheap clone trait for distinguishing expensive
   clones from things that should have been Copy.
+- [`route67`](./route67/README.md): True Mesh VPN.
 - [`ust`](./ust/mod.rs): Universal styling (WIP).
 
 ## Contributing
@@ -19,7 +21,7 @@ All contributors must follow the [Code of Conduct](./CODE_OF_CONDUCT.md).
 This project is subject to the terms of the Immutable Software License, edition
 ee1e96f741ba9e18.
 
-You can verify the notice's integrity using this POSIX shell script:
+You can verify the notice's integrity using this POSIX shell function:
 
 ```sh
 verify() {
@@ -30,7 +32,7 @@ verify() {
 }
 ```
 
-Or this Nushell script:
+Or this Nushell function:
 
 ```nu
 def verify [ hash: string, file: path ]: nothing -> bool {

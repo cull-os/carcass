@@ -4,7 +4,7 @@ description = "Auxiliary vector (auxv) reader and modifier."
 license     = "MPL-2.0"
 categories  = [ "os::unix-apis" ]
 keywords    = [ "elf", "auxiliary", "vector", "auxv", "auxval" ]
-repository  = "https://github.com/cull-os/carcass/tree/master/auxvec"
+repository  = "https://radicle.network/nodes/seed.radicle.garden/rad:z2AeopTVY58JJSJC3zroqEV5T3pNp/tree/auxvec"
 version     = "0.0.4"
 publish     = true
 

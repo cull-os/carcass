@@ -4,7 +4,7 @@ description = "Chain of values"
 license     = "MPL-2.0"
 categories  = [ "rust-patterns" ]
 keywords    = [ "error", "chain" ]
-repository  = "https://github.com/cull-os/carcass/tree/master/cyn"
+repository  = "https://radicle.network/nodes/seed.radicle.garden/rad:z2AeopTVY58JJSJC3zroqEV5T3pNp/tree/cyn"
 version     = "0.0.1"
 publish     = true
 

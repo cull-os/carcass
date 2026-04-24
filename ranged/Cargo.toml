@@ -4,7 +4,7 @@ description = "Small span and size types"
 license     = "MPL-2.0"
 categories  = [ "rust-patterns" ]
 keywords    = [ "size", "span" ]
-repository  = "https://github.com/cull-os/carcass/tree/master/ranged"
+repository  = "https://radicle.network/nodes/seed.radicle.garden/rad:z2AeopTVY58JJSJC3zroqEV5T3pNp/tree/ranged"
 version     = "0.1.0"
 publish     = true
 

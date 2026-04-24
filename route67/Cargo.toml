@@ -2,7 +2,7 @@
 name        = "route67"
 description = "True Mesh VPN"
 license     = "MPL-2.0"
-repository  = "https://github.com/cull-os/carcass/tree/master/route67"
+repository  = "https://radicle.network/nodes/seed.radicle.garden/rad:z2AeopTVY58JJSJC3zroqEV5T3pNp/tree/route67"
 version     = "0.0.1"
 publish     = true
 
