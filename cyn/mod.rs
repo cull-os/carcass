@@ -1,6 +1,6 @@
 //! Error and chain handling utilities.
 
-#![feature(trait_alias, try_trait_v2)]
+#![feature(trait_alias, try_trait_v2, try_trait_v2_residual)]
 
 use std::{
    fmt::{
@@ -251,6 +251,10 @@ impl ops::Try for Termination {
          Err(_) => ops::ControlFlow::Break(self),
       }
    }
+}
+
+impl ops::Residual<()> for Termination {
+   type TryType = Self;
 }
 
 impl<T, E: StdDisplay> ops::FromResidual<result::Result<T, E>> for Termination {

@@ -5,7 +5,7 @@ use std::{
 };
 
 use hickory_server::{
-   authority,
+   net::runtime as hickory_runtime,
    proto::{
       op,
       rr::{
@@ -14,6 +14,7 @@ use hickory_server::{
       },
    },
    server as hserver,
+   zone_handler,
 };
 use libp2p as p2p;
 use tokio::{
@@ -81,16 +82,16 @@ impl Handler {
 
 #[async_trait::async_trait]
 impl hserver::RequestHandler for Handler {
-   async fn handle_request<R: hserver::ResponseHandler>(
+   async fn handle_request<R: hserver::ResponseHandler, T: hickory_runtime::Time>(
       &self,
       request: &hserver::Request,
       mut response_handle: R,
    ) -> hserver::ResponseInfo {
-      let mut header = op::Header::response_from_request(request.header());
-      header.set_authoritative(true);
+      let mut metadata = op::Metadata::response_from_request(&request.metadata);
+      metadata.authoritative = true;
 
       let mut records = Vec::new();
-      for query in request.queries() {
+      for query in request.queries.queries() {
          let name = query.name();
 
          let rdata = match query.query_type() {
@@ -125,13 +126,13 @@ impl hserver::RequestHandler for Handler {
       }
 
       if records.is_empty() {
-         header.set_response_code(op::ResponseCode::NXDomain);
+         metadata.response_code = op::ResponseCode::NXDomain;
       }
 
       response_handle
          .send_response(
-            authority::MessageResponseBuilder::from_message_request(request).build(
-               header,
+            zone_handler::MessageResponseBuilder::from_message_request(request).build(
+               metadata,
                records.iter(),
                [],
                [],
@@ -141,7 +142,10 @@ impl hserver::RequestHandler for Handler {
          .await
          .unwrap_or_else(|error| {
             tracing::warn!(%error, "Failed to send dns response");
-            hserver::ResponseInfo::from(header)
+            hserver::ResponseInfo::from(op::Header {
+               metadata,
+               counts: op::HeaderCounts::default(),
+            })
          })
    }
 }
@@ -161,7 +165,7 @@ pub enum ListenError {
 pub async fn listen() -> Result<mpsc::UnboundedReceiver<Query>, ListenError> {
    let (sender, receiver) = mpsc::unbounded_channel();
 
-   let mut server = hserver::ServerFuture::new(Handler { queries: sender });
+   let mut server = hserver::Server::new(Handler { queries: sender });
 
    server.register_socket({
       let address = net::SocketAddr::new(
