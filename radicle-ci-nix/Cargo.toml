@@ -1,0 +1,28 @@
+[package]
+name        = "radicle-ci-nix"
+description = "Radicle CI adapter that runs `nix flake check` against the repository"
+license     = "MPL-2.0"
+categories  = [ "development-tools::build-utils" ]
+repository  = "https://radicle.network/nodes/iris.radicle.network/rad:z2AeopTVY58JJSJC3zroqEV5T3pNp/tree/radicle-ci-nix"
+version     = "0.0.1"
+publish     = true
+
+authors.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "radicle-ci-nix"
+path = "main.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+paste.workspace              = true
+radicle.workspace            = true
+serde.workspace              = true
+serde_json.workspace         = true
+thiserror.workspace          = true
+tracing.workspace            = true
+tracing-subscriber.workspace = true
+uuid.workspace               = true
