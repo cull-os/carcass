@@ -194,6 +194,7 @@ tun-rs               = { features = [ "async_tokio" ], version = "2.8.2" }
 unic-emoji-char      = "0.9.0"
 unicode-segmentation = "1.12.0"
 unicode-width        = "0.2.0"
+url                  = { features = [ "serde" ], version = "2.5.8" }
 uuid                 = { features = [ "serde", "v4" ], version = "1.22.0" }
 vu128                = "1.1.0"
 which                = "8.0.0"

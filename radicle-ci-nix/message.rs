@@ -8,6 +8,7 @@
 
 use std::io;
 
+use derive_more::Display;
 use radicle::{
    git as radicle_git,
    identity as radicle_identity,
@@ -103,7 +104,7 @@ pub enum Error {
    NoCommits,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Display, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct RunId {
    id: uuid::Uuid,
 }
@@ -192,7 +193,7 @@ impl Request {
 pub enum Response {
    Triggered {
       run_id:   RunId,
-      info_url: Option<String>,
+      info_url: Option<url::Url>,
    },
    Finished {
       result: RunResult,
@@ -296,7 +297,9 @@ mod tests {
       assert_eq!(
          serde_json::to_value(Response::Triggered {
             run_id:   run_id.clone(),
-            info_url: Some("https://ci.example/run".to_owned()),
+            info_url: Some(
+               url::Url::parse("https://ci.example/run").expect("literal must be valid")
+            ),
          })
          .expect(EXPECT_SERIALIZE),
          serde_json::json!({

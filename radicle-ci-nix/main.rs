@@ -6,10 +6,7 @@ use std::{
    process,
 };
 
-use radicle::{
-   profile as radicle_profile,
-   storage::ReadStorage as _,
-};
+use radicle::storage::ReadStorage as _;
 use tracing_subscriber::{
    filter as tracing_filter,
    util::{
@@ -18,6 +15,7 @@ use tracing_subscriber::{
    },
 };
 
+mod config;
 mod message;
 
 #[derive(Debug, thiserror::Error)]
@@ -34,8 +32,8 @@ enum Error {
    #[error("request did not specify a commit")]
    NoCommit(#[source] message::Error),
 
-   #[error("failed to load radicle profile")]
-   LoadProfile(#[source] radicle_profile::Error),
+   #[error("failed to load configuration")]
+   LoadConfig(#[from] config::Error),
 
    #[error("failed to write response to stdout")]
    WriteResponse(#[source] message::Error),
@@ -66,18 +64,21 @@ fn real_main() -> Result<(), Error> {
    }
 
    let request = message::Request::from_reader(io::stdin()).map_err(Error::ReadRequest)?;
-   let message::Request::Trigger { .. } = request;
 
-   let repo_path = radicle_profile::Profile::load()
-      .map_err(Error::LoadProfile)?
+   let config = config::Config::load()?;
+
+   let repo_path = config
+      .profile()
       .storage
       .path_of(&request.repo_id())
       .canonicalize()
       .map_err(Error::CanonicalizeRepoPath)?;
 
+   let run_id = message::RunId::generate();
+
    message::Response::Triggered {
-      run_id:   message::RunId::generate(),
-      info_url: None,
+      info_url: config.run_url([run_id.to_string()]),
+      run_id,
    }
    .to_writer(io::stdout())
    .map_err(Error::WriteResponse)?;
