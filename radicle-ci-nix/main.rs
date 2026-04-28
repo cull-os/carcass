@@ -1,4 +1,4 @@
-#![feature(error_iter)]
+#![feature(error_iter, try_blocks)]
 
 use std::{
    error,
@@ -17,6 +17,7 @@ use tracing_subscriber::{
 
 mod config;
 mod message;
+mod nix;
 
 #[derive(Debug, thiserror::Error)]
 enum Error {

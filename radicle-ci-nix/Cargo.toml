@@ -18,11 +18,14 @@ path = "main.rs"
 workspace = true
 
 [dependencies]
+cyphergraphy.workspace = true # See workspace Cargo.toml.
+
 derive_more.workspace        = true
 paste.workspace              = true
 radicle.workspace            = true
 serde.workspace              = true
 serde_json.workspace         = true
+strum.workspace              = true
 thiserror.workspace          = true
 tracing.workspace            = true
 tracing-subscriber.workspace = true

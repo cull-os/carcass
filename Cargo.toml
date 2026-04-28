@@ -182,6 +182,7 @@ sha2                 = "0.11.0"
 slotmap              = "1.0.7"
 smallvec             = "2.0.0-alpha.10"
 stacksafe            = "1.0.0"
+strum                = { features = [ "derive" ], version = "0.28" }
 syn                  = "2.0.104"
 terminal_size        = "0.4.1"
 thiserror            = "2.0.12"

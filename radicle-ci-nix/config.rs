@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 //! Configuration related utilities.
 
 use std::{
