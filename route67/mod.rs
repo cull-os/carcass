@@ -45,6 +45,7 @@ use tokio::{
    io,
    select,
    sync::mpsc,
+   task,
 };
 
 pub mod address;
@@ -165,8 +166,11 @@ pub enum Error {
       source:  p2p_transport::TransportError<io::Error>,
    },
 
-   #[error("failed to start dns server")]
-   StartDnsServer(#[from] dns::ListenError),
+   #[error("dns subsystem failed")]
+   Dns(#[from] dns::Error),
+
+   #[error("dns subsystem panicked")]
+   DnsTaskPanic(#[source] task::JoinError),
 }
 
 #[bon::builder]
@@ -460,7 +464,8 @@ pub async fn run(
 
    program.recover();
 
-   let mut dns_queries = dns::listen().await?;
+   let mut join_set = task::JoinSet::new();
+   let mut dns_queries = dns::listen(&mut join_set).await?;
 
    loop {
       select! {
@@ -647,6 +652,14 @@ pub async fn run(
                      .send(peer_id)
                      .expect("response receiver must stay alive");
                },
+            }
+         },
+
+         Some(joined) = join_set.join_next() => {
+            match joined {
+               Ok(Ok(())) => {},
+               Ok(Err(error)) => return Err(Error::Dns(error)),
+               Err(error) => return Err(Error::DnsTaskPanic(error)),
             }
          },
       }

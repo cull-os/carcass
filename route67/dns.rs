@@ -5,7 +5,10 @@ use std::{
 };
 
 use hickory_server::{
-   net::runtime as hickory_runtime,
+   net::{
+      self as hickory_net,
+      runtime as hickory_runtime,
+   },
    proto::{
       op,
       rr::{
@@ -23,6 +26,7 @@ use tokio::{
       mpsc,
       oneshot,
    },
+   task,
 };
 
 use crate::address;
@@ -151,18 +155,23 @@ impl hserver::RequestHandler for Handler {
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum ListenError {
+pub enum Error {
    #[error("failed to bind '{address}'")]
    Bind {
       address: net::SocketAddr,
       #[source]
       source:  io::Error,
    },
+
+   #[error("dns server task failed")]
+   Server(#[source] hickory_net::NetError),
 }
 
 /// Binds the anycast DNS listener on `fd67::1:53` and returns a receiver of
 /// main-loop queries.
-pub async fn listen() -> Result<mpsc::UnboundedReceiver<Query>, ListenError> {
+pub async fn listen(
+   join_set: &mut task::JoinSet<Result<(), Error>>,
+) -> Result<mpsc::UnboundedReceiver<Query>, Error> {
    let (sender, receiver) = mpsc::unbounded_channel();
 
    let mut server = hserver::Server::new(Handler { queries: sender });
@@ -180,14 +189,10 @@ pub async fn listen() -> Result<mpsc::UnboundedReceiver<Query>, ListenError> {
 
       tokio_net::UdpSocket::bind(&address)
          .await
-         .map_err(|source| ListenError::Bind { address, source })
+         .map_err(|source| Error::Bind { address, source })
    }?);
 
-   tokio::spawn(async move {
-      if let Err(error) = server.block_until_done().await {
-         tracing::error!(%error, "Dns server exited with error");
-      }
-   });
+   join_set.spawn(async move { server.block_until_done().await.map_err(Error::Server) });
 
    Ok(receiver)
 }
