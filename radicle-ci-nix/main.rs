@@ -3,10 +3,20 @@
 use std::{
    error,
    io,
+   mem,
    process,
+   str::FromStr as _,
 };
 
 use radicle::storage::ReadStorage as _;
+use tokio::{
+   io::{
+      AsyncBufReadExt as _,
+      BufReader,
+   },
+   process as tokio_process,
+   sync::mpsc,
+};
 use tracing_subscriber::{
    filter as tracing_filter,
    util::{
@@ -94,7 +104,11 @@ fn real_main() -> Result<(), Error> {
       tracing::info!(%flakeref, "Running 'nix flake check'");
 
       process::Command::new("nix")
-         .args(["flake", "check", "--no-write-lock-file", &flakeref])
+         .args(["flake", "check"])
+         .arg("--no-write-lock-file")
+         .args(config.verbosity().into_flags())
+         .arg(&flakeref)
+         .stdout(process::Stdio::null())
          .status()
          .map_err(Error::SpawnNix)?
    };

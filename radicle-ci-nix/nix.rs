@@ -3,6 +3,7 @@
 //! Wire format for Nix's `--log-format internal-json` output.
 
 use std::{
+   iter,
    path,
    result,
    str::FromStr,
@@ -12,14 +13,14 @@ use derive_more::Display;
 
 mod raw {
    pub mod verbosity {
-      pub const ERROR: u64 = 0;
-      pub const WARN: u64 = 1;
-      pub const NOTICE: u64 = 2;
-      pub const INFO: u64 = 3;
-      pub const TALKATIVE: u64 = 4;
-      pub const CHATTY: u64 = 5;
-      pub const DEBUG: u64 = 6;
-      pub const VOMIT: u64 = 7;
+      pub const ERROR: u8 = 0;
+      pub const WARN: u8 = 1;
+      pub const NOTICE: u8 = 2;
+      pub const INFO: u8 = 3;
+      pub const TALKATIVE: u8 = 4;
+      pub const CHATTY: u8 = 5;
+      pub const DEBUG: u8 = 6;
+      pub const VOMIT: u8 = 7;
    }
 
    pub mod activity {
@@ -59,7 +60,7 @@ mod raw {
          #[serde(rename = "parent")]
          parent_id: u64,
 
-         level: u64,
+         level: u8,
          text:  String,
 
          #[serde(rename = "type")]
@@ -80,7 +81,7 @@ mod raw {
       },
       #[serde(rename = "msg")]
       Message {
-         level:       u64,
+         level:       u8,
          #[serde(rename = "msg")]
          message:     String,
          #[serde(default, rename = "raw_msg")]
@@ -546,21 +547,24 @@ impl Result {
 pub struct ActivityId(u64);
 
 /// Verbosity at which an activity or message was emitted.
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+#[derive(Default, Debug, Clone, Copy, Eq, PartialEq, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub enum Verbosity {
    Error,
    Warn,
    Notice,
+   #[default]
    Info,
    Talkative,
    Chatty,
    Debug,
    Vomit,
-   Unknown(u64),
+   #[serde(skip)]
+   Unknown(u8),
 }
 
-impl From<u64> for Verbosity {
-   fn from(value: u64) -> Self {
+impl From<u8> for Verbosity {
+   fn from(value: u8) -> Self {
       match value {
          raw::verbosity::ERROR => Self::Error,
          raw::verbosity::WARN => Self::Warn,
@@ -571,6 +575,35 @@ impl From<u64> for Verbosity {
          raw::verbosity::DEBUG => Self::Debug,
          raw::verbosity::VOMIT => Self::Vomit,
          other => Self::Unknown(other),
+      }
+   }
+}
+
+impl From<Verbosity> for u8 {
+   fn from(value: Verbosity) -> Self {
+      match value {
+         Verbosity::Error => raw::verbosity::ERROR,
+         Verbosity::Warn => raw::verbosity::WARN,
+         Verbosity::Notice => raw::verbosity::NOTICE,
+         Verbosity::Info => raw::verbosity::INFO,
+         Verbosity::Talkative => raw::verbosity::TALKATIVE,
+         Verbosity::Chatty => raw::verbosity::CHATTY,
+         Verbosity::Debug => raw::verbosity::DEBUG,
+         Verbosity::Vomit => raw::verbosity::VOMIT,
+         Verbosity::Unknown(other) => other,
+      }
+   }
+}
+
+impl Verbosity {
+   /// Turns the wanted verbosity into a sequence of flags that you can pass to
+   /// a Nix invocation.
+   pub fn into_flags(self) -> impl Iterator<Item = &'static str> {
+      let level = u8::from(self) as usize;
+      let info = raw::verbosity::INFO as usize;
+      match level.checked_sub(info) {
+         Some(extra) => iter::repeat_n("--verbose", extra),
+         None => iter::repeat_n("--quiet", info - level),
       }
    }
 }
