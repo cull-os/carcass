@@ -20,6 +20,7 @@ workspace = true
 [dependencies]
 cyphergraphy.workspace = true # See workspace Cargo.toml.
 
+bon.workspace                = true
 derive_more.workspace        = true
 paste.workspace              = true
 radicle.workspace            = true

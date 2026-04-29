@@ -4425,6 +4425,7 @@ dependencies = [
 name = "radicle-ci-nix"
 version = "0.0.1"
 dependencies = [
+ "bon",
  "cyphergraphy",
  "derive_more",
  "paste",
