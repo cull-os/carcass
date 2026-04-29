@@ -1,10 +1,4 @@
 //! Wire-format message types shared with the Radicle CI broker.
-//!
-//! These mirror `radicle_ci_broker::msg` so the broker can spawn this
-//! adapter without protocol changes. Only the fields the adapter
-//! actually reads are declared here; unknown JSON fields are ignored.
-//! Long-term this module should move to its own crate that the broker
-//! and adapters both depend on.
 
 use std::io;
 
@@ -13,17 +7,23 @@ use radicle::{
    git as radicle_git,
    identity as radicle_identity,
 };
+use serde::{
+   Deserialize as _,
+   de::{
+      self as serde_de,
+      Error as _,
+   },
+};
 
 /// Declare a serde `with`-module that (de)serializes a value at the end of a
 /// nested JSON path. The module is named after the keys joined with `_`.
-/// JSON-only; leaf type must be `DeserializeOwned`.
 ///
 /// ```ignore
 /// serde_path!["repository", "id"]; // defines `mod repository_id { ... }`
 ///
 /// #[derive(serde::Deserialize)]
 /// struct Request {
-///    #[serde(rename = "common", with = "repository_id")]
+///    #[serde(rename = "common", with = "repository_id")] // so it'll serialize from common.repository.id
 ///    repo_id: RepoId,
 /// }
 /// ```
@@ -129,12 +129,28 @@ mod path {
    serde_path![pub, "commits"];
 }
 
+pub fn protocol_version<'de, D: serde_de::Deserializer<'de>>(
+   deserializer: D,
+) -> Result<(), D::Error> {
+   match usize::deserialize(deserializer)? {
+      1 => Ok(()),
+      version => {
+         Err(D::Error::custom(format_args!(
+            "unsupported protocol version '{version}'",
+         )))
+      },
+   }
+}
+
 /// A request message sent by the broker to its adapter child process.
 #[derive(Debug, Clone, serde::Deserialize)]
 #[serde(tag = "request", rename_all = "snake_case")]
 #[non_exhaustive]
 pub enum Request {
    Trigger {
+      #[serde(rename = "version", deserialize_with = "protocol_version")]
+      _version: (),
+
       #[serde(rename = "repository", with = "path::id")]
       repo_id: radicle_identity::RepoId,
 
@@ -143,11 +159,9 @@ pub enum Request {
    },
 }
 
-/// The event that produced a [`Request::Trigger`]. Exactly one of these
-/// is present per trigger; serde picks the variant by which fields the
-/// JSON object carries.
+/// The event that produced a [`Request::Trigger`].
 #[derive(Debug, Clone, serde::Deserialize)]
-#[serde(untagged)]
+#[serde(tag = "event_type", rename_all = "lowercase")]
 pub enum TriggerEvent {
    Push {
       commits: Vec<radicle_git::Oid>,
@@ -206,7 +220,8 @@ impl Response {
       line.push('\n');
       writer
          .write_all(line.as_bytes())
-         .map_err(Error::WriteResponse)
+         .map_err(Error::WriteResponse)?;
+      writer.flush().map_err(Error::WriteResponse)
    }
 }
 
@@ -284,6 +299,8 @@ mod tests {
    fn empty_commits_array_yields_no_commits_error() {
       let request = serde_json::from_value::<Request>(serde_json::json!({
          "request": "trigger",
+         "version": 1_u32,
+         "event_type": "push",
          "repository": { "id": REPO_ID },
          "commits": [],
       }))
@@ -340,5 +357,64 @@ mod tests {
 
       let deserialized = serde_json::from_value(serialized).expect(EXPECT_DESERIALIZE);
       assert_eq!(original, deserialized);
+   }
+
+   #[test]
+   fn unsupported_protocol_version_fails_to_deserialize() {
+      let error = serde_json::from_value::<Request>(serde_json::json!({
+         "request": "trigger",
+         "version": 2_u32,
+         "event_type": "push",
+         "repository": { "id": REPO_ID },
+         "commits": [COMMIT_A],
+      }))
+      .expect_err("unknown protocol version must fail");
+
+      assert!(
+         error.to_string().contains("unsupported protocol version"),
+         "got: {error}"
+      );
+   }
+
+   #[test]
+   fn missing_or_unknown_event_type_fails_to_deserialize() {
+      let missing = serde_json::from_value::<Request>(serde_json::json!({
+         "request": "trigger",
+         "version": 1_u32,
+         "repository": { "id": REPO_ID },
+         "commits": [COMMIT_A],
+      }))
+      .expect_err("missing event_type must fail");
+
+      let unknown = serde_json::from_value::<Request>(serde_json::json!({
+         "request": "trigger",
+         "version": 1_u32,
+         "event_type": "bogus",
+         "repository": { "id": REPO_ID },
+         "commits": [COMMIT_A],
+      }))
+      .expect_err("unknown event_type must fail");
+
+      assert!(missing.to_string().contains("event_type"), "got: {missing}");
+      assert!(
+         unknown.to_string().contains("bogus") || unknown.to_string().contains("event_type"),
+         "got: {unknown}"
+      );
+   }
+
+   #[test]
+   fn response_writer_appends_newline() {
+      let mut output = Vec::new();
+
+      Response::Finished {
+         result: RunResult::Success,
+      }
+      .to_writer(&mut output)
+      .expect("response must serialize");
+
+      assert_eq!(
+         String::from_utf8(output).expect("response JSON must be utf-8"),
+         "{\"response\":\"finished\",\"result\":\"success\"}\n",
+      );
    }
 }

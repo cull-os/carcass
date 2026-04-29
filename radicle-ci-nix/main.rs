@@ -15,8 +15,8 @@ use tracing_subscriber::{
    },
 };
 
+mod broker;
 mod config;
-mod message;
 mod nix;
 
 #[derive(Debug, thiserror::Error)]
@@ -28,16 +28,16 @@ enum Error {
    InitTracing(#[from] tracing_subscriber_util::TryInitError),
 
    #[error("failed to read request from stdin")]
-   ReadRequest(#[source] message::Error),
+   ReadRequest(#[source] broker::Error),
 
    #[error("request did not specify a commit")]
-   NoCommit(#[source] message::Error),
+   NoCommit(#[source] broker::Error),
 
    #[error("failed to load configuration")]
    LoadConfig(#[from] config::Error),
 
    #[error("failed to write response to stdout")]
-   WriteResponse(#[source] message::Error),
+   WriteResponse(#[source] broker::Error),
 
    #[error("failed to spawn 'nix flake check'")]
    SpawnNix(#[source] io::Error),
@@ -64,7 +64,7 @@ fn real_main() -> Result<(), Error> {
          .try_init()?;
    }
 
-   let request = message::Request::from_reader(io::stdin()).map_err(Error::ReadRequest)?;
+   let request = broker::Request::from_reader(io::stdin()).map_err(Error::ReadRequest)?;
 
    let config = config::Config::load()?;
 
@@ -75,9 +75,9 @@ fn real_main() -> Result<(), Error> {
       .canonicalize()
       .map_err(Error::CanonicalizeRepoPath)?;
 
-   let run_id = message::RunId::generate();
+   let run_id = broker::RunId::generate();
 
-   message::Response::Triggered {
+   broker::Response::Triggered {
       info_url: config.run_url([run_id.to_string()]),
       run_id,
    }
@@ -99,12 +99,12 @@ fn real_main() -> Result<(), Error> {
          .map_err(Error::SpawnNix)?
    };
 
-   message::Response::Finished {
+   broker::Response::Finished {
       result: if status.success() {
-         message::RunResult::Success
+         broker::RunResult::Success
       } else {
          tracing::warn!(?status, "'nix flake check' failed");
-         message::RunResult::Failure
+         broker::RunResult::Failure
       },
    }
    .to_writer(io::stdout())
