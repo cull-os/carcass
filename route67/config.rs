@@ -1,4 +1,7 @@
-use std::str::FromStr as _;
+use std::{
+   path,
+   str::FromStr as _,
+};
 
 use indexmap::IndexMap;
 use libp2p::{
@@ -83,16 +86,29 @@ pub struct Peer {
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
+pub enum FileOrInline {
+   File(path::PathBuf),
+   #[serde(untagged)]
+   Inline(String),
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub struct Config {
    #[serde(rename = "id", with = "peer_id")]
    pub peer_id: p2p::PeerId,
    #[serde(with = "keypair")]
    pub keypair: ed25519::Keypair,
 
+   #[serde(default, skip_serializing_if = "Option::is_none")]
    pub interface: Option<String>,
+   #[serde(default, skip_serializing_if = "Vec::is_empty")]
    pub listen:    Vec<p2p::Multiaddr>,
 
-   #[serde(default, rename = "peer")]
+   #[serde(default, skip_serializing_if = "Option::is_none")]
+   pub zone: Option<FileOrInline>,
+
+   #[serde(default, rename = "peer", skip_serializing_if = "IndexMap::is_empty")]
    pub peers: IndexMap<p2p::PeerId, Peer>,
 }
 
@@ -114,8 +130,7 @@ impl TryFrom<&str> for Config {
    fn try_from(string: &str) -> Result<Self, Error> {
       let config: Self = toml::from_str(string)?;
 
-      let keypair_id =
-         p2p::PeerId::from_public_key(&p2p_id::PublicKey::from(config.keypair.public()));
+      let keypair_id = p2p::PeerId::from(p2p_id::PublicKey::from(config.keypair.public()));
 
       if config.peer_id != keypair_id {
          return Err(Error::PeerIdMismatch {
@@ -180,7 +195,7 @@ impl Config {
       ];
 
       let keypair = ed25519::Keypair::generate();
-      let peer_id = p2p::PeerId::from_public_key(&p2p_id::PublicKey::from(keypair.public()));
+      let peer_id = p2p::PeerId::from(p2p_id::PublicKey::from(keypair.public()));
 
       Self {
          peer_id,
@@ -196,6 +211,8 @@ impl Config {
          .iter()
          .map(|address| p2p::Multiaddr::from_str(address).expect("literals must be valid"))
          .collect(),
+
+         zone: None,
 
          peers: PEERS
             .iter()

@@ -5,6 +5,10 @@ use std::{
    path,
 };
 
+use dup::{
+   Dupe as _,
+   IteratorDupedExt as _,
+};
 use libp2p as p2p;
 use libp2p::futures::{
    SinkExt as _,
@@ -217,7 +221,7 @@ pub async fn connect<
                };
 
                tokio::spawn({
-                  let sender = sender.clone();
+                  let sender = sender.dupe();
                   async move {
                      if let Err(error) = handle_stream::<TYPE, In, Out>(stream, sender).await {
                         tracing::warn!(%error, "Control socket client disconnected with error");
@@ -234,15 +238,16 @@ pub async fn connect<
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case", tag = "command")]
+#[expect(clippy::enum_variant_names)]
 pub enum Request {
-   MapPeer {
+   PeerMap {
       peer_id:   p2p::PeerId,
       #[serde(default)]
       addresses: Vec<p2p::Multiaddr>,
       #[serde(default)]
       allow:     Vec<String>,
    },
-   UnmapPeer {
+   PeerUnmap {
       peer_id: p2p::PeerId,
    },
    PeerStatus {
@@ -270,12 +275,12 @@ pub enum Response {
 impl<P: ip::Policy> Program<P> {
    pub fn handle_request(&mut self, request: Request) -> Response {
       match request {
-         Request::MapPeer {
+         Request::PeerMap {
             peer_id,
             addresses,
             allow,
          } => {
-            match self.map_peer(peer_id, &config::Peer { addresses, allow }) {
+            match self.peer_map(peer_id, &config::Peer { addresses, allow }) {
                Ok(()) => {
                   Response::Ok {
                      ok: format!("mapped peer '{peer_id}'"),
@@ -284,10 +289,10 @@ impl<P: ip::Policy> Program<P> {
                Err(error) => Response::Error { error },
             }
          },
-         Request::UnmapPeer { peer_id } => {
+         Request::PeerUnmap { peer_id } => {
             let ok = format!("unmapped peer '{peer_id}'");
 
-            self.unmap_peer(peer_id);
+            self.peer_unmap(peer_id);
 
             Response::Ok { ok }
          },
@@ -299,7 +304,7 @@ impl<P: ip::Policy> Program<P> {
                   .behaviour()
                   .ip
                   .connections(&peer_id)
-                  .cloned()
+                  .duped()
                   .collect(),
             }
          },

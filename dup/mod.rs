@@ -244,6 +244,29 @@ mod bytes {
    impl Dupe for bytes::BytesMut {}
 }
 
+#[cfg(feature = "libp2p")]
+mod libp2p {
+   use libp2p::{
+      core::{
+         self,
+         transport,
+      },
+      swarm,
+   };
+
+   use super::Dupe;
+
+   impl Dupe for libp2p::PeerId {}
+   impl Dupe for libp2p::StreamProtocol {}
+
+   impl Dupe for core::Endpoint {}
+   impl Dupe for transport::DialOpts {}
+   impl Dupe for transport::ListenerId {}
+   impl Dupe for transport::PortUse {}
+
+   impl Dupe for swarm::ConnectionId {}
+}
+
 #[cfg(feature = "multiaddr")]
 mod multiaddr {
    use super::Dupe;

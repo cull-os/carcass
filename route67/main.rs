@@ -140,7 +140,7 @@ enum Command {
    Status { peer_id: libp2p::PeerId },
 
    /// Map a peer.
-   Map {
+   PeerMap {
       peer_id: libp2p::PeerId,
 
       #[arg(long = "address")]
@@ -151,7 +151,7 @@ enum Command {
    },
 
    /// Unmap a peer.
-   Unmap { peer_id: libp2p::PeerId },
+   PeerUnmap { peer_id: libp2p::PeerId },
 }
 
 async fn send_request(request: socket::Request) -> Result<socket::Response, Error> {
@@ -292,12 +292,12 @@ async fn real_main() -> Result<(), Error> {
             response => return Err(Error::UnexpectedResponse { response }),
          }
       },
-      Command::Map {
+      Command::PeerMap {
          peer_id,
          addresses,
          allow,
       } => {
-         let response = send_request(socket::Request::MapPeer {
+         let response = send_request(socket::Request::PeerMap {
             peer_id,
             addresses,
             allow,
@@ -310,8 +310,8 @@ async fn real_main() -> Result<(), Error> {
             response => return Err(Error::UnexpectedResponse { response }),
          }
       },
-      Command::Unmap { peer_id } => {
-         let response = send_request(socket::Request::UnmapPeer { peer_id }).await?;
+      Command::PeerUnmap { peer_id } => {
+         let response = send_request(socket::Request::PeerUnmap { peer_id }).await?;
 
          match response {
             socket::Response::Ok { ok } => println!("{ok}"),

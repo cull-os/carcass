@@ -1,4 +1,11 @@
-#![feature(adt_const_params, trait_alias, stmt_expr_attributes)]
+#![feature(
+   adt_const_params,
+   const_index,
+   const_trait_impl,
+   duration_constructors,
+   stmt_expr_attributes,
+   trait_alias
+)]
 
 use std::{
    cell::RefCell,
@@ -7,7 +14,10 @@ use std::{
    time,
 };
 
-use dup::Dupe as _;
+use dup::{
+   Dupe as _,
+   IteratorDupedExt as _,
+};
 use indexmap::IndexMap;
 use libp2p::{
    self as p2p,
@@ -131,6 +141,9 @@ struct Program<P: ip::Policy> {
    address_map:  address::Map,
    mapped_peers: Rc<RefCell<rustc_hash::FxHashSet<p2p::PeerId>>>,
 
+   dns_local: dns::Local,
+   dns_host:  dns::Host,
+
    relays: IndexMap<p2p::PeerId, Relay, rustc_hash::FxBuildHasher>,
 
    swarm: p2p::Swarm<Behaviour<P>>,
@@ -211,6 +224,9 @@ async fn create(
       network_state: network_monitor.get(),
       network_monitor,
 
+      dns_local: dns::Local::new(),
+      dns_host: dns::Host::new(peer_id, &address_map),
+
       address_map,
       mapped_peers: allowed_peers.dupe(),
 
@@ -268,7 +284,7 @@ async fn create(
 }
 
 impl<P: ip::Policy> Program<P> {
-   fn map_peer(&mut self, peer_id: p2p::PeerId, peer: &config::Peer) -> Result<(), String> {
+   fn peer_map(&mut self, peer_id: p2p::PeerId, peer: &config::Peer) -> Result<(), String> {
       let Some(prefix) = self.address_map.map(peer_id) else {
          tracing::error!(%peer_id, "Peer has a prefix collision, could not map");
          return Err("failed to map peer due to prefix collision".to_owned());
@@ -279,12 +295,12 @@ impl<P: ip::Policy> Program<P> {
       }
 
       for address in &peer.addresses {
-         self.swarm.add_peer_address(peer_id, address.clone());
+         self.swarm.add_peer_address(peer_id, address.dupe());
          self
             .swarm
             .behaviour_mut()
             .kad
-            .add_address(&peer_id, address.clone());
+            .add_address(&peer_id, address.dupe());
       }
 
       tracing::info!(
@@ -296,7 +312,7 @@ impl<P: ip::Policy> Program<P> {
       Ok(())
    }
 
-   fn unmap_peer(&mut self, peer_id: p2p::PeerId) {
+   fn peer_unmap(&mut self, peer_id: p2p::PeerId) {
       self.address_map.unmap(&peer_id);
 
       self.mapped_peers.borrow_mut().remove(&peer_id);
@@ -308,7 +324,7 @@ impl<P: ip::Policy> Program<P> {
    }
 
    fn recover(&mut self) {
-      for address in self.swarm.external_addresses().cloned().collect::<Vec<_>>() {
+      for address in self.swarm.external_addresses().duped().collect::<Vec<_>>() {
          self.swarm.remove_external_address(&address);
       }
 
@@ -368,11 +384,11 @@ impl<P: ip::Policy> Program<P> {
             }
 
             let address = address
-               .clone()
+               .dupe()
                .with(p2p_multiaddr::Protocol::P2p(peer_id))
                .with(p2p_multiaddr::Protocol::P2pCircuit);
 
-            if let Ok(listener_id) = self.swarm.listen_on(address.clone()) {
+            if let Ok(listener_id) = self.swarm.listen_on(address.dupe()) {
                addresses_listened += 1;
                listener_id_opt.replace(listener_id);
             }
@@ -450,13 +466,13 @@ pub async fn run(
       .await?;
 
    for (&peer_id, peer) in &config.peers {
-      let _ = program.map_peer(peer_id, peer);
+      let _ = program.peer_map(peer_id, peer);
    }
 
    for address in &config.listen {
-      program.swarm.listen_on(address.clone()).map_err(|source| {
+      program.swarm.listen_on(address.dupe()).map_err(|source| {
          Error::Listen {
-            address: address.clone(),
+            address: address.dupe(),
             source,
          }
       })?;
@@ -465,7 +481,12 @@ pub async fn run(
    program.recover();
 
    let mut join_set = task::JoinSet::new();
-   let mut dns_queries = dns::listen(&mut join_set).await?;
+
+   program.dns_local.reload(&program.address_map).await;
+   program.dns_local.listen(&mut join_set).await?;
+
+   program.dns_host.reload(config.zone.as_ref()).await?;
+   program.dns_host.listen(&mut join_set).await?;
 
    loop {
       select! {
@@ -629,30 +650,6 @@ pub async fn run(
             response
                .send(program.handle_request(request))
                .expect("response receiver must stay alive");
-         },
-
-         Some(query) = dns_queries.recv() => {
-            match query {
-               dns::Query::AddressForPeerId { peer_id, sender } => {
-                  let address = program.address_map.prefix_of(&peer_id).map(|prefix| {
-                     let mut octets = [0; _];
-                     octets[..address::HOST_PREFIX_RANGE.end].copy_from_slice(&*prefix);
-                     *octets.last_mut().expect("address array must not be empty") = 1;
-                     net::Ipv6Addr::from(octets)
-                  });
-
-                  sender
-                     .send(address)
-                     .expect("response receiver must stay alive");
-               },
-               dns::Query::PeerIdForAddress { address, sender } => {
-                  let peer_id = program.address_map.peer_of(&address::Prefix::from(address));
-
-                  sender
-                     .send(peer_id)
-                     .expect("response receiver must stay alive");
-               },
-            }
          },
 
          Some(joined) = join_set.join_next() => {

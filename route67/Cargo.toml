@@ -20,7 +20,7 @@ path = "main.rs"
 workspace = true
 
 [dependencies]
-dup.path = "../dup"
+dup = { features = [ "bytes", "libp2p", "multiaddr", "tokio" ], path = "../dup" }
 ust.path = "../ust"
 
 async-trait.workspace = true
@@ -73,6 +73,9 @@ tun-rs.workspace = true
 
 [target.'cfg(target_os = "linux")'.dependencies]
 rtnetlink.workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+route_manager.workspace = true
 
 [dev-dependencies]
 proptest.workspace = true

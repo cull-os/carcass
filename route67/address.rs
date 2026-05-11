@@ -8,6 +8,7 @@ use derive_more::{
    Deref,
    DerefMut,
 };
+use dup::Dupe;
 use libp2p as p2p;
 use rustc_hash::FxHashMap;
 use sha2::Digest as _;
@@ -17,7 +18,7 @@ pub const VPN_PREFIX_RANGE: Range<usize> = 0..2;
 pub const HOST_PREFIX_RANGE: Range<usize> = VPN_PREFIX_RANGE.end..VPN_PREFIX_RANGE.end + 8;
 pub const HOST_SUBNET_RANGE: Range<usize> = HOST_PREFIX_RANGE.end..HOST_PREFIX_RANGE.end + 6;
 
-#[derive(Deref, DerefMut, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Deref, DerefMut, Debug, Clone, Copy, Dupe, PartialEq, Eq, Hash)]
 pub struct Prefix([u8; HOST_PREFIX_RANGE.end]);
 
 impl From<net::Ipv6Addr> for Prefix {
@@ -33,6 +34,22 @@ impl From<Prefix> for net::Ipv6Addr {
       let mut octets = [0; _];
       octets[..prefix.len()].copy_from_slice(&*prefix);
       Self::from(octets)
+   }
+}
+
+impl Prefix {
+   pub const LOCAL: Self = {
+      let mut octets = [0; HOST_PREFIX_RANGE.end];
+      octets[VPN_PREFIX_RANGE.start..VPN_PREFIX_RANGE.end].copy_from_slice(&VPN_PREFIX);
+      Self(octets)
+   };
+
+   #[must_use]
+   pub fn host_addr(self) -> net::Ipv6Addr {
+      let mut octets = [0; _];
+      octets[..self.len()].copy_from_slice(&*self);
+      *octets.last_mut().expect("address array must not be empty") = 1;
+      net::Ipv6Addr::from(octets)
    }
 }
 
@@ -87,6 +104,10 @@ impl Map {
    pub fn peer_of(&self, prefix: &Prefix) -> Option<p2p::PeerId> {
       self.prefix_to_peer.get(prefix).copied()
    }
+
+   pub fn iter(&self) -> impl Iterator<Item = (p2p::PeerId, Prefix)> + '_ {
+      self.peer_to_prefix.iter().map(|(&peer_id, &prefix)| (peer_id, prefix))
+   }
 }
 
 #[cfg(test)]
@@ -101,7 +122,7 @@ mod tests {
 
    fn peer_id_strategy() -> impl Strategy<Value = p2p::PeerId> {
       any::<[u8; 32]>().prop_map(|mut bytes| {
-         p2p::PeerId::from_public_key(&identity::PublicKey::from(
+         p2p::PeerId::from(identity::PublicKey::from(
             ed25519::Keypair::from(
                ed25519::SecretKey::try_from_bytes(&mut bytes).expect("size was statically checked"),
             )

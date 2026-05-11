@@ -18,6 +18,7 @@ use bytes::{
    BytesMut,
 };
 use derive_more::Deref;
+use dup::Dupe;
 use either::Either;
 use libp2p::{
    self as p2p,
@@ -47,7 +48,7 @@ use ringbuf::{
 
 const PROTOCOL: p2p_swarm::StreamProtocol = p2p_swarm::StreamProtocol::new("/ip/0.0.1");
 
-#[derive(Debug, Deref, Clone)]
+#[derive(Debug, Deref, Clone, Dupe)]
 pub struct Packet(pub Bytes);
 
 #[derive(Debug)]
@@ -477,7 +478,7 @@ impl<P: Policy> p2p_swarm::NetworkBehaviour for Behaviour<P> {
          .connections
          .entry(peer_id)
          .or_default()
-         .push_back((connection_id, remote_addr.clone()));
+         .push_back((connection_id, remote_addr.dupe()));
       Ok(Handler::new(peer_id))
    }
 
@@ -493,7 +494,7 @@ impl<P: Policy> p2p_swarm::NetworkBehaviour for Behaviour<P> {
          .connections
          .entry(peer_id)
          .or_default()
-         .push_back((connection_id, addr.clone()));
+         .push_back((connection_id, addr.dupe()));
       Ok(Handler::new(peer_id))
    }
 

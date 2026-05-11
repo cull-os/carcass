@@ -1395,6 +1395,7 @@ dependencies = [
  "bytes",
  "cstree",
  "dup-macros",
+ "libp2p",
  "multiaddr",
  "rpds",
  "tokio",
@@ -2088,6 +2089,7 @@ dependencies = [
  "ipnet",
  "jni",
  "once_cell",
+ "prefix-trie",
  "rand 0.10.1",
  "ring",
  "serde",
@@ -2119,6 +2121,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "hickory-resolver"
+version = "0.26.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a10bd64d950b4d38ca21e25c8ae230712e4955fb8290cfcb29a5e5dc6017e544"
+dependencies = [
+ "cfg-if",
+ "futures-util",
+ "hickory-net",
+ "hickory-proto 0.26.0",
+ "ipconfig",
+ "ipnet",
+ "jni",
+ "moka",
+ "ndk-context",
+ "once_cell",
+ "parking_lot",
+ "rand 0.10.1",
+ "resolv-conf",
+ "serde",
+ "smallvec 1.15.1",
+ "system-configuration",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "hickory-server"
 version = "0.26.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2131,6 +2160,7 @@ dependencies = [
  "futures-util",
  "hickory-net",
  "hickory-proto 0.26.0",
+ "hickory-resolver 0.26.0",
  "ipnet",
  "prefix-trie",
  "serde",
@@ -2782,7 +2812,7 @@ checksum = "0b770c1c8476736ca98c578cba4b505104ff8e842c2876b528925f9766379f9a"
 dependencies = [
  "async-trait",
  "futures",
- "hickory-resolver",
+ "hickory-resolver 0.25.2",
  "libp2p-core",
  "libp2p-identity",
  "parking_lot",
@@ -3386,6 +3416,12 @@ dependencies = [
  "n0-error",
  "n0-future",
 ]
+
+[[package]]
+name = "ndk-context"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "27b02d87554356db9e9a873add8782d4ea6e3e58ea071a9adb9a2e8ddb884a8b"
 
 [[package]]
 name = "netconfig-rs"
@@ -4807,6 +4843,7 @@ dependencies = [
  "nix 0.31.2",
  "proptest",
  "ringbuf",
+ "route_manager",
  "rtnetlink 0.21.0",
  "rustc-hash",
  "serde",
@@ -4833,6 +4870,7 @@ dependencies = [
  "netlink-packet-core",
  "netlink-packet-route 0.28.0",
  "netlink-sys",
+ "tokio",
  "windows-sys 0.61.2",
 ]
 

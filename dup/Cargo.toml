@@ -21,6 +21,7 @@ workspace = true
 arcstr    = [ "dep:arcstr" ]
 bytes     = [ "dep:bytes" ]
 cstree    = [ "dep:cstree" ]
+libp2p    = [ "dep:libp2p" ]
 multiaddr = [ "dep:multiaddr" ]
 rpds      = [ "dep:rpds", "dep:archery" ]
 tokio     = [ "dep:tokio" ]
@@ -33,6 +34,8 @@ arcstr = { optional = true, workspace = true }
 bytes = { optional = true, workspace = true }
 
 cstree = { optional = true, workspace = true }
+
+libp2p = { optional = true, workspace = true }
 
 multiaddr = { optional = true, workspace = true }
 
