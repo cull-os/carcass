@@ -104,7 +104,7 @@ pub enum Error {
    NoCommits,
 }
 
-#[derive(Debug, Display, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Display, Clone, Copy, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct RunId {
    id: uuid::Uuid,
 }
@@ -313,7 +313,7 @@ mod tests {
       let run_id = RunId::generate();
       assert_eq!(
          serde_json::to_value(Response::Triggered {
-            run_id:   run_id.clone(),
+            run_id,
             info_url: Some(
                url::Url::parse("https://ci.example/run").expect("literal must be valid")
             ),

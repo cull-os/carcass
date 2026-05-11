@@ -191,6 +191,18 @@ mod containers {
 
    impl<A: Dupe> Dupe for ops::Bound<A> {}
 
+   impl<A: Dupe> Dupe for ops::Range<A> {}
+
+   impl<A: Dupe> Dupe for ops::RangeFrom<A> {}
+
+   impl<A: Dupe> Dupe for ops::RangeInclusive<A> {}
+
+   impl<A: Dupe> Dupe for ops::RangeTo<A> {}
+
+   impl<A: Dupe> Dupe for ops::RangeToInclusive<A> {}
+
+   impl Dupe for ops::RangeFull {}
+
    impl<A: Dupe> Dupe for pin::Pin<A> {}
 
    impl<A: Dupe> Dupe for ptr::NonNull<A> {}
@@ -230,6 +242,32 @@ mod bytes {
    impl Dupe for bytes::Bytes {}
 
    impl Dupe for bytes::BytesMut {}
+}
+
+#[cfg(feature = "multiaddr")]
+mod multiaddr {
+   use super::Dupe;
+
+   impl Dupe for multiaddr::Multiaddr {}
+}
+
+#[cfg(feature = "tokio")]
+mod tokio {
+   use tokio::sync;
+
+   use super::Dupe;
+
+   impl<T> Dupe for sync::mpsc::Sender<T> {}
+   impl<T> Dupe for sync::mpsc::WeakSender<T> {}
+
+   impl<T> Dupe for sync::mpsc::UnboundedSender<T> {}
+   impl<T> Dupe for sync::mpsc::WeakUnboundedSender<T> {}
+
+   impl<T> Dupe for sync::watch::Sender<T> {}
+   impl<T> Dupe for sync::watch::Receiver<T> {}
+
+   impl<T> Dupe for sync::broadcast::Sender<T> {}
+   impl<T> Dupe for sync::broadcast::WeakSender<T> {}
 }
 
 #[cfg(feature = "cstree")]

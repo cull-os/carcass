@@ -1395,7 +1395,9 @@ dependencies = [
  "bytes",
  "cstree",
  "dup-macros",
+ "multiaddr",
  "rpds",
+ "tokio",
 ]
 
 [[package]]

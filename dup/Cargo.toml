@@ -18,10 +18,12 @@ path = "mod.rs"
 workspace = true
 
 [features]
-arcstr = [ "dep:arcstr" ]
-bytes  = [ "dep:bytes" ]
-cstree = [ "dep:cstree" ]
-rpds   = [ "dep:rpds", "dep:archery" ]
+arcstr    = [ "dep:arcstr" ]
+bytes     = [ "dep:bytes" ]
+cstree    = [ "dep:cstree" ]
+multiaddr = [ "dep:multiaddr" ]
+rpds      = [ "dep:rpds", "dep:archery" ]
+tokio     = [ "dep:tokio" ]
 
 [dependencies]
 dup-macros.path = "./macros"
@@ -32,5 +34,9 @@ bytes = { optional = true, workspace = true }
 
 cstree = { optional = true, workspace = true }
 
+multiaddr = { optional = true, workspace = true }
+
 archery = { optional = true, workspace = true }
 rpds    = { optional = true, workspace = true }
+
+tokio = { optional = true, workspace = true }
