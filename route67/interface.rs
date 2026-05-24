@@ -15,6 +15,22 @@ pub enum Error {
    #[error("failed to create tun device")]
    CreateDevice(#[source] io::Error),
 
+   #[cfg(target_os = "macos")]
+   #[error("failed to read the tun device name")]
+   DeviceName(#[source] io::Error),
+
+   #[cfg(target_os = "macos")]
+   #[error("failed to enumerate interface addresses")]
+   ListAddresses(#[source] io::Error),
+
+   #[cfg(target_os = "macos")]
+   #[error("failed to remove link-local '{address}' from the tun")]
+   RemoveLinkLocal {
+      address: net::Ipv6Addr,
+      #[source]
+      source:  io::Error,
+   },
+
    #[error("failed to create route manager")]
    RouteManager(#[source] io::Error),
 
@@ -35,22 +51,6 @@ pub enum Error {
       #[source]
       source:  io::Error,
    },
-
-   #[cfg(target_os = "macos")]
-   #[error("failed to read the tun device name")]
-   DeviceName(#[source] io::Error),
-
-   #[cfg(target_os = "macos")]
-   #[error("failed to enumerate interface addresses")]
-   ListAddresses(#[source] io::Error),
-
-   #[cfg(target_os = "macos")]
-   #[error("failed to remove stray link-local '{address}' from the tun")]
-   RemoveLinkLocal {
-      address: net::Ipv6Addr,
-      #[source]
-      source:  io::Error,
-   },
 }
 
 pub struct Interface {
@@ -66,9 +66,11 @@ impl Interface {
          builder = builder.name(name);
       }
 
-      let builder = builder.ipv6(LOCAL, 16).associate_route(false);
-
-      let device = builder.build_async().map_err(Error::CreateDevice)?;
+      let device = builder
+         .ipv6(LOCAL, 16)
+         .associate_route(false)
+         .build_async()
+         .map_err(Error::CreateDevice)?;
 
       #[cfg(target_os = "macos")]
       {
