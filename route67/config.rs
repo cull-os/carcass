@@ -74,17 +74,21 @@ mod peer_id {
    }
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+fn is_default<T: Default + Eq>(value: &T) -> bool {
+   value == &T::default()
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct Peer {
-   #[serde(default, skip_serializing_if = "Vec::is_empty")]
+   #[serde(default, skip_serializing_if = "is_default")]
    pub addresses: Vec<p2p::Multiaddr>,
 
-   #[serde(default, skip_serializing_if = "Vec::is_empty")]
+   #[serde(default, skip_serializing_if = "is_default")]
    pub allow: Vec<String>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum FileOrInline {
    File(path::PathBuf),
@@ -100,15 +104,15 @@ pub struct Config {
    #[serde(with = "keypair")]
    pub keypair: ed25519::Keypair,
 
-   #[serde(default, skip_serializing_if = "Option::is_none")]
+   #[serde(default, skip_serializing_if = "is_default")]
    pub interface: Option<String>,
-   #[serde(default, skip_serializing_if = "Vec::is_empty")]
+   #[serde(default, skip_serializing_if = "is_default")]
    pub listen:    Vec<p2p::Multiaddr>,
 
-   #[serde(default, skip_serializing_if = "Option::is_none")]
+   #[serde(default, skip_serializing_if = "is_default")]
    pub zone: Option<FileOrInline>,
 
-   #[serde(default, rename = "peer", skip_serializing_if = "IndexMap::is_empty")]
+   #[serde(default, rename = "peer", skip_serializing_if = "is_default")]
    pub peers: IndexMap<p2p::PeerId, Peer>,
 }
 
