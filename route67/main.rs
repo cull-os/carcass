@@ -136,11 +136,15 @@ enum Command {
       generate_config: bool,
    },
 
-   /// Query peer status.
-   Status { peer_id: libp2p::PeerId },
+   /// Manage peers.
+   #[command(subcommand)]
+   Peer(Peer),
+}
 
+#[derive(clap::Subcommand, Debug, Clone)]
+enum Peer {
    /// Map a peer.
-   PeerMap {
+   Map {
       peer_id: libp2p::PeerId,
 
       #[arg(long = "address")]
@@ -151,7 +155,10 @@ enum Command {
    },
 
    /// Unmap a peer.
-   PeerUnmap { peer_id: libp2p::PeerId },
+   Unmap { peer_id: libp2p::PeerId },
+
+   /// Query peer status.
+   Status { peer_id: libp2p::PeerId },
 }
 
 async fn send_request(request: socket::Request) -> Result<socket::Response, Error> {
@@ -278,25 +285,12 @@ async fn real_main() -> Result<(), Error> {
          .await
          .map_err(|error| Error::Route67(Box::new(error)))?;
       },
-      Command::Status { peer_id } => {
-         let response = send_request(socket::Request::PeerStatus { peer_id }).await?;
 
-         match response {
-            socket::Response::PeerStatus { connections, .. } => {
-               // TODO: Colors and stuff.
-               for connection in connections {
-                  println!("{connection}");
-               }
-            },
-            socket::Response::Error { error } => return Err(Error::Daemon { error }),
-            response => return Err(Error::UnexpectedResponse { response }),
-         }
-      },
-      Command::PeerMap {
+      Command::Peer(Peer::Map {
          peer_id,
          addresses,
          allow,
-      } => {
+      }) => {
          let response = send_request(socket::Request::PeerMap {
             peer_id,
             addresses,
@@ -310,11 +304,25 @@ async fn real_main() -> Result<(), Error> {
             response => return Err(Error::UnexpectedResponse { response }),
          }
       },
-      Command::PeerUnmap { peer_id } => {
+      Command::Peer(Peer::Unmap { peer_id }) => {
          let response = send_request(socket::Request::PeerUnmap { peer_id }).await?;
 
          match response {
             socket::Response::Ok { ok } => println!("{ok}"),
+            socket::Response::Error { error } => return Err(Error::Daemon { error }),
+            response => return Err(Error::UnexpectedResponse { response }),
+         }
+      },
+      Command::Peer(Peer::Status { peer_id }) => {
+         let response = send_request(socket::Request::PeerStatus { peer_id }).await?;
+
+         match response {
+            socket::Response::PeerStatus { connections, .. } => {
+               // TODO: Colors and stuff.
+               for connection in connections {
+                  println!("{connection}");
+               }
+            },
             socket::Response::Error { error } => return Err(Error::Daemon { error }),
             response => return Err(Error::UnexpectedResponse { response }),
          }
