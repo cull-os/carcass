@@ -8,6 +8,8 @@ use super::address;
 
 pub const MTU: u16 = 1420;
 
+const LOCAL: net::Ipv6Addr = net::Ipv6Addr::new(0xFE80, 0, 0, 0, 0, 0, 0, 0x67);
+
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
    #[error("failed to create tun device")]
@@ -33,6 +35,22 @@ pub enum Error {
       #[source]
       source:  io::Error,
    },
+
+   #[cfg(target_os = "macos")]
+   #[error("failed to read the tun device name")]
+   DeviceName(#[source] io::Error),
+
+   #[cfg(target_os = "macos")]
+   #[error("failed to enumerate interface addresses")]
+   ListAddresses(#[source] io::Error),
+
+   #[cfg(target_os = "macos")]
+   #[error("failed to remove stray link-local '{address}' from the tun")]
+   RemoveLinkLocal {
+      address: net::Ipv6Addr,
+      #[source]
+      source:  io::Error,
+   },
 }
 
 pub struct Interface {
@@ -40,6 +58,7 @@ pub struct Interface {
 }
 
 impl Interface {
+   #[cfg_attr(target_os = "macos", expect(clippy::cognitive_complexity))]
    pub async fn create(name: Option<&str>, host_prefix: address::Prefix) -> Result<Self, Error> {
       let mut builder = tun_rs::DeviceBuilder::new().mtu(MTU);
 
@@ -47,13 +66,39 @@ impl Interface {
          builder = builder.name(name);
       }
 
-      // XNU rejects new routes when the target interface has no address of
-      // the route's family, this useless link-local activates v6 on the TUN.
-      let builder = builder
-         .ipv6(net::Ipv6Addr::new(0xFE80, 0, 0, 0, 0, 0, 0, 0x67), 64)
-         .associate_route(false);
+      let builder = builder.ipv6(LOCAL, 16).associate_route(false);
 
       let device = builder.build_async().map_err(Error::CreateDevice)?;
+
+      #[cfg(target_os = "macos")]
+      {
+         use nix::ifaddrs as nix_ifaddrs;
+
+         let name = device.name().map_err(Error::DeviceName)?;
+
+         let strays = nix_ifaddrs::getifaddrs()
+            .map_err(|error| Error::ListAddresses(io::Error::from(error)))?
+            .filter_map(|interface| {
+               if interface.interface_name != name {
+                  return None;
+               }
+
+               let address = interface.address?.as_sockaddr_in6()?.ip();
+
+               if address == LOCAL {
+                  return None;
+               }
+
+               Some(address)
+            });
+
+         for address in strays {
+            tracing::info!(%address, "Removing stray link-local from tun");
+            device
+               .remove_address(net::IpAddr::from(address))
+               .map_err(|source| Error::RemoveLinkLocal { address, source })?;
+         }
+      }
 
       {
          let mut route = route::Manager::new().map_err(Error::RouteManager)?;
@@ -362,7 +407,7 @@ mod loopback {
                   address:          sockaddr_in6(address),
                   destination:      {
                      /// Zeroed `sockaddr_in6` with `AF_UNSPEC` family. XNU rejects
-                     /// `AF_INET6` destinations on loopback when prefix length is not /128.
+                     /// `AF_INET6` destinations when prefix length is not /128.
                      const SOCKADDR_IN6_UNSPEC: libc::sockaddr_in6 = libc::sockaddr_in6 {
                         sin6_len:      0,
                         sin6_family:   0,
@@ -381,15 +426,7 @@ mod loopback {
                         0
                      }
                   }))),
-                  flags:            {
-                     /// Interface address flag that makes the kernel skip NDP duplicate
-                     /// address detection, which would otherwise send neighbor
-                     /// solicitations on the wire and delay address availability by ~1s.
-                     /// Pointless on loopback.
-                     const IN6_IFF_NODAD: libc::c_int = 0x0020;
-
-                     IN6_IFF_NODAD
-                  },
+                  flags:            0,
                   address_lifetime: AddressLifetime {
                      expire:             0,
                      preferred:          0,
