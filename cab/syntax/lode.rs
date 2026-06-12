@@ -33,98 +33,22 @@ pub(crate) trait ResolvedExt {
 impl<T> ResolvedExt for T {}
 
 macro_rules! lode {
-   ($name:ident { $($field:tt)* }) => {
-      lode! {
-         @parse
-         $name
-         []
-         []
-         $($field)*
-      }
-   };
-
-   (
-      @parse
-      $name:ident
-      [ $($field_declaration:tt)* ]
-      [ $($field_getter:tt)* ]
-   ) => {
+   ($name:ident { $($([$list:ident])? $(?$option:ident)? $($plain:ident)?),* $(,)? }) => {
       #[derive(Debug, Clone, PartialEq, Eq)]
       pub struct $name {
-         $($field_declaration)*
+         $(
+            $(pub(crate) $list: Vec<ExpressionId>,)?
+            $(pub(crate) $option: Option<ExpressionId>,)?
+            $(pub(crate) $plain: ExpressionId,)?
+         )*
       }
 
       impl<'arena> Resolved<'arena, Spanned<&'arena $name>> {
-         $($field_getter)*
-      }
-   };
-
-   (
-      @parse
-      $name:ident
-      [ $($field_declaration:tt)* ]
-      [ $($field_getter:tt)* ]
-      $field:ident
-      $(, $($rest:tt)*)?
-   ) => {
-      lode! {
-         @parse
-         $name
-         [
-            $($field_declaration)*
-            pub(crate) $field: ExpressionId,
-         ]
-         [
-            $($field_getter)*
-            get! { &'arena $field }
-         ]
-         $($($rest)*)?
-      }
-   };
-
-   (
-      @parse
-      $name:ident
-      [ $($field_declaration:tt)* ]
-      [ $($field_getter:tt)* ]
-      Option<$field:ident>
-      $(, $($rest:tt)*)?
-   ) => {
-      lode! {
-         @parse
-         $name
-         [
-            $($field_declaration)*
-            pub(crate) $field: Option<ExpressionId>,
-         ]
-         [
-            $($field_getter)*
-            get! { Option < &'arena $field > }
-         ]
-         $($($rest)*)?
-      }
-   };
-
-   (
-      @parse
-      $name:ident
-      [ $($field_declaration:tt)* ]
-      [ $($field_getter:tt)* ]
-      [$field:ident]
-      $(, $($rest:tt)*)?
-   ) => {
-      lode! {
-         @parse
-         $name
-         [
-            $($field_declaration)*
-            pub(crate) $field: Vec<ExpressionId>,
-         ]
-         [
-            $($field_getter)*
-            get! { [ &'arena $field ] }
-         ]
-         $($($rest)*)?
+         $(
+            $(get! { [ &'arena $list ] })?
+            $(get! { Option < &'arena $option > })?
+            $(get! { &'arena $plain })?
+         )*
       }
    };
 }
@@ -234,7 +158,7 @@ lode! { List { [items] } }
 
 // ATTRIBUTES
 
-lode! { Attributes { Option<expression> } }
+lode! { Attributes { ?expression } }
 
 // OPERATIONS
 
