@@ -143,20 +143,6 @@ impl Emitter {
       });
    }
 
-   fn emit_list<'arena>(&mut self, list: lode::Resolved<'arena, Spanned<&'arena lode::List>>) {
-      for item in list.items() {
-         self.emit_thunk_start();
-         self.emit(item);
-      }
-
-      self.emit_push(list.span(), value::Nil);
-
-      for item in list.items() {
-         self.push_operation(list.span(), Operation::Construct);
-         self.emit_thunkable_end(item.span()).needs_argument(false);
-      }
-   }
-
    fn emit_attributes<'arena>(
       &mut self,
       attributes: lode::Resolved<'arena, Spanned<&'arena lode::Attributes>>,
@@ -564,8 +550,8 @@ impl Emitter {
             self.emit_parenthesis(parenthesis);
          },
 
-         lode::ExpressionPropagated::List(list) => {
-            self.emit_list(list);
+         lode::ExpressionPropagated::Nil(nil) => {
+            self.emit_push(nil.span(), value::Nil);
          },
 
          lode::ExpressionPropagated::Attributes(attributes) => {

@@ -311,7 +311,6 @@ impl Loder {
       lode::Parenthesis { expression }.into()
    }
 
-   // TODO: Refactor into x:y:z:[]
    fn lode_list(&mut self, list: &node::List) -> lode::ExpressionRaw {
       if let Some(node::ExpressionRef::InfixOperation(operation)) = list.expression()
          && operation.operator() == node::InfixOperator::Sequence
@@ -330,10 +329,17 @@ impl Loder {
          );
       }
 
-      lode::List {
-         items: list.items().map(|item| self.lode(item)).collect(),
+      let mut expression: lode::ExpressionRaw = lode::Nil.into();
+
+      for head in list.items().collect::<Vec<_>>().into_iter().rev() {
+         expression = lode::Construct {
+            head: self.lode(head),
+            tail: self.insert(expression.spanned(list.span())),
+         }
+         .into();
       }
-      .into()
+
+      expression
    }
 
    fn lode_attributes(&mut self, attributes: &node::Attributes) -> lode::ExpressionRaw {

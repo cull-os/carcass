@@ -33,6 +33,11 @@ pub(crate) trait ResolvedExt {
 impl<T> ResolvedExt for T {}
 
 macro_rules! lode {
+   ($name:ident;) => {
+      #[derive(Debug, Clone, PartialEq, Eq)]
+      pub struct $name;
+   };
+
    ($name:ident { $($([$list:ident])? $(?$option:ident)? $($plain:ident)?),* $(,)? }) => {
       #[derive(Debug, Clone, PartialEq, Eq)]
       pub struct $name {
@@ -54,13 +59,11 @@ macro_rules! lode {
 }
 
 macro_rules! get {
-   (&$lifetime:lifetime $field:ident) => {
-      pub fn $field(&self) -> Resolved<$lifetime, &$lifetime Expression> {
-         self
-            .arena
-            .get(self.$field)
-            .expect(EXPECT_ARENA)
-            .resolved(self.arena)
+   ([ &$lifetime:lifetime $field:ident ]) => {
+      pub fn $field(&self) -> impl Iterator<Item = Resolved<$lifetime, &$lifetime Expression>> {
+         self.$field.iter().map(|&item| {
+            self.arena.get(item).expect(EXPECT_ARENA).resolved(self.arena)
+         })
       }
    };
 
@@ -76,12 +79,13 @@ macro_rules! get {
       }
    };
 
-
-   ([ &$lifetime:lifetime $field:ident ]) => {
-      pub fn $field(&self) -> impl Iterator<Item = Resolved<$lifetime, &$lifetime Expression>> {
-         self.$field.iter().map(|&item| {
-            self.arena.get(item).expect(EXPECT_ARENA).resolved(self.arena)
-         })
+   (&$lifetime:lifetime $field:ident) => {
+      pub fn $field(&self) -> Resolved<$lifetime, &$lifetime Expression> {
+         self
+            .arena
+            .get(self.$field)
+            .expect(EXPECT_ARENA)
+            .resolved(self.arena)
       }
    };
 }
@@ -107,7 +111,7 @@ cab_util::paired! {
    #[derive(Debug, Clone, PartialEq, From)]
    pub enum ExpressionRaw {
       Parenthesis(Parenthesis),
-      List(List),
+      Nil(Nil),
       Attributes(Attributes),
 
       Same(Same),
@@ -152,9 +156,9 @@ impl<'arena> Resolved<'arena, &'arena Expression> {
 
 lode! { Parenthesis { expression } }
 
-// LIST
+// NIL
 
-lode! { List { [items] } }
+lode! { Nil; }
 
 // ATTRIBUTES
 
