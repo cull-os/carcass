@@ -417,11 +417,9 @@ impl<P: Policy> Behaviour<P> {
       }
    }
 
-   /// Multiaddrs of the peer's live connections, ordered most-recently-active first.
-   pub fn connections(
-      &self,
-      peer_id: &p2p::PeerId,
-   ) -> impl Iterator<Item = &p2p::Multiaddr> {
+   /// Multiaddrs of the peer's live connections, ordered most-recently-active
+   /// first.
+   pub fn connections(&self, peer_id: &p2p::PeerId) -> impl Iterator<Item = &p2p::Multiaddr> {
       self
          .connections
          .get(peer_id)

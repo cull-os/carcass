@@ -106,7 +106,10 @@ impl Map {
    }
 
    pub fn iter(&self) -> impl Iterator<Item = (p2p::PeerId, Prefix)> + '_ {
-      self.peer_to_prefix.iter().map(|(&peer_id, &prefix)| (peer_id, prefix))
+      self
+         .peer_to_prefix
+         .iter()
+         .map(|(&peer_id, &prefix)| (peer_id, prefix))
    }
 }
 

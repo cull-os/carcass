@@ -299,13 +299,13 @@ impl Local {
          )]);
 
          catalog.upsert(rr::LowerName::from(&*REVERSE_APEX), vec![Arc::new(
-            zone_handler_of(&REVERSE_APEX).serial(serial).records(iter::once(
-               rr::Record::from_rdata(
+            zone_handler_of(&REVERSE_APEX)
+               .serial(serial)
+               .records(iter::once(rr::Record::from_rdata(
                   rr::Name::from(net::IpAddr::from(address::Prefix::LOCAL.host_addr())),
                   secs!(TTL),
                   rr::RData::PTR(rdata::PTR(APEX.clone())),
-               ),
-            )),
+               ))),
          )]);
 
          for (peer_id, prefix) in map.iter() {
