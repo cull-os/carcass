@@ -459,8 +459,8 @@ pub async fn run(
    use p2p_swarm::SwarmEvent as Se;
 
    let mut program = create()
-      .peer_id(config.peer_id)
-      .keypair(config.keypair)
+      .peer_id(p2p::PeerId::from(config.peer_id))
+      .keypair(ed25519::Keypair::from(config.keypair.content()?))
       .maybe_interface(config.interface.as_deref())
       .call()
       .await?;

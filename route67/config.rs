@@ -1,8 +1,11 @@
 use std::{
+   fs,
+   io,
    path,
    str::FromStr as _,
 };
 
+use derive_more::Into;
 use indexmap::IndexMap;
 use libp2p::{
    self as p2p,
@@ -11,66 +14,108 @@ use libp2p::{
       ed25519,
    },
 };
+use serde::de::{
+   self as serde_de,
+   value as serde_value,
+};
 use toml::de as toml_de;
 
-mod keypair {
-   use libp2p::identity::ed25519;
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum FileOrInline<T> {
+   File(path::PathBuf),
+   #[serde(untagged)]
+   Inline(T),
+}
 
-   const PREFIX: &str = "route67private_";
+impl<T: serde_de::DeserializeOwned + Clone> FileOrInline<T> {
+   #[expect(clippy::result_large_err)]
+   pub fn content(&self) -> Result<T, Error> {
+      use serde::de::IntoDeserializer as _;
 
-   pub fn serialize<S: serde::Serializer>(
-      keypair: &ed25519::Keypair,
-      serializer: S,
-   ) -> Result<S::Ok, S::Error> {
-      let encoded = multibase::encode(multibase::Base::Base58Btc, keypair.to_bytes());
-      serializer.serialize_str(&format!("{PREFIX}{encoded}"))
-   }
+      match *self {
+         Self::Inline(ref value) => Ok(value.clone()),
+         Self::File(ref path) => {
+            let string = fs::read_to_string(path).map_err(|source| {
+               Error::ReadFile {
+                  path: path.clone(),
+                  source,
+               }
+            })?;
 
-   pub fn deserialize<'de, D: serde::Deserializer<'de>>(
-      deserializer: D,
-   ) -> Result<ed25519::Keypair, D::Error> {
-      use serde::de::{
-         Deserialize as _,
-         Error as _,
-      };
-
-      let string = String::deserialize(deserializer)?;
-      let stripped = string
-         .strip_prefix(PREFIX)
-         .ok_or_else(|| D::Error::custom(format!("missing '{PREFIX}' prefix")))?;
-
-      let (_, mut decoded) = multibase::decode(stripped).map_err(D::Error::custom)?;
-
-      ed25519::Keypair::try_from_bytes(&mut decoded).map_err(D::Error::custom)
+            T::deserialize(string.trim().into_deserializer()).map_err(Error::DeserializeFile)
+         },
+      }
    }
 }
 
-mod peer_id {
-   use libp2p as p2p;
+#[derive(Debug, Clone, Into)]
+pub struct Keypair(ed25519::Keypair);
 
-   const PREFIX: &str = "route67_";
+impl Keypair {
+   const PREFIX: &str = "route67private_";
+}
 
-   pub fn serialize<S: serde::Serializer>(
-      peer_id: &p2p::PeerId,
-      serializer: S,
-   ) -> Result<S::Ok, S::Error> {
-      serializer.serialize_str(&format!("{PREFIX}{peer_id}"))
+impl serde::Serialize for Keypair {
+   fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+      serializer.collect_str(&format_args!(
+         "{prefix}{encoded}",
+         prefix = Self::PREFIX,
+         encoded = multibase::encode(multibase::Base::Base58Btc, self.0.to_bytes()),
+      ))
    }
+}
 
-   pub fn deserialize<'de, D: serde::Deserializer<'de>>(
-      deserializer: D,
-   ) -> Result<p2p::PeerId, D::Error> {
-      use serde::de::{
-         Deserialize as _,
-         Error as _,
-      };
+impl<'de> serde::Deserialize<'de> for Keypair {
+   fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+      use serde::de::Error as _;
 
       let string = String::deserialize(deserializer)?;
-      let stripped = string
-         .strip_prefix(PREFIX)
-         .ok_or_else(|| D::Error::custom(format!("missing '{PREFIX}' prefix")))?;
+      let stripped = string.strip_prefix(Self::PREFIX).ok_or_else(|| {
+         D::Error::custom(format_args!(
+            "missing '{prefix}' prefix",
+            prefix = Self::PREFIX,
+         ))
+      })?;
 
-      stripped.parse().map_err(D::Error::custom)
+      let (_, mut decoded) = multibase::decode(stripped).map_err(D::Error::custom)?;
+
+      ed25519::Keypair::try_from_bytes(&mut decoded)
+         .map(Self)
+         .map_err(D::Error::custom)
+   }
+}
+
+#[derive(Debug, Clone, Copy, Into)]
+pub struct PeerId(p2p::PeerId);
+
+impl PeerId {
+   const PREFIX: &str = "route67_";
+}
+
+impl serde::Serialize for PeerId {
+   fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+      serializer.collect_str(&format_args!(
+         "{prefix}{peer_id}",
+         prefix = Self::PREFIX,
+         peer_id = self.0,
+      ))
+   }
+}
+
+impl<'de> serde::Deserialize<'de> for PeerId {
+   fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+      use serde::de::Error as _;
+
+      let string = String::deserialize(deserializer)?;
+      let stripped = string.strip_prefix(Self::PREFIX).ok_or_else(|| {
+         D::Error::custom(format_args!(
+            "missing '{prefix}' prefix",
+            prefix = Self::PREFIX,
+         ))
+      })?;
+
+      stripped.parse().map(Self).map_err(D::Error::custom)
    }
 }
 
@@ -88,21 +133,12 @@ pub struct Peer {
    pub allow: Vec<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum FileOrInline {
-   File(path::PathBuf),
-   #[serde(untagged)]
-   Inline(String),
-}
-
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct Config {
-   #[serde(rename = "id", with = "peer_id")]
-   pub peer_id: p2p::PeerId,
-   #[serde(with = "keypair")]
-   pub keypair: ed25519::Keypair,
+   #[serde(rename = "id")]
+   pub peer_id: PeerId,
+   pub keypair: FileOrInline<Keypair>,
 
    #[serde(default, skip_serializing_if = "is_default")]
    pub interface: Option<String>,
@@ -110,7 +146,7 @@ pub struct Config {
    pub listen:    Vec<p2p::Multiaddr>,
 
    #[serde(default, skip_serializing_if = "is_default")]
-   pub zone: Option<FileOrInline>,
+   pub zone: Option<FileOrInline<String>>,
 
    #[serde(default, rename = "peer", skip_serializing_if = "is_default")]
    pub peers: IndexMap<p2p::PeerId, Peer>,
@@ -126,6 +162,16 @@ pub enum Error {
       id:         p2p::PeerId,
       keypair_id: p2p::PeerId,
    },
+
+   #[error("failed to read file '{path}'", path = .path.display())]
+   ReadFile {
+      path:   path::PathBuf,
+      #[source]
+      source: io::Error,
+   },
+
+   #[error("failed to deserialize file")]
+   DeserializeFile(#[source] serde_value::Error),
 }
 
 impl TryFrom<&str> for Config {
@@ -134,11 +180,13 @@ impl TryFrom<&str> for Config {
    fn try_from(string: &str) -> Result<Self, Error> {
       let config: Self = toml::from_str(string)?;
 
-      let keypair_id = p2p::PeerId::from(p2p_id::PublicKey::from(config.keypair.public()));
+      let keypair_id = p2p::PeerId::from(p2p_id::PublicKey::from(
+         ed25519::Keypair::from(config.keypair.content()?).public(),
+      ));
 
-      if config.peer_id != keypair_id {
+      if p2p::PeerId::from(config.peer_id) != keypair_id {
          return Err(Error::PeerIdMismatch {
-            id: config.peer_id,
+            id: p2p::PeerId::from(config.peer_id),
             keypair_id,
          });
       }
@@ -199,14 +247,13 @@ impl Config {
       ];
 
       let keypair = ed25519::Keypair::generate();
-      let peer_id = p2p::PeerId::from(p2p_id::PublicKey::from(keypair.public()));
 
       Self {
-         peer_id,
-         keypair,
+         peer_id: PeerId(p2p::PeerId::from(p2p_id::PublicKey::from(keypair.public()))),
+         keypair: FileOrInline::Inline(Keypair(keypair)),
 
          interface: None,
-         listen: [
+         listen:    [
             "/ip4/0.0.0.0/tcp/0",
             "/ip6/::/tcp/0",
             "/ip4/0.0.0.0/udp/0/quic-v1",

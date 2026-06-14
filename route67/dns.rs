@@ -378,7 +378,7 @@ impl Host {
       Ok(())
    }
 
-   pub async fn reload(&self, source: Option<&config::FileOrInline>) -> Result<(), Error> {
+   pub async fn reload(&self, source: Option<&config::FileOrInline<String>>) -> Result<(), Error> {
       let serial = next_serial();
 
       let zone = zone_of(self.peer_id);
