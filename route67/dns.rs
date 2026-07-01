@@ -113,21 +113,42 @@ fn reverse_zone_of(prefix: address::Prefix) -> rr::Name {
       .trim_to(address::HOST_PREFIX_RANGE.end * NIBBLES_PER_BYTE + SUFFIX_LABELS)
 }
 
+enum Nameserver {
+   Itself(net::Ipv6Addr),
+   At(rr::Name),
+}
+
 #[bon::builder(finish_fn(name = "records"))]
-fn zone_handler_of(
+fn authority_of(
    #[builder(start_fn)] zone: &rr::Name,
+   #[builder(start_fn)] nameserver: Nameserver,
    #[builder(finish_fn)] records: impl Iterator<Item = rr::Record>,
    serial: u32,
-   glue: Option<net::Ipv6Addr>,
 ) -> in_memory::InMemoryZoneHandler<hickory_runtime::TokioRuntimeProvider> {
-   let soa = (
-      rr::RrKey::new(rr::LowerName::from(zone), rr::RecordType::SOA),
-      rr::RecordSet::from(rr::Record::from_rdata(
+   let mut handler = in_memory::InMemoryZoneHandler::<hickory_runtime::TokioRuntimeProvider>::empty(
+      zone.clone(),
+      zone_handler::ZoneType::Primary,
+      zone_handler::AxfrPolicy::Deny,
+   );
+
+   let nameserver = match nameserver {
+      Nameserver::Itself(address) => {
+         handler.upsert_mut(
+            rr::Record::from_rdata(zone.clone(), secs!(TTL), rr::RData::from(address)),
+            serial,
+         );
+
+         zone.clone()
+      },
+      Nameserver::At(name) => name,
+   };
+
+   handler.upsert_mut(
+      rr::Record::from_rdata(
          zone.clone(),
          secs!(TTL),
          rr::RData::SOA(rdata::SOA::new(
-            // Use the zone itself for the primary authority and responsible party.
-            zone.clone(),
+            nameserver.clone(),
             zone.clone(),
             serial,
             secs!(time::Duration::from_hours(2), i32),
@@ -135,35 +156,18 @@ fn zone_handler_of(
             secs!(time::Duration::from_weeks(2), i32),
             secs!(TTL),
          )),
-      )),
+      ),
+      serial,
    );
 
-   let mut handler = in_memory::InMemoryZoneHandler::<hickory_runtime::TokioRuntimeProvider>::new(
-      zone.clone(),
-      iter::once(soa).collect(),
-      zone_handler::ZoneType::Primary,
-      zone_handler::AxfrPolicy::Deny,
-   )
-   .expect("zone construction with valid soa cannot fail");
-
-   if let Some(address) = glue {
-      handler.upsert_mut(
-         rr::Record::from_rdata(
-            zone.clone(),
-            secs!(TTL),
-            rr::RData::NS(rdata::NS(zone.clone())),
-         ),
-         serial,
-      );
-      handler.upsert_mut(
-         rr::Record::from_rdata(
-            zone.clone(),
-            secs!(TTL),
-            rr::RData::AAAA(rdata::AAAA(address)),
-         ),
-         serial,
-      );
-   }
+   handler.upsert_mut(
+      rr::Record::from_rdata(
+         zone.clone(),
+         secs!(TTL),
+         rr::RData::NS(rdata::NS(nameserver)),
+      ),
+      serial,
+   );
 
    for record in records {
       handler.upsert_mut(record, serial);
@@ -292,17 +296,19 @@ impl Local {
          let mut catalog = zone_handler::Catalog::new();
 
          catalog.upsert(rr::LowerName::from(&*APEX), vec![Arc::new(
-            zone_handler_of(&APEX)
-               .serial(serial)
-               .glue(address::Prefix::LOCAL.host_addr())
-               .records(iter::empty()),
+            authority_of(
+               &APEX,
+               Nameserver::Itself(address::Prefix::LOCAL.host_addr()),
+            )
+            .serial(serial)
+            .records(iter::empty()),
          )]);
 
          catalog.upsert(rr::LowerName::from(&*REVERSE_APEX), vec![Arc::new(
-            zone_handler_of(&REVERSE_APEX)
+            authority_of(&REVERSE_APEX, Nameserver::At(APEX.clone()))
                .serial(serial)
                .records(iter::once(rr::Record::from_rdata(
-                  rr::Name::from(net::IpAddr::from(address::Prefix::LOCAL.host_addr())),
+                  rr::Name::from(address::Prefix::LOCAL.host_addr()),
                   secs!(TTL),
                   rr::RData::PTR(rdata::PTR(APEX.clone())),
                ))),
@@ -313,6 +319,17 @@ impl Local {
             catalog.upsert(rr::LowerName::from(forward_zone.clone()), vec![Arc::new(
                forwarder_of(forward_zone).prefix(prefix),
             )]);
+
+            for alias in map.aliases_of(&peer_id) {
+               let alias_zone = rr::Name::from(alias.clone())
+                  .append_domain(&APEX)
+                  .expect("alias with apex must fit in a dns name");
+               catalog.upsert(rr::LowerName::from(&alias_zone), vec![Arc::new(
+                  authority_of(&alias_zone, Nameserver::Itself(prefix.host_addr()))
+                     .serial(serial)
+                     .records(iter::empty()),
+               )]);
+            }
 
             let reverse_zone = reverse_zone_of(prefix);
             catalog.upsert(rr::LowerName::from(reverse_zone.clone()), vec![Arc::new(
@@ -422,7 +439,7 @@ impl Host {
       .collect::<Vec<_>>();
 
       let reverse_records = iter::once(rr::Record::from_rdata(
-         rr::Name::from(net::IpAddr::from(self.prefix.host_addr())),
+         rr::Name::from(self.prefix.host_addr()),
          secs!(TTL),
          rr::RData::PTR(rdata::PTR(zone.clone())),
       ))
@@ -441,15 +458,14 @@ impl Host {
 
          // Reverse first as it borrows `records`.
          catalog.upsert(rr::LowerName::from(&reverse_zone), vec![Arc::new(
-            zone_handler_of(&reverse_zone)
+            authority_of(&reverse_zone, Nameserver::At(zone.clone()))
                .serial(serial)
                .records(reverse_records),
          )]);
 
          catalog.upsert(rr::LowerName::from(&zone), vec![Arc::new(
-            zone_handler_of(&zone)
+            authority_of(&zone, Nameserver::Itself(self.prefix.host_addr()))
                .serial(serial)
-               .glue(self.prefix.host_addr())
                .records(records.into_iter()),
          )]);
 

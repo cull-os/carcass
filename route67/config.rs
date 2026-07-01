@@ -2,10 +2,20 @@ use std::{
    fs,
    io,
    path,
-   str::FromStr as _,
+   str::{
+      self,
+      FromStr as _,
+   },
 };
 
-use derive_more::Into;
+use derive_more::{
+   Display,
+   Into,
+};
+use hickory_server::proto::{
+   self as hickory_proto,
+   rr,
+};
 use indexmap::IndexMap;
 use libp2p::{
    self as p2p,
@@ -119,6 +129,47 @@ impl<'de> serde::Deserialize<'de> for PeerId {
    }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Display, Into)]
+pub struct Alias(rr::Name);
+
+#[derive(Debug, thiserror::Error)]
+pub enum AliasError {
+   #[error("failed to parse dns name")]
+   Parse(#[source] hickory_proto::ProtoError),
+
+   #[error("alias '{name}' must not be fully qualified")]
+   FullyQualified { name: rr::Name },
+}
+
+impl str::FromStr for Alias {
+   type Err = AliasError;
+
+   fn from_str(string: &str) -> Result<Self, Self::Err> {
+      let name = rr::Name::from_str(string).map_err(AliasError::Parse)?;
+
+      let false = name.is_fqdn() else {
+         return Err(AliasError::FullyQualified { name });
+      };
+
+      Ok(Self(name))
+   }
+}
+
+impl serde::Serialize for Alias {
+   fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+      self.0.serialize(serializer)
+   }
+}
+
+impl<'de> serde::Deserialize<'de> for Alias {
+   fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+      use serde::de::Error as _;
+
+      let string = String::deserialize(deserializer)?;
+      string.parse().map_err(D::Error::custom)
+   }
+}
+
 fn is_default<T: Default + Eq>(value: &T) -> bool {
    value == &T::default()
 }
@@ -128,6 +179,9 @@ fn is_default<T: Default + Eq>(value: &T) -> bool {
 pub struct Peer {
    #[serde(default, skip_serializing_if = "is_default")]
    pub addresses: Vec<p2p::Multiaddr>,
+
+   #[serde(default, skip_serializing_if = "is_default")]
+   pub aliases: Vec<Alias>,
 
    #[serde(default, skip_serializing_if = "is_default")]
    pub allow: Vec<String>,
@@ -144,6 +198,9 @@ pub struct Config {
    pub interface: Option<String>,
    #[serde(default, skip_serializing_if = "is_default")]
    pub listen:    Vec<p2p::Multiaddr>,
+
+   #[serde(default, skip_serializing_if = "is_default")]
+   pub aliases: Vec<Alias>,
 
    #[serde(default, skip_serializing_if = "is_default")]
    pub zone: Option<FileOrInline<String>>,
@@ -263,6 +320,8 @@ impl Config {
          .map(|address| p2p::Multiaddr::from_str(address).expect("literals must be valid"))
          .collect(),
 
+         aliases: vec!["self".parse().expect("literals must be valid")],
+
          zone: None,
 
          peers: PEERS
@@ -275,6 +334,7 @@ impl Config {
                         p2p::Multiaddr::from_str(address).expect("literals must be valid")
                      })
                      .collect(),
+                  aliases:   Vec::new(),
                   allow:     Vec::new(),
                })
             })

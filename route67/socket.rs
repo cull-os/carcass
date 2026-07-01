@@ -245,6 +245,8 @@ pub enum Request {
       #[serde(default)]
       addresses: Vec<p2p::Multiaddr>,
       #[serde(default)]
+      aliases:   Vec<config::Alias>,
+      #[serde(default)]
       allow:     Vec<String>,
    },
    PeerUnmap {
@@ -278,9 +280,14 @@ impl<P: ip::Policy> Program<P> {
          Request::PeerMap {
             peer_id,
             addresses,
+            aliases,
             allow,
          } => {
-            match self.peer_map(peer_id, &config::Peer { addresses, allow }) {
+            match self.peer_map(peer_id, &config::Peer {
+               addresses,
+               aliases,
+               allow,
+            }) {
                Ok(()) => {
                   Response::Ok {
                      ok: format!("mapped peer '{peer_id}'"),

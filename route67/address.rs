@@ -1,5 +1,4 @@
 use std::{
-   collections::hash_map,
    net,
    ops::Range,
 };
@@ -12,6 +11,8 @@ use dup::Dupe;
 use libp2p as p2p;
 use rustc_hash::FxHashMap;
 use sha2::Digest as _;
+
+use crate::config;
 
 pub const VPN_PREFIX: [u8; 2] = [0xFD, 0x67];
 pub const VPN_PREFIX_RANGE: Range<usize> = 0..2;
@@ -56,34 +57,75 @@ impl Prefix {
 pub struct Map {
    peer_to_prefix: FxHashMap<p2p::PeerId, Prefix>,
    prefix_to_peer: FxHashMap<Prefix, p2p::PeerId>,
+
+   peer_to_aliases: FxHashMap<p2p::PeerId, Vec<config::Alias>>,
+   alias_to_peer:   FxHashMap<config::Alias, p2p::PeerId>,
 }
 
+#[bon::bon]
 impl Map {
    #[must_use]
-   pub fn new(self_id: p2p::PeerId) -> Self {
+   #[builder(start_fn = new, finish_fn(name = "self_aliases"))]
+   pub fn new_(
+      #[builder(start_fn)] self_id: p2p::PeerId,
+      #[builder(finish_fn)] self_aliases: &[config::Alias],
+   ) -> Self {
       let mut map = Self {
          peer_to_prefix: FxHashMap::default(),
          prefix_to_peer: FxHashMap::default(),
+
+         peer_to_aliases: FxHashMap::default(),
+         alias_to_peer:   FxHashMap::default(),
       };
 
-      map.map(self_id);
+      map.map(self_id).aliases(self_aliases);
       map
    }
 
-   pub fn map(&mut self, peer_id: p2p::PeerId) -> Option<Prefix> {
+   #[builder(finish_fn(name = "aliases"))]
+   pub fn map(
+      &mut self,
+      #[builder(start_fn)] peer_id: p2p::PeerId,
+      #[builder(finish_fn)] aliases: &[config::Alias],
+   ) -> Option<Prefix> {
       let mut prefix = Prefix([0; _]);
       prefix[VPN_PREFIX_RANGE].copy_from_slice(&VPN_PREFIX);
 
       let hash = sha2::Sha256::digest(peer_id.to_bytes());
       prefix[HOST_PREFIX_RANGE].copy_from_slice(&hash[..HOST_PREFIX_RANGE.len()]);
 
-      match self.prefix_to_peer.entry(prefix) {
-         hash_map::Entry::Occupied(entry) if *entry.get() == peer_id => return Some(prefix),
-         hash_map::Entry::Occupied(_) => return None,
-         hash_map::Entry::Vacant(entry) => entry.insert(peer_id),
-      };
+      if aliases.iter().any(|alias| {
+         self
+            .alias_to_peer
+            .get(alias)
+            .is_some_and(|&owner_id| owner_id != peer_id)
+      }) {
+         return None;
+      }
 
+      if self
+         .prefix_to_peer
+         .get(&prefix)
+         .is_some_and(|&owner_id| owner_id != peer_id)
+      {
+         return None;
+      }
+
+      self.prefix_to_peer.insert(prefix, peer_id);
       self.peer_to_prefix.insert(peer_id, prefix);
+
+      for alias in self.peer_to_aliases.remove(&peer_id).into_iter().flatten() {
+         self.alias_to_peer.remove(&alias);
+      }
+
+      for alias in aliases {
+         self.alias_to_peer.insert(alias.clone(), peer_id);
+         self
+            .peer_to_aliases
+            .entry(peer_id)
+            .or_default()
+            .push(alias.clone());
+      }
 
       Some(prefix)
    }
@@ -93,6 +135,10 @@ impl Map {
          return;
       };
       self.prefix_to_peer.remove(&prefix);
+
+      for alias in self.peer_to_aliases.remove(peer_id).into_iter().flatten() {
+         self.alias_to_peer.remove(&alias);
+      }
    }
 
    #[must_use]
@@ -103,6 +149,15 @@ impl Map {
    #[must_use]
    pub fn peer_of(&self, prefix: &Prefix) -> Option<p2p::PeerId> {
       self.prefix_to_peer.get(prefix).copied()
+   }
+
+   pub fn aliases_of(&self, peer_id: &p2p::PeerId) -> impl Iterator<Item = &config::Alias> {
+      self.peer_to_aliases.get(peer_id).into_iter().flatten()
+   }
+
+   #[must_use]
+   pub fn peer_of_alias(&self, alias: &config::Alias) -> Option<p2p::PeerId> {
+      self.alias_to_peer.get(alias).copied()
    }
 
    pub fn iter(&self) -> impl Iterator<Item = (p2p::PeerId, Prefix)> + '_ {
@@ -137,7 +192,7 @@ mod tests {
    proptest! {
       #[test]
       fn prefix_starts_with_fd67(id in peer_id_strategy()) {
-         let map = Map::new(id);
+         let map = Map::new(id).self_aliases(&[]);
          let prefix = map.prefix_of(&id).expect("self must be in map");
 
          prop_assert!(prefix.starts_with(&VPN_PREFIX));
@@ -145,8 +200,8 @@ mod tests {
 
       #[test]
       fn prefix_deterministic(id in peer_id_strategy()) {
-         let map1 = Map::new(id);
-         let map2 = Map::new(id);
+         let map1 = Map::new(id).self_aliases(&[]);
+         let map2 = Map::new(id).self_aliases(&[]);
 
          prop_assert_eq!(
             map1.prefix_of(&id).expect("self must be in map"),
@@ -156,16 +211,16 @@ mod tests {
 
       #[test]
       fn map_roundtrip(self_id in peer_id_strategy(), peer_id in peer_id_strategy()) {
-         let mut map = Map::new(self_id);
+         let mut map = Map::new(self_id).self_aliases(&[]);
 
-         if let Some(prefix) = map.map(peer_id) {
+         if let Some(prefix) = map.map(peer_id).aliases(&[]) {
             prop_assert_eq!(map.peer_of(&prefix), Some(peer_id));
          }
       }
 
       #[test]
       fn prefix_from_ipv6_roundtrip(id in peer_id_strategy()) {
-         let map = Map::new(id);
+         let map = Map::new(id).self_aliases(&[]);
          let prefix = map.prefix_of(&id).expect("self must be in map");
 
          prop_assert_eq!(Prefix::from(net::Ipv6Addr::from(prefix)), prefix);

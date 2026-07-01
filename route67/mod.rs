@@ -190,9 +190,10 @@ pub enum Error {
 async fn create(
    peer_id: p2p::PeerId,
    keypair: ed25519::Keypair,
+   aliases: &[config::Alias],
    interface: Option<&str>,
 ) -> Result<Program<impl ip::Policy>, Error> {
-   let address_map = address::Map::new(peer_id);
+   let address_map = address::Map::new(peer_id).self_aliases(aliases);
 
    tracing::info!(
       %peer_id,
@@ -285,9 +286,9 @@ async fn create(
 
 impl<P: ip::Policy> Program<P> {
    fn peer_map(&mut self, peer_id: p2p::PeerId, peer: &config::Peer) -> Result<(), String> {
-      let Some(prefix) = self.address_map.map(peer_id) else {
-         tracing::error!(%peer_id, "Peer has a prefix collision, could not map");
-         return Err("failed to map peer due to prefix collision".to_owned());
+      let Some(prefix) = self.address_map.map(peer_id).aliases(&peer.aliases) else {
+         tracing::error!(%peer_id, "Peer has a prefix or alias collision, could not map");
+         return Err("failed to map peer due to a prefix or alias collision".to_owned());
       };
 
       if !peer.allow.is_empty() {
@@ -461,6 +462,7 @@ pub async fn run(
    let mut program = create()
       .peer_id(p2p::PeerId::from(config.peer_id))
       .keypair(ed25519::Keypair::from(config.keypair.content()?))
+      .aliases(&config.aliases)
       .maybe_interface(config.interface.as_deref())
       .call()
       .await?;

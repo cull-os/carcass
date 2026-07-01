@@ -150,6 +150,9 @@ enum Peer {
       #[arg(long = "address")]
       addresses: Vec<libp2p::Multiaddr>,
 
+      #[arg(long = "alias")]
+      aliases: Vec<config::Alias>,
+
       #[arg(long)]
       allow: Vec<String>,
    },
@@ -289,11 +292,13 @@ async fn real_main() -> Result<(), Error> {
       Command::Peer(Peer::Map {
          peer_id,
          addresses,
+         aliases,
          allow,
       }) => {
          let response = send_request(socket::Request::PeerMap {
             peer_id,
             addresses,
+            aliases,
             allow,
          })
          .await?;
