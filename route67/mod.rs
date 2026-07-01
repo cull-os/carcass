@@ -138,8 +138,8 @@ struct Program<P: ip::Policy> {
    network_state:   netmon::State,
    network_monitor: n0_watcher::Direct<netmon::State>,
 
-   address_map:  address::Map,
-   mapped_peers: Rc<RefCell<rustc_hash::FxHashSet<p2p::PeerId>>>,
+   address_map:   address::Map,
+   allowed_peers: Rc<RefCell<rustc_hash::FxHashSet<p2p::PeerId>>>,
 
    dns_local: dns::Local,
    dns_host:  dns::Host,
@@ -229,7 +229,7 @@ async fn create(
       dns_host: dns::Host::new(peer_id, &address_map),
 
       address_map,
-      mapped_peers: allowed_peers.dupe(),
+      allowed_peers: allowed_peers.dupe(),
 
       relays: IndexMap::default(),
 
@@ -292,7 +292,7 @@ impl<P: ip::Policy> Program<P> {
       };
 
       if !peer.allow.is_empty() {
-         self.mapped_peers.borrow_mut().insert(peer_id);
+         self.allowed_peers.borrow_mut().insert(peer_id);
       }
 
       for address in &peer.addresses {
@@ -316,7 +316,7 @@ impl<P: ip::Policy> Program<P> {
    fn peer_unmap(&mut self, peer_id: p2p::PeerId) {
       self.address_map.unmap(&peer_id);
 
-      self.mapped_peers.borrow_mut().remove(&peer_id);
+      self.allowed_peers.borrow_mut().remove(&peer_id);
 
       let _ = self.swarm.disconnect_peer_id(peer_id);
       self.swarm.behaviour_mut().kad.remove_peer(&peer_id);

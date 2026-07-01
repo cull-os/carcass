@@ -84,18 +84,19 @@ impl Decoder for PacketCodec {
    type Error = io::Error;
 
    fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-      let Some(len_bytes) = src.get(..2) else {
+      let Some(len_bytes) = src.get(..size_of::<u16>()) else {
          return Ok(None);
       };
 
-      let len =
-         u16::from_le_bytes(<[u8; 2]>::try_from(len_bytes).expect("length was checked")) as usize;
+      let len = u16::from_le_bytes(
+         <[u8; size_of::<u16>()]>::try_from(len_bytes).expect("length was checked"),
+      ) as usize;
 
-      if src.len() < 2 + len {
+      if src.len() < size_of::<u16>() + len {
          return Ok(None);
       }
 
-      src.advance(2);
+      src.advance(size_of::<u16>());
       Ok(Some(Packet(src.split_to(len).freeze())))
    }
 }
