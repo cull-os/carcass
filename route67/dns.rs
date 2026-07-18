@@ -180,7 +180,7 @@ fn authority_of(
 fn forwarder_of(
    #[builder(start_fn)] zone: rr::Name,
    #[builder(finish_fn)] prefix: address::Prefix,
-) -> forwarder::ForwardZoneHandler<hickory_runtime::TokioRuntimeProvider> {
+) -> impl zone_handler::ZoneHandler {
    let upstream = resolver_config::NameServerConfig::new(
       net::IpAddr::from(prefix.host_addr()),
       true, // trust_negative_responses
@@ -200,6 +200,101 @@ fn forwarder_of(
    .with_origin(zone)
    .build()
    .expect("forwarder build cannot fail without tls or dnssec features")
+}
+
+#[bon::builder(finish_fn(name = "target"))]
+fn proxy_of(
+   #[builder(start_fn)] zone: rr::Name,
+   #[builder(finish_fn)] target: rr::Name,
+) -> impl zone_handler::ZoneHandler {
+   struct Proxy {
+      origin: rr::LowerName,
+      target: rr::Name,
+   }
+
+   #[async_trait::async_trait]
+   impl zone_handler::ZoneHandler for Proxy {
+      fn zone_type(&self) -> zone_handler::ZoneType {
+         zone_handler::ZoneType::External
+      }
+
+      fn axfr_policy(&self) -> zone_handler::AxfrPolicy {
+         zone_handler::AxfrPolicy::Deny
+      }
+
+      fn origin(&self) -> &rr::LowerName {
+         &self.origin
+      }
+
+      async fn lookup(
+         &self,
+         name: &rr::LowerName,
+         _record_type: rr::RecordType,
+         _request_info: Option<&hserver::RequestInfo<'_>>,
+         lookup_options: zone_handler::LookupOptions,
+      ) -> zone_handler::LookupControlFlow<zone_handler::AuthLookup> {
+         let target = rr::Name::from_labels(
+            name
+               .iter()
+               .take(name.iter().count() - self.origin.iter().count())
+               .chain(self.target.iter()),
+         )
+         .expect("name with origin replaced with target must be valid");
+
+         zone_handler::LookupControlFlow::Continue(Ok(zone_handler::AuthLookup::answers(
+            zone_handler::LookupRecords::new(
+               lookup_options,
+               Arc::new(rr::RecordSet::from(rr::Record::from_rdata(
+                  rr::Name::from(name),
+                  secs!(TTL),
+                  rr::RData::CNAME(rdata::CNAME(target)),
+               ))),
+            ),
+            None,
+         )))
+      }
+
+      async fn search(
+         &self,
+         request: &hserver::Request,
+         lookup_options: zone_handler::LookupOptions,
+      ) -> (
+         zone_handler::LookupControlFlow<zone_handler::AuthLookup>,
+         Option<rr::TSigResponseContext>,
+      ) {
+         let request_info = match request.request_info() {
+            Ok(request_info) => request_info,
+            Err(error) => return (zone_handler::LookupControlFlow::Break(Err(error)), None),
+         };
+
+         (
+            self
+               .lookup(
+                  request_info.query.name(),
+                  request_info.query.query_type(),
+                  Some(&request_info),
+                  lookup_options,
+               )
+               .await,
+            None,
+         )
+      }
+
+      async fn nsec_records(
+         &self,
+         _name: &rr::LowerName,
+         _lookup_options: zone_handler::LookupOptions,
+      ) -> zone_handler::LookupControlFlow<zone_handler::AuthLookup> {
+         zone_handler::LookupControlFlow::Continue(Err(zone_handler::LookupError::from(
+            io::Error::other("getting NSEC records is unimplemented for DNAME zones"),
+         )))
+      }
+   }
+
+   Proxy {
+      origin: rr::LowerName::from(zone),
+      target,
+   }
 }
 
 fn next_serial() -> u32 {
@@ -317,7 +412,7 @@ impl Local {
          for (peer_id, prefix) in map.iter() {
             let forward_zone = zone_of(peer_id);
             catalog.upsert(rr::LowerName::from(forward_zone.clone()), vec![Arc::new(
-               forwarder_of(forward_zone).prefix(prefix),
+               forwarder_of(forward_zone.clone()).prefix(prefix),
             )]);
 
             for alias in map.aliases_of(&peer_id) {
@@ -325,9 +420,7 @@ impl Local {
                   .append_domain(&APEX)
                   .expect("alias with apex must fit in a dns name");
                catalog.upsert(rr::LowerName::from(&alias_zone), vec![Arc::new(
-                  authority_of(&alias_zone, Nameserver::Itself(prefix.host_addr()))
-                     .serial(serial)
-                     .records(iter::empty()),
+                  proxy_of(alias_zone).target(forward_zone.clone()),
                )]);
             }
 
